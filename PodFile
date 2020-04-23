@@ -1,0 +1,7 @@
+platform :ios, '8.0'
+inhibit_all_warnings!
+
+target 'CloudAccess' do
+	use_modular_headers!
+	pod 'PromisesSwift', '~> 1.2'
+end

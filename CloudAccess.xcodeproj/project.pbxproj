@@ -18,7 +18,8 @@
 		4A05901B2451A539008831F9 /* CloudAccess.podspec in Resources */ = {isa = PBXBuildFile; fileRef = 4A05901A2451A538008831F9 /* CloudAccess.podspec */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
 		4A05901F2451E12C008831F9 /* CloudAuthenticationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901E2451E12C008831F9 /* CloudAuthenticationError.swift */; };
-		4A0590202451EB00008831F9 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4A058FF524519FFC008831F9 /* Info.plist */; };
+		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
+		4A7C214F24530C4E00DE81E6 /* CloudItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214E24530C4E00DE81E6 /* CloudItem.swift */; };
 		5AC159597D1BAF25F496A9EF /* libPods-CloudAccess.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2230DF163E130AF89D75DF5F /* libPods-CloudAccess.a */; };
 /* End PBXBuildFile section */
 
@@ -49,6 +50,8 @@
 		4A05901A2451A538008831F9 /* CloudAccess.podspec */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CloudAccess.podspec; sourceTree = "<group>"; };
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
 		4A05901E2451E12C008831F9 /* CloudAuthenticationError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAuthenticationError.swift; sourceTree = "<group>"; };
+		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
+		4A7C214E24530C4E00DE81E6 /* CloudItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItem.swift; sourceTree = "<group>"; };
 		6858A3B492209AF52C989BBC /* Pods-CloudAccess.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccess.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccess/Pods-CloudAccess.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -128,6 +131,8 @@
 				4A05900F2451A16D008831F9 /* CloudFile.swift */,
 				4A0590112451A180008831F9 /* CloudItemMetadata.swift */,
 				4A05900D2451A145008831F9 /* CloudItemList.swift */,
+				4A7C214C245305BB00DE81E6 /* CloudItemType.swift */,
+				4A7C214E24530C4E00DE81E6 /* CloudItem.swift */,
 			);
 			path = Item;
 			sourceTree = "<group>";
@@ -253,7 +258,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4A0590202451EB00008831F9 /* Info.plist in Resources */,
 				4A05901B2451A539008831F9 /* CloudAccess.podspec in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -303,6 +307,8 @@
 				4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
+				4A7C214F24530C4E00DE81E6 /* CloudItem.swift in Sources */,
+				4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */,
 				4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -8,7 +8,7 @@
 
 import Foundation
 
-public class CloudFile {
+public class CloudFile: CloudItem {
     
     public let localURL: URL
     public let metadata: CloudItemMetadata
@@ -17,4 +17,6 @@ public class CloudFile {
         self.localURL = localURL
         self.metadata = metadata
     }
+    
 }
+

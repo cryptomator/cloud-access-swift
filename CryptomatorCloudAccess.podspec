@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
-  s.name             = 'CloudAccess'
+  s.name             = 'CryptomatorCloudAccess'
   s.version          = '0.1.0'
-  s.summary          = 'CloudAccess is used in Cryptomator for iOS to access different cloud providers.'
+  s.summary          = 'CryptomatorCloudAccess is used in Cryptomator for iOS to access different cloud providers.'
 
 
   s.homepage         = 'https://github.com/cryptomator/cloud-access-swift'

@@ -7,7 +7,7 @@
 //
 
 import Foundation
-class CloudItemList {
+public class CloudItemList {
     public let items: [CloudItemMetadata]
     public let nextPageToken: String?
     

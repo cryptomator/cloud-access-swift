@@ -7,7 +7,7 @@
 //
 
 import Foundation
-enum CloudAuthenticationError: Error {
+public enum CloudAuthenticationError: Error {
     case authenticationFailed
     case userCanceled
 }

@@ -10,7 +10,7 @@ import Foundation
 import Promises
 import UIKit
 
-protocol CloudAuthentication {
+public protocol CloudAuthentication {
     
     /**
        - Postcondition: Promise is rejected with CloudAuthenticationError.userCanceled if the user cancels the authentication.

@@ -8,7 +8,7 @@
 
 import Foundation
 import Promises
-protocol CloudProvider {
+public protocol CloudProvider {
     
     //MARK: Constructor
     init(withAuthentication: CloudAuthentication)

@@ -7,7 +7,7 @@
 //
 
 import Foundation
-enum CloudProviderError: Error {
+public enum CloudProviderError: Error {
     case itemNotFound
     case itemAlreadyExists
     case uploadFileFailed

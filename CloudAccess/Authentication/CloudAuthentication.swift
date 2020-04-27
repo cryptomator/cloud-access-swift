@@ -19,6 +19,12 @@ public protocol CloudAuthentication {
     
     func isAuthenticated() -> Promise<Bool>
     
+    /**
+     - Postcondition:
+     Promise is rejected with CloudAuthenticationError.notAuthenticated if the user is not authenticated.
+     
+     Promise is rejected with CloudAuthenticationError.noUsername if the user is authenticated but there is no username.
+     */
     func getUsername() -> Promise<String>
     
     func deauthenticate() -> Promise<Void>

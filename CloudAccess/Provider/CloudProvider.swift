@@ -10,18 +10,7 @@ import Foundation
 import Promises
 public protocol CloudProvider {
     
-    //MARK: Constructor
-    init(withAuthentication: CloudAuthentication)
-    
     //MARK: Fetching
-    
-    /**
-     - Important: remoteURL conforms to the following pattern:
-     - file: has no slash at the end (e.g. /folder/example.txt)
-     - folder: has a slash at the end (e.g. /folder/subfolder/)
-     */
-    func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata>
-    
     
     /**
      - Important: remoteURL conforms to the following pattern:

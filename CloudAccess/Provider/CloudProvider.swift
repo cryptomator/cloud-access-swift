@@ -16,6 +16,13 @@ public protocol CloudProvider {
      - Important: remoteURL conforms to the following pattern:
      - file: has no slash at the end (e.g. /folder/example.txt)
      - folder: has a slash at the end (e.g. /folder/subfolder/)
+     */
+    func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata>
+    
+    /**
+     - Important: remoteURL conforms to the following pattern:
+     - file: has no slash at the end (e.g. /folder/example.txt)
+     - folder: has a slash at the end (e.g. /folder/subfolder/)
       - Precondition: 'remoteURL' must point to a folder.
      */
     func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList>

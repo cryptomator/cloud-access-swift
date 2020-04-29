@@ -13,7 +13,7 @@ import UIKit
 public protocol CloudAuthentication {
     
     /**
-       - Postcondition: Promise is rejected with CloudAuthenticationError.userCanceled if the user cancels the authentication.
+     - Postcondition: Promise is rejected with CloudAuthenticationError.userCanceled if the user cancels the authentication.
      */
     func authenticate(from viewController: UIViewController) -> Promise<Void>
     

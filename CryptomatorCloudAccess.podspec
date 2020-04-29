@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'CryptomatorCloudAccess'
-  s.version          = '0.1.0-alpha.5'
+  s.version          = '0.1.0-alpha.6'
   s.summary          = 'CryptomatorCloudAccess is used in Cryptomator for iOS to access different cloud providers.'
 
 

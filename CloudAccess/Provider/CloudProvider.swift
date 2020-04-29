@@ -50,9 +50,13 @@ public protocol CloudProvider {
     
     /**
      - Important: remoteURL conforms to the following pattern:
-     - file: has no slash at the end (e.g. /folder/example.txt)
-     - folder: has a slash at the end (e.g. /folder/subfolder/)
+        - file: has no slash at the end (e.g. /folder/example.txt)
+        - folder: has a slash at the end (e.g. /folder/subfolder/)
+     
      - Precondition: 'remoteURL' must point to a folder.
+     - Postcondition: Promise is rejected with:
+        - CloudProviderError.itemAlreadyExists if the folder already exists
+        - CloudProviderError.parentFolderDoesNotExist if the parentFolder does not exist
      */
     func createFolder(at remoteURL: URL) -> Promise<Void>
     

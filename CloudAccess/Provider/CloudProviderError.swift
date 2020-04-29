@@ -10,6 +10,7 @@ import Foundation
 public enum CloudProviderError: Error {
     case itemNotFound
     case itemAlreadyExists
+    case parentFolderDoesNotExist
     case uploadFileFailed
     case noInternetConnection
     case procedureCanceled

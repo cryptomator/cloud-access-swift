@@ -43,8 +43,12 @@ public protocol CloudProvider {
      - Postcondition: The returned URLSessionUploadTask has a URLSessionConfiguration that meets the following properties:
      - background URLSessionConfiguration
      - sharedContainerIdentifier is set to the AppGroup Identifier
+     
+     reject Promise with CloudProviderError.itemAlreadyExists if file already exists at the file.metadata.remoteURL && !isUpdate
+    
+     reject Promise with CloudProviderError.itemNotFound if file does not existt at the file.metadata.remoteURL && isUpdate
      */
-    func createBackgroundUploadTask(for file: CloudFile, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionUploadTask>
+    func createBackgroundUploadTask(for file: CloudFile, isUpdate: Bool, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionUploadTask>
     
     //MARK: Actions
     

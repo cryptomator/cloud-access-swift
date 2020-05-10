@@ -30,25 +30,25 @@ public protocol CloudProvider {
     //MARK: Download
     
     /**
-     - Postcondition: The returned URLSessionDownloadTask has a URLSessionConfiguration that meets the following properties:
-     - background URLSessionConfiguration
-     - sharedContainerIdentifier is set to the AppGroup Identifier
+     - Precondition: The requested file (file.metadata.remoteURL) exists at the cloud provider
+     - Postcondition: The requested file is stored under the file.localURL
+     
+     reject Promise with CloudProviderError.itemNotFound if the file does not exists at the file.metadata.remoteURL
      */
-    func createBackgroundDownloadTask(for file: CloudFile, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionDownloadTask>
+    func downloadFile(_ file: CloudFile) -> Promise<Void>
     
     
     //MARK: Upload
     
     /**
-     - Postcondition: The returned URLSessionUploadTask has a URLSessionConfiguration that meets the following properties:
-     - background URLSessionConfiguration
-     - sharedContainerIdentifier is set to the AppGroup Identifier
+     - Precondition: The file to be uploaded exists in the location file.localURL
+     - Postcondition: The local file is stored at the cloud provider under the remote URL (file.metadata.remoteURL).
      
      reject Promise with CloudProviderError.itemAlreadyExists if file already exists at the file.metadata.remoteURL && !isUpdate
     
-     reject Promise with CloudProviderError.itemNotFound if file does not existt at the file.metadata.remoteURL && isUpdate
+     reject Promise with CloudProviderError.itemNotFound if file does not exists at the file.metadata.remoteURL && isUpdate
      */
-    func createBackgroundUploadTask(for file: CloudFile, isUpdate: Bool, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionUploadTask>
+    func uploadFile(_ file: CloudFile, isUpdate: Bool) -> Promise<CloudItemMetadata>
     
     //MARK: Actions
     

@@ -18,4 +18,5 @@ Pod::Spec.new do |s|
   s.source_files = 'CloudAccess/**/*{swift,h,m}'
 
   s.dependency 'PromisesSwift', '~> 1.2'
+	s.dependency 'CryptomatorCryptoLib', '~> 0.2'
 end

@@ -37,7 +37,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		if let dirId = dirIds[cleartextURL] {
 			return Promise(dirId)
 		} else {
-			let localDirIdUrl = tmpDir.appendingPathComponent(UUID().uuidString)
 			return getDirId(cleartextURL: cleartextURL.deletingLastPathComponent()).then { parentDirId -> Promise<CloudItemMetadata> in
 				if let ciphertextName = self.cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId.data(using: .utf8)!) {
 					let i = parentDirId.index(parentDirId.startIndex, offsetBy: 2)
@@ -46,11 +45,12 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 				} else {
 					throw VaultFormat7Error.unresolvableDirId("Failed to encrypt cleartext name \(cleartextURL.lastPathComponent)")
 				}
-			}.then { metadata -> Promise<Void> in
+			}.then { metadata -> Promise<CloudFile> in
+				let localDirIdUrl = self.tmpDir.appendingPathComponent(UUID().uuidString)
 				let cloudFile = CloudFile(localURL: localDirIdUrl, metadata: metadata)
 				return self.delegate.downloadFile(cloudFile)
-			}.then { () -> String in
-				let dirIdData = try Data(contentsOf: localDirIdUrl)
+			}.then { cloudFile -> String in
+				let dirIdData = try Data(contentsOf: cloudFile.localURL)
 				if let result = self.cryptor.encryptDirId(String(data: dirIdData, encoding: .utf8)!) {
 					return result
 				} else {
@@ -90,7 +90,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 	
-	public func downloadFile(_ file: CloudFile) -> Promise<Void> {
+	public func downloadFile(_ file: CloudFile) -> Promise<CloudFile> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 	

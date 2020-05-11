@@ -61,10 +61,11 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 	
-	public func downloadFile(_ file: CloudFile) -> Promise<Void> {
+	public func downloadFile(_ file: CloudFile) -> Promise<CloudFile> {
 		if let data = files[file.metadata.remoteURL.relativePath] {
-			return Promise {
+			return Promise { () -> CloudFile in
 				try data.write(to: file.localURL, options: .withoutOverwriting)
+				return file
 			}
 		} else {
 			return Promise(CloudProviderError.itemNotFound)

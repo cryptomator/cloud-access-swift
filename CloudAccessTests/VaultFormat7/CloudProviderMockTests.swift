@@ -55,12 +55,12 @@ class CloudProviderMockTests: XCTestCase {
 		let remoteUrl = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
 		let localUrl = tmpDir.appendingPathComponent("dir.c9r")
 		let result = provider.fetchItemMetadata(at: remoteUrl)
-		result.then { metadata -> Promise<Void> in
+		result.then { metadata -> Promise<CloudFile> in
 			XCTAssertEqual(.file, metadata.itemType)
 			let cloudFile = CloudFile(localURL: localUrl, metadata: metadata)
 			return provider.downloadFile(cloudFile)
-		}.then {
-			let downloadedContents = try Data(contentsOf: localUrl)
+		}.then { cloudFile in
+			let downloadedContents = try Data(contentsOf: cloudFile.localURL)
 			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")

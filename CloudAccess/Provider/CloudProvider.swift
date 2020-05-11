@@ -35,7 +35,7 @@ public protocol CloudProvider {
      
      reject Promise with CloudProviderError.itemNotFound if the file does not exists at the file.metadata.remoteURL
      */
-    func downloadFile(_ file: CloudFile) -> Promise<Void>
+    func downloadFile(_ file: CloudFile) -> Promise<CloudFile>
     
     
     //MARK: Upload

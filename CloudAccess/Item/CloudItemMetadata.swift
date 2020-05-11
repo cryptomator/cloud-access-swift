@@ -8,7 +8,7 @@
 
 import Foundation
 
-public class CloudItemMetadata {
+public struct CloudItemMetadata {
     public let name: String
     public let size: NSNumber?
     public let remoteURL: URL

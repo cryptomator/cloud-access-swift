@@ -7,8 +7,9 @@
 //
 
 import Foundation
-public enum CloudItemType{
-    case file
-    case folder
-    case unknown
+
+public enum CloudItemType {
+	case file
+	case folder
+	case unknown
 }

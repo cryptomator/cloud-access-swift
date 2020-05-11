@@ -6,14 +6,13 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
 import Promises
+import XCTest
 @testable import CloudAccess
 
 class CloudProviderMockTests: XCTestCase {
-	
 	var tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
-	
+
 	override func setUp() {
 		tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
 		do {
@@ -22,7 +21,7 @@ class CloudProviderMockTests: XCTestCase {
 			XCTFail("Error in setUp: \(error)")
 		}
 	}
-	
+
 	override func tearDown() {
 		do {
 			try FileManager.default.removeItem(at: tmpDir)
@@ -30,7 +29,7 @@ class CloudProviderMockTests: XCTestCase {
 			XCTFail("Error in teardown: \(error)")
 		}
 	}
-	
+
 	func testVaultRootContainsFiles() {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 		let provider = CloudProviderMock()
@@ -38,9 +37,9 @@ class CloudProviderMockTests: XCTestCase {
 		let result = provider.fetchItemList(forFolderAt: url, withPageToken: nil)
 		result.then { cloudItemList in
 			XCTAssertEqual(3, cloudItemList.items.count)
-			XCTAssertTrue(cloudItemList.items.contains(where: {$0.name == "file1.c9r"}))
-			XCTAssertTrue(cloudItemList.items.contains(where: {$0.name == "file2.c9r"}))
-			XCTAssertTrue(cloudItemList.items.contains(where: {$0.name == "dir1.c9r"}))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1.c9r" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2.c9r" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -48,7 +47,7 @@ class CloudProviderMockTests: XCTestCase {
 		}
 		wait(for: [expectation], timeout: 1.0)
 	}
-	
+
 	func testDir1FileContainsDirId() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		let provider = CloudProviderMock()
@@ -69,5 +68,4 @@ class CloudProviderMockTests: XCTestCase {
 		}
 		wait(for: [expectation], timeout: 1.0)
 	}
-
 }

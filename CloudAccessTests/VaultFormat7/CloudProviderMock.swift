@@ -6,31 +6,29 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CloudAccess
 import Foundation
 import Promises
-import CloudAccess
 
-
-let lastModifiedDate = Date.init(timeIntervalSinceReferenceDate: 0)
+let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 
 public class CloudProviderMock: CloudProvider {
-	
 	let dirs = [
 		"pathToVault",
 		"pathToVault/d",
 		"pathToVault/d/00",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r",
-		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 	]
-	
+
 	let files = [
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!,
-		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0),
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0)
 	]
-	
+
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		if dirs.contains(remoteURL.relativePath) {
 			return Promise {
@@ -44,15 +42,15 @@ public class CloudProviderMock: CloudProvider {
 			return Promise(CloudProviderError.itemNotFound)
 		}
 	}
-	
-	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let parentPath = remoteURL.relativePath;
+
+	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken _: String?) -> Promise<CloudItemList> {
+		let parentPath = remoteURL.relativePath
 		let parentPathLvl = parentPath.components(separatedBy: "/").count - (parentPath.hasSuffix("/") ? 1 : 0)
-		let childDirs = dirs.filter({ $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 })
-		let childFiles = files.keys.filter({ $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 })
+		let childDirs = dirs.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
+		let childFiles = files.keys.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
 		let children = childDirs + childFiles
 		return Promise { fulfill, reject in
-			let metadataPromises = children.map({ self.fetchItemMetadata(at: URL(fileURLWithPath: $0)) })
+			let metadataPromises = children.map { self.fetchItemMetadata(at: URL(fileURLWithPath: $0)) }
 			all(metadataPromises).then { metadata in
 				fulfill(CloudItemList(items: metadata))
 			}.catch { error in
@@ -60,7 +58,7 @@ public class CloudProviderMock: CloudProvider {
 			}
 		}
 	}
-	
+
 	public func downloadFile(_ file: CloudFile) -> Promise<CloudFile> {
 		if let data = files[file.metadata.remoteURL.relativePath] {
 			return Promise { () -> CloudFile in
@@ -71,22 +69,20 @@ public class CloudProviderMock: CloudProvider {
 			return Promise(CloudProviderError.itemNotFound)
 		}
 	}
-	
-	public func uploadFile(_ file: CloudFile, isUpdate: Bool) -> Promise<CloudItemMetadata> {
-		return Promise(CloudProviderError.noInternetConnection)
-	}
-	
-	public func createFolder(at remoteURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
-	}
-	
-	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
-	}
-	
-	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
-	}
-	
 
+	public func uploadFile(_: CloudFile, isUpdate _: Bool) -> Promise<CloudItemMetadata> {
+		Promise(CloudProviderError.noInternetConnection)
+	}
+
+	public func createFolder(at _: URL) -> Promise<Void> {
+		Promise(CloudProviderError.noInternetConnection)
+	}
+
+	public func deleteItem(at _: URL) -> Promise<Void> {
+		Promise(CloudProviderError.noInternetConnection)
+	}
+
+	public func moveItem(from _: URL, to _: URL) -> Promise<Void> {
+		Promise(CloudProviderError.noInternetConnection)
+	}
 }

@@ -7,12 +7,13 @@
 //
 
 import Foundation
+
 public class CloudItemList {
-    public let items: [CloudItemMetadata]
-    public let nextPageToken: String?
-    
-    public init(items: [CloudItemMetadata], nextPageToken: String? = nil) {
-        self.items = items
-        self.nextPageToken = nextPageToken
-    }
+	public let items: [CloudItemMetadata]
+	public let nextPageToken: String?
+
+	public init(items: [CloudItemMetadata], nextPageToken: String? = nil) {
+		self.items = items
+		self.nextPageToken = nextPageToken
+	}
 }

@@ -109,10 +109,10 @@
 			children = (
 				4A058FF424519FFC008831F9 /* CloudAccess.h */,
 				4A058FF524519FFC008831F9 /* Info.plist */,
-				9ED0E61B24617C0300FDB438 /* VaultFormat7 */,
-				4A0590172451A1CA008831F9 /* Provider */,
 				4A0590162451A1BB008831F9 /* Authentication */,
 				4A0590132451A18D008831F9 /* Item */,
+				4A0590172451A1CA008831F9 /* Provider */,
+				9ED0E61B24617C0300FDB438 /* VaultFormat7 */,
 			);
 			path = CloudAccess;
 			sourceTree = "<group>";
@@ -130,8 +130,8 @@
 			isa = PBXGroup;
 			children = (
 				4A05900F2451A16D008831F9 /* CloudFile.swift */,
-				4A0590112451A180008831F9 /* CloudItemMetadata.swift */,
 				4A05900D2451A145008831F9 /* CloudItemList.swift */,
+				4A0590112451A180008831F9 /* CloudItemMetadata.swift */,
 				4A7C214C245305BB00DE81E6 /* CloudItemType.swift */,
 			);
 			path = Item;
@@ -175,10 +175,10 @@
 		9ED0E61E2461807800FDB438 /* VaultFormat7 */ = {
 			isa = PBXGroup;
 			children = (
-				9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */,
 				9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */,
 				9ED0E623246198F600FDB438 /* CloudProviderMockTests.swift */,
 				9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */,
+				9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";
@@ -217,6 +217,7 @@
 				4A058FED24519FFC008831F9 /* Sources */,
 				4A058FEE24519FFC008831F9 /* Frameworks */,
 				4A058FEF24519FFC008831F9 /* Resources */,
+				74862A722469A7AF003D81CB /* Lint With SwiftFormat */,
 			);
 			buildRules = (
 			);
@@ -323,6 +324,24 @@
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
+		};
+		74862A722469A7AF003D81CB /* Lint With SwiftFormat */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Lint With SwiftFormat";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if which swiftformat >/dev/null; then\n  swiftformat --lint .\nelse\n  echo \"warning: SwiftFormat not installed, download from https://github.com/nicklockwood/SwiftFormat\"\nfi\n";
 		};
 		F944FCE8C5CAC976072B565D /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

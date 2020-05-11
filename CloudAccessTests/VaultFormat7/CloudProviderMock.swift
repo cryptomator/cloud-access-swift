@@ -13,39 +13,32 @@ import CloudAccess
 
 let lastModifiedDate = Date.init(timeIntervalSinceReferenceDate: 0)
 
-let masterkeyContents = """
-	{
-		"version": 7,
-		"scryptSalt": "AAAAAAAAAAA=",
-		"scryptCostParam": 2,
-		"scryptBlockSize": 8,
-		"primaryMasterKey": "mM+qoQ+o0qvPTiDAZYt+flaC3WbpNAx1sTXaUzxwpy0M9Ctj6Tih/Q==",
-		"hmacMasterKey": "mM+qoQ+o0qvPTiDAZYt+flaC3WbpNAx1sTXaUzxwpy0M9Ctj6Tih/Q==",
-		"versionMac": "cn2sAK6l9p1/w9deJVUuW3h7br056mpv5srvALiYw+g="
-	}
-	"""
-
 public class CloudProviderMock: CloudProvider {
 	
 	let dirs = [
 		"pathToVault",
 		"pathToVault/d",
-		"pathToVault/d/AA",
-		"pathToVault/d/AA/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+		"pathToVault/d/00",
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r",
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 	]
 	
 	let files = [
-		"pathToVault/masterkey.cryptomator": Data(masterkeyContents.utf8)
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r": Data(count: 0),
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2.c9r": Data(count: 0),
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!,
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0),
 	]
 	
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
-		if dirs.filter({ remoteURL.relativePath.hasSuffix($0) }).count > 0 {
+		if dirs.contains(remoteURL.relativePath) {
 			return Promise {
 				CloudItemMetadata(name: remoteURL.lastPathComponent, size: 0, remoteURL: remoteURL, lastModifiedDate: lastModifiedDate, itemType: .folder)
 			}
-		} else if let file = files.filter({ remoteURL.relativePath.hasSuffix($0.key) }).first {
+		} else if let data = files[remoteURL.relativePath] {
 			return Promise {
-				CloudItemMetadata(name: remoteURL.lastPathComponent, size: NSNumber(value: file.value.count), remoteURL: remoteURL, lastModifiedDate: lastModifiedDate, itemType: .file)
+				CloudItemMetadata(name: remoteURL.lastPathComponent, size: NSNumber(value: data.count), remoteURL: remoteURL, lastModifiedDate: lastModifiedDate, itemType: .file)
 			}
 		} else {
 			return Promise(CloudProviderError.itemNotFound)
@@ -59,7 +52,7 @@ public class CloudProviderMock: CloudProvider {
 		let childFiles = files.keys.filter({ $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 })
 		let children = childDirs + childFiles
 		return Promise { fulfill, reject in
-			let metadataPromises = children.map({ self.fetchItemMetadata(at: remoteURL.appendingPathComponent($0)) })
+			let metadataPromises = children.map({ self.fetchItemMetadata(at: URL(fileURLWithPath: $0)) })
 			all(metadataPromises).then { metadata in
 				fulfill(CloudItemList(items: metadata))
 			}.catch { error in
@@ -68,12 +61,17 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 	
-	
-	public func createBackgroundDownloadTask(for file: CloudFile, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionDownloadTask> {
-		return Promise(CloudProviderError.noInternetConnection)
+	public func downloadFile(_ file: CloudFile) -> Promise<Void> {
+		if let data = files[file.metadata.remoteURL.relativePath] {
+			return Promise {
+				try data.write(to: file.localURL, options: .withoutOverwriting)
+			}
+		} else {
+			return Promise(CloudProviderError.itemNotFound)
+		}
 	}
 	
-	public func createBackgroundUploadTask(for file: CloudFile, isUpdate: Bool, with delegate: URLSessionTaskDelegate) -> Promise<URLSessionUploadTask> {
+	public func uploadFile(_ file: CloudFile, isUpdate: Bool) -> Promise<CloudItemMetadata> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 	

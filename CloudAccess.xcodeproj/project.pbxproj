@@ -18,6 +18,7 @@
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
 		4A05901F2451E12C008831F9 /* CloudAuthenticationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901E2451E12C008831F9 /* CloudAuthenticationError.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
+		9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */; };
 		9ED0E61D24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E61C24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift */; };
 		9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */; };
 		9ED0E622246180AB00FDB438 /* CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */; };
@@ -51,6 +52,7 @@
 		4A05901E2451E12C008831F9 /* CloudAuthenticationError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAuthenticationError.swift; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
 		9A51696105A9168880585575 /* Pods-CloudAccess.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccess.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccess/Pods-CloudAccess.debug.xcconfig"; sourceTree = "<group>"; };
+		9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptorMock.swift; sourceTree = "<group>"; };
 		9ED0E61C24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ProviderDecorator.swift; sourceTree = "<group>"; };
 		9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderMock.swift; sourceTree = "<group>"; };
@@ -176,6 +178,7 @@
 				9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */,
 				9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */,
 				9ED0E623246198F600FDB438 /* CloudProviderMockTests.swift */,
+				9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";
@@ -367,6 +370,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9ED0E624246198F600FDB438 /* CloudProviderMockTests.swift in Sources */,
+				9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */,
 				9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */,
 				9ED0E622246180AB00FDB438 /* CloudProviderMock.swift in Sources */,
 			);

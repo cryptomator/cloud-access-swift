@@ -7,23 +7,47 @@
 //
 
 import XCTest
+import Promises
 @testable import CloudAccess
+@testable import CryptomatorCryptoLib
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
+	
+	let pathToVault = URL(fileURLWithPath: "pathToVault")
+	let provider = CloudProviderMock()
+	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32)))
 
-    override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    func testFetchItemListForRootDir() throws {
+		let expectation = XCTestExpectation(description: "fetchItemList")
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
+		
+		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/"), withPageToken: nil).then { itemList in
+			XCTAssertEqual(3, itemList.items.count)
+			XCTAssertTrue(itemList.items.contains(where: {$0.name == "File 1"}))
+			XCTAssertTrue(itemList.items.contains(where: {$0.name == "File 2"}))
+			XCTAssertTrue(itemList.items.contains(where: {$0.name == "Directory 1"}))
+		}.catch { error in
+			XCTFail("Promise rejected: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+
+		wait(for: [expectation], timeout: 10.0)
     }
-
-    override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+	
+	func testFetchItemListForSubDir() throws {
+		let expectation = XCTestExpectation(description: "fetchItemList")
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
+		
+		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1"), withPageToken: nil).then { itemList in
+			XCTAssertEqual(1, itemList.items.count)
+			XCTAssertTrue(itemList.items.contains(where: {$0.name == "File 3"}))
+		}.catch { error in
+			XCTFail("Promise rejected: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 10.0)
     }
-
-    func testFetchItemList() {
-		let pathToVault = URL(fileURLWithPath: "pathToVault")
-		let provider = CloudProviderMock()
-		let decorator = VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault)
-		// TODO
-    }
-
+	
 }

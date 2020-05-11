@@ -32,7 +32,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 			expectation.fulfill()
 		}
 
-		wait(for: [expectation], timeout: 10.0)
+		wait(for: [expectation], timeout: 1.0)
     }
 	
 	func testFetchItemListForSubDir() throws {
@@ -47,7 +47,23 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		}.always {
 			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 10.0)
+		wait(for: [expectation], timeout: 1.0)
     }
+	
+	func testFetchItemMetadata() throws {
+		let expectation = XCTestExpectation(description: "fetchItemMetadata")
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
+		
+		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3")).then { metadata in
+			XCTAssertEqual("File 3", metadata.name)
+			XCTAssertEqual(.file, metadata.itemType)
+			XCTAssertEqual("/Directory 1/File 3", metadata.remoteURL.path)
+		}.catch { error in
+			XCTFail("Promise rejected: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
 	
 }

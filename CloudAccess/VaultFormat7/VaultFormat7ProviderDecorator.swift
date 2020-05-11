@@ -10,6 +10,10 @@ import Foundation
 import Promises
 import CryptomatorCryptoLib
 
+enum VaultFormat7Error: Error {
+	case encounteredUnrelatedFile
+}
+
 public class VaultFormat7ProviderDecorator: CloudProvider {
 	
 	let delegate: CloudProvider
@@ -51,29 +55,48 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		return pathToVault.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/")
 	}
 	
+	private func cleartextMetadata(_ metadata: CloudItemMetadata, cleartextParentUrl: URL) -> Promise<CloudItemMetadata> {
+		return getDirId(cleartextURL: cleartextParentUrl).then { parentDirId -> CloudItemMetadata in
+			// TODO unshorten .c9s names
+			guard let extRange = metadata.name.range(of: ".c9r", options: .caseInsensitive) else {
+				throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
+			}
+			let ciphertextName = String(metadata.name[..<extRange.lowerBound])
+			let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: parentDirId)
+			let cleartextURL = cleartextParentUrl.appendingPathComponent(cleartextName)
+			let cleartextSize = NSNumber(value: 0) // TODO determine cleartext size
+			return CloudItemMetadata(name: cleartextName, size: cleartextSize, remoteURL: cleartextURL, lastModifiedDate: metadata.lastModifiedDate, itemType: metadata.itemType) // TODO determine itemType
+		}
+	}
+	
 	public func fetchItemMetadata(at cleartextURL: URL) -> Promise<CloudItemMetadata> {
-		return Promise(CloudProviderError.noInternetConnection)
+		let cleartextParent = cleartextURL.deletingLastPathComponent()
+		let cleartextName = cleartextURL.lastPathComponent
+		
+		return getDirId(cleartextURL: cleartextParent).then { dirId -> Promise<CloudItemMetadata> in
+			let ciphertextParentPath = try self.getDirPath(dirId)
+			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
+			let ciphertextPath = ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r")
+			return self.delegate.fetchItemMetadata(at: ciphertextPath)
+		}.then { ciphertextMetadata in
+			return self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextParent)
+		}
 	}
 	
 	public func fetchItemList(forFolderAt cleartextURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		let dirIdPromise = getDirId(cleartextURL: cleartextURL)
-		
+
 		let itemListPromise = dirIdPromise.then { dirId -> Promise<CloudItemList> in
 			let dirPath = try self.getDirPath(dirId)
 			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 		}
-		
-		return all(dirIdPromise, itemListPromise).then { (dirId, list) -> CloudItemList in
-			let cleartextItems = try list.items.compactMap { metadata -> CloudItemMetadata? in
-				guard let extRange = metadata.name.range(of: ".c9r", options: .caseInsensitive) else {
-					return nil // not a cryptomator file
-				}
-				let ciphertextName = String(metadata.name[..<extRange.lowerBound])
-				let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: dirId)
-				let cleartextSize = NSNumber(value: 0) // TODO determine cleartext size
-				return CloudItemMetadata(name: cleartextName, size: cleartextSize, remoteURL: metadata.remoteURL, lastModifiedDate: metadata.lastModifiedDate, itemType: metadata.itemType) // TODO determine itemType
+
+		return all(dirIdPromise, itemListPromise).then { (dirId, list) -> Promise<CloudItemList> in
+			let cleartextItemPromises = list.items.map({self.cleartextMetadata($0, cleartextParentUrl: cleartextURL)})
+			return any(cleartextItemPromises).then { maybeCleartextItems -> CloudItemList in
+				let cleartextItems = maybeCleartextItems.filter({$0.value != nil}).map({$0.value!})
+				return CloudItemList(items: cleartextItems, nextPageToken: list.nextPageToken)
 			}
-			return CloudItemList(items: cleartextItems, nextPageToken: list.nextPageToken)
 		}
 	}
 	

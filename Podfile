@@ -5,8 +5,8 @@ use_frameworks! :linkage => :static
 target 'CloudAccess' do
 	pod 'PromisesSwift', '~> 1.2'
 	pod 'CryptomatorCryptoLib', '~> 0.2'
-end
-
-target 'CloudAccessTests' do
-	pod 'PromisesSwift', '~> 1.2'
+	
+	target 'CloudAccessTests' do
+		inherit! :search_paths
+	end
 end

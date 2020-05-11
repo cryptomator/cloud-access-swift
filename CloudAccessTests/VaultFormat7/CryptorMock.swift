@@ -9,6 +9,10 @@
 import Foundation
 @testable import CryptomatorCryptoLib
 
+enum CryptorMockError: Error {
+	case notMocked
+}
+
 public class CryptorMock: Cryptor {
 	
 	let cleartextNames = [
@@ -34,16 +38,28 @@ public class CryptorMock: Cryptor {
 		super.init(masterKey: masterKey)
 	}
 	
-	public override func encryptDirId(_ dirIdStr: String) -> String? {
-		return dirIds[dirIdStr]
+	public override func encryptDirId(_ dirId: Data) throws -> String {
+		if let dirId = dirIds[String(data: dirId, encoding: .utf8)!] {
+			return dirId
+		} else {
+			throw CryptorMockError.notMocked
+		}
 	}
 	
-	public override func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) -> String? {
-		return ciphertextNames[cleartextName]
+	public override func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws  -> String {
+		if let ciphertextName = ciphertextNames[cleartextName] {
+			return ciphertextName
+		} else {
+			throw CryptorMockError.notMocked
+		}
 	}
 	
-	public override func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) -> String? {
-		return cleartextNames[ciphertextName]
+	public override func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws  -> String {
+		if let cleartextName = cleartextNames[ciphertextName] {
+			return cleartextName
+		} else {
+			throw CryptorMockError.notMocked
+		}
 	}
 	
 }

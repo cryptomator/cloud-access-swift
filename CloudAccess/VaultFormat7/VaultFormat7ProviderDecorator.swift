@@ -10,11 +10,6 @@ import Foundation
 import Promises
 import CryptomatorCryptoLib
 
-public enum VaultFormat7Error: Error {
-	case decryptionError
-	case unresolvableDirId(_ reason: String)
-}
-
 public class VaultFormat7ProviderDecorator: CloudProvider {
 	
 	let delegate: CloudProvider
@@ -22,7 +17,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let cryptor: Cryptor
 	let tmpDir: URL
 	
-	var dirIds = Dictionary<URL, String>()
+	var dirIds = [URL(fileURLWithPath: "/"): Data(count: 0)]
 	
 	public init(delegate: CloudProvider, remotePathToVault: URL, cryptor: Cryptor) throws {
 		self.delegate = delegate
@@ -30,34 +25,30 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		self.cryptor = cryptor
 		self.tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
 		try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-		dirIds[URL(fileURLWithPath: "/")] = cryptor.encryptDirId("")
 	}
 	
-	private func getDirId(cleartextURL: URL) -> Promise<String> {
+	private func getDirId(cleartextURL: URL) -> Promise<Data> {
 		if let dirId = dirIds[cleartextURL] {
 			return Promise(dirId)
 		} else {
 			return getDirId(cleartextURL: cleartextURL.deletingLastPathComponent()).then { parentDirId -> Promise<CloudItemMetadata> in
-				if let ciphertextName = self.cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId.data(using: .utf8)!) {
-					let i = parentDirId.index(parentDirId.startIndex, offsetBy: 2)
-					let dirFilePath = "d/" + parentDirId[..<i] + "/" + parentDirId[i...] + "/" + ciphertextName + ".c9r/dir.c9r"
-					return self.delegate.fetchItemMetadata(at: self.pathToVault.appendingPathComponent(dirFilePath))
-				} else {
-					throw VaultFormat7Error.unresolvableDirId("Failed to encrypt cleartext name \(cleartextURL.lastPathComponent)")
-				}
+				let ciphertextName = try self.cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId)
+				let dirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
+				return self.delegate.fetchItemMetadata(at: dirFilePath)
 			}.then { metadata -> Promise<CloudFile> in
 				let localDirIdUrl = self.tmpDir.appendingPathComponent(UUID().uuidString)
 				let cloudFile = CloudFile(localURL: localDirIdUrl, metadata: metadata)
 				return self.delegate.downloadFile(cloudFile)
-			}.then { cloudFile -> String in
-				let dirIdData = try Data(contentsOf: cloudFile.localURL)
-				if let result = self.cryptor.encryptDirId(String(data: dirIdData, encoding: .utf8)!) {
-					return result
-				} else {
-					throw VaultFormat7Error.unresolvableDirId("dir.c9r file not containing utf8 data")
-				}
+			}.then { cloudFile -> Data in
+				return try Data(contentsOf: cloudFile.localURL)
 			}
 		}
+	}
+	
+	private func getDirPath(_ dirId: Data) throws -> URL {
+		let digest = try self.cryptor.encryptDirId(dirId)
+		let i = digest.index(digest.startIndex, offsetBy: 2)
+		return pathToVault.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/")
 	}
 	
 	public func fetchItemMetadata(at cleartextURL: URL) -> Promise<CloudItemMetadata> {
@@ -68,10 +59,8 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		let dirIdPromise = getDirId(cleartextURL: cleartextURL)
 		
 		let itemListPromise = dirIdPromise.then { dirId -> Promise<CloudItemList> in
-			let i = dirId.index(dirId.startIndex, offsetBy: 2)
-			let dirPath = "d/" + dirId[..<i] + "/" + dirId[i...] + "/"
-			let ciphertextPath = self.pathToVault.appendingPathComponent(dirPath)
-			return self.delegate.fetchItemList(forFolderAt: ciphertextPath, withPageToken: pageToken)
+			let dirPath = try self.getDirPath(dirId)
+			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 		}
 		
 		return all(dirIdPromise, itemListPromise).then { (dirId, list) -> CloudItemList in
@@ -80,9 +69,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 					return nil // not a cryptomator file
 				}
 				let ciphertextName = String(metadata.name[..<extRange.lowerBound])
-				guard let cleartextName = self.cryptor.decryptFileName(ciphertextName, dirId: dirId.data(using: .utf8)!) else {
-					throw VaultFormat7Error.decryptionError
-				}
+				let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: dirId)
 				let cleartextSize = NSNumber(value: 0) // TODO determine cleartext size
 				return CloudItemMetadata(name: cleartextName, size: cleartextSize, remoteURL: metadata.remoteURL, lastModifiedDate: metadata.lastModifiedDate, itemType: metadata.itemType) // TODO determine itemType
 			}

@@ -15,7 +15,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	
 	let pathToVault = URL(fileURLWithPath: "pathToVault")
 	let provider = CloudProviderMock()
-	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32)))
+	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 
     func testFetchItemListForRootDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")

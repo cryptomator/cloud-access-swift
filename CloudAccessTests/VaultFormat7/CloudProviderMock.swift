@@ -32,11 +32,11 @@ public class CloudProviderMock: CloudProvider {
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		if dirs.contains(remoteURL.relativePath) {
 			return Promise {
-				CloudItemMetadata(name: remoteURL.lastPathComponent, size: 0, remoteURL: remoteURL, lastModifiedDate: lastModifiedDate, itemType: .folder)
+				CloudItemMetadata(name: remoteURL.lastPathComponent, remoteURL: remoteURL, itemType: .folder, lastModifiedDate: lastModifiedDate, size: 0)
 			}
 		} else if let data = files[remoteURL.relativePath] {
 			return Promise {
-				CloudItemMetadata(name: remoteURL.lastPathComponent, size: NSNumber(value: data.count), remoteURL: remoteURL, lastModifiedDate: lastModifiedDate, itemType: .file)
+				CloudItemMetadata(name: remoteURL.lastPathComponent, remoteURL: remoteURL, itemType: .file, lastModifiedDate: lastModifiedDate, size: data.count)
 			}
 		} else {
 			return Promise(CloudProviderError.itemNotFound)
@@ -59,30 +59,30 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func downloadFile(_ file: CloudFile) -> Promise<CloudFile> {
-		if let data = files[file.metadata.remoteURL.relativePath] {
-			return Promise { () -> CloudFile in
-				try data.write(to: file.localURL, options: .withoutOverwriting)
-				return file
+	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<CloudItemMetadata> {
+		if let data = files[remoteURL.relativePath] {
+			return Promise { () -> Promise<CloudItemMetadata> in
+				try data.write(to: localURL, options: .withoutOverwriting)
+				return self.fetchItemMetadata(at: remoteURL)
 			}
 		} else {
 			return Promise(CloudProviderError.itemNotFound)
 		}
 	}
 
-	public func uploadFile(_: CloudFile, isUpdate _: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func createFolder(at _: URL) -> Promise<Void> {
+	public func createFolder(at remoteURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func deleteItem(at _: URL) -> Promise<Void> {
+	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func moveItem(from _: URL, to _: URL) -> Promise<Void> {
+	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 }

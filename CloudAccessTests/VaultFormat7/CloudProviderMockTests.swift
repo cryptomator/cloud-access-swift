@@ -34,8 +34,7 @@ class CloudProviderMockTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 		let provider = CloudProviderMock()
 		let url = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-		let result = provider.fetchItemList(forFolderAt: url, withPageToken: nil)
-		result.then { cloudItemList in
+		provider.fetchItemList(forFolderAt: url, withPageToken: nil).then { cloudItemList in
 			XCTAssertEqual(3, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1.c9r" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2.c9r" }))
@@ -51,15 +50,13 @@ class CloudProviderMockTests: XCTestCase {
 	func testDir1FileContainsDirId() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		let provider = CloudProviderMock()
-		let remoteUrl = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
-		let localUrl = tmpDir.appendingPathComponent("dir.c9r")
-		let result = provider.fetchItemMetadata(at: remoteUrl)
-		result.then { metadata -> Promise<CloudFile> in
+		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
+		let localURL = tmpDir.appendingPathComponent("dir.c9r")
+		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<CloudItemMetadata> in
 			XCTAssertEqual(.file, metadata.itemType)
-			let cloudFile = CloudFile(localURL: localUrl, metadata: metadata)
-			return provider.downloadFile(cloudFile)
-		}.then { cloudFile in
-			let downloadedContents = try Data(contentsOf: cloudFile.localURL)
+			return provider.downloadFile(from: metadata.remoteURL, to: localURL)
+		}.then { _ in
+			let downloadedContents = try Data(contentsOf: localURL)
 			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")

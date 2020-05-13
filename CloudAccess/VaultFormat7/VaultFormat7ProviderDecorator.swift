@@ -63,23 +63,23 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func downloadFile(_: CloudFile) -> Promise<CloudFile> {
+	public func downloadFile(from cleartextURL: URL, to localURL: URL) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func uploadFile(_: CloudFile, isUpdate _: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func createFolder(at _: URL) -> Promise<Void> {
+	public func createFolder(at cleartextURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func deleteItem(at _: URL) -> Promise<Void> {
+	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func moveItem(from _: URL, to _: URL) -> Promise<Void> {
+	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
@@ -89,16 +89,15 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		if let dirId = dirIds[cleartextURL] {
 			return Promise(dirId)
 		} else {
+			let localDirIdUrl = tmpDir.appendingPathComponent(UUID().uuidString)
 			return getDirId(cleartextURL: cleartextURL.deletingLastPathComponent()).then { parentDirId -> Promise<CloudItemMetadata> in
 				let ciphertextName = try self.cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId)
 				let dirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
 				return self.delegate.fetchItemMetadata(at: dirFilePath)
-			}.then { metadata -> Promise<CloudFile> in
-				let localDirIdUrl = self.tmpDir.appendingPathComponent(UUID().uuidString)
-				let cloudFile = CloudFile(localURL: localDirIdUrl, metadata: metadata)
-				return self.delegate.downloadFile(cloudFile)
-			}.then { cloudFile -> Data in
-				try Data(contentsOf: cloudFile.localURL)
+			}.then { metadata -> Promise<CloudItemMetadata> in
+				self.delegate.downloadFile(from: metadata.remoteURL, to: localDirIdUrl)
+			}.then { _ -> Data in
+				try Data(contentsOf: localDirIdUrl)
 			}
 		}
 	}

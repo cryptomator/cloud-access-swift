@@ -12,7 +12,6 @@
 		4A05900224519FFC008831F9 /* CloudAccess.h in Headers */ = {isa = PBXBuildFile; fileRef = 4A058FF424519FFC008831F9 /* CloudAccess.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05900B2451A107008831F9 /* CloudProvider.swift */; };
 		4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05900D2451A145008831F9 /* CloudItemList.swift */; };
-		4A0590102451A16D008831F9 /* CloudFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05900F2451A16D008831F9 /* CloudFile.swift */; };
 		4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590112451A180008831F9 /* CloudItemMetadata.swift */; };
 		4A0590152451A1AC008831F9 /* CloudAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590142451A1AC008831F9 /* CloudAuthentication.swift */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
@@ -45,7 +44,6 @@
 		4A05900124519FFC008831F9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4A05900B2451A107008831F9 /* CloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProvider.swift; sourceTree = "<group>"; };
 		4A05900D2451A145008831F9 /* CloudItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemList.swift; sourceTree = "<group>"; };
-		4A05900F2451A16D008831F9 /* CloudFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFile.swift; sourceTree = "<group>"; };
 		4A0590112451A180008831F9 /* CloudItemMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemMetadata.swift; sourceTree = "<group>"; };
 		4A0590142451A1AC008831F9 /* CloudAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAuthentication.swift; sourceTree = "<group>"; };
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
@@ -120,8 +118,8 @@
 		4A058FFE24519FFC008831F9 /* CloudAccessTests */ = {
 			isa = PBXGroup;
 			children = (
-				9ED0E61E2461807800FDB438 /* VaultFormat7 */,
 				4A05900124519FFC008831F9 /* Info.plist */,
+				9ED0E61E2461807800FDB438 /* VaultFormat7 */,
 			);
 			path = CloudAccessTests;
 			sourceTree = "<group>";
@@ -129,7 +127,6 @@
 		4A0590132451A18D008831F9 /* Item */ = {
 			isa = PBXGroup;
 			children = (
-				4A05900F2451A16D008831F9 /* CloudFile.swift */,
 				4A05900D2451A145008831F9 /* CloudItemList.swift */,
 				4A0590112451A180008831F9 /* CloudItemMetadata.swift */,
 				4A7C214C245305BB00DE81E6 /* CloudItemType.swift */,
@@ -341,7 +338,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if which swiftformat >/dev/null; then\n  swiftformat --lint .\nelse\n  echo \"warning: SwiftFormat not installed, download from https://github.com/nicklockwood/SwiftFormat\"\nfi\n";
+			shellScript = "if which swiftformat >/dev/null; then\n  swiftformat --lint --lenient .\nelse\n  echo \"warning: SwiftFormat not installed, download from https://github.com/nicklockwood/SwiftFormat\"\nfi\n";
 		};
 		F944FCE8C5CAC976072B565D /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -375,7 +372,6 @@
 				4A05901F2451E12C008831F9 /* CloudAuthenticationError.swift in Sources */,
 				4A0590152451A1AC008831F9 /* CloudAuthentication.swift in Sources */,
 				9ED0E61D24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift in Sources */,
-				4A0590102451A16D008831F9 /* CloudFile.swift in Sources */,
 				4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,

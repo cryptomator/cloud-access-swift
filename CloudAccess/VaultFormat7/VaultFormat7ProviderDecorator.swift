@@ -117,7 +117,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let ciphertextName = String(metadata.name[..<extRange.lowerBound])
 			let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: parentDirId)
 			let cleartextURL = cleartextParentUrl.appendingPathComponent(cleartextName)
-			let cleartextSize = NSNumber(value: 0) // TODO: determine cleartext size
+			let cleartextSize = 0 // TODO: determine cleartext size
 			return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: metadata.itemType, lastModifiedDate: metadata.lastModifiedDate, size: cleartextSize) // TODO: determine itemType
 		}
 	}

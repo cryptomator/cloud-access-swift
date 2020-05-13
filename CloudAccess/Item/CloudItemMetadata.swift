@@ -13,9 +13,9 @@ public struct CloudItemMetadata {
 	public let remoteURL: URL
 	public let itemType: CloudItemType
 	public let lastModifiedDate: Date?
-	public let size: NSNumber?
+	public let size: Int?
 
-	public init(name: String, remoteURL: URL, itemType: CloudItemType, lastModifiedDate: Date?, size: NSNumber?) {
+	public init(name: String, remoteURL: URL, itemType: CloudItemType, lastModifiedDate: Date?, size: Int?) {
 		self.name = name
 		self.remoteURL = remoteURL
 		self.itemType = itemType

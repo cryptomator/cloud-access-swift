@@ -106,7 +106,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func getDirPath(_ dirId: Data) throws -> URL {
 		let digest = try cryptor.encryptDirId(dirId)
 		let i = digest.index(digest.startIndex, offsetBy: 2)
-		return pathToVault.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/")
+		return pathToVault.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/", isDirectory: true)
 	}
 
 	private func cleartextMetadata(_ metadata: CloudItemMetadata, cleartextParentUrl: URL) -> Promise<CloudItemMetadata> {

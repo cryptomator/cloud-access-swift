@@ -19,14 +19,14 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let pathToVault: URL
 	let cryptor: Cryptor
 	let tmpDir: URL
-
-	var dirIds = [URL(fileURLWithPath: "/"): Data(count: 0)]
+	let dirIdCache: DirectoryIdCache
 
 	public init(delegate: CloudProvider, remotePathToVault: URL, cryptor: Cryptor) throws {
 		self.delegate = delegate
 		self.pathToVault = remotePathToVault
 		self.cryptor = cryptor
 		self.tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+		self.dirIdCache = try DirectoryIdCache()
 		try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
 	}
 
@@ -86,18 +86,12 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	// MARK: - Internal
 
 	private func getDirId(cleartextURL: URL) -> Promise<Data> {
-		if let dirId = dirIds[cleartextURL] {
-			return Promise(dirId)
-		} else {
-			let localDirIdUrl = tmpDir.appendingPathComponent(UUID().uuidString)
-			return getDirId(cleartextURL: cleartextURL.deletingLastPathComponent()).then { parentDirId -> Promise<CloudItemMetadata> in
-				let ciphertextName = try self.cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId)
-				let dirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
-				return self.delegate.fetchItemMetadata(at: dirFilePath)
-			}.then { metadata -> Promise<CloudItemMetadata> in
-				self.delegate.downloadFile(from: metadata.remoteURL, to: localDirIdUrl)
-			}.then { _ -> Data in
-				try Data(contentsOf: localDirIdUrl)
+		return dirIdCache.get(cleartextURL) { (url, parentDirId) throws -> Promise<Data> in
+			let ciphertextName = try self.cryptor.encryptFileName(url.lastPathComponent, dirId: parentDirId)
+			let remoteDirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
+			let localDirFilePath = self.tmpDir.appendingPathComponent(UUID().uuidString)
+			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath).then { _ in
+				try Data(contentsOf: localDirFilePath)
 			}
 		}
 	}

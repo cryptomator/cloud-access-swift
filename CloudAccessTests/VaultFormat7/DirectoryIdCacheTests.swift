@@ -10,6 +10,13 @@ import XCTest
 @testable import CloudAccess
 
 class DirectoryIdCacheTests: XCTestCase {
+	func testContainsRootPath() throws {
+		let cache = try DirectoryIdCache()
+		let path = URL(fileURLWithPath: "/")
+
+		XCTAssertEqual(Data([]), try cache.getCached(path))
+	}
+	
 	func testGetCached() throws {
 		let cache = try DirectoryIdCache()
 		let path = URL(fileURLWithPath: "/foo/bar")

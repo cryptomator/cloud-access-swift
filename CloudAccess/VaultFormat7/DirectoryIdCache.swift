@@ -33,15 +33,18 @@ internal class DirectoryIdCache {
 				table.column("cleartextPath", .text).notNull().primaryKey()
 				table.column("dirId", .blob).notNull()
 			}
+			try CachedEntry(cleartextPath: URL(fileURLWithPath: "/"), dirId: Data([])).save(db)
 		}
 	}
 
-	public func get(_ cleartextPath: URL, onMiss: (URL) -> Promise<Data>) -> Promise<Data> {
+	public func get(_ cleartextPath: URL, onMiss: @escaping (_ cleartextPath: URL, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
 		do {
 			if let cached = try getCached(cleartextPath) {
 				return Promise(cached)
 			} else {
-				return onMiss(cleartextPath).then { dirId -> Data in
+				return get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId -> Promise<Data> in
+					return try onMiss(cleartextPath, parentDirId)
+				}.then { dirId -> Data in
 					try self.addToCache(cleartextPath, dirId: dirId)
 					return dirId
 				}

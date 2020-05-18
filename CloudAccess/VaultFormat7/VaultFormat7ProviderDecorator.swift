@@ -42,7 +42,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let ciphertextPath = ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r")
 			return self.delegate.fetchItemMetadata(at: ciphertextPath)
 		}.then { ciphertextMetadata in
-			self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextParent)
+			return self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextParent)
 		}
 	}
 
@@ -64,23 +64,23 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func downloadFile(from cleartextURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func createFolder(at cleartextURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	// MARK: - Internal
@@ -91,7 +91,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let remoteDirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
 			let localDirFilePath = self.tmpDir.appendingPathComponent(UUID().uuidString)
 			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath, progress: nil).then { _ in
-				try Data(contentsOf: localDirFilePath)
+				return try Data(contentsOf: localDirFilePath)
 			}
 		})
 	}

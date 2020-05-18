@@ -71,18 +71,18 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func createFolder(at remoteURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
-		Promise(CloudProviderError.noInternetConnection)
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 }

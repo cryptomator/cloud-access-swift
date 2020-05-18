@@ -59,7 +59,7 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<CloudItemMetadata> {
+	public func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
 		if let data = files[remoteURL.relativePath] {
 			return Promise { () -> Promise<CloudItemMetadata> in
 				try data.write(to: localURL, options: .withoutOverwriting)
@@ -70,7 +70,7 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 

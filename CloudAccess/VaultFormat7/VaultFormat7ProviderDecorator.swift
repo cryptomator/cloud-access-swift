@@ -63,11 +63,11 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from cleartextURL: URL, to localURL: URL) -> Promise<CloudItemMetadata> {
+	public func downloadFile(from cleartextURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
-	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
 		Promise(CloudProviderError.noInternetConnection)
 	}
 
@@ -90,7 +90,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let ciphertextName = try self.cryptor.encryptFileName(url.lastPathComponent, dirId: parentDirId)
 			let remoteDirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
 			let localDirFilePath = self.tmpDir.appendingPathComponent(UUID().uuidString)
-			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath).then { _ in
+			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath, progress: nil).then { _ in
 				try Data(contentsOf: localDirFilePath)
 			}
 		}

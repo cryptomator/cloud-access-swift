@@ -86,14 +86,14 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	// MARK: - Internal
 
 	private func getDirId(cleartextURL: URL) -> Promise<Data> {
-		return dirIdCache.get(cleartextURL) { (url, parentDirId) throws -> Promise<Data> in
+		return dirIdCache.get(cleartextURL, onMiss: { (url, parentDirId) throws -> Promise<Data> in
 			let ciphertextName = try self.cryptor.encryptFileName(url.lastPathComponent, dirId: parentDirId)
 			let remoteDirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
 			let localDirFilePath = self.tmpDir.appendingPathComponent(UUID().uuidString)
 			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath, progress: nil).then { _ in
 				try Data(contentsOf: localDirFilePath)
 			}
-		}
+		})
 	}
 
 	private func getDirPath(_ dirId: Data) throws -> URL {

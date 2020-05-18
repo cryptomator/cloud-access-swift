@@ -39,6 +39,7 @@ public protocol CloudProvider {
 
 	 - Parameter remoteURL: The remote URL of the file to download.
 	 - Parameter localURL: The local URL of the desired download location.
+	 - Parameter progress: (Optional) A representation of the download progress.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	 - Postcondition: The file is stored under the `localURL`.
@@ -46,7 +47,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `localURL`.
 	 */
-	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<CloudItemMetadata>
+	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata>
 
 	/**
 	 Upload a file.
@@ -54,6 +55,7 @@ public protocol CloudProvider {
 	 - Parameter localURL: The local URL of the file to upload.
 	 - Parameter remoteURL: The remote URL of the desired upload location.
 	 - Parameter isUpdate: If true, overwrite the existing file at the `remoteURL`.
+	 - Parameter progress: (Optional) A representation of the upload progress.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
@@ -62,7 +64,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!isUpdate`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
 	 */
-	func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool) -> Promise<CloudItemMetadata>
+	func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata>
 
 	/**
 	 Create a folder.

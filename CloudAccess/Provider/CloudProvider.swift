@@ -19,6 +19,9 @@ public protocol CloudProvider {
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Promise with the metadata for a file or folder. If the fetch fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `remoteURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata>
 
@@ -31,6 +34,9 @@ public protocol CloudProvider {
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Promise with the item list for a folder (at page token if specified). If the fetch fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at the `remoteURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `remoteURL`.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList>
 
@@ -46,6 +52,9 @@ public protocol CloudProvider {
 	 - Returns: Promise with the metadata for the downloaded file. If the download fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `localURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `remoteURL`.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata>
 
@@ -62,7 +71,10 @@ public protocol CloudProvider {
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!isUpdate`.
+	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata>
 
@@ -75,6 +87,8 @@ public protocol CloudProvider {
 	 - Returns: Empty promise. If the folder creation fails, promise is rejected with:
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `remoteURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func createFolder(at remoteURL: URL) -> Promise<Void>
 
@@ -86,6 +100,9 @@ public protocol CloudProvider {
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Empty promise. If the deletion fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if a file or folder does not exist at the `remoteURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func deleteItem(at remoteURL: URL) -> Promise<Void>
 
@@ -101,7 +118,10 @@ public protocol CloudProvider {
 	 - Returns: Empty promise. If the move fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `oldRemoteURL`.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `newRemoteURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `oldRemoteURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `newRemoteURL` does not exist.
+	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
+	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
 	func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void>
 }

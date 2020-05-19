@@ -9,7 +9,6 @@
 import Foundation
 
 public enum CloudAuthenticationError: Error {
-	case authenticationFailed
 	case userCanceled
 	case notAuthenticated
 	case noUsername

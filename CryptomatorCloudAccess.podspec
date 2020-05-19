@@ -19,4 +19,5 @@ Pod::Spec.new do |s|
 
   s.dependency 'PromisesSwift', '~> 1.2'
 	s.dependency 'CryptomatorCryptoLib', '~> 0.2'
+  s.dependency 'GRDB.swift', '~> 4.14'
 end

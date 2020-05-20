@@ -12,9 +12,9 @@ PODS:
   - SwiftBase32 (0.8.0)
 
 DEPENDENCIES:
-  - CryptomatorCryptoLib (~> 0.3)
-  - GRDB.swift (~> 4.14)
-  - PromisesSwift (~> 1.2)
+  - CryptomatorCryptoLib (~> 0.3.0)
+  - GRDB.swift (~> 4.14.0)
+  - PromisesSwift (~> 1.2.0)
 
 SPEC REPOS:
   trunk:
@@ -33,6 +33,6 @@ SPEC CHECKSUMS:
   PromisesSwift: 37bad6f4daddb02f7c9c531efe91e8b21c13ee2f
   SwiftBase32: 723fd05e2fce776f2b98f26fe423bd20fa80e411
 
-PODFILE CHECKSUM: b834f3bf7fcd5a8c51c57fc110cba5bca73783b2
+PODFILE CHECKSUM: e6ba3630e50c35173481eeb353c32d681dd5a5cd
 
 COCOAPODS: 1.9.1

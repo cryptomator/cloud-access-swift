@@ -11,13 +11,19 @@ Pod::Spec.new do |s|
   s.source           = { :git => 'https://github.com/cryptomator/cloud-access-swift.git', :tag => s.version.to_s }
   s.social_media_url = 'https://twitter.com/Cryptomator'
 
-  s.public_header_files = 'CloudAccess/CloudAccess.h'
+  s.source_files = 'CloudAccess/CloudAccess.h'
   s.ios.deployment_target = '9.0'
   s.swift_version = '5.0'
 
-  s.source_files = 'CloudAccess/**/*{swift,h,m}'
+  s.subspec 'Core' do |ss|
+    ss.source_files = 'CloudAccess/Core/**/*.swift'
+    ss.dependency 'PromisesSwift', '~> 1.2.0'
+  end
 
-  s.dependency 'PromisesSwift', '~> 1.2'
-	s.dependency 'CryptomatorCryptoLib', '~> 0.2'
-  s.dependency 'GRDB.swift', '~> 4.14'
+  s.subspec 'VaultFormat7' do |ss|
+    ss.dependency 'CryptomatorCloudAccess/Core'
+    ss.source_files = 'CloudAccess/VaultFormat7/**/*.swift'
+    ss.dependency 'CryptomatorCryptoLib', '~> 0.3.0'
+    ss.dependency 'GRDB.swift', '~> 4.14.0'
+  end
 end

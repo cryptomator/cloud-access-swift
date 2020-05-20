@@ -8,7 +8,7 @@
 
 import Foundation
 
-public class CloudItemList {
+public struct CloudItemList {
 	public let items: [CloudItemMetadata]
 	public let nextPageToken: String?
 

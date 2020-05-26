@@ -70,7 +70,19 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+		if cleartextURL.hasDirectoryPath {
+			return getDirId(cleartextURL: cleartextURL).then { dirId throws -> Promise<Void> in
+				return try self.deleteCiphertextDir(dirId)
+			}.then { _ -> Promise<URL> in
+				return self.getCiphertextURL(cleartextURL)
+			}.then { ciphertextURL in
+				return self.delegate.deleteItem(at: ciphertextURL)
+			}
+		} else {
+			return getCiphertextURL(cleartextURL).then { ciphertextURL in
+				return self.delegate.deleteItem(at: ciphertextURL)
+			}
+		}
 	}
 
 	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
@@ -78,6 +90,27 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	// MARK: - Internal
+
+	private func deleteCiphertextDir(_ dirId: Data) throws -> Promise<Void> {
+		let ciphertextDir = try getDirPath(dirId)
+		return delegate.fetchItemListExhaustively(forFolderAt: ciphertextDir).then { ciphertextItemList -> Promise<Void> in
+			let subDirs = ciphertextItemList.items.filter { $0.remoteURL.hasDirectoryPath }
+			let subDirItemListPromises = subDirs.map { self.delegate.fetchItemListExhaustively(forFolderAt: $0.remoteURL) }
+			return all(subDirItemListPromises).then { subDirItemLists -> Promise<[Maybe<Data>]> in
+				// find subdirectories
+				let allDirFiles = subDirItemLists.flatMap { $0.items }.filter { $0.name == "dir.c9r" }
+				let dirIdPromises = allDirFiles.map { self.getRemoteFileContents($0.remoteURL) }
+				return any(dirIdPromises)
+			}.then { dirIds throws -> Promise<[Maybe<Void>]> in
+				// delete subdirectories recursively
+				let recursiveDeleteOperations = try dirIds.filter { $0.value != nil }.map { try self.deleteCiphertextDir($0.value!) }
+				return any(recursiveDeleteOperations)
+			}.then { _ in
+				// delete self
+				self.delegate.deleteItem(at: ciphertextDir)
+			}
+		}
+	}
 
 	private func getCiphertextURL(_ cleartextURL: URL) -> Promise<URL> {
 		let cleartextParent = cleartextURL.deletingLastPathComponent()

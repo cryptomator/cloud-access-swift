@@ -33,16 +33,10 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cleartextURL: URL) -> Promise<CloudItemMetadata> {
-		let cleartextParent = cleartextURL.deletingLastPathComponent()
-		let cleartextName = cleartextURL.lastPathComponent
-
-		return getDirId(cleartextURL: cleartextParent).then { dirId -> Promise<CloudItemMetadata> in
-			let ciphertextParentPath = try self.getDirPath(dirId)
-			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
-			let ciphertextPath = ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r")
-			return self.delegate.fetchItemMetadata(at: ciphertextPath)
+		return getCiphertextURL(cleartextURL).then { ciphertextURL -> Promise<CloudItemMetadata> in
+			return self.delegate.fetchItemMetadata(at: ciphertextURL)
 		}.then { ciphertextMetadata in
-			return self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextParent)
+			return self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextURL.deletingLastPathComponent())
 		}
 	}
 
@@ -85,15 +79,29 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - Internal
 
+	private func getCiphertextURL(_ cleartextURL: URL) -> Promise<URL> {
+		let cleartextParent = cleartextURL.deletingLastPathComponent()
+		let cleartextName = cleartextURL.lastPathComponent
+		return getDirId(cleartextURL: cleartextParent).then { dirId -> URL in
+			let ciphertextParentPath = try self.getDirPath(dirId)
+			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
+			return ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r")
+		}
+	}
+
 	private func getDirId(cleartextURL: URL) -> Promise<Data> {
 		return dirIdCache.get(cleartextURL, onMiss: { (url, parentDirId) throws -> Promise<Data> in
 			let ciphertextName = try self.cryptor.encryptFileName(url.lastPathComponent, dirId: parentDirId)
-			let remoteDirFilePath = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
-			let localDirFilePath = self.tmpDir.appendingPathComponent(UUID().uuidString)
-			return self.delegate.downloadFile(from: remoteDirFilePath, to: localDirFilePath, progress: nil).then { _ in
-				return try Data(contentsOf: localDirFilePath)
-			}
+			let dirFileURL = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
+			return self.getRemoteFileContents(dirFileURL)
 		})
+	}
+
+	private func getRemoteFileContents(_ remoteURL: URL) -> Promise<Data> {
+		let localURL = tmpDir.appendingPathComponent(UUID().uuidString)
+		return delegate.downloadFile(from: remoteURL, to: localURL, progress: nil).then { _ in
+			return try Data(contentsOf: localURL)
+		}
 	}
 
 	private func getDirPath(_ dirId: Data) throws -> URL {

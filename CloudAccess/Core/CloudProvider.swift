@@ -26,7 +26,9 @@ public protocol CloudProvider {
 	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata>
 
 	/**
-	 Starts fetching the contents of a folder. If the result's `CloudItemList` has a `nextPageToken`, call `fetchItemList()` with the returned `nextPageToken` to retrieve more entries.
+	 Starts fetching the contents of a folder.
+
+	 If the result's `CloudItemList` has a `nextPageToken`, call `fetchItemList()` with the returned `nextPageToken` to retrieve more entries.
 	 If on the other hand the end of the list is reached, `nextPageToken` will not be set.
 
 	 - Parameter remoteURL: The remote URL of the folder to fetch item list.

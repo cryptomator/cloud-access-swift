@@ -27,6 +27,7 @@ public protocol CloudProvider {
 
 	/**
 	 Starts fetching the contents of a folder. If the result's `CloudItemList` has a `nextPageToken`, call `fetchItemList()` with the returned `nextPageToken` to retrieve more entries.
+	 If on the other hand the end of the list is reached, `nextPageToken` will not be set.
 
 	 - Parameter remoteURL: The remote URL of the folder to fetch item list.
 	 - Parameter pageToken: (Optional) The page token returned by your last call to `fetchItemList()`.
@@ -93,7 +94,7 @@ public protocol CloudProvider {
 	func createFolder(at remoteURL: URL) -> Promise<Void>
 
 	/**
-	 Delete a file or folder.
+	 Recursively delete a file or folder.
 
 	 - Parameter remoteURL: `remoteURL` conforms to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)

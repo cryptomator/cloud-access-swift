@@ -17,7 +17,7 @@ class DirectoryIdCacheTests: XCTestCase {
 
 		XCTAssertEqual(Data([]), try cache.getCached(path))
 	}
-	
+
 	func testGetCached() throws {
 		let cache = try DirectoryIdCache()
 		let path = URL(fileURLWithPath: "/foo/bar")

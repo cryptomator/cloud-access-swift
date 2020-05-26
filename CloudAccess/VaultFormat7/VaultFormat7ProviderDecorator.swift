@@ -72,7 +72,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
 		if cleartextURL.hasDirectoryPath {
 			return getDirId(cleartextURL: cleartextURL).then { dirId throws -> Promise<Void> in
-				return try self.deleteCiphertextDir(dirId)
+				return self.deleteCiphertextDir(dirId)
 			}.then { _ -> Promise<URL> in
 				return self.getCiphertextURL(cleartextURL)
 			}.then { ciphertextURL in
@@ -91,8 +91,13 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - Internal
 
-	private func deleteCiphertextDir(_ dirId: Data) throws -> Promise<Void> {
-		let ciphertextDir = try getDirPath(dirId)
+	private func deleteCiphertextDir(_ dirId: Data) -> Promise<Void> {
+		let ciphertextDir: URL
+		do {
+			ciphertextDir = try getDirPath(dirId)
+		} catch {
+			return Promise(error)
+		}
 		return delegate.fetchItemListExhaustively(forFolderAt: ciphertextDir).then { ciphertextItemList -> Promise<Void> in
 			let subDirs = ciphertextItemList.items.filter { $0.remoteURL.hasDirectoryPath }
 			let subDirItemListPromises = subDirs.map { self.delegate.fetchItemListExhaustively(forFolderAt: $0.remoteURL) }
@@ -103,7 +108,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 				return any(dirIdPromises)
 			}.then { dirIds throws -> Promise<[Maybe<Void>]> in
 				// delete subdirectories recursively
-				let recursiveDeleteOperations = try dirIds.filter { $0.value != nil }.map { try self.deleteCiphertextDir($0.value!) }
+				let recursiveDeleteOperations = dirIds.filter { $0.value != nil }.map { self.deleteCiphertextDir($0.value!) }
 				return any(recursiveDeleteOperations)
 			}.then { _ in
 				// delete self

@@ -24,6 +24,8 @@
 		9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */; };
 		9ED0E622246180AB00FDB438 /* CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */; };
 		9ED0E624246198F600FDB438 /* CloudProviderMockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E623246198F600FDB438 /* CloudProviderMockTests.swift */; };
+		9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */; };
+		9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */; };
 		B8BDF41748FA84EE49D536DF /* Pods_CloudAccess.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E616317171F34CD86C0132F8 /* Pods_CloudAccess.framework */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +61,8 @@
 		9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		9ED0E621246180AB00FDB438 /* CloudProviderMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderMock.swift; sourceTree = "<group>"; };
 		9ED0E623246198F600FDB438 /* CloudProviderMockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderMockTests.swift; sourceTree = "<group>"; };
+		9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudProvider+Convenience.swift"; sourceTree = "<group>"; };
+		9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudProvider+ConvenienceTests.swift"; sourceTree = "<group>"; };
 		B5030D0B338FB443C0C6967E /* Pods-CloudAccessTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccessTests.release.xcconfig"; path = "Target Support Files/Pods-CloudAccessTests/Pods-CloudAccessTests.release.xcconfig"; sourceTree = "<group>"; };
 		E35D9BB4A5B34BEBECDF7213 /* Pods-CloudAccessTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccessTests.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccessTests/Pods-CloudAccessTests.debug.xcconfig"; sourceTree = "<group>"; };
 		E616317171F34CD86C0132F8 /* Pods_CloudAccess.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_CloudAccess.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -121,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				4A05900124519FFC008831F9 /* Info.plist */,
+				9EE62A0E247D54CD0089DAF7 /* Core */,
 				9ED0E61E2461807800FDB438 /* VaultFormat7 */,
 			);
 			path = CloudAccessTests;
@@ -136,6 +141,7 @@
 				4A7C214C245305BB00DE81E6 /* CloudItemType.swift */,
 				4A05900B2451A107008831F9 /* CloudProvider.swift */,
 				4A05901C2451DD26008831F9 /* CloudProviderError.swift */,
+				9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -168,6 +174,14 @@
 				9ECEC0B0246EE6A700151299 /* DirectoryIdCacheTests.swift */,
 			);
 			path = VaultFormat7;
+			sourceTree = "<group>";
+		};
+		9EE62A0E247D54CD0089DAF7 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */,
+			);
+			path = Core;
 			sourceTree = "<group>";
 		};
 		A94BEDC345DFCCE0C1DAB0DE /* Pods */ = {
@@ -365,6 +379,7 @@
 				4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
+				9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */,
 				9ECEC0AF246ED1FB00151299 /* DirectoryIdCache.swift in Sources */,
 				4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */,
 				4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */,
@@ -379,6 +394,7 @@
 				9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */,
 				9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */,
 				9ECEC0B1246EE6A700151299 /* DirectoryIdCacheTests.swift in Sources */,
+				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,
 				9ED0E622246180AB00FDB438 /* CloudProviderMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

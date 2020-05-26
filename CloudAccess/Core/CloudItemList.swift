@@ -16,4 +16,8 @@ public struct CloudItemList {
 		self.items = items
 		self.nextPageToken = nextPageToken
 	}
+
+	static func + (left: CloudItemList, right: CloudItemList) -> CloudItemList {
+		return CloudItemList(items: left.items + right.items, nextPageToken: right.nextPageToken)
+	}
 }

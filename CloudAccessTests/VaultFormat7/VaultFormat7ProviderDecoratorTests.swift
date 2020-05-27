@@ -13,11 +13,11 @@ import XCTest
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	let pathToVault = URL(fileURLWithPath: "pathToVault")
-	let provider = CloudProviderMock()
 	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 
 	func testFetchItemListForRootDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
+		let provider = CloudProviderMock()
 		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/"), withPageToken: nil).then { itemList in
@@ -36,6 +36,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testFetchItemListForSubDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
+		let provider = CloudProviderMock()
 		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1"), withPageToken: nil).then { itemList in
@@ -51,6 +52,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testFetchItemMetadata() throws {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
+		let provider = CloudProviderMock()
 		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3")).then { metadata in

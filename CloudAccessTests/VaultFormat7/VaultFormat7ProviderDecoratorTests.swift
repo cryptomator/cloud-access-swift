@@ -14,11 +14,17 @@ import XCTest
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	let pathToVault = URL(fileURLWithPath: "pathToVault")
 	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
+	var provider: CloudProviderMock!
+	var decorator: VaultFormat7ProviderDecorator!
+
+	override func setUpWithError() throws {
+		try super.setUpWithError()
+		provider = CloudProviderMock()
+		decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
+	}
 
 	func testFetchItemListForRootDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
-		let provider = CloudProviderMock()
-		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(3, itemList.items.count)
@@ -36,8 +42,6 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testFetchItemListForSubDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
-		let provider = CloudProviderMock()
-		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
@@ -53,8 +57,6 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testFetchItemMetadata() throws {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
-		let provider = CloudProviderMock()
-		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3")).then { metadata in
 			XCTAssertEqual("File 3", metadata.name)
@@ -70,14 +72,12 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testDeleteDirectoryRecursively() throws {
 		let expectation = XCTestExpectation(description: "deleteItem")
-		let provider = CloudProviderMock()
-		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1", isDirectory: true)).then {
-			XCTAssertEqual(3, provider.deleted.count)
-			XCTAssertTrue(provider.deleted.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
-			XCTAssertTrue(provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
-			XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+			XCTAssertEqual(3, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 		}.catch { error in
 			XCTFail("Promise rejected: \(error)")
 		}.always {
@@ -88,12 +88,10 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testDeleteFile() throws {
 		let expectation = XCTestExpectation(description: "deleteItem")
-		let provider = CloudProviderMock()
-		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
 
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1/File 3")).then {
-			XCTAssertEqual(1, provider.deleted.count)
-			XCTAssertTrue(provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
+			XCTAssertEqual(1, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
 		}.catch { error in
 			XCTFail("Promise rejected: \(error)")
 		}.always {

@@ -19,15 +19,20 @@ public class CloudProviderMock: CloudProvider {
 		"pathToVault/d/00",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r",
-		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r",
+		"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 	]
 
 	let files = [
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!,
-		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0)
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0),
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": "dir2-id".data(using: .utf8)!
 	]
+
+	var deleted: [String] = []
 
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		if dirs.contains(remoteURL.relativePath) {
@@ -50,7 +55,7 @@ public class CloudProviderMock: CloudProvider {
 		let childFiles = files.keys.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
 		let children = childDirs + childFiles
 		return Promise { fulfill, reject in
-			let metadataPromises = children.map { self.fetchItemMetadata(at: URL(fileURLWithPath: $0)) }
+			let metadataPromises = children.map { self.fetchItemMetadata(at: URL(fileURLWithPath: $0, isDirectory: childDirs.contains($0))) }
 			all(metadataPromises).then { metadata in
 				fulfill(CloudItemList(items: metadata))
 			}.catch { error in
@@ -79,7 +84,8 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+		deleted.append(remoteURL.relativePath)
+		return Promise(())
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {

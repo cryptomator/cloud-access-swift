@@ -110,9 +110,9 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 				// delete subdirectories recursively
 				let recursiveDeleteOperations = dirIds.filter { $0.value != nil }.map { self.deleteCiphertextDir($0.value!) }
 				return any(recursiveDeleteOperations)
-			}.then { _ in
+			}.then { _ -> Promise<Void> in
 				// delete self
-				self.delegate.deleteItem(at: ciphertextDir)
+				return self.delegate.deleteItem(at: ciphertextDir)
 			}
 		}
 	}

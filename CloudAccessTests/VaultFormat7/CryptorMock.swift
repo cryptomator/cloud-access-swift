@@ -18,14 +18,16 @@ public class CryptorMock: Cryptor {
 		"file1": "File 1",
 		"file2": "File 2",
 		"dir1": "Directory 1",
-		"file3": "File 3"
+		"file3": "File 3",
+		"dir2": "Directory 2"
 	]
 
 	let ciphertextNames: [String: String]
 
 	let dirIds = [
 		"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 	]
 
 	override public init(masterKey: Masterkey) {

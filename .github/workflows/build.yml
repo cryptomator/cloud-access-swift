@@ -12,7 +12,7 @@ jobs:
       - name: Install dependencies
         run: pod install
       - name: Build and test
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -workspace 'CloudAccess.xcworkspace' -scheme 'CloudAccess' -destination 'OS=13.5,name=iPhone 11 Pro' -enableCodeCoverage YES clean test | xcpretty
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -workspace 'CloudAccess.xcworkspace' -scheme 'CloudAccess' -destination 'name=iPhone 11 Pro' -enableCodeCoverage YES clean test | xcpretty
       - name: Upload code coverage report
         run: |
           gem install slather

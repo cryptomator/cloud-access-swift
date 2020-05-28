@@ -101,4 +101,20 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		}
 		wait(for: [expectation], timeout: 1.0)
 	}
+
+	func testMoveItem() throws {
+		let expectation = XCTestExpectation(description: "moveItem")
+
+		XCTAssertNotNil(provider.files["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"])
+		XCTAssertNil(provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r"])
+		decorator.moveItem(from: URL(fileURLWithPath: "/File 1"), to: URL(fileURLWithPath: "/Directory 1/File 2")).then {
+			XCTAssertNil(self.provider.files["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"])
+			XCTAssertNotNil(self.provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r"])
+		}.catch { error in
+			XCTFail("Promise rejected: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
 }

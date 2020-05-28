@@ -94,7 +94,12 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
 		precondition(oldCleartextURL.hasDirectoryPath == newCleartextURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		return all(
+			getCiphertextURL(oldCleartextURL),
+			getCiphertextURL(newCleartextURL)
+		).then { oldCiphertextURL, newCiphertextURL in
+			return self.delegate.moveItem(from: oldCiphertextURL, to: newCiphertextURL)
+		}
 	}
 
 	// MARK: - Internal

@@ -101,6 +101,24 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
+		if dirs.contains(newRemoteURL.relativePath) || files[newRemoteURL.relativePath] != nil {
+			return Promise(CloudProviderError.itemAlreadyExists)
+		} else if oldRemoteURL.hasDirectoryPath, files[oldRemoteURL.relativePath] != nil ||
+			!oldRemoteURL.hasDirectoryPath, dirs.contains(oldRemoteURL.relativePath) {
+			return Promise(CloudProviderError.itemTypeMismatch)
+		} else if !dirs.contains(newRemoteURL.deletingLastPathComponent().relativePath) {
+			return Promise(CloudProviderError.parentFolderDoesNotExist)
+		} else if oldRemoteURL.hasDirectoryPath, dirs.contains(oldRemoteURL.relativePath) {
+			if dirs.remove(oldRemoteURL.relativePath) != nil, dirs.insert(newRemoteURL.relativePath).inserted {
+				return Promise(())
+			}
+		} else if !oldRemoteURL.hasDirectoryPath, files[oldRemoteURL.relativePath] != nil {
+			if let data = files.removeValue(forKey: oldRemoteURL.relativePath) {
+				files.updateValue(data, forKey: newRemoteURL.relativePath)
+				return Promise(())
+			}
+		}
+		return Promise(CloudProviderError.itemNotFound)
 	}
 }

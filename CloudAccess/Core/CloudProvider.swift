@@ -14,9 +14,6 @@ public protocol CloudProvider {
 	 Fetches the metadata for a file or folder.
 
 	 - Parameter remoteURL: The remote URL of the file or folder to fetch metadata.
-	 - Precondition: `remoteURL` should conform to the following pattern:
-	   - file: has no slash at the end (e.g. `/folder/example.txt`)
-	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Promise with the metadata for a file or folder. If the fetch fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
@@ -114,9 +111,6 @@ public protocol CloudProvider {
 
 	 - Parameter oldRemoteURL: The remote URL of the file or folder to be moved.
 	 - Parameter newRemoteURL: The remote URL of the desired destination.
-	 - Precondition: `oldRemoteURL` and `newRemoteURL` should conform to the following pattern:
-	   - file: has no slash at the end (e.g. `/folder/example.txt`)
-	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Precondition: `oldRemoteURL` and `newRemoteURL` point to the same item type (both point to a folder or both point to a file).
 	 - Returns: Empty promise. If the move fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `oldRemoteURL`.

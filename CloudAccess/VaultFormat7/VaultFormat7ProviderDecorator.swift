@@ -61,6 +61,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	public func downloadFile(from cleartextURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
 		precondition(!cleartextURL.hasDirectoryPath)
+		precondition(!localURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
@@ -130,7 +131,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		return getDirId(cleartextURL: cleartextParent).then { dirId -> URL in
 			let ciphertextParentPath = try self.getDirPath(dirId)
 			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
-			return ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r")
+			return ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r", isDirectory: cleartextURL.hasDirectoryPath)
 		}
 	}
 

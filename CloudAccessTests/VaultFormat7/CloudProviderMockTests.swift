@@ -33,7 +33,7 @@ class CloudProviderMockTests: XCTestCase {
 	func testVaultRootContainsFiles() {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 		let provider = CloudProviderMock()
-		let url = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+		let url = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", isDirectory: true)
 		provider.fetchItemList(forFolderAt: url, withPageToken: nil).then { cloudItemList in
 			XCTAssertEqual(3, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1.c9r" }))

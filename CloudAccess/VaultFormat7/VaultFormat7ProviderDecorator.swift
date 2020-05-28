@@ -16,18 +16,18 @@ enum VaultFormat7Error: Error {
 
 public class VaultFormat7ProviderDecorator: CloudProvider {
 	let delegate: CloudProvider
-	let pathToVault: URL
+	let vaultURL: URL
 	let cryptor: Cryptor
-	let tmpDir: URL
+	let tmpDirURL: URL
 	let dirIdCache: DirectoryIdCache
 
-	public init(delegate: CloudProvider, remotePathToVault: URL, cryptor: Cryptor) throws {
+	public init(delegate: CloudProvider, remoteVaultURL: URL, cryptor: Cryptor) throws {
 		self.delegate = delegate
-		self.pathToVault = remotePathToVault
+		self.vaultURL = remoteVaultURL
 		self.cryptor = cryptor
-		self.tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.dirIdCache = try DirectoryIdCache()
-		try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
 	// MARK: - CloudProvider API
@@ -36,7 +36,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		return getCiphertextURL(cleartextURL).then { ciphertextURL -> Promise<CloudItemMetadata> in
 			return self.delegate.fetchItemMetadata(at: ciphertextURL)
 		}.then { ciphertextMetadata in
-			return self.cleartextMetadata(ciphertextMetadata, cleartextParentUrl: cleartextURL.deletingLastPathComponent())
+			return self.cleartextMetadata(ciphertextMetadata, cleartextParentURL: cleartextURL.deletingLastPathComponent())
 		}
 	}
 
@@ -51,7 +51,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 
 		return all(dirIdPromise, itemListPromise).then { (_, list) -> Promise<CloudItemList> in
-			let cleartextItemPromises = list.items.map { self.cleartextMetadata($0, cleartextParentUrl: cleartextURL) }
+			let cleartextItemPromises = list.items.map { self.cleartextMetadata($0, cleartextParentURL: cleartextURL) }
 			return any(cleartextItemPromises).then { maybeCleartextItems -> CloudItemList in
 				let cleartextItems = maybeCleartextItems.filter { $0.value != nil }.map { $0.value! }
 				return CloudItemList(items: cleartextItems, nextPageToken: list.nextPageToken)
@@ -149,7 +149,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	private func getRemoteFileContents(_ remoteURL: URL) -> Promise<Data> {
-		let localURL = tmpDir.appendingPathComponent(UUID().uuidString)
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
 		return delegate.downloadFile(from: remoteURL, to: localURL, progress: nil).then { _ in
 			return try Data(contentsOf: localURL)
 		}
@@ -158,18 +158,18 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func getDirPath(_ dirId: Data) throws -> URL {
 		let digest = try cryptor.encryptDirId(dirId)
 		let i = digest.index(digest.startIndex, offsetBy: 2)
-		return pathToVault.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/", isDirectory: true)
+		return vaultURL.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/", isDirectory: true)
 	}
 
-	private func cleartextMetadata(_ metadata: CloudItemMetadata, cleartextParentUrl: URL) -> Promise<CloudItemMetadata> {
-		getDirId(cleartextURL: cleartextParentUrl).then { parentDirId -> CloudItemMetadata in
+	private func cleartextMetadata(_ metadata: CloudItemMetadata, cleartextParentURL: URL) -> Promise<CloudItemMetadata> {
+		getDirId(cleartextURL: cleartextParentURL).then { parentDirId -> CloudItemMetadata in
 			// TODO: unshorten .c9s names
 			guard let extRange = metadata.name.range(of: ".c9r", options: .caseInsensitive) else {
 				throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
 			}
 			let ciphertextName = String(metadata.name[..<extRange.lowerBound])
 			let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: parentDirId)
-			let cleartextURL = cleartextParentUrl.appendingPathComponent(cleartextName)
+			let cleartextURL = cleartextParentURL.appendingPathComponent(cleartextName)
 			let cleartextSize = 0 // TODO: determine cleartext size
 			return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: metadata.itemType, lastModifiedDate: metadata.lastModifiedDate, size: cleartextSize) // TODO: determine itemType
 		}

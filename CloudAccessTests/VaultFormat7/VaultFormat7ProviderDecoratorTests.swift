@@ -12,7 +12,7 @@ import XCTest
 @testable import CryptomatorCryptoLib
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
-	let pathToVault = URL(fileURLWithPath: "pathToVault")
+	let vaultURL = URL(fileURLWithPath: "pathToVault")
 	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 	var provider: CloudProviderMock!
 	var decorator: VaultFormat7ProviderDecorator!
@@ -20,7 +20,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		provider = CloudProviderMock()
-		decorator = try VaultFormat7ProviderDecorator(delegate: provider, remotePathToVault: pathToVault, cryptor: cryptor)
+		decorator = try VaultFormat7ProviderDecorator(delegate: provider, remoteVaultURL: vaultURL, cryptor: cryptor)
 	}
 
 	func testFetchItemMetadata() throws {

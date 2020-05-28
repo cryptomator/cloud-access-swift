@@ -54,9 +54,9 @@ class DirectoryIdCacheTests: XCTestCase {
 		let url = URL(fileURLWithPath: "/one/two/three")
 
 		var misses: [String] = []
-		let result = cache.get(url, onMiss: { (cleartextUrl, parentDirId) -> Promise<Data> in
+		let result = cache.get(url, onMiss: { (cleartextURL, parentDirId) -> Promise<Data> in
 			let dirId: String = {
-				switch cleartextUrl.lastPathComponent {
+				switch cleartextURL.lastPathComponent {
 				case "one":
 					XCTAssertEqual(Data(), parentDirId)
 					return "ONE"

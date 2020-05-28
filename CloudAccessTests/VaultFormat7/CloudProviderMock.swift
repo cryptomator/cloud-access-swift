@@ -13,7 +13,7 @@ import Promises
 let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 
 public class CloudProviderMock: CloudProvider {
-	var dirs: Set = [
+	let dirs: Set = [
 		"pathToVault",
 		"pathToVault/d",
 		"pathToVault/d/00",
@@ -24,13 +24,16 @@ public class CloudProviderMock: CloudProvider {
 		"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 	]
 
-	var files = [
+	let files = [
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2.c9r": Data(count: 0),
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!,
 		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data(count: 0),
 		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": "dir2-id".data(using: .utf8)!
 	]
+
+	var deleted: [String] = []
+	var moved: [String: String] = [:]
 
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		if dirs.contains(remoteURL.relativePath) {
@@ -88,37 +91,13 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		if remoteURL.hasDirectoryPath, dirs.contains(remoteURL.relativePath) {
-			if dirs.remove(remoteURL.relativePath) != nil {
-				return Promise(())
-			}
-		} else if !remoteURL.hasDirectoryPath, files[remoteURL.relativePath] != nil {
-			if files.removeValue(forKey: remoteURL.relativePath) != nil {
-				return Promise(())
-			}
-		}
-		return Promise(CloudProviderError.itemNotFound)
+		deleted.append(remoteURL.relativePath)
+		return Promise(())
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
 		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		if dirs.contains(newRemoteURL.relativePath) || files[newRemoteURL.relativePath] != nil {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} else if oldRemoteURL.hasDirectoryPath, files[oldRemoteURL.relativePath] != nil ||
-			!oldRemoteURL.hasDirectoryPath, dirs.contains(oldRemoteURL.relativePath) {
-			return Promise(CloudProviderError.itemTypeMismatch)
-		} else if !dirs.contains(newRemoteURL.deletingLastPathComponent().relativePath) {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} else if oldRemoteURL.hasDirectoryPath, dirs.contains(oldRemoteURL.relativePath) {
-			if dirs.remove(oldRemoteURL.relativePath) != nil, dirs.insert(newRemoteURL.relativePath).inserted {
-				return Promise(())
-			}
-		} else if !oldRemoteURL.hasDirectoryPath, files[oldRemoteURL.relativePath] != nil {
-			if let data = files.removeValue(forKey: oldRemoteURL.relativePath) {
-				files.updateValue(data, forKey: newRemoteURL.relativePath)
-				return Promise(())
-			}
-		}
-		return Promise(CloudProviderError.itemNotFound)
+		moved[oldRemoteURL.relativePath] = newRemoteURL.relativePath
+		return Promise(())
 	}
 }

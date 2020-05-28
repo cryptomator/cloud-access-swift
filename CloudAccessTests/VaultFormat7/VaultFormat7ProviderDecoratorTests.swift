@@ -73,13 +73,11 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testDeleteDirectoryRecursively() throws {
 		let expectation = XCTestExpectation(description: "deleteItem")
 
-		XCTAssertTrue(provider.dirs.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
-		XCTAssertTrue(provider.dirs.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
-		XCTAssertTrue(provider.dirs.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1", isDirectory: true)).then {
-			XCTAssertFalse(self.provider.dirs.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
-			XCTAssertFalse(self.provider.dirs.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
-			XCTAssertFalse(self.provider.dirs.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+			XCTAssertEqual(3, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 		}.catch { error in
 			XCTFail("Promise rejected: \(error)")
 		}.always {
@@ -91,9 +89,9 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testDeleteFile() throws {
 		let expectation = XCTestExpectation(description: "deleteItem")
 
-		XCTAssertNotNil(provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"])
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1/File 3")).then {
-			XCTAssertNil(self.provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"])
+			XCTAssertEqual(1, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
 		}.catch { error in
 			XCTFail("Promise rejected: \(error)")
 		}.always {
@@ -105,11 +103,9 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testMoveItem() throws {
 		let expectation = XCTestExpectation(description: "moveItem")
 
-		XCTAssertNotNil(provider.files["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"])
-		XCTAssertNil(provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r"])
 		decorator.moveItem(from: URL(fileURLWithPath: "/File 1"), to: URL(fileURLWithPath: "/Directory 1/File 2")).then {
-			XCTAssertNil(self.provider.files["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"])
-			XCTAssertNotNil(self.provider.files["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r"])
+			XCTAssertEqual(1, self.provider.moved.count)
+			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r")
 		}.catch { error in
 			XCTFail("Promise rejected: \(error)")
 		}.always {

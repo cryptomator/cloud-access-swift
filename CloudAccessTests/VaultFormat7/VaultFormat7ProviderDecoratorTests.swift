@@ -43,7 +43,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testFetchItemListForSubDir() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 
-		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1"), withPageToken: nil).then { itemList in
+		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1", isDirectory: true), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 3" }))
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Directory 2" }))

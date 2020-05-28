@@ -41,6 +41,8 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cleartextURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		precondition(cleartextURL.hasDirectoryPath)
+
 		let dirIdPromise = getDirId(cleartextURL: cleartextURL)
 
 		let itemListPromise = dirIdPromise.then { dirId -> Promise<CloudItemList> in
@@ -58,14 +60,18 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func downloadFile(from cleartextURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
+		precondition(!cleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+		precondition(!localURL.hasDirectoryPath)
+		precondition(!cleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func createFolder(at cleartextURL: URL) -> Promise<Void> {
+		precondition(cleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
@@ -86,6 +92,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
+		precondition(oldCleartextURL.hasDirectoryPath == newCleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 

@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-extension CloudProvider {
+public extension CloudProvider {
 	/**
 	 Convenience wrapper for `fetchItemList()` that returns a complete item list.
 	 */
@@ -20,6 +20,34 @@ extension CloudProvider {
 				return Promise(combinedList)
 			} else {
 				return self.fetchItemListExhaustively(forFolderAt: cleartextURL, appendTo: combinedList)
+			}
+		}
+	}
+
+	/**
+	 Convenience Wrapper for `deleteItem()` , which satisfies also if the item is not present.
+	 */
+	func deleteItemIfExists(at remoteURL: URL) -> Promise<Void> {
+		return Promise(on: .global()) { fulfill, _ in
+			do {
+				try await(self.deleteItem(at: remoteURL))
+				fulfill(())
+			} catch CloudProviderError.itemNotFound {
+				fulfill(())
+			}
+		}
+	}
+
+	/**
+	 Checks if the item exists at the given remoteURL.
+	 */
+	func checkForItemExistence(at remoteURL: URL) -> Promise<Bool> {
+		return Promise(on: .global()) { fulfill, _ in
+			do {
+				_ = try await(self.fetchItemMetadata(at: remoteURL))
+				fulfill(true)
+			} catch CloudProviderError.itemNotFound {
+				fulfill(false)
 			}
 		}
 	}

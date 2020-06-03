@@ -33,6 +33,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cleartextURL: URL) -> Promise<CloudItemMetadata> {
+		precondition(cleartextURL.isFileURL)
 		return getCiphertextURL(cleartextURL).then { ciphertextURL -> Promise<CloudItemMetadata> in
 			return self.delegate.fetchItemMetadata(at: ciphertextURL)
 		}.then { ciphertextMetadata in
@@ -41,6 +42,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cleartextURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		precondition(cleartextURL.isFileURL)
 		precondition(cleartextURL.hasDirectoryPath)
 
 		let dirIdPromise = getDirId(cleartextURL: cleartextURL)
@@ -60,23 +62,29 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func downloadFile(from cleartextURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
+		precondition(cleartextURL.isFileURL)
+		precondition(localURL.isFileURL)
 		precondition(!cleartextURL.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+		precondition(localURL.isFileURL)
+		precondition(cleartextURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!cleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func createFolder(at cleartextURL: URL) -> Promise<Void> {
+		precondition(cleartextURL.isFileURL)
 		precondition(cleartextURL.hasDirectoryPath)
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
+		precondition(cleartextURL.isFileURL)
 		if cleartextURL.hasDirectoryPath {
 			return getDirId(cleartextURL: cleartextURL).then { dirId throws -> Promise<Void> in
 				return self.deleteCiphertextDir(dirId)
@@ -93,6 +101,8 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func moveItem(from oldCleartextURL: URL, to newCleartextURL: URL) -> Promise<Void> {
+		precondition(oldCleartextURL.isFileURL)
+		precondition(newCleartextURL.isFileURL)
 		precondition(oldCleartextURL.hasDirectoryPath == newCleartextURL.hasDirectoryPath)
 		return all(
 			getCiphertextURL(oldCleartextURL),

@@ -10,6 +10,11 @@ import Foundation
 import Promises
 import UIKit
 
+/**
+ Protocol for a cloud authentication.
+
+ This authentication object will be used to authenticate the requests for its corresponding `CloudProvider` implementation.
+ */
 public protocol CloudAuthentication {
 	/**
 	 Initiate authentication flow from specified view controller.

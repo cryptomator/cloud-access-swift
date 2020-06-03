@@ -9,11 +9,19 @@
 import Foundation
 import Promises
 
+/**
+ Protocol for a cloud provider.
+
+ If your cloud provider requires authentication, see `CloudAuthentication`. In that case, the best practice would be to pass the specific authentication object as a parameter in `init()`.
+
+ The `remoteURL`s of the methods are expected to be file URLs and not the actual `URL` that might be used internally by the cloud provider implementation. Even though the `remoteURL`s are not actual file URLs, it's more convenient to instantiate them with `URL(fileURLWithPath:)`. E.g., you can expect the path `/` to be the root of the cloud provider. The implementation has to consistently resolve the path if needed.
+ */
 public protocol CloudProvider {
 	/**
 	 Fetches the metadata for a file or folder.
 
 	 - Parameter remoteURL: The remote URL of the file or folder to fetch metadata.
+	 - Precondition: `remoteURL` must be a file URL.
 	 - Returns: Promise with the metadata for a file or folder. If the fetch fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
@@ -30,6 +38,7 @@ public protocol CloudProvider {
 
 	 - Parameter remoteURL: The remote URL of the folder to fetch item list.
 	 - Parameter pageToken: (Optional) The page token returned by your last call to `fetchItemList()`.
+	 - Precondition: `remoteURL` must be a file URL.
 	 - Precondition: `remoteURL` must point to a folder and therefore conform to the following pattern:
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Promise with the item list for a folder (at page token if specified). If the fetch fails, promise is rejected with:
@@ -46,6 +55,7 @@ public protocol CloudProvider {
 	 - Parameter remoteURL: The remote URL of the file to download.
 	 - Parameter localURL: The local URL of the desired download location.
 	 - Parameter progress: (Optional) A representation of the download progress.
+	 - Precondition: `remoteURL` and `localURL` must be a file URL.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	 - Postcondition: The file is stored under the `localURL`.
@@ -65,6 +75,7 @@ public protocol CloudProvider {
 	 - Parameter remoteURL: The remote URL of the desired upload location.
 	 - Parameter isUpdate: If true, overwrite the existing file at the `remoteURL`.
 	 - Parameter progress: (Optional) A representation of the upload progress.
+	 - Precondition: `remoteURL` and `localURL` must be a file URL.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
@@ -82,6 +93,7 @@ public protocol CloudProvider {
 	 Create a folder.
 
 	 - Parameter remoteURL: The remote URL of the folder to create.
+	 - Precondition: `remoteURL` must be a file URL.
 	 - Precondition: `remoteURL` must point to a folder and therefore conform to the following pattern:
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
 	 - Returns: Empty promise. If the folder creation fails, promise is rejected with:
@@ -98,6 +110,7 @@ public protocol CloudProvider {
 	 - Parameter remoteURL: `remoteURL` conforms to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
+	 - Precondition: `remoteURL` must be a file URL.
 	 - Returns: Empty promise. If the deletion fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if a file or folder does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
@@ -111,6 +124,7 @@ public protocol CloudProvider {
 
 	 - Parameter oldRemoteURL: The remote URL of the file or folder to be moved.
 	 - Parameter newRemoteURL: The remote URL of the desired destination.
+	 - Precondition: `oldRemoteURL` and `newRemoteURL` must be a file URL.
 	 - Precondition: `oldRemoteURL` and `newRemoteURL` point to the same item type (both point to a folder or both point to a file).
 	 - Returns: Empty promise. If the move fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `oldRemoteURL`.

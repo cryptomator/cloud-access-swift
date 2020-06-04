@@ -12,4 +12,5 @@ public enum CloudAuthenticationError: Error {
 	case userCanceled
 	case notAuthenticated
 	case noUsername
+	case authenticationFailed
 }

@@ -11,23 +11,15 @@ import XCTest
 @testable import CloudAccess
 
 class CloudProviderMockTests: XCTestCase {
-	var tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+	var tmpDirURL: URL!
 
-	override func setUp() {
-		tmpDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
-		do {
-			try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-		} catch {
-			XCTFail("Error in setUp: \(error)")
-		}
+	override func setUpWithError() throws {
+		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
-	override func tearDown() {
-		do {
-			try FileManager.default.removeItem(at: tmpDir)
-		} catch {
-			XCTFail("Error in teardown: \(error)")
-		}
+	override func tearDownWithError() throws {
+		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
 	func testVaultRootContainsFiles() {
@@ -51,7 +43,7 @@ class CloudProviderMockTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		let provider = CloudProviderMock()
 		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
-		let localURL = tmpDir.appendingPathComponent("dir.c9r")
+		let localURL = tmpDirURL.appendingPathComponent("dir.c9r")
 		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<CloudItemMetadata> in
 			XCTAssertEqual(.file, metadata.itemType)
 			return provider.downloadFile(from: metadata.remoteURL, to: localURL, progress: nil)

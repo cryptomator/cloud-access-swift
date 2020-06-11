@@ -59,14 +59,14 @@ public protocol CloudProvider {
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
 	   - file: has no slash at the end (e.g. `/folder/example.txt`)
 	 - Postcondition: The file is stored under the `localURL`.
-	 - Returns: Promise with the metadata for the downloaded file. If the download fails, promise is rejected with:
+	 - Returns: Empty promise. If the download fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `localURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `remoteURL`.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata>
+	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void>
 
 	/**
 	 Upload a file.

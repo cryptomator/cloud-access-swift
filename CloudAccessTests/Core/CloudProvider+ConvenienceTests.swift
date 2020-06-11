@@ -167,7 +167,7 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		return Promise(CloudItemList(items: items, nextPageToken: nextToken))
 	}
 
-	func downloadFile(from _: URL, to _: URL, progress _: Progress?) -> Promise<CloudItemMetadata> {
+	func downloadFile(from _: URL, to _: URL, progress _: Progress?) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 

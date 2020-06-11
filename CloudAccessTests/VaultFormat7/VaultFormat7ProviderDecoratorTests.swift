@@ -13,7 +13,7 @@ import XCTest
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	let vaultURL = URL(fileURLWithPath: "pathToVault")
-	let cryptor = CryptorMock(masterKey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
+	let cryptor = CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 	var provider: CloudProviderMock!
 	var decorator: VaultFormat7ProviderDecorator!
 

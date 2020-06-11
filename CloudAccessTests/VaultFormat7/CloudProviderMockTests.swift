@@ -44,10 +44,10 @@ class CloudProviderMockTests: XCTestCase {
 		let provider = CloudProviderMock()
 		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
 		let localURL = tmpDirURL.appendingPathComponent("dir.c9r")
-		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<CloudItemMetadata> in
+		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<Void> in
 			XCTAssertEqual(.file, metadata.itemType)
 			return provider.downloadFile(from: metadata.remoteURL, to: localURL, progress: nil)
-		}.then { _ in
+		}.then {
 			let downloadedContents = try Data(contentsOf: localURL)
 			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
 		}.catch { error in

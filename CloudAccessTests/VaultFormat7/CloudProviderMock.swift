@@ -66,14 +66,16 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<CloudItemMetadata> {
+	public func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void> {
 		precondition(!remoteURL.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
 		if let data = files[remoteURL.relativePath] {
-			return Promise { () -> Promise<CloudItemMetadata> in
+			do {
 				try data.write(to: localURL, options: .withoutOverwriting)
-				return self.fetchItemMetadata(at: remoteURL)
+			} catch {
+				return Promise(error)
 			}
+			return Promise(())
 		} else {
 			return Promise(CloudProviderError.itemNotFound)
 		}

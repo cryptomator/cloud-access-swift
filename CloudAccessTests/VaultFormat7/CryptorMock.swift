@@ -9,6 +9,12 @@
 import Foundation
 @testable import CryptomatorCryptoLib
 
+class CryptoSupportMock: CryptoSupport {
+	override func createRandomBytes(size: Int) throws -> [UInt8] {
+		return [UInt8](repeating: 0xF0, count: size)
+	}
+}
+
 enum CryptorMockError: Error {
 	case notMocked
 }
@@ -30,13 +36,13 @@ public class CryptorMock: Cryptor {
 		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 	]
 
-	override public init(masterKey: Masterkey) {
+	init(masterkey: Masterkey) {
 		var reversed = [String: String]()
 		for (key, value) in cleartextNames {
 			reversed[value] = key
 		}
 		self.ciphertextNames = reversed
-		super.init(masterKey: masterKey)
+		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock())
 	}
 
 	override public func encryptDirId(_ dirId: Data) throws -> String {

@@ -69,7 +69,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to cleartextURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cleartextURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		precondition(cleartextURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)

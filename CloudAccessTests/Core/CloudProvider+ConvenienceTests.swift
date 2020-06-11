@@ -171,7 +171,7 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func uploadFile(from _: URL, to _: URL, isUpdate _: Bool, progress _: Progress?) -> Promise<CloudItemMetadata> {
+	func uploadFile(from _: URL, to _: URL, replaceExisting _: Bool, progress _: Progress?) -> Promise<CloudItemMetadata> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 

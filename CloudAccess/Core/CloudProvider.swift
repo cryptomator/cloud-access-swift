@@ -73,7 +73,7 @@ public protocol CloudProvider {
 
 	 - Parameter localURL: The local URL of the file to upload.
 	 - Parameter remoteURL: The remote URL of the desired upload location.
-	 - Parameter isUpdate: If true, overwrite the existing file at the `remoteURL`.
+	 - Parameter replaceExisting: If true, overwrite the existing file at the `remoteURL`.
 	 - Parameter progress: (Optional) A representation of the upload progress.
 	 - Precondition: `remoteURL` and `localURL` must be a file URL.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
@@ -81,13 +81,13 @@ public protocol CloudProvider {
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
-	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!isUpdate`.
+	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!replaceExisting`.
 	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func uploadFile(from localURL: URL, to remoteURL: URL, isUpdate: Bool, progress: Progress?) -> Promise<CloudItemMetadata>
+	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata>
 
 	/**
 	 Create a folder.

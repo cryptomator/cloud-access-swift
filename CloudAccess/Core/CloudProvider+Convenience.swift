@@ -25,6 +25,21 @@ public extension CloudProvider {
 	}
 
 	/**
+	 Convenience wrapper for `createFolder()` that creates intermediate folders when they're missing.
+	 */
+	func createFolderWithIntermediates(at remoteURL: URL) -> Promise<Void> {
+		return createFolder(at: remoteURL).recover { error -> Promise<Void> in
+			if case CloudProviderError.parentFolderDoesNotExist = error {
+				return self.createFolderWithIntermediates(at: remoteURL.deletingLastPathComponent()).then { _ -> Promise<Void> in
+					return self.createFolder(at: remoteURL)
+				}
+			} else {
+				return Promise(error)
+			}
+		}
+	}
+
+	/**
 	 Convenience Wrapper for `deleteItem()` , which satisfies also if the item is not present.
 	 */
 	func deleteItemIfExists(at remoteURL: URL) -> Promise<Void> {

@@ -45,8 +45,8 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		precondition(cleartextURL.isFileURL)
 		precondition(cleartextURL.hasDirectoryPath)
 		return getDirId(cleartextURL: cleartextURL).then { dirId -> Promise<CloudItemList> in
-			let dirPath = try self.getDirPath(dirId)
-			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
+			let dirURL = try self.getDirURL(dirId)
+			return self.delegate.fetchItemList(forFolderAt: dirURL, withPageToken: pageToken)
 		}.then { list -> Promise<CloudItemList> in
 			let cleartextItemPromises = list.items.map { self.cleartextMetadata($0, cleartextParentURL: cleartextURL) }
 			return any(cleartextItemPromises).then { maybeCleartextItems in
@@ -66,21 +66,42 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			return self.delegate.downloadFile(from: remoteCiphertextURL, to: localCiphertextURL, progress: progress)
 		}.then {
 			try self.cryptor.decryptContent(from: localCiphertextURL, to: localCleartextURL)
+			try? FileManager.default.removeItem(at: localCiphertextURL)
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to cleartextURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
-		precondition(localURL.isFileURL)
-		precondition(cleartextURL.isFileURL)
-		precondition(!localURL.hasDirectoryPath)
-		precondition(!cleartextURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+	public func uploadFile(from localCleartextURL: URL, to remoteCleartextURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+		precondition(localCleartextURL.isFileURL)
+		precondition(remoteCleartextURL.isFileURL)
+		precondition(!localCleartextURL.hasDirectoryPath)
+		precondition(!remoteCleartextURL.hasDirectoryPath)
+		let localCiphertextURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		return getCiphertextURL(remoteCleartextURL).then { remoteCiphertextURL in
+			try self.cryptor.encryptContent(from: localCleartextURL, to: localCiphertextURL)
+			return self.delegate.uploadFile(from: localCiphertextURL, to: remoteCiphertextURL, replaceExisting: replaceExisting, progress: progress)
+		}.always {
+			try? FileManager.default.removeItem(at: localCiphertextURL)
+		}
 	}
 
 	public func createFolder(at cleartextURL: URL) -> Promise<Void> {
 		precondition(cleartextURL.isFileURL)
 		precondition(cleartextURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		let dirId = UUID().uuidString.data(using: .utf8)!
+		let localDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		do {
+			try dirId.write(to: localDirFileURL)
+		} catch {
+			return Promise(error)
+		}
+		return getDirFileURL(cleartextURL: cleartextURL).then { remoteDirFileURL in
+			return self.delegate.uploadFile(from: localDirFileURL, to: remoteDirFileURL, replaceExisting: false, progress: nil)
+		}.then { _ in
+			let dirURL = try self.getDirURL(dirId)
+			return self.delegate.createFolderWithIntermediates(at: dirURL)
+		}.always {
+			try? FileManager.default.removeItem(at: localDirFileURL)
+		}
 	}
 
 	public func deleteItem(at cleartextURL: URL) -> Promise<Void> {
@@ -117,7 +138,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func deleteCiphertextDir(_ dirId: Data) -> Promise<Void> {
 		let ciphertextDir: URL
 		do {
-			ciphertextDir = try getDirPath(dirId)
+			ciphertextDir = try getDirURL(dirId)
 		} catch {
 			return Promise(error)
 		}
@@ -144,7 +165,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		let cleartextParent = cleartextURL.deletingLastPathComponent()
 		let cleartextName = cleartextURL.lastPathComponent
 		return getDirId(cleartextURL: cleartextParent).then { dirId in
-			let ciphertextParentPath = try self.getDirPath(dirId)
+			let ciphertextParentPath = try self.getDirURL(dirId)
 			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
 			return Promise(ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r", isDirectory: cleartextURL.hasDirectoryPath))
 		}
@@ -152,20 +173,32 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	private func getDirId(cleartextURL: URL) -> Promise<Data> {
 		return dirIdCache.get(cleartextURL, onMiss: { url, parentDirId in
-			let ciphertextName = try self.cryptor.encryptFileName(url.lastPathComponent, dirId: parentDirId)
-			let dirFileURL = try self.getDirPath(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
+			let dirFileURL = try self.getDirFileURL(cleartextURL: url, parentDirId: parentDirId)
 			return self.getRemoteFileContents(dirFileURL)
 		})
+	}
+
+	private func getDirFileURL(cleartextURL: URL) -> Promise<URL> {
+		return getDirId(cleartextURL: cleartextURL.deletingLastPathComponent()).then { parentDirId in
+			return try self.getDirFileURL(cleartextURL: cleartextURL, parentDirId: parentDirId)
+		}
+	}
+
+	private func getDirFileURL(cleartextURL: URL, parentDirId: Data) throws -> URL {
+		let ciphertextName = try cryptor.encryptFileName(cleartextURL.lastPathComponent, dirId: parentDirId)
+		return try getDirURL(parentDirId).appendingPathComponent(ciphertextName + ".c9r/dir.c9r")
 	}
 
 	private func getRemoteFileContents(_ remoteURL: URL) -> Promise<Data> {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
 		return delegate.downloadFile(from: remoteURL, to: localURL, progress: nil).then {
 			return try Data(contentsOf: localURL)
+		}.always {
+			try? FileManager.default.removeItem(at: localURL)
 		}
 	}
 
-	private func getDirPath(_ dirId: Data) throws -> URL {
+	private func getDirURL(_ dirId: Data) throws -> URL {
 		let digest = try cryptor.encryptDirId(dirId)
 		let i = digest.index(digest.startIndex, offsetBy: 2)
 		return vaultURL.appendingPathComponent("d/" + digest[..<i] + "/" + digest[i...] + "/", isDirectory: true)

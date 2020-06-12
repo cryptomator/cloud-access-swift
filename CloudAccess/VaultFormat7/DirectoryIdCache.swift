@@ -12,13 +12,13 @@ import Promises
 
 struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 	static let databaseTableName = "entries"
-	let cleartextPath: URL
+	let cleartextURL: URL
 	let dirId: Data
 }
 
 extension CachedEntry: PersistableRecord {
 	func encode(to container: inout PersistenceContainer) {
-		container["cleartextPath"] = cleartextPath
+		container["cleartextURL"] = cleartextURL
 		container["dirId"] = dirId
 	}
 }
@@ -30,22 +30,22 @@ internal class DirectoryIdCache {
 		self.inMemoryDB = DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
-				table.column("cleartextPath", .text).notNull().primaryKey()
+				table.column("cleartextURL", .text).notNull().primaryKey()
 				table.column("dirId", .blob).notNull()
 			}
-			try CachedEntry(cleartextPath: URL(fileURLWithPath: "/"), dirId: Data([])).save(db)
+			try CachedEntry(cleartextURL: URL(fileURLWithPath: "/"), dirId: Data([])).save(db)
 		}
 	}
 
-	public func get(_ cleartextPath: URL, onMiss: @escaping (_ cleartextPath: URL, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
+	public func get(_ cleartextURL: URL, onMiss: @escaping (_ cleartextURL: URL, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
 		do {
-			if let cached = try getCached(cleartextPath) {
+			if let cached = try getCached(cleartextURL) {
 				return Promise(cached)
 			} else {
-				return get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId -> Promise<Data> in
-					return try onMiss(cleartextPath, parentDirId)
+				return get(cleartextURL.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId -> Promise<Data> in
+					return try onMiss(cleartextURL, parentDirId)
 				}.then { dirId -> Data in
-					try self.addToCache(cleartextPath, dirId: dirId)
+					try self.addToCache(cleartextURL, dirId: dirId)
 					return dirId
 				}
 			}
@@ -54,21 +54,21 @@ internal class DirectoryIdCache {
 		}
 	}
 
-	public func invalidate(_ cleartextPath: URL) throws {
+	public func invalidate(_ cleartextURL: URL) throws {
 		try inMemoryDB.write { db in
-			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE cleartextPath LIKE ?", arguments: [cleartextPath.absoluteString + "%"])
+			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE cleartextURL LIKE ?", arguments: [cleartextURL.absoluteString + "%"])
 		}
 	}
 
-	internal func addToCache(_ cleartextPath: URL, dirId: Data) throws {
+	internal func addToCache(_ cleartextURL: URL, dirId: Data) throws {
 		try inMemoryDB.write { db in
-			try CachedEntry(cleartextPath: cleartextPath, dirId: dirId).save(db)
+			try CachedEntry(cleartextURL: cleartextURL, dirId: dirId).save(db)
 		}
 	}
 
-	internal func getCached(_ cleartextPath: URL) throws -> Data? {
+	internal func getCached(_ cleartextURL: URL) throws -> Data? {
 		let entry: CachedEntry? = try inMemoryDB.read { db in
-			return try CachedEntry.fetchOne(db, key: cleartextPath)
+			return try CachedEntry.fetchOne(db, key: cleartextURL)
 		}
 		return entry?.dirId
 	}

@@ -105,7 +105,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			} else {
 				return Promise(error)
 			}
-		}.then { _ -> Promise<Void> in
+		}.then { () -> Promise<Void> in
 			let dirURL = try self.getDirURL(dirId)
 			return self.delegate.createFolder(at: dirURL)
 		}.always {

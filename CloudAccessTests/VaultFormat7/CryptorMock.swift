@@ -15,12 +15,23 @@ class CryptoSupportMock: CryptoSupport {
 	}
 }
 
+extension Dictionary where Value: Equatable {
+	func someKey(for value: Value) -> Key? {
+		return first(where: { $1 == value })?.key
+	}
+}
+
 enum CryptorMockError: Error {
 	case notMocked
 }
 
 public class CryptorMock: Cryptor {
-	let cleartextNames = [
+	let dirIds = [
+		"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+	]
+	let fileNames = [
 		"file1": "File 1",
 		"file2": "File 2",
 		"dir1": "Directory 1",
@@ -28,20 +39,7 @@ public class CryptorMock: Cryptor {
 		"dir2": "Directory 2"
 	]
 
-	let ciphertextNames: [String: String]
-
-	let dirIds = [
-		"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
-	]
-
 	init(masterkey: Masterkey) {
-		var reversed = [String: String]()
-		for (key, value) in cleartextNames {
-			reversed[value] = key
-		}
-		self.ciphertextNames = reversed
 		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock())
 	}
 
@@ -53,16 +51,16 @@ public class CryptorMock: Cryptor {
 		}
 	}
 
-	override public func encryptFileName(_ cleartextName: String, dirId _: Data, encoding _: FileNameEncoding = .base64url) throws -> String {
-		if let ciphertextName = ciphertextNames[cleartextName] {
+	override public func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws -> String {
+		if let ciphertextName = fileNames.someKey(for: cleartextName) {
 			return ciphertextName
 		} else {
 			throw CryptorMockError.notMocked
 		}
 	}
 
-	override public func decryptFileName(_ ciphertextName: String, dirId _: Data, encoding _: FileNameEncoding = .base64url) throws -> String {
-		if let cleartextName = cleartextNames[ciphertextName] {
+	override public func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws -> String {
+		if let cleartextName = fileNames[ciphertextName] {
 			return cleartextName
 		} else {
 			throw CryptorMockError.notMocked

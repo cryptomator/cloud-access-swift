@@ -22,7 +22,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		decorator = try VaultFormat7ProviderDecorator(delegate: provider, remoteVaultURL: vaultURL, cryptor: cryptor)
 	}
 
-	func testFetchItemMetadata() throws {
+	func testFetchItemMetadata() {
 		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3")).then { metadata in
 			XCTAssertEqual("File 3", metadata.name)
 			XCTAssertEqual(.file, metadata.itemType)
@@ -33,7 +33,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testFetchItemListForRootDir() throws {
+	func testFetchItemListForRootDir() {
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/", isDirectory: true), withPageToken: nil).then { itemList in
 			XCTAssertEqual(3, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 1" }))
@@ -45,7 +45,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testFetchItemListForSubDir() throws {
+	func testFetchItemListForSubDir() {
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 1", isDirectory: true), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 3" }))
@@ -56,7 +56,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testDeleteDirectoryRecursively() throws {
+	func testDeleteDirectoryRecursively() {
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1", isDirectory: true)).then {
 			XCTAssertEqual(3, self.provider.deleted.count)
 			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"))
@@ -68,7 +68,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testDeleteFile() throws {
+	func testDeleteFile() {
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1/File 3")).then {
 			XCTAssertEqual(1, self.provider.deleted.count)
 			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
@@ -78,7 +78,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testMoveItem() throws {
+	func testMoveItem() {
 		decorator.moveItem(from: URL(fileURLWithPath: "/File 1"), to: URL(fileURLWithPath: "/Directory 1/File 2")).then {
 			XCTAssertEqual(1, self.provider.moved.count)
 			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r")

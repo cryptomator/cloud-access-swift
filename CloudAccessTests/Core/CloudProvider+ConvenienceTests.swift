@@ -11,7 +11,7 @@ import XCTest
 @testable import Promises
 
 class CloudProvider_ConvenienceTests: XCTestCase {
-	func testFetchItemListExhaustively() throws {
+	func testFetchItemListExhaustively() {
 		let provider = ConvenienceCloudProviderMock()
 		provider.fetchItemListExhaustively(forFolderAt: URL(fileURLWithPath: "/")).then { cloudItemList in
 			XCTAssertEqual(6, cloudItemList.items.count)
@@ -27,7 +27,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testCreateFolderWithIntermediates() throws {
+	func testCreateFolderWithIntermediates() {
 		let provider = ConvenienceCloudProviderMock()
 		provider.createFolderWithIntermediates(at: URL(fileURLWithPath: "/a/b/c/")).then {
 			XCTAssertEqual(3, provider.createdFolders.count)
@@ -40,7 +40,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testDeleteItemIfExistsFulfillForNonExistentItem() throws {
+	func testDeleteItemIfExistsFulfillForNonExistentItem() {
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFolder/", isDirectory: true)
 		let provider = ConvenienceCloudProviderMock()
 		provider.deleteItemIfExists(at: nonExistentItemURL).catch { error in
@@ -49,7 +49,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testDeleteItemIfExistsFulfillForExistingItem() throws {
+	func testDeleteItemIfExistsFulfillForExistingItem() {
 		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
 		let provider = ConvenienceCloudProviderMock()
 		provider.deleteItemIfExists(at: existingItemURL).catch { error in
@@ -58,7 +58,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testDeleteItemIfExistsRejectsStillErrorsDifferentFromItemNotFound() throws {
+	func testDeleteItemIfExistsRejectsStillErrorsDifferentFromItemNotFound() {
 		let itemURL = URL(fileURLWithPath: "/AAAAA/BBBB/", isDirectory: true)
 		let provider = ConvenienceCloudProviderMock()
 		provider.deleteItemIfExists(at: itemURL).then {
@@ -72,7 +72,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testCheckForItemExistenceWorksForExistingItem() throws {
+	func testCheckForItemExistenceWorksForExistingItem() {
 		let provider = ConvenienceCloudProviderMock()
 		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
 		provider.checkForItemExistence(at: existingItemURL).then { itemExists in
@@ -83,7 +83,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testCheckForItemExistenceWorksForNonExistentItem() throws {
+	func testCheckForItemExistenceWorksForNonExistentItem() {
 		let provider = ConvenienceCloudProviderMock()
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFile", isDirectory: false)
 		provider.checkForItemExistence(at: nonExistentItemURL).then { itemExists in
@@ -94,7 +94,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testCheckForItemExistenceRejectsStillErrorsDifferentFromItemNotFound() throws {
+	func testCheckForItemExistenceRejectsStillErrorsDifferentFromItemNotFound() {
 		let provider = ConvenienceCloudProviderMock()
 		let itemURL = URL(fileURLWithPath: "/AAAAA/BBBB/", isDirectory: true)
 		provider.checkForItemExistence(at: itemURL).then { _ in

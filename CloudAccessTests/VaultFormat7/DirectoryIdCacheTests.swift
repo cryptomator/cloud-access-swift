@@ -6,9 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
 import XCTest
 @testable import CloudAccess
+@testable import Promises
 
 class DirectoryIdCacheTests: XCTestCase {
 	func testContainsRootPath() throws {
@@ -49,7 +49,6 @@ class DirectoryIdCacheTests: XCTestCase {
 	}
 
 	func testRecursiveGet() throws {
-		let expectation = XCTestExpectation(description: "get")
 		let cache = try DirectoryIdCache()
 		let url = URL(fileURLWithPath: "/one/two/three")
 
@@ -77,11 +76,9 @@ class DirectoryIdCacheTests: XCTestCase {
 
 		result.then { data in
 			XCTAssertEqual(Data("THREE".utf8), data)
-		}.always {
-			expectation.fulfill()
 		}
 
-		wait(for: [expectation], timeout: 1.0)
+		XCTAssertTrue(waitForPromises(timeout: 1.0))
 		XCTAssertEqual("ONE", misses[0])
 		XCTAssertEqual("TWO", misses[1])
 		XCTAssertEqual("THREE", misses[2])

@@ -6,9 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
 import XCTest
 @testable import CloudAccess
+@testable import Promises
 
 class CloudProviderMockTests: XCTestCase {
 	var tmpDirURL: URL!
@@ -23,7 +23,6 @@ class CloudProviderMockTests: XCTestCase {
 	}
 
 	func testVaultRootContainsFiles() {
-		let expectation = XCTestExpectation(description: "fetchItemList")
 		let provider = CloudProviderMock()
 		let url = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", isDirectory: true)
 		provider.fetchItemList(forFolderAt: url, withPageToken: nil).then { cloudItemList in
@@ -33,14 +32,11 @@ class CloudProviderMockTests: XCTestCase {
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 1.0)
+		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
 	func testDir1FileContainsDirId() {
-		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		let provider = CloudProviderMock()
 		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
 		let localURL = tmpDirURL.appendingPathComponent("dir.c9r")
@@ -52,9 +48,7 @@ class CloudProviderMockTests: XCTestCase {
 			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 1.0)
+		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 }

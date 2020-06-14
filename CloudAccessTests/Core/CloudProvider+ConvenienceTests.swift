@@ -27,19 +27,6 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		XCTAssertTrue(waitForPromises(timeout: 1.0))
 	}
 
-	func testCreateFolderWithIntermediates() {
-		let provider = ConvenienceCloudProviderMock()
-		provider.createFolderWithIntermediates(at: URL(fileURLWithPath: "/a/b/c/")).then {
-			XCTAssertEqual(3, provider.createdFolders.count)
-			XCTAssertTrue(provider.createdFolders.contains("/a"))
-			XCTAssertTrue(provider.createdFolders.contains("/a/b"))
-			XCTAssertTrue(provider.createdFolders.contains("/a/b/c"))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}
-		XCTAssertTrue(waitForPromises(timeout: 1.0))
-	}
-
 	func testDeleteItemIfExistsFulfillForNonExistentItem() {
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFolder/", isDirectory: true)
 		let provider = ConvenienceCloudProviderMock()
@@ -124,7 +111,6 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 			CloudItemMetadata(name: "f", remoteURL: URL(fileURLWithPath: "/f"), itemType: .file, lastModifiedDate: nil, size: nil)
 		]
 	]
-	var createdFolders: [String] = []
 
 	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFile", isDirectory: false)
@@ -168,13 +154,7 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 	}
 
 	func createFolder(at remoteURL: URL) -> Promise<Void> {
-		let parentPath = remoteURL.deletingLastPathComponent().relativePath
-		if parentPath != "/", !createdFolders.contains(parentPath) {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} else {
-			createdFolders.append(remoteURL.relativePath)
-			return Promise(())
-		}
+		return Promise(CloudProviderError.noInternetConnection)
 	}
 
 	func deleteItem(at remoteURL: URL) -> Promise<Void> {

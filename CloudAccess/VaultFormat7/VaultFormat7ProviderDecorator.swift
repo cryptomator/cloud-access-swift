@@ -96,9 +96,18 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 		return getDirFileURL(cleartextURL: cleartextURL).then { remoteDirFileURL in
 			return self.delegate.uploadFile(from: localDirFileURL, to: remoteDirFileURL, replaceExisting: false, progress: nil)
-		}.then { _ in
+		}.then { _ -> Promise<Void> in
+			let parentDirURL = try self.getDirURL(dirId).deletingLastPathComponent()
+			return self.delegate.createFolder(at: parentDirURL)
+		}.recover { error -> Promise<Void> in
+			if case CloudProviderError.itemAlreadyExists = error {
+				return Promise(())
+			} else {
+				return Promise(error)
+			}
+		}.then { _ -> Promise<Void> in
 			let dirURL = try self.getDirURL(dirId)
-			return self.delegate.createFolderWithIntermediates(at: dirURL)
+			return self.delegate.createFolder(at: dirURL)
 		}.always {
 			try? FileManager.default.removeItem(at: localDirFileURL)
 		}

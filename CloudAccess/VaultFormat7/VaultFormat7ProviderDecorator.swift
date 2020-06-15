@@ -83,6 +83,8 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		return ciphertextURL(remoteCleartextURL).then { remoteCiphertextURL in
 			try self.cryptor.encryptContent(from: localCleartextURL, to: localCiphertextURL)
 			return self.delegate.uploadFile(from: localCiphertextURL, to: remoteCiphertextURL, replaceExisting: replaceExisting, progress: progress)
+		}.then { ciphertextMetadata in
+			return self.cleartextMetadata(ciphertextMetadata, cleartextParentURL: remoteCleartextURL.deletingLastPathComponent())
 		}.always {
 			try? FileManager.default.removeItem(at: localCiphertextURL)
 		}

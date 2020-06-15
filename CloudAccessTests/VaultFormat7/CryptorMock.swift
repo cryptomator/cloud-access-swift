@@ -38,6 +38,11 @@ public class CryptorMock: Cryptor {
 		"file3": "File 3",
 		"dir2": "Directory 2"
 	]
+	let contents = [
+		"ciphertext1": "cleartext1",
+		"ciphertext2": "cleartext2",
+		"ciphertext3": "cleartext3"
+	]
 
 	init(masterkey: Masterkey) {
 		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock())
@@ -47,7 +52,7 @@ public class CryptorMock: Cryptor {
 		if let dirId = dirIds[String(data: dirId, encoding: .utf8)!] {
 			return dirId
 		} else {
-			throw CryptorMockError.notMocked
+			return "99ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
 		}
 	}
 
@@ -62,6 +67,24 @@ public class CryptorMock: Cryptor {
 	override public func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws -> String {
 		if let cleartextName = fileNames[ciphertextName] {
 			return cleartextName
+		} else {
+			throw CryptorMockError.notMocked
+		}
+	}
+
+	override public func encryptContent(from cleartextURL: URL, to ciphertextURL: URL) throws {
+		let cleartext = try String(contentsOf: cleartextURL, encoding: .utf8)
+		if let ciphertext = contents.someKey(for: cleartext) {
+			try ciphertext.write(to: ciphertextURL, atomically: true, encoding: .utf8)
+		} else {
+			throw CryptorMockError.notMocked
+		}
+	}
+
+	override public func decryptContent(from ciphertextURL: URL, to cleartextURL: URL) throws {
+		let ciphertext = try String(contentsOf: ciphertextURL, encoding: .utf8)
+		if let cleartext = contents[ciphertext] {
+			try cleartext.write(to: cleartextURL, atomically: true, encoding: .utf8)
 		} else {
 			throw CryptorMockError.notMocked
 		}

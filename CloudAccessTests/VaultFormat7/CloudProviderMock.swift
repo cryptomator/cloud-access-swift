@@ -57,7 +57,7 @@ public class CloudProviderMock: CloudProvider {
 		let children = childDirs + childFiles
 		let metadataPromises = children.map { self.fetchItemMetadata(at: URL(fileURLWithPath: $0, isDirectory: childDirs.contains($0))) }
 		return all(metadataPromises).then { metadata in
-			return Promise(CloudItemList(items: metadata))
+			return CloudItemList(items: metadata)
 		}
 	}
 

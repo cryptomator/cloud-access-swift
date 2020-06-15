@@ -53,9 +53,9 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			return self.delegate.fetchItemList(forFolderAt: dirURL, withPageToken: pageToken)
 		}.then { list -> Promise<CloudItemList> in
 			let cleartextItemPromises = list.items.map { self.cleartextMetadata($0, cleartextParentURL: cleartextURL) }
-			return any(cleartextItemPromises).then { maybeCleartextItems in
+			return any(cleartextItemPromises).then { maybeCleartextItems -> CloudItemList in
 				let cleartextItems = maybeCleartextItems.filter { $0.value != nil }.map { $0.value! }
-				return Promise(CloudItemList(items: cleartextItems, nextPageToken: list.nextPageToken))
+				return CloudItemList(items: cleartextItems, nextPageToken: list.nextPageToken)
 			}
 		}
 	}
@@ -153,15 +153,15 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func ciphertextURL(_ cleartextURL: URL) -> Promise<URL> {
 		let cleartextParent = cleartextURL.deletingLastPathComponent()
 		let cleartextName = cleartextURL.lastPathComponent
-		return dirId(cleartextURL: cleartextParent).then { dirId in
+		return dirId(cleartextURL: cleartextParent).then { dirId -> URL in
 			let ciphertextParentPath = try self.dirURL(dirId)
 			let ciphertextName = try self.cryptor.encryptFileName(cleartextName, dirId: dirId)
-			return Promise(ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r", isDirectory: cleartextURL.hasDirectoryPath))
+			return ciphertextParentPath.appendingPathComponent(ciphertextName + ".c9r", isDirectory: cleartextURL.hasDirectoryPath)
 		}
 	}
 
 	private func cleartextMetadata(_ ciphertextMetadata: CloudItemMetadata, cleartextParentURL: URL) -> Promise<CloudItemMetadata> {
-		dirId(cleartextURL: cleartextParentURL).then { parentDirId in
+		dirId(cleartextURL: cleartextParentURL).then { parentDirId -> CloudItemMetadata in
 			// TODO: unshorten .c9s names
 			guard let extRange = ciphertextMetadata.name.range(of: ".c9r", options: .caseInsensitive) else {
 				throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
@@ -170,7 +170,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let cleartextName = try self.cryptor.decryptFileName(ciphertextName, dirId: parentDirId)
 			let cleartextURL = cleartextParentURL.appendingPathComponent(cleartextName, isDirectory: ciphertextMetadata.itemType == .folder)
 			let cleartextSize = 0 // TODO: determine cleartext size
-			return Promise(CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)) // TODO: determine itemType
+			return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize) // TODO: determine itemType
 		}
 	}
 

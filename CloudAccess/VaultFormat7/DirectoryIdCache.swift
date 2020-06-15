@@ -42,7 +42,7 @@ internal class DirectoryIdCache {
 			if let cached = try getCached(cleartextURL) {
 				return Promise(cached)
 			} else {
-				return get(cleartextURL.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId -> Promise<Data> in
+				return get(cleartextURL.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId in
 					return try onMiss(cleartextURL, parentDirId)
 				}.then { dirId -> Data in
 					try self.addToCache(cleartextURL, dirId: dirId)

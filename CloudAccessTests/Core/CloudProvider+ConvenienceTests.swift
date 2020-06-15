@@ -136,41 +136,34 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFile", isDirectory: false)
 		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
-
-		if remoteURL == nonExistentItemURL {
+		switch remoteURL {
+		case nonExistentItemURL:
 			return Promise(CloudProviderError.itemNotFound)
-		}
-		if remoteURL == existingItemURL {
-			let metadata = CloudItemMetadata(name: "thisFolderExistsInTheCloud", remoteURL: existingItemURL, itemType: .folder, lastModifiedDate: nil, size: nil)
-			return Promise(metadata)
-		}
-		return Promise(CloudProviderError.noInternetConnection)
-	}
-
-	func fetchItemList(forFolderAt _: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let items: [CloudItemMetadata]
-		let nextToken: String?
-
-		switch pageToken {
-		case "1":
-			items = pages["1"]!
-			nextToken = "2"
-		case "2":
-			items = pages["2"]!
-			nextToken = nil
+		case existingItemURL:
+			return Promise(CloudItemMetadata(name: "thisFolderExistsInTheCloud", remoteURL: existingItemURL, itemType: .folder, lastModifiedDate: nil, size: nil))
 		default:
-			items = pages["0"]!
-			nextToken = "1"
+			return Promise(CloudProviderError.noInternetConnection)
 		}
-
-		return Promise(CloudItemList(items: items, nextPageToken: nextToken))
 	}
 
-	func downloadFile(from _: URL, to _: URL, progress _: Progress?) -> Promise<Void> {
+	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		switch pageToken {
+		case nil:
+			return Promise(CloudItemList(items: pages["0"]!, nextPageToken: "1"))
+		case "1":
+			return Promise(CloudItemList(items: pages["1"]!, nextPageToken: "2"))
+		case "2":
+			return Promise(CloudItemList(items: pages["2"]!, nextPageToken: nil))
+		default:
+			return Promise(CloudProviderError.noInternetConnection)
+		}
+	}
+
+	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func uploadFile(from _: URL, to _: URL, replaceExisting _: Bool, progress _: Progress?) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
@@ -181,17 +174,17 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 	func deleteItem(at remoteURL: URL) -> Promise<Void> {
 		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFolder/", isDirectory: true)
 		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
-
-		if remoteURL == nonExistentItemURL {
+		switch remoteURL {
+		case nonExistentItemURL:
 			return Promise(CloudProviderError.itemNotFound)
-		}
-		if remoteURL == existingItemURL {
+		case existingItemURL:
 			return Promise(())
+		default:
+			return Promise(CloudProviderError.noInternetConnection)
 		}
-		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func moveItem(from _: URL, to _: URL) -> Promise<Void> {
+	func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 }

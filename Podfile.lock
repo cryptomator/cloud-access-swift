@@ -1,5 +1,5 @@
 PODS:
-  - CryptomatorCryptoLib (0.0.1-snapshot):
+  - CryptomatorCryptoLib (0.4.0):
     - CryptoSwift (~> 1.3.0)
     - SwiftBase32 (~> 0.8.0)
   - CryptoSwift (1.3.1)
@@ -12,36 +12,27 @@ PODS:
   - SwiftBase32 (0.8.0)
 
 DEPENDENCIES:
-  - CryptomatorCryptoLib (from `https://github.com/cryptomator/cryptolib-swift.git`, branch `develop`)
+  - CryptomatorCryptoLib (~> 0.4.0)
   - GRDB.swift (~> 4.14.0)
   - PromisesSwift (~> 1.2.0)
 
 SPEC REPOS:
   trunk:
+    - CryptomatorCryptoLib
     - CryptoSwift
     - GRDB.swift
     - PromisesObjC
     - PromisesSwift
     - SwiftBase32
 
-EXTERNAL SOURCES:
-  CryptomatorCryptoLib:
-    :branch: develop
-    :git: https://github.com/cryptomator/cryptolib-swift.git
-
-CHECKOUT OPTIONS:
-  CryptomatorCryptoLib:
-    :commit: d4093e555fbf30fd466b172120deedeece098bad
-    :git: https://github.com/cryptomator/cryptolib-swift.git
-
 SPEC CHECKSUMS:
-  CryptomatorCryptoLib: 9a873b798a2c3aba1f39caff1f844881e35785e5
+  CryptomatorCryptoLib: 2f6689d1448865173bc0ced7684c9521b89cafb9
   CryptoSwift: f12f037f6d0fcd6d48c96db0071b653de64e6c4d
   GRDB.swift: 8cc3ab7c8b8b4ac1761deb8dca4b51c1c9d429f8
   PromisesObjC: b48e0338dbbac2207e611750777895f7a5811b75
   PromisesSwift: 991ad88e9851c45410d6697d1fe5df88fd3deb08
   SwiftBase32: 723fd05e2fce776f2b98f26fe423bd20fa80e411
 
-PODFILE CHECKSUM: 09b159e1f054414b12fb189f3ce110fb077c8f84
+PODFILE CHECKSUM: a3097fe73beeef95737cf1ae64326ca793089b03
 
 COCOAPODS: 1.9.3

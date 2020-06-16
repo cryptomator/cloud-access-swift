@@ -175,27 +175,23 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {
-		guard let type = fileAttributeType else {
-			return CloudItemType.unknown
-		}
-		if type == FileAttributeType.typeDirectory {
+		switch fileAttributeType {
+		case FileAttributeType.typeDirectory:
 			return CloudItemType.folder
-		} else if type == FileAttributeType.typeRegular {
+		case FileAttributeType.typeRegular:
 			return CloudItemType.file
-		} else {
+		default:
 			return CloudItemType.unknown
 		}
 	}
 
 	func getItemType(from fileResourceType: URLFileResourceType?) -> CloudItemType {
-		guard let type = fileResourceType else {
-			return CloudItemType.unknown
-		}
-		if type == URLFileResourceType.directory {
+		switch fileResourceType {
+		case URLFileResourceType.directory:
 			return CloudItemType.folder
-		} else if type == URLFileResourceType.regular {
+		case URLFileResourceType.regular:
 			return CloudItemType.file
-		} else {
+		default:
 			return CloudItemType.unknown
 		}
 	}
@@ -206,7 +202,6 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	func validateItemType(at remoteURL: URL, with itemType: CloudItemType) -> Bool {
-		return remoteURL.hasDirectoryPath == (itemType == .folder) ||
-			!remoteURL.hasDirectoryPath == (itemType == .file)
+		return remoteURL.hasDirectoryPath == (itemType == .folder) || !remoteURL.hasDirectoryPath == (itemType == .file)
 	}
 }

@@ -89,7 +89,17 @@ internal class VaultFormat7ShortenedNameCache {
 	 - Returns: A `ShortenedURL` object that is either based on the `originalURL` (if no shortening is required) or a shortened URL
 	 */
 	public func getShortenedURL(_ originalURL: URL) -> ShortenedURL {
-		return ShortenedURL(url: originalURL, originalName: "TODO", state: .unshortened, nameFileURL: nil)
+		precondition(ciphertextNameCompIdx < originalURL.pathComponents.count)
+		let originalName = originalURL.pathComponents[ciphertextNameCompIdx]
+		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
+			let shortenedName = deflateFileName(originalName) + ".c9s"
+			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
+			let nameFileURL = generateNameFileURL(shortenedURL)
+			let state: ShorteningState = originalURL.pathComponents.count - 1 == ciphertextNameCompIdx ? .shortenedChild : .shortenedAncester
+			return ShortenedURL(url: shortenedURL, originalName: originalName, state: state, nameFileURL: nameFileURL)
+		} else {
+			return ShortenedURL(url: originalURL, originalName: originalName, state: .unshortened, nameFileURL: nil)
+		}
 	}
 
 	/**
@@ -104,7 +114,12 @@ internal class VaultFormat7ShortenedNameCache {
 		return Promise(shortenedURL)
 	}
 
-	internal func replaceCiphertextFileName(_ url: URL, with replacement: String) -> URL {
+	internal func generateNameFileURL(_ url: URL) -> URL {
+		let cutOff = url.pathComponents.count - ciphertextNameCompIdx - 1
+		return url.deletingLastPathComponents(cutOff).appendingPathComponent("name.c9s", isDirectory: false)
+	}
+
+	internal func replaceCiphertextFileNameInURL(_ url: URL, with replacement: String) -> URL {
 		return url.replacingPathComponent(atIndex: ciphertextNameCompIdx, with: replacement, isDirectory: url.hasDirectoryPath)
 	}
 

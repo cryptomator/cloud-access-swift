@@ -22,7 +22,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		provider = CloudProviderMock()
-		decorator = try VaultFormat7ProviderDecorator(delegate: provider, remoteVaultURL: vaultURL, cryptor: cryptor)
+		decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultURL: vaultURL, cryptor: cryptor)
 	}
 
 	override func tearDownWithError() throws {
@@ -107,7 +107,8 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testCreateFolder() {
 		let expectation = XCTestExpectation(description: "createFolder")
 		decorator.createFolder(at: URL(fileURLWithPath: "/Directory 1", isDirectory: true)).then {
-			XCTAssertEqual(2, self.provider.createdFolders.count)
+			XCTAssertEqual(3, self.provider.createdFolders.count)
+			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99"))
 			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
 			XCTAssertEqual(1, self.provider.createdFiles.count)

@@ -56,7 +56,7 @@ internal class DirectoryIdCache {
 
 	public func invalidate(_ cleartextURL: URL) throws {
 		try inMemoryDB.write { db in
-			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE cleartextURL LIKE ?", arguments: [cleartextURL.absoluteString + "%"])
+			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE cleartextURL LIKE ?", arguments: ["\(cleartextURL.absoluteString)%"])
 		}
 	}
 

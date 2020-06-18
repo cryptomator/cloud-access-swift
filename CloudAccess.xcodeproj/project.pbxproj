@@ -163,8 +163,8 @@
 		7471BDAC24865B6F000D05FC /* LocalFileSystem */ = {
 			isa = PBXGroup;
 			children = (
-				7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */,
 				4A837C532487D01100223222 /* LocalFileSystemAuthentication.swift */,
+				7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */,
 			);
 			path = LocalFileSystem;
 			sourceTree = "<group>";

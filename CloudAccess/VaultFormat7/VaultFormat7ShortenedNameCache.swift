@@ -94,15 +94,15 @@ internal class VaultFormat7ShortenedNameCache {
 	 Undos .c9s shortening defined in vault format 7 (if required).
 
 	 - Parameter shortenedURL: A potentially shortened URL.
-	 - Parameter contentLoader: A closure loading the contents of `nameC9SURL`.
-	 - Parameter nameC9SURL: The URL of a `name.c9s` that needs to be loaded.
+	 - Parameter contentLoader: A closure loading the contents of a `name.c9s` file for the corresponding `c9sDirURL`.
+	 - Parameter c9sDirURL: The URL of a `.c9s` directory, whose original name should be loaded
 	 - Returns: Either `shortenedURL` if no shortening was applied or the original ("inflated") URL
 	 */
-	public func getOriginalURL(_ shortenedURL: URL, contentLoader: (_ nameC9SURL: URL) -> Promise<Data>) -> Promise<URL> {
+	public func getOriginalURL(_ shortenedURL: URL, contentLoader: (_ c9sDirURL: URL) -> Promise<Data>) -> Promise<URL> {
 		if shortenedURL.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
 			let cutOff = shortenedURL.pathComponents.count - ciphertextNameCompIdx - 1
-			let nameURL = shortenedURL.deletingLastPathComponents(cutOff).appendingPathComponent("name.c9s", isDirectory: false)
-			return contentLoader(nameURL).then { data -> URL in
+			let c9sDirURL = shortenedURL.deletingLastPathComponents(cutOff)
+			return contentLoader(c9sDirURL).then { data -> URL in
 				let name = String(data: data, encoding: .utf8)!
 				return shortenedURL.replacingPathComponent(atIndex: self.ciphertextNameCompIdx, with: name, isDirectory: shortenedURL.hasDirectoryPath)
 			}

@@ -173,7 +173,9 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			if shortenedURL.pointsToC9S {
 				return self.fetchMetadataForC9SContent(c9sURL: shortenedMetadata.remoteURL).then { c9sItemMetadata -> CloudItemMetadata in
 					let originalItemType = self.guessItemTypeByC9SItemName(c9sItemMetadata.name)
-					return CloudItemMetadata(name: shortenedURL.originalName, remoteURL: originalURL, itemType: originalItemType, lastModifiedDate: c9sItemMetadata.lastModifiedDate, size: c9sItemMetadata.size)
+					let originalLastModifiedDate = originalURL.hasDirectoryPath ? shortenedMetadata.lastModifiedDate : c9sItemMetadata.lastModifiedDate
+					let originalSize = originalURL.hasDirectoryPath ? shortenedMetadata.size : c9sItemMetadata.size
+					return CloudItemMetadata(name: shortenedURL.originalName, remoteURL: originalURL, itemType: originalItemType, lastModifiedDate: originalLastModifiedDate, size: originalSize)
 				}
 			} else {
 				return Promise(CloudItemMetadata(name: shortenedMetadata.name, remoteURL: originalURL, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size))

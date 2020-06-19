@@ -20,6 +20,7 @@
 		4A837C542487D01100223222 /* LocalFileSystemAuthentication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A837C532487D01100223222 /* LocalFileSystemAuthentication.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
 		7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */; };
+		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
 		9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */; };
 		9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */; };
 		9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969457249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift */; };
@@ -61,6 +62,7 @@
 		4A837C532487D01100223222 /* LocalFileSystemAuthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFileSystemAuthentication.swift; sourceTree = "<group>"; };
 		740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProvider.swift; sourceTree = "<group>"; };
+		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		9A51696105A9168880585575 /* Pods-CloudAccess.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccess.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccess/Pods-CloudAccess.debug.xcconfig"; sourceTree = "<group>"; };
 		9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptorMock.swift; sourceTree = "<group>"; };
 		9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShortenedNameCache.swift; sourceTree = "<group>"; };
@@ -195,6 +197,7 @@
 				9ECEC0B0246EE6A700151299 /* DirectoryIdCacheTests.swift */,
 				9ED0E61F2461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift */,
 				9E969457249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift */,
+				7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";
@@ -420,6 +423,7 @@
 				9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */,
 				9ED0E624246198F600FDB438 /* CloudProviderMockTests.swift in Sources */,
 				9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */,
+				7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */,
 				9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */,
 				9ECEC0B1246EE6A700151299 /* DirectoryIdCacheTests.swift in Sources */,
 				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,

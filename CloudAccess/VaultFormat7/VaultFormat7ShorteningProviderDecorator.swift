@@ -15,12 +15,12 @@ enum VaultFormat7ShorteningError: Error {
 
 private extension URL {
 	func appendingNameFileComponent() -> URL {
-		assert(hasDirectoryPath)
+		assert(pathExtension == "c9s")
 		return appendingPathComponent("name.c9s", isDirectory: false)
 	}
 
 	func appendingContentsFileComponent() -> URL {
-		assert(hasDirectoryPath)
+		assert(pathExtension == "c9s")
 		return appendingPathComponent("contents.c9r", isDirectory: false)
 	}
 }
@@ -196,7 +196,6 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	}
 
 	private func downloadNameFile(_ c9sDirURL: URL) -> Promise<Data> {
-		assert(c9sDirURL.hasDirectoryPath)
 		let remoteNameFileURL = c9sDirURL.appendingNameFileComponent()
 		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return delegate.downloadFile(from: remoteNameFileURL, to: localNameFileURL, progress: nil).then {
@@ -208,7 +207,8 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 
 	private func fetchC9SItemMetadata(at shortenedURL: ShortenedURL) -> Promise<CloudItemMetadata> {
 		assert(shortenedURL.pointsToC9S)
-		return delegate.fetchItemList(forFolderAt: shortenedURL.url, withPageToken: nil).then { itemList -> CloudItemMetadata in
+		let c9sURL = shortenedURL.url.deletingLastPathComponent().appendingPathComponent(shortenedURL.url.lastPathComponent, isDirectory: true)
+		return delegate.fetchItemList(forFolderAt: c9sURL, withPageToken: nil).then { itemList -> CloudItemMetadata in
 			for item in itemList.items {
 				switch item.name {
 				case "contents.c9r":

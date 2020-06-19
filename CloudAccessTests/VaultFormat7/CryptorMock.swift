@@ -29,19 +29,23 @@ public class CryptorMock: Cryptor {
 	let dirIds = [
 		"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+		"dir3-id": "33DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
 	]
 	let fileNames = [
 		"file1": "File 1",
 		"file2": "File 2",
 		"dir1": "Directory 1",
+		"\(String(repeating: "a", count: 217))": "Long Name Directory",
 		"file3": "File 3",
-		"dir2": "Directory 2"
+		"dir2": "Directory 2",
+		"\(String(repeating: "b", count: 217))": "Long Name File"
 	]
 	let contents = [
 		"ciphertext1": "cleartext1",
 		"ciphertext2": "cleartext2",
-		"ciphertext3": "cleartext3"
+		"ciphertext3": "cleartext3",
+		"ciphertext4": "cleartext4"
 	]
 
 	init(masterkey: Masterkey) {

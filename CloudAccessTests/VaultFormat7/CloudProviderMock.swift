@@ -19,16 +19,22 @@ public class CloudProviderMock: CloudProvider {
 		"pathToVault/d/00",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r",
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s",
 		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r",
-		"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+		"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+		"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/zJnBY0kkM89vsN5Rl7y-p1dnueo=.c9s"
 	]
 	let files = [
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r": "ciphertext1".data(using: .utf8)!,
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2.c9r": "ciphertext2".data(using: .utf8)!,
 		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!,
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r": "dir3-id".data(using: .utf8)!,
+		"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s": "\(String(repeating: "a", count: 217)).c9r".data(using: .utf8)!,
 		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": "ciphertext3".data(using: .utf8)!,
-		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": "dir2-id".data(using: .utf8)!
+		"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": "dir2-id".data(using: .utf8)!,
+		"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/zJnBY0kkM89vsN5Rl7y-p1dnueo=.c9s/contents.c9r": "ciphertext4".data(using: .utf8)!,
+		"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/zJnBY0kkM89vsN5Rl7y-p1dnueo=.c9s/name.c9s": "\(String(repeating: "b", count: 217)).c9r".data(using: .utf8)!
 	]
 
 	var createdFolders: [String] = []

@@ -13,25 +13,20 @@ import Promises
 struct ShortenedURL {
 	let url: URL
 	let originalName: String
-	let state: ShorteningState
+	let childState: ChildShorteningState
 	let nameFileURL: URL?
 }
 
-enum ShorteningState {
+enum ChildShorteningState {
 	/**
-	 URL has not been shortened
+	 URL has not been shortened in its last path component
 	 */
 	case unshortened
 
 	/**
 	 URL has been shortened in its last path component
 	 */
-	case shortenedChild
-
-	/**
-	 URL has been shortened, but not in its last path component
-	 */
-	case shortenedAncester
+	case shortened
 }
 
 private extension URL {
@@ -95,10 +90,10 @@ internal class VaultFormat7ShortenedNameCache {
 			let shortenedName = deflateFileName(originalName) + ".c9s"
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
 			let nameFileURL = generateNameFileURL(shortenedURL)
-			let state: ShorteningState = originalURL.pathComponents.count - 1 == ciphertextNameCompIdx ? .shortenedChild : .shortenedAncester
-			return ShortenedURL(url: shortenedURL, originalName: originalName, state: state, nameFileURL: nameFileURL)
+			let childState: ChildShorteningState = originalURL.pathComponents.count - 1 == ciphertextNameCompIdx ? .shortened : .unshortened
+			return ShortenedURL(url: shortenedURL, originalName: originalName, childState: childState, nameFileURL: nameFileURL)
 		} else {
-			return ShortenedURL(url: originalURL, originalName: originalName, state: .unshortened, nameFileURL: nil)
+			return ShortenedURL(url: originalURL, originalName: originalName, childState: .unshortened, nameFileURL: nil)
 		}
 	}
 

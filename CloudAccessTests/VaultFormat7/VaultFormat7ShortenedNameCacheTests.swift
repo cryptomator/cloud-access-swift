@@ -23,7 +23,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r/meow/miau", isDirectory: true)
 		let shortened = cache.getShortenedURL(originalURL)
 
-		XCTAssertEqual(ShorteningState.shortenedAncester, shortened.state)
+		XCTAssertEqual(ChildShorteningState.unshortened, shortened.childState)
 		XCTAssertEqual("\(longName).c9r", shortened.originalName)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/meow/miau", shortened.url.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s", shortened.nameFileURL!.path)

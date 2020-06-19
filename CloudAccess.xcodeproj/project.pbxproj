@@ -180,8 +180,8 @@
 			children = (
 				9ECEC0AE246ED1FB00151299 /* DirectoryIdCache.swift */,
 				9ED0E61C24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift */,
-				740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */,
 				9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */,
+				740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";

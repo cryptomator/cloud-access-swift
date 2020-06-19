@@ -18,15 +18,15 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let delegate: CloudProvider
 	let vaultURL: URL
 	let cryptor: Cryptor
-	let tmpDirURL: URL
 	let dirIdCache: DirectoryIdCache
+	let tmpDirURL: URL
 
 	public init(delegate: CloudProvider, vaultURL: URL, cryptor: Cryptor) throws {
 		self.delegate = delegate
 		self.vaultURL = vaultURL
 		self.cryptor = cryptor
-		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.dirIdCache = try DirectoryIdCache()
+		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 

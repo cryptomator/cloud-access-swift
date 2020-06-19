@@ -60,6 +60,7 @@ private extension URL {
 
 internal class VaultFormat7ShortenedNameCache {
 	static let threshold = 220
+	static let c9sSuffix = ".c9s"
 
 	let vaultURL: URL
 	let ciphertextNameCompIdx: Int
@@ -80,7 +81,7 @@ internal class VaultFormat7ShortenedNameCache {
 		precondition(ciphertextNameCompIdx < originalURL.pathComponents.count)
 		let originalName = originalURL.pathComponents[ciphertextNameCompIdx]
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
-			let shortenedName = deflateFileName(originalName) + ".c9s"
+			let shortenedName = deflateFileName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
 			let pointsToC9S = ciphertextNameCompIdx == originalURL.pathComponents.lastItemIndex()
 			return ShortenedURL(url: shortenedURL, originalName: originalName, pointsToC9S: pointsToC9S)
@@ -98,7 +99,16 @@ internal class VaultFormat7ShortenedNameCache {
 	 - Returns: Either `shortenedURL` if no shortening was applied or the original ("inflated") URL
 	 */
 	public func getOriginalURL(_ shortenedURL: URL, contentLoader: (_ nameC9SURL: URL) -> Promise<Data>) -> Promise<URL> {
-		return Promise(shortenedURL)
+		if shortenedURL.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
+			let cutOff = shortenedURL.pathComponents.count - ciphertextNameCompIdx - 1
+			let nameURL = shortenedURL.deletingLastPathComponents(cutOff).appendingPathComponent("name.c9s", isDirectory: false)
+			return contentLoader(nameURL).then { data -> URL in
+				let name = String(data: data, encoding: .utf8)!
+				return shortenedURL.replacingPathComponent(atIndex: self.ciphertextNameCompIdx, with: name, isDirectory: shortenedURL.hasDirectoryPath)
+			}
+		} else {
+			return Promise(shortenedURL)
+		}
 	}
 
 	internal func replaceCiphertextFileNameInURL(_ url: URL, with replacement: String) -> URL {

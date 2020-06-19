@@ -168,7 +168,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	}
 
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) -> Promise<CloudItemMetadata> {
-		return shortenedNameCache.getOriginalURL(shortenedMetadata.remoteURL, contentLoader: downloadFile).then { originalURL in
+		return shortenedNameCache.getOriginalURL(shortenedMetadata.remoteURL, nameC9SLoader: { downloadFile(at: $0.appendingPathComponent("name.c9s")) }).then { originalURL in
 			let shortenedURL = self.shortenedNameCache.getShortenedURL(originalURL)
 			if shortenedURL.pointsToC9S {
 				return self.fetchMetadataForC9SContent(c9sURL: shortenedMetadata.remoteURL).then { c9sItemMetadata -> CloudItemMetadata in

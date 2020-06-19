@@ -25,7 +25,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let shortened = cache.getShortenedURL(originalURL)
 
 		XCTAssertTrue(shortened.pointsToC9S)
-		XCTAssertEqual("\(longName).c9r", shortened.originalName)
+		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.url.path)
 		XCTAssertFalse(shortened.url.hasDirectoryPath)
 	}
@@ -36,8 +36,17 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let shortened = cache.getShortenedURL(originalURL)
 
 		XCTAssertFalse(shortened.pointsToC9S)
-		XCTAssertEqual("\(longName).c9r", shortened.originalName)
+		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.url.path)
+		XCTAssertTrue(shortened.url.hasDirectoryPath)
+	}
+
+	func testGetShortenedURL3() throws {
+		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30", isDirectory: true)
+		let shortened = cache.getShortenedURL(originalURL)
+
+		XCTAssertFalse(shortened.pointsToC9S)
+		XCTAssertEqual("/foo/bar/d/2/30", shortened.url.path)
 		XCTAssertTrue(shortened.url.hasDirectoryPath)
 	}
 

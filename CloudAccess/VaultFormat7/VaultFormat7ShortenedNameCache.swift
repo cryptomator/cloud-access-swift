@@ -10,10 +10,15 @@ import CommonCrypto
 import Foundation
 import Promises
 
-struct ShortenedURL {
+struct C9SDir {
 	let url: URL
 	let originalName: String
-	let pointsToC9S: Bool
+}
+
+struct ShorteningResult {
+	let url: URL
+	let c9sDir: C9SDir?
+	var pointsToC9S: Bool { url == c9sDir?.url }
 }
 
 private extension Array {
@@ -56,6 +61,11 @@ private extension URL {
 		tail[0] = replacement
 		return prefix.appendingPathComponents(pathComponents: tail, isDirectory: isDirectory)
 	}
+
+	func trimmingToPathComponent(atIndex index: Int, isDirectory: Bool) -> URL {
+		let toBeRemoved = pathComponents.count - pathComponents.index(after: index)
+		return deletingLastPathComponents(toBeRemoved)
+	}
 }
 
 internal class VaultFormat7ShortenedNameCache {
@@ -77,16 +87,19 @@ internal class VaultFormat7ShortenedNameCache {
 	 - Parameter originalURL: The unshortened URL.
 	 - Returns: A `ShortenedURL` object that is either based on the `originalURL` (if no shortening is required) or a shortened URL
 	 */
-	public func getShortenedURL(_ originalURL: URL) -> ShortenedURL {
-		precondition(ciphertextNameCompIdx < originalURL.pathComponents.count)
+	public func getShortenedURL(_ originalURL: URL) -> ShorteningResult {
+		if originalURL.pathComponents.count <= ciphertextNameCompIdx {
+			return ShorteningResult(url: originalURL, c9sDir: nil)
+		}
 		let originalName = originalURL.pathComponents[ciphertextNameCompIdx]
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
 			let shortenedName = deflateFileName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
-			let pointsToC9S = ciphertextNameCompIdx == originalURL.pathComponents.lastItemIndex()
-			return ShortenedURL(url: shortenedURL, originalName: originalName, pointsToC9S: pointsToC9S)
+			let c9sURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx, isDirectory: true)
+			let c9sDir = C9SDir(url: c9sURL, originalName: originalName)
+			return ShorteningResult(url: shortenedURL, c9sDir: c9sDir)
 		} else {
-			return ShortenedURL(url: originalURL, originalName: originalName, pointsToC9S: false)
+			return ShorteningResult(url: originalURL, c9sDir: nil)
 		}
 	}
 

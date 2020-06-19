@@ -77,9 +77,11 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		precondition(!remoteURL.hasDirectoryPath)
 		let shortenedURL = shortenedNameCache.getShortenedURL(remoteURL)
 		if shortenedURL.childState == .shortened {
-			return createC9SFolderAndUploadNameFile(shortenedURL: shortenedURL).then {
+			return createC9SFolderAndUploadNameFile(shortenedURL: shortenedURL).then { () -> Promise<CloudItemMetadata> in
 				let contentsFileURL = shortenedURL.url.appendingPathComponent("contents.c9r")
 				return self.delegate.uploadFile(from: localURL, to: contentsFileURL, replaceExisting: replaceExisting, progress: progress)
+			}.then { _ in
+				return self.delegate.fetchItemMetadata(at: shortenedURL.url)
 			}.then { shortenedMetadata in
 				return self.getOriginalMetadata(shortenedMetadata)
 			}

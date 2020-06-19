@@ -13,20 +13,14 @@ import Promises
 struct ShortenedURL {
 	let url: URL
 	let originalName: String
-	let childState: ChildShorteningState
+	let pointsToC9S: Bool
 	let nameFileURL: URL?
 }
 
-enum ChildShorteningState {
-	/**
-	 URL has not been shortened in its last path component
-	 */
-	case unshortened
-
-	/**
-	 URL has been shortened in its last path component
-	 */
-	case shortened
+private extension Array {
+	func lastItemIndex() -> Int {
+		return self.index(before: endIndex)
+	}
 }
 
 private extension URL {
@@ -73,7 +67,7 @@ internal class VaultFormat7ShortenedNameCache {
 
 	init(vaultURL: URL) {
 		self.vaultURL = vaultURL
-		self.ciphertextNameCompIdx = vaultURL.pathComponents.endIndex - 1 + 4
+		self.ciphertextNameCompIdx = vaultURL.pathComponents.lastItemIndex() + 4
 	}
 
 	/**
@@ -90,10 +84,10 @@ internal class VaultFormat7ShortenedNameCache {
 			let shortenedName = deflateFileName(originalName) + ".c9s"
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
 			let nameFileURL = generateNameFileURL(shortenedURL)
-			let childState: ChildShorteningState = originalURL.pathComponents.count - 1 == ciphertextNameCompIdx ? .shortened : .unshortened
-			return ShortenedURL(url: shortenedURL, originalName: originalName, childState: childState, nameFileURL: nameFileURL)
+			let pointsToC9S = ciphertextNameCompIdx == originalURL.pathComponents.lastItemIndex()
+			return ShortenedURL(url: shortenedURL, originalName: originalName, pointsToC9S: pointsToC9S, nameFileURL: nameFileURL)
 		} else {
-			return ShortenedURL(url: originalURL, originalName: originalName, childState: .unshortened, nameFileURL: nil)
+			return ShortenedURL(url: originalURL, originalName: originalName, pointsToC9S: false, nameFileURL: nil)
 		}
 	}
 

@@ -20,12 +20,24 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 
 	func testGetShortenedURL1() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r/meow/miau", isDirectory: true)
+		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r", isDirectory: false)
 		let shortened = cache.getShortenedURL(originalURL)
 
-		XCTAssertEqual(ChildShorteningState.unshortened, shortened.childState)
+		XCTAssertTrue(shortened.pointsToC9S)
 		XCTAssertEqual("\(longName).c9r", shortened.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/meow/miau", shortened.url.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.url.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s", shortened.nameFileURL!.path)
+		XCTAssertFalse(shortened.url.hasDirectoryPath)
+	}
+
+	func testGetShortenedURL2() throws {
+		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
+		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r/dir.c9r", isDirectory: true)
+		let shortened = cache.getShortenedURL(originalURL)
+
+		XCTAssertFalse(shortened.pointsToC9S)
+		XCTAssertEqual("\(longName).c9r", shortened.originalName)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.url.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s", shortened.nameFileURL!.path)
 		XCTAssertTrue(shortened.url.hasDirectoryPath)
 	}

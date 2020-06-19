@@ -26,7 +26,6 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertTrue(shortened.pointsToC9S)
 		XCTAssertEqual("\(longName).c9r", shortened.originalName)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.url.path)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s", shortened.nameFileURL!.path)
 		XCTAssertFalse(shortened.url.hasDirectoryPath)
 	}
 
@@ -38,16 +37,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertFalse(shortened.pointsToC9S)
 		XCTAssertEqual("\(longName).c9r", shortened.originalName)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.url.path)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/name.c9s", shortened.nameFileURL!.path)
 		XCTAssertTrue(shortened.url.hasDirectoryPath)
-	}
-
-	func testGenerateNameFileURL1() throws {
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/short.c9s/meow/miau", isDirectory: true)
-		let shortened = cache.generateNameFileURL(originalURL)
-
-		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/name.c9s", shortened.path)
-		XCTAssertFalse(shortened.hasDirectoryPath)
 	}
 
 	func testReplaceCiphertextFileNameInURL1() throws {

@@ -14,12 +14,11 @@ struct ShortenedURL {
 	let url: URL
 	let originalName: String
 	let pointsToC9S: Bool
-	let nameFileURL: URL?
 }
 
 private extension Array {
 	func lastItemIndex() -> Int {
-		return self.index(before: endIndex)
+		return index(before: endIndex)
 	}
 }
 
@@ -83,11 +82,10 @@ internal class VaultFormat7ShortenedNameCache {
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
 			let shortenedName = deflateFileName(originalName) + ".c9s"
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
-			let nameFileURL = generateNameFileURL(shortenedURL)
 			let pointsToC9S = ciphertextNameCompIdx == originalURL.pathComponents.lastItemIndex()
-			return ShortenedURL(url: shortenedURL, originalName: originalName, pointsToC9S: pointsToC9S, nameFileURL: nameFileURL)
+			return ShortenedURL(url: shortenedURL, originalName: originalName, pointsToC9S: pointsToC9S)
 		} else {
-			return ShortenedURL(url: originalURL, originalName: originalName, pointsToC9S: false, nameFileURL: nil)
+			return ShortenedURL(url: originalURL, originalName: originalName, pointsToC9S: false)
 		}
 	}
 
@@ -101,11 +99,6 @@ internal class VaultFormat7ShortenedNameCache {
 	 */
 	public func getOriginalURL(_ shortenedURL: URL, contentLoader: (_ nameC9SURL: URL) -> Promise<Data>) -> Promise<URL> {
 		return Promise(shortenedURL)
-	}
-
-	internal func generateNameFileURL(_ url: URL) -> URL {
-		let cutOff = url.pathComponents.count - ciphertextNameCompIdx - 1
-		return url.deletingLastPathComponents(cutOff).appendingPathComponent("name.c9s", isDirectory: false)
 	}
 
 	internal func replaceCiphertextFileNameInURL(_ url: URL, with replacement: String) -> URL {

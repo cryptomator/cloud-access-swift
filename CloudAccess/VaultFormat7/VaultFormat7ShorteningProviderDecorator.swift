@@ -111,33 +111,35 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		precondition(oldRemoteURL.isFileURL)
 		precondition(newRemoteURL.isFileURL)
 		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		let isDirectory = oldRemoteURL.hasDirectoryPath
 		let oldShortenedURL = shortenedNameCache.getShortenedURL(oldRemoteURL)
 		let newShortenedURL = shortenedNameCache.getShortenedURL(newRemoteURL)
-		switch (oldShortenedURL.pointsToC9S, newShortenedURL.pointsToC9S) {
-		case (false, false):
+
+		enum URLState { case shortened, unshortened }
+		enum ItemType { case folder, file }
+		let oldState: URLState = oldShortenedURL.pointsToC9S ? .shortened : .unshortened
+		let newState: URLState = newShortenedURL.pointsToC9S ? .shortened : .unshortened
+		let itemType: ItemType = oldRemoteURL.hasDirectoryPath ? .folder : .file
+
+		switch (oldState, newState, itemType) {
+		case (.unshortened, .unshortened, _):
 			return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url)
-		case (false, true):
-			if isDirectory {
-				return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url).then {
-					return self.uploadNameFile(shortenedURL: newShortenedURL)
-				}
-			} else {
-				return createC9SFolderAndUploadNameFile(shortenedURL: newShortenedURL).then {
-					return self.delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url.appendingPathComponent("contents.c9r"))
-				}
+		case (.unshortened, .shortened, .folder):
+			return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url).then {
+				return self.uploadNameFile(shortenedURL: newShortenedURL)
 			}
-		case (true, false):
-			if isDirectory {
-				return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url).then {
-					return self.delegate.deleteItem(at: newShortenedURL.url.appendingPathComponent("name.c9s"))
-				}
-			} else {
-				return delegate.moveItem(from: oldShortenedURL.url.appendingPathComponent("contents.c9r"), to: newShortenedURL.url).then {
-					return self.delegate.deleteItem(at: oldShortenedURL.url)
-				}
+		case (.unshortened, .shortened, .file):
+			return createC9SFolderAndUploadNameFile(shortenedURL: newShortenedURL).then {
+				return self.delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url.appendingPathComponent("contents.c9r"))
 			}
-		case (true, true):
+		case (.shortened, .unshortened, .folder):
+			return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url).then {
+				return self.delegate.deleteItem(at: newShortenedURL.url.appendingPathComponent("name.c9s"))
+			}
+		case (.shortened, .unshortened, .file):
+			return delegate.moveItem(from: oldShortenedURL.url.appendingPathComponent("contents.c9r"), to: newShortenedURL.url).then {
+				return self.delegate.deleteItem(at: oldShortenedURL.url)
+			}
+		case (.shortened, .shortened, _):
 			return delegate.moveItem(from: oldShortenedURL.url, to: newShortenedURL.url).then {
 				return self.uploadNameFile(shortenedURL: newShortenedURL)
 			}
@@ -161,9 +163,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		} catch {
 			return Promise(error)
 		}
-		guard let remoteNameFileURL = shortenedURL.nameFileURL else {
-			return Promise(VaultFormat7ShorteningError.unableToInflateFileName)
-		}
+		let remoteNameFileURL = shortenedURL.url.appendingPathComponent("name.c9s")
 		return delegate.uploadFile(from: localNameFileURL, to: remoteNameFileURL, replaceExisting: true, progress: nil).then { _ in () }
 	}
 

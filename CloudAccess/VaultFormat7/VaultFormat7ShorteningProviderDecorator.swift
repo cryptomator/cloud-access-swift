@@ -180,7 +180,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	}
 
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) -> Promise<CloudItemMetadata> {
-		return shortenedNameCache.getOriginalURL(shortenedMetadata.remoteURL, nameC9SLoader: { downloadFile(at: $0.appendingNameFileComponent()) }).then { originalURL in
+		return shortenedNameCache.getOriginalURL(shortenedMetadata.remoteURL, nameC9SLoader: downloadNameFile).then { originalURL in
 			let shortenedURL = self.shortenedNameCache.getShortenedURL(originalURL)
 			if shortenedURL.pointsToC9S {
 				return self.fetchC9SItemMetadata(at: shortenedURL).then { c9sItemMetadata -> CloudItemMetadata in
@@ -192,6 +192,17 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			} else {
 				return Promise(CloudItemMetadata(name: shortenedMetadata.name, remoteURL: originalURL, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size))
 			}
+		}
+	}
+
+	private func downloadNameFile(_ c9sDirURL: URL) -> Promise<Data> {
+		assert(c9sDirURL.hasDirectoryPath)
+		let remoteNameFileURL = c9sDirURL.appendingNameFileComponent()
+		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		return delegate.downloadFile(from: remoteNameFileURL, to: localNameFileURL, progress: nil).then {
+			return try Data(contentsOf: localNameFileURL)
+		}.always {
+			try? FileManager.default.removeItem(at: localNameFileURL)
 		}
 	}
 
@@ -220,17 +231,6 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			return .folder
 		default:
 			return .unknown
-		}
-	}
-
-	// MARK: - Convenience
-
-	private func downloadFile(at remoteURL: URL) -> Promise<Data> {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: remoteURL, to: localURL, progress: nil).then {
-			return try Data(contentsOf: localURL)
-		}.always {
-			try? FileManager.default.removeItem(at: localURL)
 		}
 	}
 }

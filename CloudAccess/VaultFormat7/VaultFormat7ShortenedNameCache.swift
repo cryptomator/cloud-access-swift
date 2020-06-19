@@ -18,7 +18,8 @@ struct C9SDir {
 struct ShorteningResult {
 	let url: URL
 	let c9sDir: C9SDir?
-	var pointsToC9S: Bool { url == c9sDir?.url }
+	// TODO fuck that additional "isDirectory" crap -.-
+	var pointsToC9S: Bool { url.appendingPathComponent(".", isDirectory: true) == c9sDir?.url.appendingPathComponent(".", isDirectory: true) }
 }
 
 private extension Array {
@@ -32,6 +33,10 @@ private extension URL {
 		let comps = pathComponents
 		let n = comps.count
 		return Array(comps[n - count ... n - 1])
+	}
+
+	func directoryURL() -> URL {
+		return deletingLastPathComponent().appendingPathComponent(lastPathComponent, isDirectory: true)
 	}
 
 	func deletingLastPathComponents(_ count: Int) -> URL {
@@ -62,7 +67,7 @@ private extension URL {
 		return prefix.appendingPathComponents(pathComponents: tail, isDirectory: isDirectory)
 	}
 
-	func trimmingToPathComponent(atIndex index: Int, isDirectory: Bool) -> URL {
+	func trimmingToPathComponent(atIndex index: Int) -> URL {
 		let toBeRemoved = pathComponents.count - pathComponents.index(after: index)
 		return deletingLastPathComponents(toBeRemoved)
 	}
@@ -95,7 +100,7 @@ internal class VaultFormat7ShortenedNameCache {
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
 			let shortenedName = deflateFileName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
-			let c9sURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx, isDirectory: true)
+			let c9sURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx).directoryURL()
 			let c9sDir = C9SDir(url: c9sURL, originalName: originalName)
 			return ShorteningResult(url: shortenedURL, c9sDir: c9sDir)
 		} else {

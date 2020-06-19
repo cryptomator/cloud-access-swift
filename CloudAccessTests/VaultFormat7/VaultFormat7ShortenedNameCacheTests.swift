@@ -24,9 +24,12 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r", isDirectory: false)
 		let shortened = cache.getShortenedURL(originalURL)
 
-		XCTAssertTrue(shortened.pointsToC9S)
+		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.url.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.url.path)
+		XCTAssertTrue(shortened.pointsToC9S)
+		XCTAssertTrue(shortened.c9sDir!.url.hasDirectoryPath)
 		XCTAssertFalse(shortened.url.hasDirectoryPath)
 	}
 
@@ -35,9 +38,12 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r/dir.c9r", isDirectory: true)
 		let shortened = cache.getShortenedURL(originalURL)
 
-		XCTAssertFalse(shortened.pointsToC9S)
+		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.url.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.url.path)
+		XCTAssertFalse(shortened.pointsToC9S)
+		XCTAssertTrue(shortened.c9sDir!.url.hasDirectoryPath)
 		XCTAssertTrue(shortened.url.hasDirectoryPath)
 	}
 
@@ -45,8 +51,9 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30", isDirectory: true)
 		let shortened = cache.getShortenedURL(originalURL)
 
-		XCTAssertFalse(shortened.pointsToC9S)
+		XCTAssertNil(shortened.c9sDir)
 		XCTAssertEqual("/foo/bar/d/2/30", shortened.url.path)
+		XCTAssertFalse(shortened.pointsToC9S)
 		XCTAssertTrue(shortened.url.hasDirectoryPath)
 	}
 

@@ -18,8 +18,7 @@ struct C9SDir {
 struct ShorteningResult {
 	let url: URL
 	let c9sDir: C9SDir?
-	// TODO fuck that additional "isDirectory" crap -.-
-	var pointsToC9S: Bool { url.appendingPathComponent(".", isDirectory: true) == c9sDir?.url.appendingPathComponent(".", isDirectory: true) }
+	var pointsToC9S: Bool { url.path == c9sDir?.url.path }
 }
 
 private extension Array {

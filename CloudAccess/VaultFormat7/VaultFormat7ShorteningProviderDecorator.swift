@@ -98,7 +98,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 				return self.getOriginalMetadata(shortenedMetadata)
 			}
 		} else {
-			return delegate.uploadFile(from: localURL, to: remoteURL, replaceExisting: replaceExisting, progress: progress)
+			return delegate.uploadFile(from: localURL, to: shortened.url, replaceExisting: replaceExisting, progress: progress)
 		}
 	}
 

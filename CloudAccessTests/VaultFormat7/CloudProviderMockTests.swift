@@ -27,11 +27,13 @@ class CloudProviderMockTests: XCTestCase {
 		let provider = CloudProviderMock()
 		let url = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", isDirectory: true)
 		provider.fetchItemList(forFolderAt: url, withPageToken: nil).then { cloudItemList in
-			XCTAssertEqual(4, cloudItemList.items.count)
+			XCTAssertEqual(6, cloudItemList.items.count)
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1.c9r" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2.c9r" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

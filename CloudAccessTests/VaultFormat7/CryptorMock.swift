@@ -30,22 +30,28 @@ public class CryptorMock: Cryptor {
 		"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 		"dir2-id": "22CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
-		"dir3-id": "33DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+		"dir3-id": "33DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+		"dir4-id": "44EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
 	]
 	let fileNames = [
+		"dir1": "Directory 1",
+		"dir2": "Directory 2",
+		"\(String(repeating: "dir3", count: 55))": "Directory 3 (Long)",
+		"\(String(repeating: "dir4", count: 55))": "Directory 4 (Long)",
 		"file1": "File 1",
 		"file2": "File 2",
-		"dir1": "Directory 1",
-		"\(String(repeating: "a", count: 217))": "Long Name Directory",
 		"file3": "File 3",
-		"dir2": "Directory 2",
-		"\(String(repeating: "b", count: 217))": "Long Name File"
+		"\(String(repeating: "file4", count: 44))": "File 4 (Long)",
+		"\(String(repeating: "file5", count: 44))": "File 5 (Long)",
+		"\(String(repeating: "file6", count: 44))": "File 6 (Long)"
 	]
 	let contents = [
 		"ciphertext1": "cleartext1",
 		"ciphertext2": "cleartext2",
 		"ciphertext3": "cleartext3",
-		"ciphertext4": "cleartext4"
+		"ciphertext4": "cleartext4",
+		"ciphertext5": "cleartext5",
+		"ciphertext6": "cleartext6"
 	]
 
 	init(masterkey: Masterkey) {

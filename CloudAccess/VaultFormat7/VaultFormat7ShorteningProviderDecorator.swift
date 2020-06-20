@@ -15,12 +15,10 @@ enum VaultFormat7ShorteningError: Error {
 
 private extension URL {
 	func appendingNameFileComponent() -> URL {
-		assert(pathExtension == "c9s")
 		return appendingPathComponent("name.c9s", isDirectory: false)
 	}
 
 	func appendingContentsFileComponent() -> URL {
-		assert(pathExtension == "c9s")
 		return appendingPathComponent("contents.c9r", isDirectory: false)
 	}
 }

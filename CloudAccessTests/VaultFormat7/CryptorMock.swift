@@ -99,4 +99,12 @@ public class CryptorMock: Cryptor {
 			throw CryptorMockError.notMocked
 		}
 	}
+
+	override public func calculateCiphertextSize(_ cleartextSize: Int) -> Int {
+		return 0
+	}
+
+	override public func calculateCleartextSize(_ ciphertextSize: Int) throws -> Int {
+		return 0
+	}
 }

@@ -202,7 +202,16 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let ciphertextBaseName = String(ciphertextMetadata.name.prefix(ciphertextMetadata.name.count - 4))
 			let cleartextName = try self.cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)
 			let cleartextURL = cleartextParentURL.appendingPathComponent(cleartextName, isDirectory: ciphertextMetadata.itemType == .folder)
-			let cleartextSize = 0 // TODO: determine cleartext size
+			let cleartextSize = try { () -> Int? in
+				guard let ciphertextSize = ciphertextMetadata.size else {
+					return nil
+				}
+				if ciphertextMetadata.itemType == .file {
+					return try self.cryptor.calculateCleartextSize(ciphertextSize)
+				} else {
+					return ciphertextSize
+				}
+			}()
 			return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
 		}
 	}

@@ -87,7 +87,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		precondition(!remoteURL.hasDirectoryPath)
 		let shortened = shortenedNameCache.getShortenedURL(remoteURL)
 		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
-			return createC9SFolderAndUploadNameFile(c9sDir: c9sDir).then { () -> Promise<CloudItemMetadata> in
+			return createC9SFolderAndUploadNameFile(c9sDir).then { () -> Promise<CloudItemMetadata> in
 				let contentsFileURL = shortened.url.appendingContentsFileComponent()
 				return self.delegate.uploadFile(from: localURL, to: contentsFileURL, replaceExisting: replaceExisting, progress: progress)
 			}.then { _ in
@@ -105,7 +105,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		precondition(remoteURL.hasDirectoryPath)
 		let shortened = shortenedNameCache.getShortenedURL(remoteURL)
 		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
-			return createC9SFolderAndUploadNameFile(c9sDir: c9sDir)
+			return createC9SFolderAndUploadNameFile(c9sDir)
 		} else {
 			return delegate.createFolder(at: shortened.url)
 		}
@@ -135,10 +135,10 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			return delegate.moveItem(from: shortenedSource.url, to: shortenedTarget.url)
 		case (.unshortened, .shortened, .folder):
 			return delegate.moveItem(from: shortenedSource.url, to: shortenedTarget.url).then {
-				return self.uploadNameFile(c9sDir: shortenedTarget.c9sDir!)
+				return self.uploadNameFile(shortenedTarget.c9sDir!)
 			}
 		case (.unshortened, .shortened, .file):
-			return createC9SFolderAndUploadNameFile(c9sDir: shortenedTarget.c9sDir!).then {
+			return createC9SFolderAndUploadNameFile(shortenedTarget.c9sDir!).then {
 				return self.delegate.moveItem(from: shortenedSource.url, to: shortenedTarget.url.appendingContentsFileComponent())
 			}
 		case (.shortened, .unshortened, .folder):
@@ -151,35 +151,18 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			}
 		case (.shortened, .shortened, _):
 			return delegate.moveItem(from: shortenedSource.url, to: shortenedTarget.url).then {
-				return self.uploadNameFile(c9sDir: shortenedTarget.c9sDir!)
+				return self.uploadNameFile(shortenedTarget.c9sDir!)
 			}
 		}
 	}
 
 	// MARK: - Internal
 
-	private func createC9SFolderAndUploadNameFile(c9sDir: C9SDir) -> Promise<Void> {
-		return delegate.createFolder(at: c9sDir.url).then {
-			return self.uploadNameFile(c9sDir: c9sDir)
-		}
-	}
-
-	private func uploadNameFile(c9sDir: C9SDir) -> Promise<Void> {
-		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		do {
-			try c9sDir.originalName.write(to: localNameFileURL, atomically: true, encoding: .utf8)
-		} catch {
-			return Promise(error)
-		}
-		let remoteNameFileURL = c9sDir.url.appendingNameFileComponent()
-		return delegate.uploadFile(from: localNameFileURL, to: remoteNameFileURL, replaceExisting: true, progress: nil).then { _ in () }
-	}
-
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) -> Promise<CloudItemMetadata> {
 		return shortenedNameCache.getOriginalURL(shortenedMetadata.remoteURL, nameC9SLoader: downloadNameFile).then { originalURL in
 			let shortened = self.shortenedNameCache.getShortenedURL(originalURL)
 			if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
-				return self.fetchC9SItemMetadata(at: c9sDir).then { c9sItemMetadata -> CloudItemMetadata in
+				return self.fetchC9SItemMetadata(c9sDir).then { c9sItemMetadata -> CloudItemMetadata in
 					let originalItemType = self.guessItemTypeByC9SItemName(c9sItemMetadata.name)
 					let originalLastModifiedDate = originalURL.hasDirectoryPath ? shortenedMetadata.lastModifiedDate : c9sItemMetadata.lastModifiedDate
 					let originalSize = originalURL.hasDirectoryPath ? shortenedMetadata.size : c9sItemMetadata.size
@@ -201,7 +184,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	private func fetchC9SItemMetadata(at c9sDir: C9SDir) -> Promise<CloudItemMetadata> {
+	private func fetchC9SItemMetadata(_ c9sDir: C9SDir) -> Promise<CloudItemMetadata> {
 		return delegate.fetchItemList(forFolderAt: c9sDir.url, withPageToken: nil).then { itemList -> CloudItemMetadata in
 			for item in itemList.items {
 				switch item.name {
@@ -226,5 +209,22 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		default:
 			return .unknown
 		}
+	}
+
+	private func createC9SFolderAndUploadNameFile(_ c9sDir: C9SDir) -> Promise<Void> {
+		return delegate.createFolder(at: c9sDir.url).then {
+			return self.uploadNameFile(c9sDir)
+		}
+	}
+
+	private func uploadNameFile(_ c9sDir: C9SDir) -> Promise<Void> {
+		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		do {
+			try c9sDir.originalName.write(to: localNameFileURL, atomically: true, encoding: .utf8)
+		} catch {
+			return Promise(error)
+		}
+		let remoteNameFileURL = c9sDir.url.appendingNameFileComponent()
+		return delegate.uploadFile(from: localNameFileURL, to: remoteNameFileURL, replaceExisting: true, progress: nil).then { _ in () }
 	}
 }

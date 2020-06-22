@@ -85,11 +85,11 @@ internal class VaultFormat7ShortenedNameCache {
 	}
 
 	/**
-	 Applies the .c9s shortening defined in vault format 7 (if required).
+	 Applies the `.c9s` shortening defined in vault format 7 (if required).
 	 This **does not** persist the original name to `name.c9s`, though.
 
 	 - Parameter originalURL: The unshortened URL.
-	 - Returns: A `ShortenedURL` object that is either based on the `originalURL` (if no shortening is required) or a shortened URL
+	 - Returns: A `ShorteningResult` object that is either based on the `originalURL` (if no shortening is required) or a shortened URL.
 	 */
 	public func getShortenedURL(_ originalURL: URL) -> ShorteningResult {
 		if originalURL.pathComponents.count <= ciphertextNameCompIdx {
@@ -99,8 +99,8 @@ internal class VaultFormat7ShortenedNameCache {
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
 			let shortenedName = deflateFileName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
-			let c9sURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx).directoryURL()
-			let c9sDir = C9SDir(url: c9sURL, originalName: originalName)
+			let c9sDirURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx).directoryURL()
+			let c9sDir = C9SDir(url: c9sDirURL, originalName: originalName)
 			return ShorteningResult(url: shortenedURL, c9sDir: c9sDir)
 		} else {
 			return ShorteningResult(url: originalURL, c9sDir: nil)
@@ -108,12 +108,12 @@ internal class VaultFormat7ShortenedNameCache {
 	}
 
 	/**
-	 Undos .c9s shortening defined in vault format 7 (if required).
+	 Undos `.c9s` shortening defined in vault format 7 (if required).
 
 	 - Parameter shortenedURL: A potentially shortened URL.
 	 - Parameter nameC9SLoader: A closure loading the contents of a `name.c9s` file for the corresponding `c9sDirURL`.
-	 - Parameter c9sDirURL: The URL of a `.c9s` directory, whose original name should be loaded
-	 - Returns: Either `shortenedURL` if no shortening was applied or the original ("inflated") URL
+	 - Parameter c9sDirURL: The URL of a `.c9s` directory, whose original name should be loaded.
+	 - Returns: Either `shortenedURL` if no shortening was applied or the original ("inflated") URL.
 	 */
 	public func getOriginalURL(_ shortenedURL: URL, nameC9SLoader loadNameC9S: (_ c9sDirURL: URL) -> Promise<Data>) -> Promise<URL> {
 		if shortenedURL.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {

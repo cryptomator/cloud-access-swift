@@ -52,8 +52,8 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testFetchItemListWithLongName() {
-		let expectation = XCTestExpectation(description: "fetchItemList with long name")
+	func testFetchItemListForSubDirWithLongName() {
+		let expectation = XCTestExpectation(description: "fetchItemList for sub dir with long name")
 		decorator.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Directory 3 (Long)", isDirectory: true), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 6 (Long)" }))

@@ -23,7 +23,7 @@ Pod::Spec.new do |s|
   s.subspec 'VaultFormat7' do |ss|
     ss.dependency 'CryptomatorCloudAccess/Core'
     ss.source_files = 'CloudAccess/VaultFormat7/**/*.swift'
-    ss.dependency 'CryptomatorCryptoLib', '~> 0.4.0'
+    ss.dependency 'CryptomatorCryptoLib', '~> 0.5.0'
     ss.dependency 'GRDB.swift', '~> 4.14.0'
   end
 end

@@ -45,8 +45,8 @@ class CloudProviderMockTests: XCTestCase {
 	func testDir1FileContainsDirId() {
 		let expectation = XCTestExpectation(description: "dir1FileContainsDirId")
 		let provider = CloudProviderMock()
-		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")
-		let localURL = tmpDirURL.appendingPathComponent("dir.c9r")
+		let remoteURL = URL(fileURLWithPath: "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r", isDirectory: false)
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<Void> in
 			XCTAssertEqual(.file, metadata.itemType)
 			return provider.downloadFile(from: metadata.remoteURL, to: localURL, progress: nil)

@@ -13,14 +13,14 @@ import XCTest
 class DirectoryIdCacheTests: XCTestCase {
 	func testContainsRootPath() throws {
 		let cache = try DirectoryIdCache()
-		let path = URL(fileURLWithPath: "/")
+		let path = URL(fileURLWithPath: "/", isDirectory: true)
 
 		XCTAssertEqual(Data([]), try cache.getCached(path))
 	}
 
 	func testGetCached() throws {
 		let cache = try DirectoryIdCache()
-		let path = URL(fileURLWithPath: "/foo/bar")
+		let path = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
 		let dirId = Data("foobar".utf8)
 
 		try cache.addToCache(path, dirId: dirId)
@@ -30,10 +30,10 @@ class DirectoryIdCacheTests: XCTestCase {
 
 	func testInvalidate() throws {
 		let cache = try DirectoryIdCache()
-		let path = URL(fileURLWithPath: "/foo")
-		let subPath1 = URL(fileURLWithPath: "/foo/bar")
-		let subPath2 = URL(fileURLWithPath: "/foo/baz")
-		let siblingPath = URL(fileURLWithPath: "/bar/foo")
+		let path = URL(fileURLWithPath: "/foo", isDirectory: true)
+		let subPath1 = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
+		let subPath2 = URL(fileURLWithPath: "/foo/baz", isDirectory: true)
+		let siblingPath = URL(fileURLWithPath: "/bar/foo", isDirectory: true)
 		let dirId = Data("foobar".utf8)
 
 		try cache.addToCache(path, dirId: dirId)
@@ -51,7 +51,7 @@ class DirectoryIdCacheTests: XCTestCase {
 	func testRecursiveGet() throws {
 		let expectation = XCTestExpectation(description: "recursiveGet")
 		let cache = try DirectoryIdCache()
-		let url = URL(fileURLWithPath: "/one/two/three")
+		let url = URL(fileURLWithPath: "/one/two/three", isDirectory: true)
 
 		var misses: [String] = []
 		let result = cache.get(url, onMiss: { (cleartextURL, parentDirId) -> Promise<Data> in

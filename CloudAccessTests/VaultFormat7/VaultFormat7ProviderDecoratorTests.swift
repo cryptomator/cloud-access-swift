@@ -12,7 +12,7 @@ import XCTest
 @testable import CryptomatorCryptoLib
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
-	let vaultURL = URL(fileURLWithPath: "pathToVault")
+	let vaultURL = URL(fileURLWithPath: "pathToVault", isDirectory: true)
 	let cryptor = CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 	var tmpDirURL: URL!
 	var provider: CloudProviderMock!
@@ -31,7 +31,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testFetchItemMetadata() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
-		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3")).then { metadata in
+		decorator.fetchItemMetadata(at: URL(fileURLWithPath: "/Directory 1/File 3", isDirectory: false)).then { metadata in
 			XCTAssertEqual("File 3", metadata.name)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual("/Directory 1/File 3", metadata.remoteURL.path)
@@ -74,8 +74,8 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testDownloadFile() {
 		let expectation = XCTestExpectation(description: "downloadFile")
-		let localURL = tmpDirURL.appendingPathComponent("File 1")
-		decorator.downloadFile(from: URL(fileURLWithPath: "/File 1"), to: localURL, progress: nil).then {
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		decorator.downloadFile(from: URL(fileURLWithPath: "/File 1", isDirectory: false), to: localURL, progress: nil).then {
 			let cleartext = try String(contentsOf: localURL, encoding: .utf8)
 			XCTAssertEqual("cleartext1", cleartext)
 		}.catch { error in
@@ -88,9 +88,9 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testUploadFile() throws {
 		let expectation = XCTestExpectation(description: "uploadFile")
-		let localURL = tmpDirURL.appendingPathComponent("file1.c9r")
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
-		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 1"), replaceExisting: false, progress: nil).then { metadata in
+		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 1", isDirectory: false), replaceExisting: false, progress: nil).then { metadata in
 			XCTAssertEqual(1, self.provider.createdFiles.count)
 			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "ciphertext1".data(using: .utf8))
 			XCTAssertEqual("File 1", metadata.name)
@@ -121,7 +121,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testDeleteDirectoryRecursively() {
+	func testDeleteFolder() {
 		let expectation = XCTestExpectation(description: "deleteItem on folder")
 		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1", isDirectory: true)).then {
 			XCTAssertEqual(3, self.provider.deleted.count)
@@ -138,7 +138,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testDeleteFile() {
 		let expectation = XCTestExpectation(description: "deleteItem on file")
-		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1/File 3")).then {
+		decorator.deleteItem(at: URL(fileURLWithPath: "/Directory 1/File 3", isDirectory: false)).then {
 			XCTAssertEqual(1, self.provider.deleted.count)
 			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
 		}.catch { error in
@@ -151,7 +151,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testMoveItem() {
 		let expectation = XCTestExpectation(description: "moveItem")
-		decorator.moveItem(from: URL(fileURLWithPath: "/File 1"), to: URL(fileURLWithPath: "/Directory 1/File 2")).then {
+		decorator.moveItem(from: URL(fileURLWithPath: "/File 1", isDirectory: false), to: URL(fileURLWithPath: "/Directory 1/File 2", isDirectory: false)).then {
 			XCTAssertEqual(1, self.provider.moved.count)
 			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r")
 		}.catch { error in

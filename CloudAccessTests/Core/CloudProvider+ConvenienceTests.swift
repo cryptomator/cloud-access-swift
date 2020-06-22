@@ -14,7 +14,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testFetchItemListExhaustively() {
 		let expectation = XCTestExpectation(description: "fetchItemListExhaustively")
 		let provider = ConvenienceCloudProviderMock()
-		provider.fetchItemListExhaustively(forFolderAt: URL(fileURLWithPath: "/")).then { cloudItemList in
+		provider.fetchItemListExhaustively(forFolderAt: URL(fileURLWithPath: "/", isDirectory: true)).then { cloudItemList in
 			XCTAssertEqual(6, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "a" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "b" }))
@@ -120,16 +120,16 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 private class ConvenienceCloudProviderMock: CloudProvider {
 	let pages = [
 		"0": [
-			CloudItemMetadata(name: "a", remoteURL: URL(fileURLWithPath: "/a"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "b", remoteURL: URL(fileURLWithPath: "/b"), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "a", remoteURL: URL(fileURLWithPath: "/a", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "b", remoteURL: URL(fileURLWithPath: "/b", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
 		],
 		"1": [
-			CloudItemMetadata(name: "c", remoteURL: URL(fileURLWithPath: "/c"), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "c", remoteURL: URL(fileURLWithPath: "/c", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
 		],
 		"2": [
-			CloudItemMetadata(name: "d", remoteURL: URL(fileURLWithPath: "/d"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "e", remoteURL: URL(fileURLWithPath: "/e"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "f", remoteURL: URL(fileURLWithPath: "/f"), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "d", remoteURL: URL(fileURLWithPath: "/d", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "e", remoteURL: URL(fileURLWithPath: "/e", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "f", remoteURL: URL(fileURLWithPath: "/f", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
 		]
 	]
 

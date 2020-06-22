@@ -33,7 +33,7 @@ internal class DirectoryIdCache {
 				table.column("cleartextURL", .text).notNull().primaryKey()
 				table.column("dirId", .blob).notNull()
 			}
-			try CachedEntry(cleartextURL: URL(fileURLWithPath: "/"), dirId: Data([])).save(db)
+			try CachedEntry(cleartextURL: URL(fileURLWithPath: "/", isDirectory: true), dirId: Data([])).save(db)
 		}
 	}
 

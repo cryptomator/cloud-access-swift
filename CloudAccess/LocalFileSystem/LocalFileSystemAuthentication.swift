@@ -9,6 +9,8 @@
 import Foundation
 import Promises
 public class LocalFileSystemAuthentication: CloudAuthentication {
+	public init() {}
+
 	public func authenticate(from _: UIViewController) -> Promise<Void> {
 		return Promise(())
 	}

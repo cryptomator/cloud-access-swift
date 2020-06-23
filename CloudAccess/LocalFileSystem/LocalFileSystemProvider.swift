@@ -27,6 +27,8 @@ extension FileManager {
 public class LocalFileSystemProvider: CloudProvider {
 	let fileManager = FileManager()
 
+	public init() {}
+
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		precondition(remoteURL.isFileURL)
 		let attributes: [FileAttributeKey: Any]

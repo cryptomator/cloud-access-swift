@@ -20,6 +20,11 @@ Pod::Spec.new do |s|
     ss.dependency 'PromisesSwift', '~> 1.2.0'
   end
 
+  s.subspec 'LocalFileSystem' do |ss|
+    ss.dependency 'CryptomatorCloudAccess/Core'
+    ss.source_files = 'CloudAccess/LocalFileSystem/**/*.swift'
+  end
+
   s.subspec 'VaultFormat7' do |ss|
     ss.dependency 'CryptomatorCloudAccess/Core'
     ss.source_files = 'CloudAccess/VaultFormat7/**/*.swift'

@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum CloudItemType {
+public enum CloudItemType: String, Codable {
 	case file
 	case folder
 	case unknown

@@ -39,11 +39,11 @@ public protocol CloudProvider {
 	 - Parameter remoteURL: The remote URL of the folder to fetch item list.
 	 - Parameter pageToken: (Optional) The page token returned by your last call to `fetchItemList()`.
 	 - Precondition: `remoteURL` must be a file URL.
-	 - Precondition: `remoteURL` must point to a folder and therefore conform to the following pattern:
-	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
+	 - Precondition: `remoteURL` must point to a folder and therefore `hasDirectoryPath` must be `true`.
 	 - Returns: Promise with the item list for a folder (at page token if specified). If the fetch fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at the `remoteURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `remoteURL`.
+	   - `CloudProviderError.pageTokenInvalid` if the `pageToken` is invalid.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
@@ -56,8 +56,7 @@ public protocol CloudProvider {
 	 - Parameter localURL: The local URL of the desired download location.
 	 - Parameter progress: (Optional) A representation of the download progress.
 	 - Precondition: `remoteURL` and `localURL` must be a file URL.
-	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
-	   - file: has no slash at the end (e.g. `/folder/example.txt`)
+	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false` .
 	 - Postcondition: The file is stored under the `localURL`.
 	 - Returns: Empty promise. If the download fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `remoteURL`.
@@ -76,13 +75,13 @@ public protocol CloudProvider {
 	 - Parameter replaceExisting: If true, overwrite the existing file at the `remoteURL`.
 	 - Parameter progress: (Optional) A representation of the upload progress.
 	 - Precondition: `remoteURL` and `localURL` must be a file URL.
-	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore conform to the following pattern:
-	   - file: has no slash at the end (e.g. `/folder/example.txt`)
+	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false`.
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!replaceExisting`.
 	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
+	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
@@ -94,11 +93,11 @@ public protocol CloudProvider {
 
 	 - Parameter remoteURL: The remote URL of the folder to create.
 	 - Precondition: `remoteURL` must be a file URL.
-	 - Precondition: `remoteURL` must point to a folder and therefore conform to the following pattern:
-	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
+	 - Precondition: `remoteURL` must point to a folder and therefore `hasDirectoryPath` must be `true`.
 	 - Returns: Empty promise. If the folder creation fails, promise is rejected with:
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `remoteURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
+	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
@@ -107,9 +106,7 @@ public protocol CloudProvider {
 	/**
 	 Recursively delete a file or folder.
 
-	 - Parameter remoteURL: `remoteURL` conforms to the following pattern:
-	   - file: has no slash at the end (e.g. `/folder/example.txt`)
-	   - folder: has a slash at the end (e.g. `/folder/subfolder/`)
+	 - Parameter remoteURL: The remote URL of the file or folder to delete.
 	 - Precondition: `remoteURL` must be a file URL.
 	 - Returns: Empty promise. If the deletion fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if a file or folder does not exist at the `remoteURL`.
@@ -131,6 +128,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `newRemoteURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `oldRemoteURL`.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `newRemoteURL` does not exist.
+	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */

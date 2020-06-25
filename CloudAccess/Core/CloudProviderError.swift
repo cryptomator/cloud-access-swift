@@ -13,6 +13,8 @@ public enum CloudProviderError: Error {
 	case itemAlreadyExists
 	case itemTypeMismatch
 	case parentFolderDoesNotExist
+	case pageTokenInvalid
+	case quotaInsufficient
 	case unauthorized
 	case noInternetConnection
 }

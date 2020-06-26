@@ -84,7 +84,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			return delegate.downloadFile(from: remoteMasterkeyURL, to: localMasterkeyURL, progress: nil).then { () -> VaultFormat7ProviderDecorator in
-				let masterkey = try Masterkey.createFromMasterkeyFile(file: localMasterkeyURL, password: password)
+				let masterkey = try Masterkey.createFromMasterkeyFile(fileURL: localMasterkeyURL, password: password)
 				let cryptor = Cryptor(masterkey: masterkey)
 				return try VaultFormat7ProviderDecorator(delegate: delegate, vaultURL: vaultURL, cryptor: cryptor)
 			}

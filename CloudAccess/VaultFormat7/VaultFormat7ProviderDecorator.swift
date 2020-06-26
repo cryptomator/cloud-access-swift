@@ -50,6 +50,22 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - Factory
 
+	/**
+	 Creates crypto decorator with a new masterkey.
+
+	 This method does the following:
+	 1. Creates a folder at `vaultURL`.
+	 2. Uses `password` to create a new masterkey.
+	 3. Uploads masterkey file to `masterkey.cryptomator` relative to `vaultURL`.
+	 4. Creates a folder at `d/` relative to `vaultURL`.
+	 5. Creates a folder at `d/<two-chars>/` relative to `vaultURL`.
+	 6. Creates a folder at `d/<two-chars>/<thirty-chars>/` relative to `vaultURL`.
+
+	 - Parameter delegate: The cloud provider that is being decorated.
+	 - Parameter vaultURL: The vault URL. Last path component represents the vault name.
+	 - Parameter password: The password used to encrypt the key material.
+	 - Returns: Promise with the crypto decorator.
+	 */
 	public static func createNew(delegate: CloudProvider, vaultURL: URL, password: String) throws -> Promise<VaultFormat7ProviderDecorator> {
 		let masterkey = try Masterkey.createNew()
 		let cryptor = Cryptor(masterkey: masterkey)
@@ -77,6 +93,18 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
+	/**
+	 Creates crypto decorator from an existing masterkey.
+
+	 This method does the following:
+	 1. Downloads masterkey file from `masterkey.cryptomator` relative to `vaultURL`.
+	 2. Uses `password` to create a masterkey from downloaded masterkey file. This is equivalent to an unlock attempt.
+
+	 - Parameter delegate: The cloud provider that is being decorated.
+	 - Parameter vaultURL: The vault URL. Last path component represents the vault name.
+	 - Parameter password: The password to use for decrypting the masterkey file.
+	 - Returns: Promise with the crypto decorator.
+	 */
 	public static func createFromExisting(delegate: CloudProvider, vaultURL: URL, password: String) -> Promise<VaultFormat7ProviderDecorator> {
 		do {
 			let remoteMasterkeyURL = vaultURL.appendingMasterkeyFileComponent()

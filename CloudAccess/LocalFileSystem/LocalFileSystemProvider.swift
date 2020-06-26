@@ -113,6 +113,8 @@ public class LocalFileSystemProvider: CloudProvider {
 			return Promise(CloudProviderError.itemAlreadyExists)
 		} catch CocoaError.fileNoSuchFile {
 			return Promise(CloudProviderError.parentFolderDoesNotExist)
+		} catch CocoaError.fileWriteOutOfSpace {
+			return Promise(CloudProviderError.quotaInsufficient)
 		} catch {
 			return Promise(error)
 		}
@@ -128,6 +130,8 @@ public class LocalFileSystemProvider: CloudProvider {
 			return Promise(CloudProviderError.itemAlreadyExists)
 		} catch CocoaError.fileNoSuchFile {
 			return Promise(CloudProviderError.parentFolderDoesNotExist)
+		} catch CocoaError.fileWriteOutOfSpace {
+			return Promise(CloudProviderError.quotaInsufficient)
 		} catch {
 			return Promise(error)
 		}
@@ -164,6 +168,8 @@ public class LocalFileSystemProvider: CloudProvider {
 			return Promise(CloudProviderError.itemAlreadyExists)
 		} catch CocoaError.fileNoSuchFile {
 			return Promise(CloudProviderError.parentFolderDoesNotExist)
+		} catch CocoaError.fileWriteOutOfSpace {
+			return Promise(CloudProviderError.quotaInsufficient)
 		} catch {
 			return Promise(error)
 		}

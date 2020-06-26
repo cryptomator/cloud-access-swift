@@ -3,7 +3,7 @@ inhibit_all_warnings!
 use_frameworks! :linkage => :static
 
 target 'CloudAccess' do
-	pod 'CryptomatorCryptoLib', '~> 0.6.0'
+	pod 'CryptomatorCryptoLib', '~> 0.7.0'
 	pod 'GRDB.swift', '~> 4.14.0'
 	pod 'PromisesSwift', '~> 1.2.0'
 	

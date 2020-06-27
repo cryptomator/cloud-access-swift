@@ -69,7 +69,7 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 	func testDownloadFileWithLongName() {
 		let expectation = XCTestExpectation(description: "downloadFile with long name")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		decorator.downloadFile(from: URL(fileURLWithPath: "/File 4 (Long)", isDirectory: false), to: localURL, progress: nil).then {
+		decorator.downloadFile(from: URL(fileURLWithPath: "/File 4 (Long)", isDirectory: false), to: localURL).then {
 			let cleartext = try String(contentsOf: localURL, encoding: .utf8)
 			XCTAssertEqual("cleartext4", cleartext)
 		}.catch { error in
@@ -84,7 +84,7 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		let expectation = XCTestExpectation(description: "uploadFile with long name")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
-		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 4 (Long)", isDirectory: false), replaceExisting: false, progress: nil).then { metadata in
+		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 4 (Long)", isDirectory: false), replaceExisting: false).then { metadata in
 			XCTAssertEqual(2, self.provider.createdFiles.count)
 			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"] == "ciphertext4".data(using: .utf8))
 			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"] == "\(String(repeating: "file4", count: 44)).c9r".data(using: .utf8))

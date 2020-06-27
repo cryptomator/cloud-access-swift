@@ -92,7 +92,7 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void> {
+	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
 		precondition(localURL.isFileURL)
 		precondition(!remoteURL.hasDirectoryPath)
@@ -109,7 +109,7 @@ public class CloudProviderMock: CloudProvider {
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		precondition(remoteURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)

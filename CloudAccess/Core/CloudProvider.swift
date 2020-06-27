@@ -52,9 +52,10 @@ public protocol CloudProvider {
 	/**
 	 Download a file.
 
+	 This method supports implicit progress composition.
+
 	 - Parameter remoteURL: The remote URL of the file to download.
 	 - Parameter localURL: The local URL of the desired download location.
-	 - Parameter progress: (Optional) A representation of the download progress.
 	 - Precondition: `remoteURL` and `localURL` must be a file URL.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false` .
 	 - Postcondition: The file is stored under the `localURL`.
@@ -65,15 +66,16 @@ public protocol CloudProvider {
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void>
+	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void>
 
 	/**
 	 Upload a file.
 
+	 This method supports implicit progress composition.
+
 	 - Parameter localURL: The local URL of the file to upload.
 	 - Parameter remoteURL: The remote URL of the desired upload location.
 	 - Parameter replaceExisting: If true, overwrite the existing file at the `remoteURL`.
-	 - Parameter progress: (Optional) A representation of the upload progress.
 	 - Precondition: `remoteURL` and `localURL` must be a file URL.
 	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false`.
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
@@ -86,7 +88,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata>
+	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata>
 
 	/**
 	 Create a folder.

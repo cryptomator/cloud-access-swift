@@ -75,14 +75,22 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testDownloadFile() {
 		let expectation = XCTestExpectation(description: "downloadFile")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		decorator.downloadFile(from: URL(fileURLWithPath: "/File 1", isDirectory: false), to: localURL, progress: nil).then {
+		let progress = Progress(totalUnitCount: 1)
+		let progressObserver = progress.observe(\.fractionCompleted) { progress, _ in
+			print("\(progress.localizedDescription ?? "") (\(progress.localizedAdditionalDescription ?? ""))")
+		}
+		progress.becomeCurrent(withPendingUnitCount: 1)
+		decorator.downloadFile(from: URL(fileURLWithPath: "/File 1", isDirectory: false), to: localURL).then {
 			let cleartext = try String(contentsOf: localURL, encoding: .utf8)
 			XCTAssertEqual("cleartext1", cleartext)
+			XCTAssertTrue(progress.completedUnitCount >= progress.totalUnitCount)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
+			progressObserver.invalidate()
 			expectation.fulfill()
 		}
+		progress.resignCurrent()
 		wait(for: [expectation], timeout: 1.0)
 	}
 
@@ -90,17 +98,25 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "uploadFile")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
-		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 1", isDirectory: false), replaceExisting: false, progress: nil).then { metadata in
+		let progress = Progress(totalUnitCount: 1)
+		let progressObserver = progress.observe(\.fractionCompleted) { progress, _ in
+			print("\(progress.localizedDescription ?? "") (\(progress.localizedAdditionalDescription ?? ""))")
+		}
+		progress.becomeCurrent(withPendingUnitCount: 1)
+		decorator.uploadFile(from: localURL, to: URL(fileURLWithPath: "/File 1", isDirectory: false), replaceExisting: false).then { metadata in
 			XCTAssertEqual(1, self.provider.createdFiles.count)
 			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "ciphertext1".data(using: .utf8))
 			XCTAssertEqual("File 1", metadata.name)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual("/File 1", metadata.remoteURL.path)
+			XCTAssertTrue(progress.completedUnitCount >= progress.totalUnitCount)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
+			progressObserver.invalidate()
 			expectation.fulfill()
 		}
+		progress.resignCurrent()
 		wait(for: [expectation], timeout: 1.0)
 	}
 

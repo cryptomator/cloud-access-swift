@@ -79,7 +79,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let masterkeyData = try masterkey.exportEncrypted(password: password)
 			try masterkeyData.write(to: localMasterkeyURL)
 			let remoteMasterkeyURL = vaultURL.appendingMasterkeyFileComponent()
-			return delegate.uploadFile(from: localMasterkeyURL, to: remoteMasterkeyURL, replaceExisting: false, progress: nil)
+			return delegate.uploadFile(from: localMasterkeyURL, to: remoteMasterkeyURL, replaceExisting: false)
 		}.then { _ -> Promise<Void> in
 			let dURL = vaultURL.appendingPathComponent("d", isDirectory: true)
 			return delegate.createFolder(at: dURL)
@@ -111,7 +111,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			return delegate.downloadFile(from: remoteMasterkeyURL, to: localMasterkeyURL, progress: nil).then { () -> VaultFormat7ProviderDecorator in
+			return delegate.downloadFile(from: remoteMasterkeyURL, to: localMasterkeyURL).then { () -> VaultFormat7ProviderDecorator in
 				let masterkey = try Masterkey.createFromMasterkeyFile(fileURL: localMasterkeyURL, password: password)
 				let cryptor = Cryptor(masterkey: masterkey)
 				return try VaultFormat7ProviderDecorator(delegate: delegate, vaultURL: vaultURL, cryptor: cryptor)
@@ -146,29 +146,41 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from remoteCleartextURL: URL, to localCleartextURL: URL, progress: Progress?) -> Promise<Void> {
+	public func downloadFile(from remoteCleartextURL: URL, to localCleartextURL: URL) -> Promise<Void> {
 		precondition(remoteCleartextURL.isFileURL)
 		precondition(localCleartextURL.isFileURL)
 		precondition(!remoteCleartextURL.hasDirectoryPath)
 		precondition(!localCleartextURL.hasDirectoryPath)
+		let overallProgress = Progress(totalUnitCount: 5)
 		let localCiphertextURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return getCiphertextURL(remoteCleartextURL).then { remoteCiphertextURL in
-			return self.delegate.downloadFile(from: remoteCiphertextURL, to: localCiphertextURL, progress: progress)
+			overallProgress.becomeCurrent(withPendingUnitCount: 4)
+			let downloadFilePromise = self.delegate.downloadFile(from: remoteCiphertextURL, to: localCiphertextURL)
+			overallProgress.resignCurrent()
+			return downloadFilePromise
 		}.then {
+			overallProgress.becomeCurrent(withPendingUnitCount: 1)
 			try self.cryptor.decryptContent(from: localCiphertextURL, to: localCleartextURL)
+			overallProgress.resignCurrent()
 			try? FileManager.default.removeItem(at: localCiphertextURL)
 		}
 	}
 
-	public func uploadFile(from localCleartextURL: URL, to remoteCleartextURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localCleartextURL: URL, to remoteCleartextURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localCleartextURL.isFileURL)
 		precondition(remoteCleartextURL.isFileURL)
 		precondition(!localCleartextURL.hasDirectoryPath)
 		precondition(!remoteCleartextURL.hasDirectoryPath)
+		let overallProgress = Progress(totalUnitCount: 5)
 		let localCiphertextURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return getCiphertextURL(remoteCleartextURL).then { remoteCiphertextURL in
+			overallProgress.becomeCurrent(withPendingUnitCount: 1)
 			try self.cryptor.encryptContent(from: localCleartextURL, to: localCiphertextURL)
-			return self.delegate.uploadFile(from: localCiphertextURL, to: remoteCiphertextURL, replaceExisting: replaceExisting, progress: progress)
+			overallProgress.resignCurrent()
+			overallProgress.becomeCurrent(withPendingUnitCount: 4)
+			let uploadFilePromise = self.delegate.uploadFile(from: localCiphertextURL, to: remoteCiphertextURL, replaceExisting: replaceExisting)
+			overallProgress.resignCurrent()
+			return uploadFilePromise
 		}.then { ciphertextMetadata in
 			return self.getCleartextMetadata(ciphertextMetadata, cleartextParentURL: remoteCleartextURL.deletingLastPathComponent())
 		}.always {
@@ -193,7 +205,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			return self.delegate.createFolder(at: ciphertextURL)
 		}.then { ciphertextURLPromise }.then { ciphertextURL -> Promise<CloudItemMetadata> in
 			let remoteDirFileURL = ciphertextURL.appendingDirFileComponent()
-			return self.delegate.uploadFile(from: localDirFileURL, to: remoteDirFileURL, replaceExisting: false, progress: nil)
+			return self.delegate.uploadFile(from: localDirFileURL, to: remoteDirFileURL, replaceExisting: false)
 		}.then { _ -> Promise<Void> in
 			let parentDirURL = dirURL.deletingLastPathComponent()
 			return self.delegate.createFolder(at: parentDirURL)
@@ -301,7 +313,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	private func downloadFile(at remoteURL: URL) -> Promise<Data> {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: remoteURL, to: localURL, progress: nil).then {
+		return delegate.downloadFile(from: remoteURL, to: localURL).then {
 			return try Data(contentsOf: localURL)
 		}.always {
 			try? FileManager.default.removeItem(at: localURL)

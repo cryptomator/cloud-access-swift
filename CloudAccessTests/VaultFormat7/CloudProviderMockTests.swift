@@ -49,7 +49,7 @@ class CloudProviderMockTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		provider.fetchItemMetadata(at: remoteURL).then { metadata -> Promise<Void> in
 			XCTAssertEqual(.file, metadata.itemType)
-			return provider.downloadFile(from: metadata.remoteURL, to: localURL, progress: nil)
+			return provider.downloadFile(from: metadata.remoteURL, to: localURL)
 		}.then {
 			let downloadedContents = try Data(contentsOf: localURL)
 			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)

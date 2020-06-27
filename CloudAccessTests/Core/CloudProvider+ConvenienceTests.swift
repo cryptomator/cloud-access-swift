@@ -159,11 +159,11 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		}
 	}
 
-	func downloadFile(from remoteURL: URL, to localURL: URL, progress: Progress?) -> Promise<Void> {
+	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool, progress: Progress?) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 

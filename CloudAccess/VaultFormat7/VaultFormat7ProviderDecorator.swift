@@ -28,6 +28,13 @@ private extension URL {
 	}
 }
 
+/**
+ Cloud provider decorator for Cryptomator vaults in vault format 7 (without name shortening).
+
+ With this decorator, you can call the cloud provider methods with cleartext URLs (relative to `vaultURL`) and the decorator passes ciphertext URLs (absolute) to the delegate. It transparently encrypts/decrypts filenames and file contents according to vault format 7, see the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/).
+
+ Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 7, pass an instance of `VaultFormat7ShorteningProviderDecorator` (shortening decorator) as the delegate.
+ */
 public class VaultFormat7ProviderDecorator: CloudProvider {
 	let delegate: CloudProvider
 	let vaultURL: URL

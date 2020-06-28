@@ -23,6 +23,13 @@ private extension URL {
 	}
 }
 
+/**
+ Cloud provider decorator for Cryptomator vaults in vault format 7 (only name shortening).
+
+ With this decorator, it is expected that the cloud provider methods are being called with ciphertext URLs. It transparently deflates/inflates filenames according to vault format 7, see the name shortening section at the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/#name-shortening).
+
+ It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative `vaultURL`.
+ */
 public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	let delegate: CloudProvider
 	let shortenedNameCache: VaultFormat7ShortenedNameCache

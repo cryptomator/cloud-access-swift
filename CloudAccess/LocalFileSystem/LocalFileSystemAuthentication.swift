@@ -8,8 +8,16 @@
 
 import Foundation
 import Promises
+
+/**
+ Cloud authentication for local file system.
+
+ The implementation of this is basically a placeholder since no authentication is needed for the local file system.
+ */
 public class LocalFileSystemAuthentication: CloudAuthentication {
 	public init() {}
+
+	// MARK: - CloudAuthentication API
 
 	public func authenticate(from _: UIViewController) -> Promise<Void> {
 		return Promise(())

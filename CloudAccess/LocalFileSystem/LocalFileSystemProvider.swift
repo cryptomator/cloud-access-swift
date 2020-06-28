@@ -24,10 +24,17 @@ extension FileManager {
 	}
 }
 
+/**
+ Cloud provider for local file system.
+
+ Since the local file system is not actually a cloud, the naming might be confusing. Even though this library is dedicated to provide access to many cloud storage services, access to the local file system still might be useful.
+ */
 public class LocalFileSystemProvider: CloudProvider {
 	let fileManager = FileManager()
 
 	public init() {}
+
+	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		precondition(remoteURL.isFileURL)

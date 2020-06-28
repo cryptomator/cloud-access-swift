@@ -73,30 +73,34 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	 - Parameter password: The password used to encrypt the key material.
 	 - Returns: Promise with the crypto decorator.
 	 */
-	public static func createNew(delegate: CloudProvider, vaultURL: URL, password: String) throws -> Promise<VaultFormat7ProviderDecorator> {
-		let masterkey = try Masterkey.createNew()
-		let cryptor = Cryptor(masterkey: masterkey)
-		let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultURL: vaultURL, cryptor: cryptor)
-		let rootDirURL = try decorator.getDirURL(Data())
-		let resolvedRootDirURL = URL(fileURLWithPath: rootDirURL.path, relativeTo: vaultURL).directoryURL()
-		return delegate.createFolder(at: vaultURL).then { () -> Promise<CloudItemMetadata> in
-			let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			let masterkeyData = try masterkey.exportEncrypted(password: password)
-			try masterkeyData.write(to: localMasterkeyURL)
-			let remoteMasterkeyURL = vaultURL.appendingMasterkeyFileComponent()
-			return delegate.uploadFile(from: localMasterkeyURL, to: remoteMasterkeyURL, replaceExisting: false)
-		}.then { _ -> Promise<Void> in
-			let dURL = vaultURL.appendingPathComponent("d", isDirectory: true)
-			return delegate.createFolder(at: dURL)
-		}.then { () -> Promise<Void> in
-			let twoCharsURL = resolvedRootDirURL.deletingLastPathComponent()
-			return delegate.createFolder(at: twoCharsURL)
-		}.then { () -> Promise<Void> in
-			return delegate.createFolder(at: resolvedRootDirURL)
-		}.then { () -> VaultFormat7ProviderDecorator in
-			return decorator
+	public static func createNew(delegate: CloudProvider, vaultURL: URL, password: String) -> Promise<VaultFormat7ProviderDecorator> {
+		do {
+			let masterkey = try Masterkey.createNew()
+			let cryptor = Cryptor(masterkey: masterkey)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultURL: vaultURL, cryptor: cryptor)
+			let rootDirURL = try decorator.getDirURL(Data())
+			let resolvedRootDirURL = URL(fileURLWithPath: rootDirURL.path, relativeTo: vaultURL).directoryURL()
+			return delegate.createFolder(at: vaultURL).then { () -> Promise<CloudItemMetadata> in
+				let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+				try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+				let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let masterkeyData = try masterkey.exportEncrypted(password: password)
+				try masterkeyData.write(to: localMasterkeyURL)
+				let remoteMasterkeyURL = vaultURL.appendingMasterkeyFileComponent()
+				return delegate.uploadFile(from: localMasterkeyURL, to: remoteMasterkeyURL, replaceExisting: false)
+			}.then { _ -> Promise<Void> in
+				let dURL = vaultURL.appendingPathComponent("d", isDirectory: true)
+				return delegate.createFolder(at: dURL)
+			}.then { () -> Promise<Void> in
+				let twoCharsURL = resolvedRootDirURL.deletingLastPathComponent()
+				return delegate.createFolder(at: twoCharsURL)
+			}.then { () -> Promise<Void> in
+				return delegate.createFolder(at: resolvedRootDirURL)
+			}.then { () -> VaultFormat7ProviderDecorator in
+				return decorator
+			}
+		} catch {
+			return Promise(error)
 		}
 	}
 

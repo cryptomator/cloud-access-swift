@@ -146,11 +146,14 @@ internal class VaultFormat7ShortenedNameCache {
 			let cutOff = shortenedURL.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirURL = shortenedURL.deletingLastPathComponents(cutOff)
 			let originalNamePromise = { () -> Promise<String> in
-				if let originalName = try? getCached(c9sDirURL.lastPathComponent) {
+				let shortenedName = c9sDirURL.lastPathComponent
+				if let originalName = try? getCached(shortenedName) {
 					return Promise(originalName)
 				} else {
 					return loadNameC9S(c9sDirURL).then { data -> String in
-						return String(data: data, encoding: .utf8)!
+						let originalName = String(data: data, encoding: .utf8)!
+						try? self.addToCache(shortenedName, originalName: originalName)
+						return originalName
 					}
 				}
 			}()

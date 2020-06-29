@@ -8,6 +8,7 @@
 
 import CommonCrypto
 import Foundation
+import GRDB
 import Promises
 
 struct C9SDir {
@@ -19,6 +20,21 @@ struct ShorteningResult {
 	let url: URL
 	let c9sDir: C9SDir?
 	var pointsToC9S: Bool { url.path == c9sDir?.url.path }
+}
+
+private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
+	static let databaseTableName = "entries"
+	static let shortenedNameKey = "shortenedName"
+	static let originalNameKey = "originalName"
+	let shortenedName: String
+	let originalName: String
+}
+
+extension CachedEntry: PersistableRecord {
+	func encode(to container: inout PersistenceContainer) {
+		container[CachedEntry.shortenedNameKey] = shortenedName
+		container[CachedEntry.originalNameKey] = originalName
+	}
 }
 
 private extension Array {
@@ -72,7 +88,6 @@ private extension URL {
 	}
 }
 
-// TODO: actually add the cache :D
 internal class VaultFormat7ShortenedNameCache {
 	static let threshold = 220
 	static let c9sSuffix = ".c9s"
@@ -80,9 +95,18 @@ internal class VaultFormat7ShortenedNameCache {
 	let vaultURL: URL
 	let ciphertextNameCompIdx: Int
 
-	init(vaultURL: URL) {
+	private let inMemoryDB: DatabaseQueue
+
+	init(vaultURL: URL) throws {
 		self.vaultURL = vaultURL
 		self.ciphertextNameCompIdx = vaultURL.pathComponents.lastItemIndex() + 4
+		self.inMemoryDB = DatabaseQueue()
+		try inMemoryDB.write { db in
+			try db.create(table: CachedEntry.databaseTableName) { table in
+				table.column(CachedEntry.shortenedNameKey, .text).notNull().primaryKey()
+				table.column(CachedEntry.originalNameKey, .text).notNull()
+			}
+		}
 	}
 
 	/**
@@ -102,6 +126,7 @@ internal class VaultFormat7ShortenedNameCache {
 			let shortenedURL = replaceCiphertextFileNameInURL(originalURL, with: shortenedName)
 			let c9sDirURL = shortenedURL.trimmingToPathComponent(atIndex: ciphertextNameCompIdx).directoryURL()
 			let c9sDir = C9SDir(url: c9sDirURL, originalName: originalName)
+			try? addToCache(shortenedName, originalName: originalName)
 			return ShorteningResult(url: shortenedURL, c9sDir: c9sDir)
 		} else {
 			return ShorteningResult(url: originalURL, c9sDir: nil)
@@ -120,9 +145,17 @@ internal class VaultFormat7ShortenedNameCache {
 		if shortenedURL.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
 			let cutOff = shortenedURL.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirURL = shortenedURL.deletingLastPathComponents(cutOff)
-			return loadNameC9S(c9sDirURL).then { data -> URL in
-				let name = String(data: data, encoding: .utf8)!
-				return shortenedURL.replacingPathComponent(atIndex: self.ciphertextNameCompIdx, with: name, isDirectory: shortenedURL.hasDirectoryPath)
+			let originalNamePromise = { () -> Promise<String> in
+				if let originalName = try? getCached(c9sDirURL.lastPathComponent) {
+					return Promise(originalName)
+				} else {
+					return loadNameC9S(c9sDirURL).then { data -> String in
+						return String(data: data, encoding: .utf8)!
+					}
+				}
+			}()
+			return originalNamePromise.then { originalName in
+				return shortenedURL.replacingPathComponent(atIndex: self.ciphertextNameCompIdx, with: originalName, isDirectory: shortenedURL.hasDirectoryPath)
 			}
 		} else {
 			return Promise(shortenedURL)
@@ -138,5 +171,18 @@ internal class VaultFormat7ShortenedNameCache {
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
 		CC_SHA1(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return Data(digest).base64UrlEncodedString()
+	}
+
+	internal func addToCache(_ shortenedName: String, originalName: String) throws {
+		try inMemoryDB.write { db in
+			try CachedEntry(shortenedName: shortenedName, originalName: originalName).save(db)
+		}
+	}
+
+	internal func getCached(_ shortenedName: String) throws -> String? {
+		let entry: CachedEntry? = try inMemoryDB.read { db in
+			return try CachedEntry.fetchOne(db, key: shortenedName)
+		}
+		return entry?.originalName
 	}
 }

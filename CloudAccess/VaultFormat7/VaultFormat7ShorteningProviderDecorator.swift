@@ -37,7 +37,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 
 	public init(delegate: CloudProvider, vaultURL: URL) throws {
 		self.delegate = delegate
-		self.shortenedNameCache = VaultFormat7ShortenedNameCache(vaultURL: vaultURL)
+		self.shortenedNameCache = try VaultFormat7ShortenedNameCache(vaultURL: vaultURL)
 		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}

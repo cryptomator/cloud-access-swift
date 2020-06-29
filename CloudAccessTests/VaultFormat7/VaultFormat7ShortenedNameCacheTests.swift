@@ -14,9 +14,9 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 	var vaultRoot: URL!
 	var cache: VaultFormat7ShortenedNameCache!
 
-	override func setUp() {
+	override func setUpWithError() throws {
 		vaultRoot = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
-		cache = VaultFormat7ShortenedNameCache(vaultURL: vaultRoot)
+		cache = try VaultFormat7ShortenedNameCache(vaultURL: vaultRoot)
 	}
 
 	func testGetShortenedURL1() throws {

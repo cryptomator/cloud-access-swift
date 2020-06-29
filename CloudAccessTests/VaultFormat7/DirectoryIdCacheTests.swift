@@ -11,15 +11,19 @@ import XCTest
 @testable import CloudAccess
 
 class DirectoryIdCacheTests: XCTestCase {
+	var cache: DirectoryIdCache!
+
+	override func setUpWithError() throws {
+		cache = try DirectoryIdCache()
+	}
+
 	func testContainsRootPath() throws {
-		let cache = try DirectoryIdCache()
 		let path = URL(fileURLWithPath: "/", isDirectory: true)
 
 		XCTAssertEqual(Data([]), try cache.getCached(path))
 	}
 
 	func testGetCached() throws {
-		let cache = try DirectoryIdCache()
 		let path = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
 		let dirId = Data("foobar".utf8)
 
@@ -29,7 +33,6 @@ class DirectoryIdCacheTests: XCTestCase {
 	}
 
 	func testInvalidate() throws {
-		let cache = try DirectoryIdCache()
 		let path = URL(fileURLWithPath: "/foo", isDirectory: true)
 		let subPath1 = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
 		let subPath2 = URL(fileURLWithPath: "/foo/baz", isDirectory: true)
@@ -50,7 +53,6 @@ class DirectoryIdCacheTests: XCTestCase {
 
 	func testRecursiveGet() throws {
 		let expectation = XCTestExpectation(description: "recursiveGet")
-		let cache = try DirectoryIdCache()
 		let url = URL(fileURLWithPath: "/one/two/three", isDirectory: true)
 
 		var misses: [String] = []

@@ -10,16 +10,18 @@ import Foundation
 import GRDB
 import Promises
 
-struct CachedEntry: Decodable, FetchableRecord, TableRecord {
+private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 	static let databaseTableName = "entries"
+	static let cleartextURLKey = "cleartextURL"
+	static let dirIdKey = "dirId"
 	let cleartextURL: URL
 	let dirId: Data
 }
 
 extension CachedEntry: PersistableRecord {
 	func encode(to container: inout PersistenceContainer) {
-		container["cleartextURL"] = cleartextURL
-		container["dirId"] = dirId
+		container[CachedEntry.cleartextURLKey] = cleartextURL
+		container[CachedEntry.dirIdKey] = dirId
 	}
 }
 
@@ -30,8 +32,8 @@ internal class DirectoryIdCache {
 		self.inMemoryDB = DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
-				table.column("cleartextURL", .text).notNull().primaryKey()
-				table.column("dirId", .blob).notNull()
+				table.column(CachedEntry.cleartextURLKey, .text).notNull().primaryKey()
+				table.column(CachedEntry.dirIdKey, .blob).notNull()
 			}
 			try CachedEntry(cleartextURL: URL(fileURLWithPath: "/", isDirectory: true), dirId: Data([])).save(db)
 		}
@@ -56,7 +58,7 @@ internal class DirectoryIdCache {
 
 	public func invalidate(_ cleartextURL: URL) throws {
 		try inMemoryDB.write { db in
-			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE cleartextURL LIKE ?", arguments: ["\(cleartextURL.absoluteString)%"])
+			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE \(CachedEntry.cleartextURLKey) LIKE ?", arguments: ["\(cleartextURL.absoluteString)%"])
 		}
 	}
 

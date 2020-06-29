@@ -21,6 +21,7 @@ public protocol CloudAuthentication {
 
 	 - Parameter viewController: The `UIViewController` with which to render the authentication flow. Please ensure that this is the top-most view controller, so that the authorization view displays correctly.
 	 - Returns: Empty promise. If the authentication fails, promise is rejected with:
+	   - `CloudAuthenticationError.authenticationFailed` if the authentication failed.
 	   - `CloudAuthenticationError.userCanceled` if the user cancels the authentication.
 	 */
 	func authenticate(from viewController: UIViewController) -> Promise<Void>

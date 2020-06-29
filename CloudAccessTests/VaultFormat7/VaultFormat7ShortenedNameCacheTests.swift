@@ -19,6 +19,15 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		cache = try VaultFormat7ShortenedNameCache(vaultURL: vaultRoot)
 	}
 
+	func testGetCached() throws {
+		let shortenedName = "-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
+		let originalName = "\(String(repeating: "a", count: 217)).c9r"
+
+		try cache.addToCache(shortenedName, originalName: originalName)
+
+		XCTAssertEqual(originalName, try cache.getCached(shortenedName))
+	}
+
 	func testGetShortenedURL1() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
 		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r", isDirectory: false)

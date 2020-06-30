@@ -62,14 +62,15 @@ public class LocalFileSystemProvider: CloudProvider {
 				lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
 				itemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 		}
-		if err?.code == CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} else if err != nil {
-			return Promise(err!)
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileReadNoSuchFile {
+				return Promise(CloudProviderError.itemNotFound)
+			} else {
+				return Promise(notNilErr)
+			}
 		}
 		guard validateItemType(at: remoteURL, with: itemType) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
@@ -93,19 +94,19 @@ public class LocalFileSystemProvider: CloudProvider {
 				do {
 					contents = try fileManager.contentsOfDirectory(at: readingURL, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey], options: .skipsHiddenFiles)
 				} catch {
-					let error = error as? CocoaError
-					err = error
+					err = error as? CocoaError
 				}
 			}
-			if err?.code == CocoaError.fileReadNoSuchFile {
-				return Promise(CloudProviderError.itemNotFound)
-			} else if err?.code == CocoaError.fileReadUnknown {
-				return Promise(CloudProviderError.itemTypeMismatch)
-			} else if err != nil {
-				return Promise(err!)
+			if let notNilErr = err {
+				if notNilErr.code == CocoaError.fileReadNoSuchFile {
+					return Promise(CloudProviderError.itemNotFound)
+				} else if notNilErr.code == CocoaError.fileReadUnknown {
+					return Promise(CloudProviderError.itemTypeMismatch)
+				} else {
+					return Promise(notNilErr)
+				}
 			}
 			var metadatas: [CloudItemMetadata]
-
 			metadatas = contents!.map { url -> CloudItemMetadata in
 				let name = url.lastPathComponent
 				let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
@@ -141,19 +142,21 @@ public class LocalFileSystemProvider: CloudProvider {
 			do {
 				try self.fileManager.copyItem(at: readingURL, to: localURL)
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 			})
-		if err == nil {
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileReadNoSuchFile {
+				return Promise(CloudProviderError.itemNotFound)
+			} else if notNilErr.code == CocoaError.fileWriteFileExists {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			} else {
+				return Promise(notNilErr)
+			}
+		}
+//		the err is nil
+		else {
 			return Promise(())
-		} else if err?.code == CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-
-		} else if err?.code == CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} else {
-			return Promise(err!)
 		}
 	}
 
@@ -185,22 +188,25 @@ public class LocalFileSystemProvider: CloudProvider {
 					try fileManager.copyItem(at: readingURL, to: remoteURL)
 				}
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 		}
-		if err == nil {
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileReadNoSuchFile {
+				return Promise(CloudProviderError.itemNotFound)
+			} else if notNilErr.code == CocoaError.fileWriteFileExists {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			} else if notNilErr.code == CocoaError.fileNoSuchFile {
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			} else if notNilErr.code == CocoaError.fileWriteOutOfSpace {
+				return Promise(CloudProviderError.quotaInsufficient)
+			} else {
+				return Promise(notNilErr)
+			}
+		}
+//		the err is nil
+		else {
 			return fetchItemMetadata(at: remoteURL)
-		} else if err?.code == CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} else if err?.code == CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} else if err?.code == CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} else if err?.code == CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} else {
-			return Promise(err!)
 		}
 	}
 
@@ -218,20 +224,23 @@ public class LocalFileSystemProvider: CloudProvider {
 			do {
 				try fileManager.createDirectory(at: writingURL, withIntermediateDirectories: false, attributes: nil)
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 		}
-		if err == nil {
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileWriteFileExists {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			} else if notNilErr.code == CocoaError.fileNoSuchFile {
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			} else if notNilErr.code == CocoaError.fileWriteOutOfSpace {
+				return Promise(CloudProviderError.quotaInsufficient)
+			} else {
+				return Promise(notNilErr)
+			}
+		}
+//		the err is nil
+		else {
 			return Promise(())
-		} else if err?.code == CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} else if err?.code == CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} else if err?.code == CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} else {
-			return Promise(err!)
 		}
 	}
 
@@ -255,16 +264,19 @@ public class LocalFileSystemProvider: CloudProvider {
 			do {
 				try fileManager.removeItem(at: writingURL)
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 		}
-		if err == nil {
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileReadNoSuchFile {
+				return Promise(CloudProviderError.itemNotFound)
+			} else {
+				return Promise(notNilErr)
+			}
+		}
+//		the err is nil
+		else {
 			return Promise(())
-		} else if err?.code == CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} else {
-			return Promise(err!)
 		}
 	}
 
@@ -291,22 +303,25 @@ public class LocalFileSystemProvider: CloudProvider {
 			do {
 				try fileManager.moveItem(at: writingURL, to: newRemoteURL)
 			} catch {
-				let error = error as? CocoaError
-				err = error
+				err = error as? CocoaError
 			}
 		}
-		if err == nil {
+		if let notNilErr = err {
+			if notNilErr.code == CocoaError.fileReadNoSuchFile {
+				return Promise(CloudProviderError.itemNotFound)
+			} else if notNilErr.code == CocoaError.fileWriteFileExists {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			} else if notNilErr.code == CocoaError.fileNoSuchFile {
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			} else if notNilErr.code == CocoaError.fileWriteOutOfSpace {
+				return Promise(CloudProviderError.quotaInsufficient)
+			} else {
+				return Promise(notNilErr)
+			}
+		}
+//		the err is nil
+		else {
 			return Promise(())
-		} else if err?.code == CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} else if err?.code == CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} else if err?.code == CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} else if err?.code == CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} else {
-			return Promise(err!)
 		}
 	}
 

@@ -50,7 +50,7 @@ public protocol CloudProvider {
 	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList>
 
 	/**
-	 Download a file.
+	 Downloads a file.
 
 	 This method supports implicit progress composition.
 
@@ -69,7 +69,7 @@ public protocol CloudProvider {
 	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void>
 
 	/**
-	 Upload a file.
+	 Uploads a file.
 
 	 This method supports implicit progress composition.
 
@@ -91,7 +91,7 @@ public protocol CloudProvider {
 	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata>
 
 	/**
-	 Create a folder.
+	 Creates a folder.
 
 	 - Parameter remoteURL: The remote URL of the folder to create.
 	 - Precondition: `remoteURL` must be a file URL.
@@ -106,7 +106,7 @@ public protocol CloudProvider {
 	func createFolder(at remoteURL: URL) -> Promise<Void>
 
 	/**
-	 Recursively delete a file or folder.
+	 Recursively deletes a file or folder.
 
 	 - Parameter remoteURL: The remote URL of the file or folder to delete.
 	 - Precondition: `remoteURL` must be a file URL.
@@ -119,7 +119,7 @@ public protocol CloudProvider {
 	func deleteItem(at remoteURL: URL) -> Promise<Void>
 
 	/**
-	 Move a file or folder to a different location.
+	 Moves a file or folder to a different location.
 
 	 - Parameter oldRemoteURL: The remote URL of the file or folder to be moved.
 	 - Parameter newRemoteURL: The remote URL of the desired destination.

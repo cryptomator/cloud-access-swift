@@ -9,6 +9,11 @@
 import Foundation
 import Promises
 
+public enum WebDAVDepth: String {
+	case zero = "0"
+	case one = "1"
+}
+
 internal class WebDAVClientURLSessionDelegate: NSObject, URLSessionTaskDelegate {
 	let credential: WebDAVCredential
 
@@ -42,7 +47,7 @@ internal class WebDAVClientURLSessionDelegate: NSObject, URLSessionTaskDelegate 
 
 	// MARK: - Internal
 
-	func allowedCertificateMatchesActualCertificate(in trust: SecTrust) -> Bool {
+	private func allowedCertificateMatchesActualCertificate(in trust: SecTrust) -> Bool {
 		guard let allowedCertificate = credential.allowedCertificate, SecTrustGetCertificateCount(trust) > 0, let actualCertificate = SecTrustGetCertificateAtIndex(trust, 0) else {
 			return false
 		}
@@ -81,13 +86,13 @@ public class WebDAVClient {
 		return urlSession.performDataTask(with: request)
 	}
 
-	public func PROPFIND(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func PROPFIND(url: URL, depth: WebDAVDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PROPFIND"
-		request.setValue("1", forHTTPHeaderField: "Depth")
+		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
 		request.setValue("application/xml", forHTTPHeaderField: "Content-Type")
 		request.httpBody = """
-		<?xml version="1.0" encoding="utf-8"?><D:propfind xmlns:D="DAV:"><D:allprop/></D:propfind>
+		<?xml version="1.0" encoding="utf-8"?><D:propfind xmlns:D="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</D:propfind>
 		""".data(using: .utf8)
 		return urlSession.performDataTask(with: request)
 	}
@@ -106,7 +111,7 @@ public class WebDAVClient {
 
 	public func MKCOL(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: url)
-		request.httpMethod = "DELETE"
+		request.httpMethod = "MKCOL"
 		return urlSession.performDataTask(with: request)
 	}
 
@@ -122,5 +127,15 @@ public class WebDAVClient {
 		request.setValue("Destination", forHTTPHeaderField: destinationURL.absoluteString)
 		request.setValue("Overwrite", forHTTPHeaderField: "F")
 		return urlSession.performDataTask(with: request)
+	}
+
+	// MARK: - Internal
+
+	private func propfindPropElementsAsXML(with propertyNames: [String]?) -> String {
+		if let propertyNames = propertyNames {
+			return propertyNames.map { "<\($0)/>" }.joined()
+		} else {
+			return "<D:allprop/>"
+		}
 	}
 }

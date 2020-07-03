@@ -6,6 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CommonCrypto
 import Foundation
 import Promises
 
@@ -16,6 +17,13 @@ public enum TLSCertificateValidatorError: Error {
 public struct TestedCertificate {
 	let data: Data
 	let isTrusted: Bool
+	let fingerprint: String
+}
+
+internal extension Sequence where Element == UInt8 {
+	func toHexString(separator: String = "") -> String {
+		return map { String(format: "%02lx", $0) }.joined(separator: separator)
+	}
 }
 
 internal class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
@@ -27,7 +35,8 @@ internal class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTa
 		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
 			var trustResultType: SecTrustResultType = .invalid
 			let isTrusted = SecTrustEvaluate(trust, &trustResultType) == errSecSuccess
-			testedCertificate = TestedCertificate(data: certificate, isTrusted: isTrusted)
+			let fingerprint = calculateFingerprint(from: certificate)
+			testedCertificate = TestedCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
 		}
 		completionHandler(.cancelAuthenticationChallenge, nil)
 	}
@@ -40,11 +49,18 @@ internal class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTa
 
 	// MARK: - Internal
 
-	func getCertificate(from trust: SecTrust) -> Data? {
+	private func getCertificate(from trust: SecTrust) -> Data? {
 		guard SecTrustGetCertificateCount(trust) > 0, let certificate = SecTrustGetCertificateAtIndex(trust, 0) else {
 			return nil
 		}
 		return SecCertificateCopyData(certificate) as Data
+	}
+
+	private func calculateFingerprint(from certificate: Data) -> String {
+		let bytes = certificate.bytes
+		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
+		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
+		return digest.toHexString(separator: " ")
 	}
 }
 
@@ -60,7 +76,7 @@ public class TLSCertificateValidator {
 	}
 
 	private static func createURLSession(sharedContainerIdentifier: String, delegate: URLSessionDelegate) -> URLSession {
-		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVClient_\(UUID().uuidString)")
+		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessTLSCertificateValidator_\(UUID().uuidString)")
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)

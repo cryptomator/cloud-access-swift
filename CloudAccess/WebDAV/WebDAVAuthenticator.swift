@@ -11,6 +11,7 @@ import Promises
 
 enum WebDAVAuthenticatorError: Error {
 	case unsupportedProcotol
+	case untrustedCertificate
 }
 
 public class WebDAVAuthenticator {
@@ -20,6 +21,13 @@ public class WebDAVAuthenticator {
 			return self.tryAuthenticatedRequest(client: client)
 		}.then { () -> WebDAVClient in
 			return client
+		}.recover { error -> Promise<WebDAVClient> in
+			let nsError = error as NSError
+			if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorServerCertificateUntrusted {
+				return Promise(WebDAVAuthenticatorError.untrustedCertificate)
+			} else {
+				return Promise(error)
+			}
 		}
 	}
 
@@ -34,7 +42,7 @@ public class WebDAVAuthenticator {
 	}
 
 	private func tryAuthenticatedRequest(client: WebDAVClient) -> Promise<Void> {
-		return client.PROPFIND(url: client.baseURL).then { _, _ in
+		return client.PROPFIND(url: client.baseURL, depth: .zero).then { _, _ in
 			return Promise(())
 		}
 	}

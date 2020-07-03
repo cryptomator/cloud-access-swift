@@ -31,4 +31,9 @@ Pod::Spec.new do |s|
     ss.dependency 'CryptomatorCryptoLib', '~> 0.7.0'
     ss.dependency 'GRDB.swift', '~> 4.14.0'
   end
+
+  s.subspec 'WebDAV' do |ss|
+    ss.dependency 'CryptomatorCloudAccess/Core'
+    ss.source_files = 'CloudAccess/WebDAV/**/*.swift'
+  end
 end

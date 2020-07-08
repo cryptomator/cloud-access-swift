@@ -133,7 +133,7 @@ public class WebDAVClient {
 
 	private func propfindPropElementsAsXML(with propertyNames: [String]?) -> String {
 		if let propertyNames = propertyNames {
-			return propertyNames.map { "<\($0)/>" }.joined()
+			return "<D:prop>\(propertyNames.map { "<\($0)/>" }.joined())</D:prop>"
 		} else {
 			return "<D:allprop/>"
 		}

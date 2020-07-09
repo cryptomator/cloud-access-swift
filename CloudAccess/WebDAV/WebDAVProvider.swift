@@ -18,7 +18,7 @@ private extension CloudItemMetadata {
 	init(_ propfindResponseElement: PropfindResponseElement, remoteURL: URL) {
 		self.name = remoteURL.lastPathComponent
 		self.remoteURL = remoteURL
-		self.itemType = (propfindResponseElement.collection ?? false) ? .folder : .file
+		self.itemType = propfindResponseElement.collection ? .folder : .file
 		self.lastModifiedDate = propfindResponseElement.lastModified
 		self.size = propfindResponseElement.contentLength
 	}
@@ -43,11 +43,11 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames).then { _, data -> CloudItemMetadata in
+		return client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemMetadata in
 			guard let data = data else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			let parser = PropfindResponseParser(XMLParser(data: data))
+			let parser = PropfindResponseParser(XMLParser(data: data), baseURL: response.url ?? url)
 			guard let firstElement = try parser.getElements().first else {
 				throw WebDAVProviderError.invalidResponse
 			}
@@ -55,10 +55,21 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
-	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken _: String?) -> Promise<CloudItemList> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let url = resolve(remoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.PROPFIND(url: url, depth: .one, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemList in
+			guard let data = data else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			let parser = PropfindResponseParser(XMLParser(data: data), baseURL: response.url ?? url)
+			let childElements = try parser.getElements().filter({ $0.depth == 1 })
+			let items = childElements.map { CloudItemMetadata($0, remoteURL: remoteURL.appendingPathComponent($0.href.lastPathComponent)) }
+			return CloudItemList(items: items)
+		}
 	}
 
 	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {

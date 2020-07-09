@@ -14,25 +14,29 @@ enum PropfindResponseParserError: Error {
 }
 
 internal struct PropfindResponseElement {
-	let href: String?
+	let depth: Int
+	let href: URL
+	let collection: Bool
 	let lastModified: Date?
 	let contentLength: Int?
-	let collection: Bool?
 }
 
 internal class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate {
 	let rootDelegate: PropfindResponseParserDelegate
+	let baseURL: URL
 
 	var xmlCharacterBuffer = ""
 	var insideOfResourceType = false
+	var collection = false
 
-	var href: String?
+	var depth: Int?
+	var href: URL?
 	var lastModified: Date?
 	var contentLength: Int?
-	var collection: Bool?
 
-	init(rootDelegate: PropfindResponseParserDelegate) {
+	init(rootDelegate: PropfindResponseParserDelegate, baseURL: URL) {
 		self.rootDelegate = rootDelegate
+		self.baseURL = baseURL
 	}
 
 	// MARK: - XMLParserDelegate
@@ -63,10 +67,13 @@ internal class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegat
 		}
 		switch elementName {
 		case "response":
-			rootDelegate.addElement(PropfindResponseElement(href: href, lastModified: lastModified, contentLength: contentLength, collection: collection))
+			if let depth = depth, let href = href {
+				rootDelegate.addElement(PropfindResponseElement(depth: depth, href: href, collection: collection, lastModified: lastModified, contentLength: contentLength))
+			}
 			parser.delegate = rootDelegate
 		case "href":
-			href = xmlCharacterBuffer
+			href = getURL(xmlCharacterBuffer)
+			depth = getDepth(href)
 		case "getlastmodified":
 			lastModified = Date.date(fromRFC822: xmlCharacterBuffer)
 		case "getcontentlength":
@@ -77,11 +84,34 @@ internal class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegat
 			break
 		}
 	}
+
+	// MARK: - Internal
+
+	private func getURL(_ href: String) -> URL? {
+		// workaround, because some servers don't escape spaces (e.g. cubby.com, powered by "IT Hit WebDAV Server .Net v3.0.520.0")
+		guard let escapedHref = href.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: " ").inverted) else {
+			return nil
+		}
+		return URL(string: escapedHref, relativeTo: baseURL)
+	}
+
+	private func getDepth(_ href: URL?) -> Int? {
+		guard let elementURL = href else {
+			return nil
+		}
+		return elementURL.path.split(separator: "/").count - baseURL.path.split(separator: "/").count
+	}
 }
 
 internal class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
+	let baseURL: URL
+
 	var elements: [PropfindResponseElement] = []
 	var elementDelegate: PropfindResponseElementParserDelegate?
+
+	init(baseURL: URL) {
+		self.baseURL = baseURL
+	}
 
 	// MARK: - XMLParserDelegate
 
@@ -90,7 +120,7 @@ internal class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 			return
 		}
 		if elementName == "response" {
-			elementDelegate = PropfindResponseElementParserDelegate(rootDelegate: self)
+			elementDelegate = PropfindResponseElementParserDelegate(rootDelegate: self, baseURL: baseURL)
 			parser.delegate = elementDelegate
 		}
 	}
@@ -102,14 +132,16 @@ internal class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 
 internal class PropfindResponseParser {
 	private let parser: XMLParser
+	private let baseURL: URL
 
-	init(_ parser: XMLParser) {
+	init(_ parser: XMLParser, baseURL: URL) {
 		self.parser = parser
 		self.parser.shouldProcessNamespaces = true
+		self.baseURL = baseURL
 	}
 
 	func getElements() throws -> [PropfindResponseElement] {
-		let delegate = PropfindResponseParserDelegate()
+		let delegate = PropfindResponseParserDelegate(baseURL: baseURL)
 		parser.delegate = delegate
 		if parser.parse() {
 			return delegate.elements

@@ -77,7 +77,15 @@ public class WebDAVProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!remoteURL.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let url = resolve(remoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.GET(url: url).then { _, fileURL -> Void in
+			guard let fileURL = fileURL else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			try FileManager.default.moveItem(at: fileURL, to: localURL)
+		}
 	}
 
 	public func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
@@ -85,25 +93,39 @@ public class WebDAVProvider: CloudProvider {
 		precondition(remoteURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!remoteURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let url = resolve(remoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.PUT(url: url, fileURL: localURL).then { _, _ in
+			return self.fetchItemMetadata(at: remoteURL)
+		}
 	}
 
 	public func createFolder(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let url = resolve(remoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.MKCOL(url: url).then { _, _ -> Void in }
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let url = resolve(remoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.DELETE(url: url).then { _, _ -> Void in }
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
 		precondition(oldRemoteURL.isFileURL)
 		precondition(newRemoteURL.isFileURL)
 		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		return Promise(CloudProviderError.noInternetConnection)
+		guard let sourceURL = resolve(oldRemoteURL), let destinationURL = resolve(newRemoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		return client.MOVE(sourceURL: sourceURL, destinationURL: destinationURL).then { _, _ -> Void in }
 	}
 
 	// MARK: - Internal

@@ -25,13 +25,6 @@
 		748420CE24B8A2A600D84E58 /* missing-href.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C724B8A2A600D84E58 /* missing-href.xml */; };
 		748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C824B8A2A600D84E58 /* file-and-folder.xml */; };
 		748420D124B8A2A600D84E58 /* 403-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420CA24B8A2A600D84E58 /* 403-status.xml */; };
-		748420DA24B8A2AD00D84E58 /* item-write-response.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D224B8A2AD00D84E58 /* item-write-response.xml */; };
-		748420DC24B8A2AD00D84E58 /* item-read-response.txt in Resources */ = {isa = PBXBuildFile; fileRef = 748420D424B8A2AD00D84E58 /* item-read-response.txt */; };
-		748420DD24B8A2AD00D84E58 /* authentication-response.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D524B8A2AD00D84E58 /* authentication-response.xml */; };
-		748420DE24B8A2AD00D84E58 /* item-move-exists-no-replace.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D624B8A2AD00D84E58 /* item-move-exists-no-replace.xml */; };
-		748420DF24B8A2AD00D84E58 /* directory-list-response.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D724B8A2AD00D84E58 /* directory-list-response.xml */; };
-		748420E024B8A2AD00D84E58 /* directory-list-exhaustively-response.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D824B8A2AD00D84E58 /* directory-list-exhaustively-response.xml */; };
-		748420E124B8A2AD00D84E58 /* item-meta-data-response.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420D924B8A2AD00D84E58 /* item-meta-data-response.xml */; };
 		748A42B624AA231000DEB6D0 /* WebDAVProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B524AA231000DEB6D0 /* WebDAVProvider.swift */; };
 		748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B724AA231D00DEB6D0 /* WebDAVAuthenticator.swift */; };
 		748A42BA24AA34F300DEB6D0 /* WebDAVCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B924AA34F300DEB6D0 /* WebDAVCredential.swift */; };

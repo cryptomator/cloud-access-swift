@@ -47,7 +47,7 @@ public class WebDAVProvider: CloudProvider {
 			guard let data = data else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			let parser = PropfindResponseParser(XMLParser(data: data), baseURL: response.url ?? url)
+			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
 			guard let firstElement = try parser.getElements().first else {
 				throw WebDAVProviderError.invalidResponse
 			}
@@ -65,7 +65,7 @@ public class WebDAVProvider: CloudProvider {
 			guard let data = data else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			let parser = PropfindResponseParser(XMLParser(data: data), baseURL: response.url ?? url)
+			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
 			let childElements = try parser.getElements().filter({ $0.depth == 1 })
 			let items = childElements.map { CloudItemMetadata($0, remoteURL: remoteURL.appendingPathComponent($0.href.lastPathComponent)) }
 			return CloudItemList(items: items)

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<d:multistatus xmlns:d="DAV:">
+	<d:response>
+		<d:href>/</d:href>
+		<d:propstat>
+			<d:prop>
+				<d:getlastmodified>Thu, 18 May 2017 09:51:59 GMT</d:getlastmodified>
+				<d:getcontentlength>0</d:getcontentlength>
+				<d:resourcetype>
+					<d:collection />
+				</d:resourcetype>
+			</d:prop>
+			<d:status>HTTP/1.1 200 OK</d:status>
+		</d:propstat>
+	</d:response>
+	<d:response>
+		<d:href>/0.txt</d:href>
+		<d:propstat>
+			<d:prop>
+				<d:getlastmodified>Thu, 18 May 2017 09:49:41 GMT</d:getlastmodified>
+				<d:getcontentlength>54175</d:getcontentlength>
+				<d:resourcetype />
+			</d:prop>
+			<d:status>HTTP/1.1 200 OK</d:status>
+		</d:propstat>
+	</d:response>
+	<d:response>
+		<d:href>/Gel%c3%b6schte%20Dateien/</d:href>
+		<d:propstat>
+			<d:prop>
+				<d:getlastmodified>Thu, 18 May 2017 09:51:59 GMT</d:getlastmodified>
+				<d:getcontentlength>0</d:getcontentlength>
+				<d:resourcetype>
+					<d:collection />
+				</d:resourcetype>
+			</d:prop>
+			<d:status>HTTP/1.1 200 OK</d:status>
+		</d:propstat>
+	</d:response>
+</d:multistatus>

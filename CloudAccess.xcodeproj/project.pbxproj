@@ -40,6 +40,7 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD324BC9BC00040513A /* partial-404-status.xml */; };
 		9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */; };
 		9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */; };
 		9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969457249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift */; };
@@ -94,6 +95,7 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		74F57AD324BC9BC00040513A /* partial-404-status.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "partial-404-status.xml"; sourceTree = "<group>"; };
 		9A51696105A9168880585575 /* Pods-CloudAccess.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccess.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccess/Pods-CloudAccess.debug.xcconfig"; sourceTree = "<group>"; };
 		9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptorMock.swift; sourceTree = "<group>"; };
 		9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShortenedNameCache.swift; sourceTree = "<group>"; };
@@ -225,6 +227,7 @@
 				748420C624B8A2A600D84E58 /* malformatted-date.xml */,
 				748420C524B8A2A600D84E58 /* malformatted-xml.xml */,
 				748420C724B8A2A600D84E58 /* missing-href.xml */,
+				74F57AD324BC9BC00040513A /* partial-404-status.xml */,
 			);
 			path = PropfindTestRequests;
 			sourceTree = "<group>";
@@ -394,6 +397,7 @@
 				748420D124B8A2A600D84E58 /* 403-status.xml in Resources */,
 				748420CC24B8A2A600D84E58 /* malformatted-xml.xml in Resources */,
 				748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */,
+				74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */,
 				748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */,
 				748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */,
 				748420CE24B8A2A600D84E58 /* missing-href.xml in Resources */,

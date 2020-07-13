@@ -18,7 +18,12 @@ private extension CloudItemMetadata {
 	init(_ propfindResponseElement: PropfindResponseElement, remoteURL: URL) {
 		self.name = remoteURL.lastPathComponent
 		self.remoteURL = remoteURL
-		self.itemType = propfindResponseElement.collection ? .folder : .file
+		self.itemType = {
+			guard let collection = propfindResponseElement.collection else {
+				return .unknown
+			}
+			return collection ? .folder : .file
+		}()
 		self.lastModifiedDate = propfindResponseElement.lastModified
 		self.size = propfindResponseElement.contentLength
 	}
@@ -67,7 +72,7 @@ public class WebDAVProvider: CloudProvider {
 			}
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
 			let childElements = try parser.getElements().filter({ $0.depth == 1 })
-			let items = childElements.map { CloudItemMetadata($0, remoteURL: remoteURL.appendingPathComponent($0.href.lastPathComponent)) }
+			let items = childElements.map { CloudItemMetadata($0, remoteURL: remoteURL.appendingPathComponent($0.url.lastPathComponent)) }
 			return CloudItemList(items: items)
 		}
 	}

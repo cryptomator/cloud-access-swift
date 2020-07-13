@@ -1,21 +1,15 @@
 <?xml version="1.0" ?>
 <d:multistatus xmlns:d="DAV:">
 	<d:response>
-		<d:href />
-		/asdasdasd/d/OC/DYNTZMMHWLW25RZHWYEDHLFWIUZZG2/
-		</d:href>
+		<d:href />/</d:href>
 		<d:propstat>
 			<d:status>HTTP/1.1 200 OK</d:status>
 			<d:prop>
-				<d:resourcetype></d:resourcetype>
-				<d:getcontentlength>36</d:getcontentlength>
-				<d:getlastmodified>Thu, 30 Mar 2017 10:14:39 GMT</d:getlastmodified>
-			</d:prop>
-		</d:propstat>
-		<d:propstat>
-			<d:status>HTTP/1.1 404 Not Found</d:status>
-			<d:prop>
-				<d:collection></d:collection>
+				<d:getlastmodified>Thu, 18 May 2017 09:51:59 GMT</d:getlastmodified>
+				<d:getcontentlength>0</d:getcontentlength>
+				<d:resourcetype>
+					<d:collection />
+				</d:resourcetype>
 			</d:prop>
 		</d:propstat>
 	</d:response>

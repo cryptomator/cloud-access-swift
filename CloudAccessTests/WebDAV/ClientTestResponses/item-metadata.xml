@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:oc="http://owncloud.org/ns"
+               xmlns:nc="http://nextcloud.org/ns">
+    <d:response>
+        <d:href>/cloud/remote.php/webdav/Nextcloud%20Manual.pdf</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:resourcetype/>
+                <d:getcontentlength>6837751</d:getcontentlength>
+                <d:getlastmodified>Wed, 19 Feb 2020 10:24:12 GMT</d:getlastmodified>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>

@@ -15,17 +15,22 @@ enum WebDAVAuthenticatorTestsError: Error {
 }
 
 class WebDAVAuthenticatorTests: XCTestCase {
+	var baseURL: URL!
 	var client: WebDAVClientMock!
 
 	override func setUp() {
-		client = WebDAVClientMock()
+		baseURL = URL(string: "/cloud/remote.php/webdav/")
+		client = WebDAVClientMock(baseURL: baseURL)
 	}
 
 	func testVerifyClient() throws {
 		let expectation = XCTestExpectation(description: "verifyClient")
-		client.urlSession.response = HTTPURLResponse(url: URL(string: "/cloud/remote.php/webdav/")!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])
+		client.urlSession.response = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])
 		client.urlSession.data = try getData(forResource: "authentication-success", withExtension: "xml")
-		WebDAVAuthenticator.verifyClient(client: client).catch { error in
+		WebDAVAuthenticator.verifyClient(client: client).then {
+			XCTAssertTrue(self.client.optionsRequests.contains(self.baseURL.relativePath))
+			XCTAssertTrue(self.client.propfindRequests[self.baseURL.relativePath] == .zero)
+		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
 			expectation.fulfill()

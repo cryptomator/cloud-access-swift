@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-public enum WebDAVDepth: String {
+public enum PropfindDepth: String {
 	case zero = "0"
 	case one = "1"
 }
@@ -90,7 +90,7 @@ public class WebDAVClient {
 		return urlSession.performDataTask(with: request)
 	}
 
-	public func PROPFIND(url: URL, depth: WebDAVDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
+	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PROPFIND"
 		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")

@@ -59,10 +59,14 @@ public class WebDAVClient {
 	public let baseURL: URL
 	private let urlSession: URLSession
 
-	public init(credential: WebDAVCredential, sharedContainerIdentifier: String) {
+	init(credential: WebDAVCredential, urlSession: URLSession) {
 		self.baseURL = credential.baseURL
+		self.urlSession = urlSession
+	}
+
+	public convenience init(credential: WebDAVCredential, sharedContainerIdentifier: String) {
 		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		self.urlSession = WebDAVClient.createURLSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate)
+		self.init(credential: credential, urlSession: WebDAVClient.createURLSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate))
 	}
 
 	private static func createURLSession(sharedContainerIdentifier: String, delegate: URLSessionDelegate) -> URLSession {

@@ -16,6 +16,7 @@
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
+		746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */; };
 		7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */; };
 		7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */; };
 		7477BD5E24AF2871005F2F31 /* URLSession+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5D24AF2871005F2F31 /* URLSession+Promises.swift */; };
@@ -33,7 +34,9 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */; };
 		74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD324BC9BC00040513A /* partial-404-status.xml */; };
+		74F57AD924BCB5390040513A /* authentication-success.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD824BCB5390040513A /* authentication-success.xml */; };
 		9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */; };
 		9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */; };
 		9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E969457249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift */; };
@@ -71,6 +74,7 @@
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
 		740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
+		746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVAuthenticatorTests.swift; sourceTree = "<group>"; };
 		7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProvider.swift; sourceTree = "<group>"; };
 		7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidator.swift; sourceTree = "<group>"; };
 		7477BD5D24AF2871005F2F31 /* URLSession+Promises.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URLSession+Promises.swift"; sourceTree = "<group>"; };
@@ -88,7 +92,9 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientMock.swift; sourceTree = "<group>"; };
 		74F57AD324BC9BC00040513A /* partial-404-status.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "partial-404-status.xml"; sourceTree = "<group>"; };
+		74F57AD824BCB5390040513A /* authentication-success.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "authentication-success.xml"; sourceTree = "<group>"; };
 		9A51696105A9168880585575 /* Pods-CloudAccess.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CloudAccess.debug.xcconfig"; path = "Target Support Files/Pods-CloudAccess/Pods-CloudAccess.debug.xcconfig"; sourceTree = "<group>"; };
 		9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptorMock.swift; sourceTree = "<group>"; };
 		9E969455249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShortenedNameCache.swift; sourceTree = "<group>"; };
@@ -206,6 +212,9 @@
 			isa = PBXGroup;
 			children = (
 				7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */,
+				746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */,
+				74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */,
+				74F57AD524BCB4E80040513A /* AuthenticatorResponses */,
 				748420C224B8A20D00D84E58 /* PropfindTestRequests */,
 			);
 			path = WebDAV;
@@ -238,6 +247,14 @@
 				748A42B524AA231000DEB6D0 /* WebDAVProvider.swift */,
 			);
 			path = WebDAV;
+			sourceTree = "<group>";
+		};
+		74F57AD524BCB4E80040513A /* AuthenticatorResponses */ = {
+			isa = PBXGroup;
+			children = (
+				74F57AD824BCB5390040513A /* authentication-success.xml */,
+			);
+			path = AuthenticatorResponses;
 			sourceTree = "<group>";
 		};
 		9ED0E61B24617C0300FDB438 /* VaultFormat7 */ = {
@@ -392,6 +409,7 @@
 				748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */,
 				74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */,
 				748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */,
+				74F57AD924BCB5390040513A /* authentication-success.xml in Resources */,
 				748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */,
 				748420CE24B8A2A600D84E58 /* missing-href.xml in Resources */,
 			);
@@ -495,6 +513,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */,
 				9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */,
 				9ED0E624246198F600FDB438 /* CloudProviderMockTests.swift in Sources */,
 				9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */,
@@ -504,6 +523,7 @@
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
 				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,
 				9ED0E622246180AB00FDB438 /* CloudProviderMock.swift in Sources */,
+				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

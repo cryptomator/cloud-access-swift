@@ -15,13 +15,10 @@ enum WebDAVAuthenticatorError: Error {
 }
 
 public class WebDAVAuthenticator {
-	public func createAuthenticatedClient(credential: WebDAVCredential, sharedContainerIdentifier: String) -> Promise<WebDAVClient> {
-		let client = WebDAVClient(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier)
+	public static func verifyClient(client: WebDAVClient) -> Promise<Void> {
 		return checkServerCompatibility(client: client).then {
 			return self.tryAuthenticatedRequest(client: client)
-		}.then { () -> WebDAVClient in
-			return client
-		}.recover { error -> Promise<WebDAVClient> in
+		}.recover { error -> Promise<Void> in
 			let nsError = error as NSError
 			if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorServerCertificateUntrusted {
 				return Promise(WebDAVAuthenticatorError.untrustedCertificate)
@@ -31,7 +28,7 @@ public class WebDAVAuthenticator {
 		}
 	}
 
-	private func checkServerCompatibility(client: WebDAVClient) -> Promise<Void> {
+	private static func checkServerCompatibility(client: WebDAVClient) -> Promise<Void> {
 		return client.OPTIONS(url: client.baseURL).then { httpResponse, _ in
 			if httpResponse.allHeaderFields["DAV"] != nil {
 				return Promise(())
@@ -41,7 +38,7 @@ public class WebDAVAuthenticator {
 		}
 	}
 
-	private func tryAuthenticatedRequest(client: WebDAVClient) -> Promise<Void> {
+	private static func tryAuthenticatedRequest(client: WebDAVClient) -> Promise<Void> {
 		return client.PROPFIND(url: client.baseURL, depth: .zero).then { _, _ in
 			return Promise(())
 		}

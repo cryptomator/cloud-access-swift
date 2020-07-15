@@ -56,7 +56,22 @@ public class WebDAVProvider: CloudProvider {
 			guard let firstElement = try parser.getElements().first else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			return CloudItemMetadata(firstElement, remoteURL: remoteURL)
+			let metadata = CloudItemMetadata(firstElement, remoteURL: remoteURL)
+			guard self.validateItemType(at: remoteURL, with: metadata.itemType) else {
+				throw CloudProviderError.itemTypeMismatch
+			}
+			return metadata
+		}.recover { error -> Promise<CloudItemMetadata> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.itemNotFound)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			default:
+				return Promise(error)
+			}
 		}
 	}
 
@@ -71,9 +86,28 @@ public class WebDAVProvider: CloudProvider {
 				throw WebDAVProviderError.invalidResponse
 			}
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
-			let childElements = try parser.getElements().filter({ $0.depth == 1 })
+			let elements = try parser.getElements()
+			guard let rootElement = elements.filter({ $0.depth == 1 }).first else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			let rootMetadata = CloudItemMetadata(rootElement, remoteURL: remoteURL)
+			guard rootMetadata.itemType == .folder else {
+				throw CloudProviderError.itemTypeMismatch
+			}
+			let childElements = elements.filter({ $0.depth == 1 })
 			let items = childElements.map { CloudItemMetadata($0, remoteURL: remoteURL.appendingPathComponent($0.url.lastPathComponent)) }
 			return CloudItemList(items: items)
+		}.recover { error -> Promise<CloudItemList> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.itemNotFound)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			default:
+				return Promise(error)
+			}
 		}
 	}
 
@@ -85,11 +119,27 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.GET(url: url).then { _, fileURL -> Void in
+		return fetchItemMetadata(at: remoteURL).then { _ in
+			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
+			return self.client.GET(url: url)
+		}.then { _, fileURL -> Void in
 			guard let fileURL = fileURL else {
 				throw WebDAVProviderError.invalidResponse
 			}
 			try FileManager.default.moveItem(at: fileURL, to: localURL)
+		}.recover { error -> Promise<Void> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.itemNotFound)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			case CocoaError.fileWriteFileExists:
+				return Promise(CloudProviderError.itemAlreadyExists)
+			default:
+				return Promise(error)
+			}
 		}
 	}
 
@@ -101,8 +151,50 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.PUT(url: url, fileURL: localURL).then { _, _ in
-			return self.fetchItemMetadata(at: remoteURL)
+		guard FileManager.default.fileExists(atPath: localURL.path) else {
+			return Promise(CloudProviderError.itemNotFound)
+		}
+		return fetchItemMetadata(at: remoteURL).then { _ in
+			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
+			if replaceExisting {
+				return self.client.PUT(url: url, fileURL: localURL)
+			} else {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			}
+		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
+			if case CloudProviderError.itemNotFound = error {
+				return self.client.PUT(url: url, fileURL: localURL)
+			} else {
+				return Promise(error)
+			}
+		}.then { response, data -> CloudItemMetadata in
+			guard let data = data else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
+			guard let firstElement = try parser.getElements().first else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			let metadata = CloudItemMetadata(firstElement, remoteURL: remoteURL)
+			guard self.validateItemType(at: remoteURL, with: metadata.itemType) else {
+				throw CloudProviderError.itemTypeMismatch
+			}
+			return metadata
+		}.recover { error -> Promise<CloudItemMetadata> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 409):
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			case URLSessionError.httpError(_, statusCode: 507):
+				return Promise(CloudProviderError.quotaInsufficient)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			case POSIXError.EISDIR:
+				return Promise(CloudProviderError.itemTypeMismatch)
+			default:
+				return Promise(error)
+			}
 		}
 	}
 
@@ -112,7 +204,24 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.MKCOL(url: url).then { _, _ -> Void in }
+		return client.MKCOL(url: url).then { _, _ -> Void in
+			// no-op
+		}.recover { error -> Promise<Void> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 405):
+				return Promise(CloudProviderError.itemAlreadyExists)
+			case URLSessionError.httpError(_, statusCode: 409):
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			case URLSessionError.httpError(_, statusCode: 507):
+				return Promise(CloudProviderError.quotaInsufficient)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			default:
+				return Promise(error)
+			}
+		}
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
@@ -120,7 +229,23 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.DELETE(url: url).then { _, _ -> Void in }
+		return fetchItemMetadata(at: remoteURL).then { _ in
+			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
+			return self.client.DELETE(url: url)
+		}.then { _, _ -> Void in
+			// no-op
+		}.recover { error -> Promise<Void> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.itemNotFound)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			default:
+				return Promise(error)
+			}
+		}
 	}
 
 	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
@@ -130,7 +255,29 @@ public class WebDAVProvider: CloudProvider {
 		guard let sourceURL = resolve(oldRemoteURL), let destinationURL = resolve(newRemoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		return client.MOVE(sourceURL: sourceURL, destinationURL: destinationURL).then { _, _ -> Void in }
+		return fetchItemMetadata(at: oldRemoteURL).then { _ in
+			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
+			return self.client.MOVE(sourceURL: sourceURL, destinationURL: destinationURL)
+		}.then { _, _ -> Void in
+			// no-op
+		}.recover { error -> Promise<Void> in
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.itemNotFound)
+			case URLSessionError.httpError(_, statusCode: 409):
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			case URLSessionError.httpError(_, statusCode: 412):
+				return Promise(CloudProviderError.itemAlreadyExists)
+			case URLSessionError.httpError(_, statusCode: 507):
+				return Promise(CloudProviderError.quotaInsufficient)
+			case URLSessionError.httpError(URLError.notConnectedToInternet, statusCode: _):
+				return Promise(CloudProviderError.noInternetConnection)
+			default:
+				return Promise(error)
+			}
+		}
 	}
 
 	// MARK: - Internal
@@ -140,5 +287,9 @@ public class WebDAVProvider: CloudProvider {
 			return nil
 		}
 		return URL(string: percentEncodedPath, relativeTo: client.baseURL)
+	}
+
+	private func validateItemType(at url: URL, with itemType: CloudItemType) -> Bool {
+		return url.hasDirectoryPath == (itemType == .folder) || !url.hasDirectoryPath == (itemType == .file)
 	}
 }

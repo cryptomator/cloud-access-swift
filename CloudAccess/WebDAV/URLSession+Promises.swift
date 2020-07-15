@@ -10,7 +10,7 @@ import Foundation
 import Promises
 
 enum URLSessionError: Error {
-	case httpError(_ error: Error, response: HTTPURLResponse)
+	case httpError(_ error: Error, statusCode: Int? = nil)
 	case unexpectedResponse
 }
 
@@ -18,14 +18,15 @@ extension URLSession {
 	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
 		return Promise { fulfill, reject in
 			let task = self.dataTask(with: request) { data, response, error in
-				guard let httpResponse = response as? HTTPURLResponse else {
-					reject(URLSessionError.unexpectedResponse)
-					return
-				}
-				if let error = error {
-					reject(URLSessionError.httpError(error, response: httpResponse))
-				} else {
+				switch (response, error) {
+				case let (httpResponse as HTTPURLResponse, nil):
 					fulfill((httpResponse, data))
+				case let (httpResponse as HTTPURLResponse, .some(error)):
+					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
+				case let (_, .some(error)):
+					reject(URLSessionError.httpError(error))
+				default:
+					reject(URLSessionError.unexpectedResponse)
 				}
 			}
 			task.resume()
@@ -35,14 +36,15 @@ extension URLSession {
 	func performDownloadTask(with request: URLRequest) -> Promise<(HTTPURLResponse, URL?)> {
 		return Promise { fulfill, reject in
 			let task = self.downloadTask(with: request) { url, response, error in
-				guard let httpResponse = response as? HTTPURLResponse else {
-					reject(URLSessionError.unexpectedResponse)
-					return
-				}
-				if let error = error {
-					reject(URLSessionError.httpError(error, response: httpResponse))
-				} else {
+				switch (response, error) {
+				case let (httpResponse as HTTPURLResponse, nil):
 					fulfill((httpResponse, url))
+				case let (httpResponse as HTTPURLResponse, .some(error)):
+					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
+				case let (_, .some(error)):
+					reject(URLSessionError.httpError(error))
+				default:
+					reject(URLSessionError.unexpectedResponse)
 				}
 			}
 			task.resume()
@@ -52,14 +54,15 @@ extension URLSession {
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
 		return Promise { fulfill, reject in
 			let task = self.uploadTask(with: request, fromFile: fileURL) { data, response, error in
-				guard let httpResponse = response as? HTTPURLResponse else {
-					reject(URLSessionError.unexpectedResponse)
-					return
-				}
-				if let error = error {
-					reject(URLSessionError.httpError(error, response: httpResponse))
-				} else {
+				switch (response, error) {
+				case let (httpResponse as HTTPURLResponse, nil):
 					fulfill((httpResponse, data))
+				case let (httpResponse as HTTPURLResponse, .some(error)):
+					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
+				case let (_, .some(error)):
+					reject(URLSessionError.httpError(error))
+				default:
+					reject(URLSessionError.unexpectedResponse)
 				}
 			}
 			task.resume()

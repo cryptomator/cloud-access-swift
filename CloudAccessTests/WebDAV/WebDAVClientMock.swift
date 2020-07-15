@@ -10,6 +10,17 @@ import Foundation
 import Promises
 @testable import CloudAccess
 
+enum URLSessionErrorMock: Error {
+	case missingCompletionMock
+	case expectedFailure
+}
+
+struct URLSessionCompletionMock {
+	let data: Data?
+	let response: URLResponse?
+	let error: Error?
+}
+
 class URLSessionDataTaskMock: URLSessionDataTask {
 	private let completionHandler: () -> Void
 
@@ -49,9 +60,7 @@ class URLSessionUploadTaskMock: URLSessionUploadTask {
 class URLSessionMock: URLSession {
 	let tmpDirURL: URL
 
-	var data: Data?
-	var response: URLResponse?
-	var error: Error?
+	var completionMocks: [URLSessionCompletionMock] = []
 
 	override init() {
 		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -60,21 +69,36 @@ class URLSessionMock: URLSession {
 
 	override func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
 		return URLSessionDataTaskMock {
-			completionHandler(self.data, self.response, self.error)
+			guard !self.completionMocks.isEmpty else {
+				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
+				return
+			}
+			let completionMock = self.completionMocks.removeFirst()
+			completionHandler(completionMock.data, completionMock.response, completionMock.error)
 		}
 	}
 
 	override func downloadTask(with request: URLRequest, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
 		return URLSessionDownloadTaskMock {
+			guard !self.completionMocks.isEmpty else {
+				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
+				return
+			}
+			let completionMock = self.completionMocks.removeFirst()
 			let url = self.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try? self.data?.write(to: url)
-			completionHandler(url, self.response, self.error)
+			try? completionMock.data?.write(to: url)
+			completionHandler(url, completionMock.response, completionMock.error)
 		}
 	}
 
 	override func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
 		return URLSessionUploadTaskMock {
-			completionHandler(self.data, self.response, self.error)
+			guard !self.completionMocks.isEmpty else {
+				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
+				return
+			}
+			let completionMock = self.completionMocks.removeFirst()
+			completionHandler(completionMock.data, completionMock.response, completionMock.error)
 		}
 	}
 }

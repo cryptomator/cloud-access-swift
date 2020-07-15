@@ -18,7 +18,6 @@
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
 		746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */; };
 		746AA0E224BDF66A0051BACC /* WebDAVProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */; };
-		746AA0E424BE023F0051BACC /* item-write.txt in Resources */ = {isa = PBXBuildFile; fileRef = 746AA0E324BE01270051BACC /* item-write.txt */; };
 		7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */; };
 		7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */; };
 		7477BD5E24AF2871005F2F31 /* URLSession+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5D24AF2871005F2F31 /* URLSession+Promises.swift */; };
@@ -36,10 +35,10 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
-		74E54F6124BCB6B9003379FA /* item-write.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5B24BCB6B9003379FA /* item-write.xml */; };
+		74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */; };
 		74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5D24BCB6B9003379FA /* item-metadata.xml */; };
 		74E54F6424BCB6B9003379FA /* item-list.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5E24BCB6B9003379FA /* item-list.xml */; };
-		74E54F6524BCB6B9003379FA /* item-read.txt in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5F24BCB6B9003379FA /* item-read.txt */; };
+		74E54F6524BCB6B9003379FA /* item-data.txt in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5F24BCB6B9003379FA /* item-data.txt */; };
 		74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */; };
 		74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD324BC9BC00040513A /* partial-404-status.xml */; };
 		74F57AD924BCB5390040513A /* authentication-success.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD824BCB5390040513A /* authentication-success.xml */; };
@@ -82,7 +81,6 @@
 		740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVAuthenticatorTests.swift; sourceTree = "<group>"; };
 		746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVProviderTests.swift; sourceTree = "<group>"; };
-		746AA0E324BE01270051BACC /* item-write.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "item-write.txt"; sourceTree = "<group>"; };
 		7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProvider.swift; sourceTree = "<group>"; };
 		7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidator.swift; sourceTree = "<group>"; };
 		7477BD5D24AF2871005F2F31 /* URLSession+Promises.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URLSession+Promises.swift"; sourceTree = "<group>"; };
@@ -100,10 +98,10 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
-		74E54F5B24BCB6B9003379FA /* item-write.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-write.xml"; sourceTree = "<group>"; };
+		74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-move-412-error.xml"; sourceTree = "<group>"; };
 		74E54F5D24BCB6B9003379FA /* item-metadata.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-metadata.xml"; sourceTree = "<group>"; };
 		74E54F5E24BCB6B9003379FA /* item-list.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-list.xml"; sourceTree = "<group>"; };
-		74E54F5F24BCB6B9003379FA /* item-read.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "item-read.txt"; sourceTree = "<group>"; };
+		74E54F5F24BCB6B9003379FA /* item-data.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "item-data.txt"; sourceTree = "<group>"; };
 		74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientMock.swift; sourceTree = "<group>"; };
 		74F57AD324BC9BC00040513A /* partial-404-status.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "partial-404-status.xml"; sourceTree = "<group>"; };
 		74F57AD824BCB5390040513A /* authentication-success.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "authentication-success.xml"; sourceTree = "<group>"; };
@@ -266,11 +264,10 @@
 		74E54F5A24BCB6B9003379FA /* ClientTestResponses */ = {
 			isa = PBXGroup;
 			children = (
-				74E54F5F24BCB6B9003379FA /* item-read.txt */,
-				746AA0E324BE01270051BACC /* item-write.txt */,
+				74E54F5F24BCB6B9003379FA /* item-data.txt */,
 				74E54F5E24BCB6B9003379FA /* item-list.xml */,
 				74E54F5D24BCB6B9003379FA /* item-metadata.xml */,
-				74E54F5B24BCB6B9003379FA /* item-write.xml */,
+				74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */,
 			);
 			path = ClientTestResponses;
 			sourceTree = "<group>";
@@ -430,19 +427,18 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				746AA0E424BE023F0051BACC /* item-write.txt in Resources */,
 				74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */,
 				748420D124B8A2A600D84E58 /* 403-status.xml in Resources */,
+				74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */,
 				748420CC24B8A2A600D84E58 /* malformatted-xml.xml in Resources */,
 				748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */,
 				74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */,
 				748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */,
-				74E54F6524BCB6B9003379FA /* item-read.txt in Resources */,
+				74E54F6524BCB6B9003379FA /* item-data.txt in Resources */,
 				74F57AD924BCB5390040513A /* authentication-success.xml in Resources */,
 				74E54F6424BCB6B9003379FA /* item-list.xml in Resources */,
 				748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */,
 				748420CE24B8A2A600D84E58 /* missing-href.xml in Resources */,
-				74E54F6124BCB6B9003379FA /* item-write.xml in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

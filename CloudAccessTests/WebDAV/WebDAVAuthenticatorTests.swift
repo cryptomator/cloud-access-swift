@@ -25,8 +25,14 @@ class WebDAVAuthenticatorTests: XCTestCase {
 
 	func testVerifyClient() throws {
 		let expectation = XCTestExpectation(description: "verifyClient")
-		client.urlSession.response = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])
-		client.urlSession.data = try getData(forResource: "authentication-success", withExtension: "xml")
+
+		let optionsResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])
+		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: optionsResponse, error: nil))
+
+		let propfindData = try getTestData(forResource: "authentication-success", withExtension: "xml")
+		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
+		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+
 		WebDAVAuthenticator.verifyClient(client: client).then {
 			XCTAssertTrue(self.client.optionsRequests.contains(self.baseURL.relativePath))
 			XCTAssertTrue(self.client.propfindRequests[self.baseURL.relativePath] == .zero)
@@ -40,7 +46,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 
 	// MARK: - Internal
 
-	private func getData(forResource name: String, withExtension ext: String) throws -> Data {
+	private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
 		let testBundle = Bundle(for: type(of: self))
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
 			throw WebDAVAuthenticatorTestsError.missingTestResource

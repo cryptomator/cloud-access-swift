@@ -89,6 +89,7 @@ class WebDAVProviderTests: XCTestCase {
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: getData, response: getResponse, error: nil))
 
 		provider.downloadFile(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: localURL).then {
+			XCTAssertTrue(self.client.propfindRequests[responseURL.relativePath] == .zero)
 			XCTAssertTrue(self.client.getRequests.contains(responseURL.relativePath))
 			let expectedData = try self.getTestData(forResource: "item-data", withExtension: "txt")
 			let actualData = try Data(contentsOf: localURL)
@@ -116,6 +117,7 @@ class WebDAVProviderTests: XCTestCase {
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: putData, response: putResponse, error: nil))
 
 		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: false).then { metadata in
+			XCTAssertTrue(self.client.propfindRequests[responseURL.relativePath] == .zero)
 			XCTAssertTrue(self.client.putRequests.contains(responseURL.relativePath))
 			XCTAssertEqual("About.txt", metadata.name)
 			XCTAssertEqual("/Documents/About.txt", metadata.remoteURL.path)
@@ -159,6 +161,7 @@ class WebDAVProviderTests: XCTestCase {
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: deleteResponse, error: nil))
 
 		provider.deleteItem(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then {
+			XCTAssertTrue(self.client.propfindRequests[responseURL.relativePath] == .zero)
 			XCTAssertTrue(self.client.deleteRequests.contains(responseURL.relativePath))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -181,6 +184,7 @@ class WebDAVProviderTests: XCTestCase {
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: nil))
 
 		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
+			XCTAssertTrue(self.client.propfindRequests[sourceURL.relativePath] == .zero)
 			XCTAssertTrue(self.client.moveRequests[sourceURL.relativePath] == destinationURL.relativePath)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -207,6 +211,7 @@ class WebDAVProviderTests: XCTestCase {
 		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
 			XCTFail("Moving item to an existing resource should fail")
 		}.catch { error in
+			XCTAssertTrue(self.client.propfindRequests[sourceURL.relativePath] == .zero)
 			XCTAssertTrue(self.client.moveRequests[sourceURL.relativePath] == destinationURL.relativePath)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)

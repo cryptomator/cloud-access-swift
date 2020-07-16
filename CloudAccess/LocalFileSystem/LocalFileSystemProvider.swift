@@ -187,12 +187,12 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	// MARK: - Internal
 
-	func getItemType(at remoteURL: URL) throws -> CloudItemType {
-		let attributes = try fileManager.attributesOfItem(atPath: remoteURL.path)
+	private func getItemType(at localURL: URL) throws -> CloudItemType {
+		let attributes = try fileManager.attributesOfItem(atPath: localURL.path)
 		return getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 	}
 
-	func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {
+	private func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {
 		switch fileAttributeType {
 		case FileAttributeType.typeDirectory:
 			return CloudItemType.folder
@@ -203,7 +203,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	func getItemType(from fileResourceType: URLFileResourceType?) -> CloudItemType {
+	private func getItemType(from fileResourceType: URLFileResourceType?) -> CloudItemType {
 		switch fileResourceType {
 		case URLFileResourceType.directory:
 			return CloudItemType.folder
@@ -214,12 +214,12 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	func validateItemType(at remoteURL: URL) throws -> Bool {
-		let itemType = try getItemType(at: remoteURL)
-		return validateItemType(at: remoteURL, with: itemType)
+	private func validateItemType(at localURL: URL) throws -> Bool {
+		let itemType = try getItemType(at: localURL)
+		return validateItemType(at: localURL, with: itemType)
 	}
 
-	func validateItemType(at remoteURL: URL, with itemType: CloudItemType) -> Bool {
-		return remoteURL.hasDirectoryPath == (itemType == .folder) || !remoteURL.hasDirectoryPath == (itemType == .file)
+	private func validateItemType(at url: URL, with itemType: CloudItemType) -> Bool {
+		return url.hasDirectoryPath == (itemType == .folder) || !url.hasDirectoryPath == (itemType == .file)
 	}
 }

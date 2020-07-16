@@ -81,8 +81,8 @@ public protocol CloudProvider {
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
-	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!replaceExisting`.
-	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
+	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` with `!replaceExisting`.
+	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or the cloud provider finds a folder instead of a file at `remoteURL` with `replaceExisting`.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.

@@ -119,8 +119,10 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
+		// GET requests on collections are possible so that it doesn't respond with an error as needed
+		// therefore a fetchItemMetadata() is called first to ensure that it's actually a file on remote
+		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
 		return fetchItemMetadata(at: remoteURL).then { _ in
-			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
 			return self.client.GET(url: url)
 		}.then { _, fileURL -> Void in
 			guard let fileURL = fileURL else {
@@ -154,8 +156,9 @@ public class WebDAVProvider: CloudProvider {
 		guard FileManager.default.fileExists(atPath: localURL.path) else {
 			return Promise(CloudProviderError.itemNotFound)
 		}
+		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
+		// therefore a fetchItemMetadata() is called first to make that distinction
 		return fetchItemMetadata(at: remoteURL).then { _ in
-			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
 			if replaceExisting {
 				return self.client.PUT(url: url, fileURL: localURL)
 			} else {
@@ -164,6 +167,8 @@ public class WebDAVProvider: CloudProvider {
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
 			if case CloudProviderError.itemNotFound = error {
 				return self.client.PUT(url: url, fileURL: localURL)
+			} else if !replaceExisting, case CloudProviderError.itemTypeMismatch = error {
+				return Promise(CloudProviderError.itemAlreadyExists)
 			} else {
 				return Promise(error)
 			}
@@ -175,15 +180,13 @@ public class WebDAVProvider: CloudProvider {
 			guard let firstElement = try parser.getElements().first else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			let metadata = CloudItemMetadata(firstElement, remoteURL: remoteURL)
-			guard self.validateItemType(at: remoteURL, with: metadata.itemType) else {
-				throw CloudProviderError.itemTypeMismatch
-			}
-			return metadata
+			return CloudItemMetadata(firstElement, remoteURL: remoteURL)
 		}.recover { error -> Promise<CloudItemMetadata> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
 				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 405):
+				return Promise(CloudProviderError.itemTypeMismatch)
 			case URLSessionError.httpError(_, statusCode: 409):
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
 			case URLSessionError.httpError(_, statusCode: 507):
@@ -229,8 +232,10 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = resolve(remoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
+		// DELETE requests have no distinction between collections and non-collections
+		// therefore a fetchItemMetadata() is called first to ensure that the expected file type matches on remote
+		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
 		return fetchItemMetadata(at: remoteURL).then { _ in
-			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
 			return self.client.DELETE(url: url)
 		}.then { _, _ -> Void in
 			// no-op
@@ -255,8 +260,10 @@ public class WebDAVProvider: CloudProvider {
 		guard let sourceURL = resolve(oldRemoteURL), let destinationURL = resolve(newRemoteURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
+		// MOVE requests have no distinction between collections and non-collections
+		// therefore a fetchItemMetadata() is called first to ensure that the expected file type matches on remote
+		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
 		return fetchItemMetadata(at: oldRemoteURL).then { _ in
-			// fetchItemMetadata already throws CloudProviderError.itemTypeMismatch, no further check needed
 			return self.client.MOVE(sourceURL: sourceURL, destinationURL: destinationURL)
 		}.then { _, _ -> Void in
 			// no-op

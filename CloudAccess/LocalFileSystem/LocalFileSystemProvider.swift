@@ -109,6 +109,9 @@ public class LocalFileSystemProvider: CloudProvider {
 				return Promise(CloudProviderError.itemTypeMismatch)
 			}
 			if replaceExisting {
+				guard try validateItemType(at: remoteURL) else {
+					return Promise(CloudProviderError.itemTypeMismatch)
+				}
 				try fileManager.copyItemWithOverwrite(at: localURL, to: remoteURL)
 			} else {
 				try fileManager.copyItem(at: localURL, to: remoteURL)

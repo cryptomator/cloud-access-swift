@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:oc="http://owncloud.org/ns"
+               xmlns:nc="http://nextcloud.org/ns">
+    <d:response>
+        <d:href>/cloud/remote.php/webdav/</d:href>
+        <d:propstat>
+            <d:prop>
+                <d:resourcetype>
+                    <d:collection/>
+                </d:resourcetype>
+                <d:getlastmodified>Tue, 07 Jul 2020 20:08:12 GMT</d:getlastmodified>
+            </d:prop>
+            <d:status>HTTP/1.1 200 OK</d:status>
+        </d:propstat>
+        <d:propstat>
+            <d:prop>
+                <d:getcontentlength/>
+            </d:prop>
+            <d:status>HTTP/1.1 404 Not Found</d:status>
+        </d:propstat>
+    </d:response>
+</d:multistatus>

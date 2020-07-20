@@ -57,7 +57,7 @@ internal class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTa
 	}
 
 	private func calculateFingerprint(from certificate: Data) -> String {
-		let bytes = certificate.bytes
+		let bytes = [UInt8](certificate)
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
 		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return digest.toHexString(separator: " ")

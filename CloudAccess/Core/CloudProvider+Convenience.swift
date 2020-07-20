@@ -13,7 +13,7 @@ public extension CloudProvider {
 	/**
 	 Convenience wrapper for `fetchItemList()` that returns a complete item list.
 	 */
-	internal func fetchItemListExhaustively(forFolderAt cleartextURL: URL, appendTo itemList: CloudItemList = CloudItemList(items: [])) -> Promise<CloudItemList> {
+	func fetchItemListExhaustively(forFolderAt cleartextURL: URL, appendTo itemList: CloudItemList = CloudItemList(items: [])) -> Promise<CloudItemList> {
 		return fetchItemList(forFolderAt: cleartextURL, withPageToken: itemList.nextPageToken).then { nextItems -> Promise<CloudItemList> in
 			let combinedList = itemList + nextItems
 			if combinedList.nextPageToken == nil {

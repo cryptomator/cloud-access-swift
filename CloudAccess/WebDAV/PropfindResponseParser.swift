@@ -13,13 +13,21 @@ public enum PropfindResponseParserError: Error {
 	case parsingAborted
 }
 
-struct PropfindResponseElementProperties: Equatable {
+struct PropfindResponseElement: Equatable {
+	let depth: Int
+	let url: URL
 	let collection: Bool?
 	let lastModified: Date?
 	let contentLength: Int?
 }
 
-internal class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLParserDelegate {
+private struct PropfindResponseElementProperties: Equatable {
+	let collection: Bool?
+	let lastModified: Date?
+	let contentLength: Int?
+}
+
+private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLParserDelegate {
 	private let parentDelegate: PropfindResponseElementParserDelegate
 
 	private var xmlCharacterBuffer = ""
@@ -92,15 +100,7 @@ internal class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPar
 	}
 }
 
-internal struct PropfindResponseElement: Equatable {
-	let depth: Int
-	let url: URL
-	let collection: Bool?
-	let lastModified: Date?
-	let contentLength: Int?
-}
-
-internal class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate {
+private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate {
 	private let parentDelegate: PropfindResponseParserDelegate
 	private let responseURL: URL
 
@@ -177,7 +177,7 @@ internal class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegat
 	}
 }
 
-internal class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
+private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 	private let responseURL: URL
 
 	private var elementDelegate: PropfindResponseElementParserDelegate?
@@ -201,7 +201,7 @@ internal class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 	}
 }
 
-internal class PropfindResponseParser {
+class PropfindResponseParser {
 	private let parser: XMLParser
 	private let responseURL: URL
 

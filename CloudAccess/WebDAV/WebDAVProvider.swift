@@ -165,11 +165,12 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.itemAlreadyExists)
 			}
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
-			if case CloudProviderError.itemNotFound = error {
+			switch (error, replaceExisting) {
+			case (CloudProviderError.itemNotFound, _):
 				return self.client.PUT(url: url, fileURL: localURL)
-			} else if !replaceExisting, case CloudProviderError.itemTypeMismatch = error {
+			case (CloudProviderError.itemTypeMismatch, false):
 				return Promise(CloudProviderError.itemAlreadyExists)
-			} else {
+			default:
 				return Promise(error)
 			}
 		}.then { response, data -> CloudItemMetadata in

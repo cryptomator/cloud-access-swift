@@ -228,9 +228,10 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let parentDirURL = dirURL.deletingLastPathComponent()
 			return self.delegate.createFolder(at: parentDirURL)
 		}.recover { error -> Promise<Void> in
-			if case CloudProviderError.itemAlreadyExists = error {
+			switch error {
+			case CloudProviderError.itemAlreadyExists:
 				return Promise(())
-			} else {
+			default:
 				return Promise(error)
 			}
 		}.then { () -> Promise<Void> in

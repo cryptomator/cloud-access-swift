@@ -28,6 +28,10 @@ class WebDAVProviderTests: XCTestCase {
 		provider = WebDAVProvider(with: client)
 	}
 
+	override func tearDownWithError() throws {
+		try FileManager.default.removeItem(at: tmpDirURL)
+	}
+
 	func testFetchItemMetadata() throws {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		let responseURL = URL(string: "/Documents/About.txt", relativeTo: baseURL)!
@@ -172,7 +176,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveItem() throws {
-		let expectation = XCTestExpectation(description: "deleteItem")
+		let expectation = XCTestExpectation(description: "moveItem")
 		let sourceURL = URL(string: "/Documents/About.txt", relativeTo: baseURL)!
 		let destinationURL = URL(string: "/Documents/Foobar.txt", relativeTo: baseURL)!
 
@@ -195,7 +199,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveItemWithAlreadyExistsError() throws {
-		let expectation = XCTestExpectation(description: "deleteItem")
+		let expectation = XCTestExpectation(description: "moveItem with itemAlreadyExists error")
 		let sourceURL = URL(string: "/Documents/About.txt", relativeTo: baseURL)!
 		let destinationURL = URL(string: "/Documents/Foobar.txt", relativeTo: baseURL)!
 

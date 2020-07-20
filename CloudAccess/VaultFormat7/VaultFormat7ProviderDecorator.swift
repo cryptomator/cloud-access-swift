@@ -10,7 +10,7 @@ import CryptomatorCryptoLib
 import Foundation
 import Promises
 
-enum VaultFormat7Error: Error {
+public enum VaultFormat7Error: Error {
 	case encounteredUnrelatedFile
 }
 

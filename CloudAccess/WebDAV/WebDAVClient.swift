@@ -14,7 +14,7 @@ public enum PropfindDepth: String {
 	case one = "1"
 }
 
-internal class WebDAVClientURLSessionDelegate: NSObject, URLSessionTaskDelegate {
+private class WebDAVClientURLSessionDelegate: NSObject, URLSessionTaskDelegate {
 	let credential: WebDAVCredential
 
 	init(credential: WebDAVCredential) {

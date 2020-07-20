@@ -9,11 +9,11 @@
 import Foundation
 import Promises
 
-enum PropfindResponseParserError: Error {
+public enum PropfindResponseParserError: Error {
 	case parsingAborted
 }
 
-internal struct PropfindResponseElementProperties: Equatable {
+struct PropfindResponseElementProperties: Equatable {
 	let collection: Bool?
 	let lastModified: Date?
 	let contentLength: Int?

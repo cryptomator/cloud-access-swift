@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-extension FileManager {
+private extension FileManager {
 	func copyItemWithOverwrite(at srcURL: URL, to dstURL: URL) throws {
 		let tmpDstURL = dstURL.appendingPathExtension(UUID().uuidString)
 		try moveItem(at: dstURL, to: tmpDstURL)

@@ -20,13 +20,13 @@ public struct TestedCertificate {
 	let fingerprint: String
 }
 
-internal extension Sequence where Element == UInt8 {
+private extension Sequence where Element == UInt8 {
 	func toHexString(separator: String = "") -> String {
 		return map { String(format: "%02lx", $0) }.joined(separator: separator)
 	}
 }
 
-internal class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
+private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
 	var testedCertificate: TestedCertificate?
 
 	// MARK: - URLSessionDelegate

@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-enum WebDAVAuthenticatorError: Error {
+public enum WebDAVAuthenticatorError: Error {
 	case unsupportedProcotol
 	case untrustedCertificate
 }

@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-enum VaultFormat7ShorteningError: Error {
+public enum VaultFormat7ShorteningError: Error {
 	case c9sItemNotFound
 }
 

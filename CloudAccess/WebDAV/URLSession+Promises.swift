@@ -9,7 +9,7 @@
 import Foundation
 import Promises
 
-enum URLSessionError: Error {
+public enum URLSessionError: Error {
 	case httpError(_ error: Error, statusCode: Int? = nil)
 	case unexpectedResponse
 }

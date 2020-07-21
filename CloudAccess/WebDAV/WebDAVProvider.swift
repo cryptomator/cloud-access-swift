@@ -87,7 +87,7 @@ public class WebDAVProvider: CloudProvider {
 			}
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
 			let elements = try parser.getElements()
-			guard let rootElement = elements.filter({ $0.depth == 1 }).first else {
+			guard let rootElement = elements.filter({ $0.depth == 0 }).first else {
 				throw WebDAVProviderError.invalidResponse
 			}
 			let rootMetadata = CloudItemMetadata(rootElement, remoteURL: remoteURL)

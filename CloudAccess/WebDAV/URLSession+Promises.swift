@@ -24,7 +24,7 @@ extension URLSession {
 				case let (httpResponse as HTTPURLResponse, .some(error)):
 					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 				case let (_, .some(error)):
-					reject(URLSessionError.httpError(error))
+					reject(error)
 				default:
 					reject(URLSessionError.unexpectedResponse)
 				}
@@ -42,7 +42,7 @@ extension URLSession {
 				case let (httpResponse as HTTPURLResponse, .some(error)):
 					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 				case let (_, .some(error)):
-					reject(URLSessionError.httpError(error))
+					reject(error)
 				default:
 					reject(URLSessionError.unexpectedResponse)
 				}
@@ -60,7 +60,7 @@ extension URLSession {
 				case let (httpResponse as HTTPURLResponse, .some(error)):
 					reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 				case let (_, .some(error)):
-					reject(URLSessionError.httpError(error))
+					reject(error)
 				default:
 					reject(URLSessionError.unexpectedResponse)
 				}

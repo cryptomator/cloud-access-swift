@@ -50,7 +50,7 @@ public protocol CloudProvider {
 	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList>
 
 	/**
-	 Download a file.
+	 Downloads a file.
 
 	 This method supports implicit progress composition.
 
@@ -69,7 +69,7 @@ public protocol CloudProvider {
 	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void>
 
 	/**
-	 Upload a file.
+	 Uploads a file.
 
 	 This method supports implicit progress composition.
 
@@ -81,8 +81,8 @@ public protocol CloudProvider {
 	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
-	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` and `!replaceExisting`.
-	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
+	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` with `!replaceExisting`.
+	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or the cloud provider finds a folder instead of a file at `remoteURL` with `replaceExisting`.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
@@ -91,7 +91,7 @@ public protocol CloudProvider {
 	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata>
 
 	/**
-	 Create a folder.
+	 Creates a folder.
 
 	 - Parameter remoteURL: The remote URL of the folder to create.
 	 - Precondition: `remoteURL` must be a file URL.
@@ -106,7 +106,7 @@ public protocol CloudProvider {
 	func createFolder(at remoteURL: URL) -> Promise<Void>
 
 	/**
-	 Recursively delete a file or folder.
+	 Recursively deletes a file or folder.
 
 	 - Parameter remoteURL: The remote URL of the file or folder to delete.
 	 - Precondition: `remoteURL` must be a file URL.
@@ -119,7 +119,7 @@ public protocol CloudProvider {
 	func deleteItem(at remoteURL: URL) -> Promise<Void>
 
 	/**
-	 Move a file or folder to a different location.
+	 Moves a file or folder to a different location.
 
 	 - Parameter oldRemoteURL: The remote URL of the file or folder to be moved.
 	 - Parameter newRemoteURL: The remote URL of the desired destination.

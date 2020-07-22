@@ -25,10 +25,10 @@ extension CachedEntry: PersistableRecord {
 	}
 }
 
-internal class DirectoryIdCache {
+class DirectoryIdCache {
 	private let inMemoryDB: DatabaseQueue
 
-	public init() throws {
+	init() throws {
 		self.inMemoryDB = DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
@@ -39,7 +39,7 @@ internal class DirectoryIdCache {
 		}
 	}
 
-	public func get(_ cleartextURL: URL, onMiss: @escaping (_ cleartextURL: URL, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
+	func get(_ cleartextURL: URL, onMiss: @escaping (_ cleartextURL: URL, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
 		do {
 			if let cached = try getCached(cleartextURL) {
 				return Promise(cached)
@@ -56,19 +56,21 @@ internal class DirectoryIdCache {
 		}
 	}
 
-	public func invalidate(_ cleartextURL: URL) throws {
+	func invalidate(_ cleartextURL: URL) throws {
 		try inMemoryDB.write { db in
 			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE \(CachedEntry.cleartextURLKey) LIKE ?", arguments: ["\(cleartextURL.absoluteString)%"])
 		}
 	}
 
-	internal func addToCache(_ cleartextURL: URL, dirId: Data) throws {
+	// MARK: - Internal
+
+	func addToCache(_ cleartextURL: URL, dirId: Data) throws {
 		try inMemoryDB.write { db in
 			try CachedEntry(cleartextURL: cleartextURL, dirId: dirId).save(db)
 		}
 	}
 
-	internal func getCached(_ cleartextURL: URL) throws -> Data? {
+	func getCached(_ cleartextURL: URL) throws -> Data? {
 		let entry: CachedEntry? = try inMemoryDB.read { db in
 			return try CachedEntry.fetchOne(db, key: cleartextURL)
 		}

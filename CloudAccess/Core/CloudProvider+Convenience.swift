@@ -13,7 +13,7 @@ public extension CloudProvider {
 	/**
 	 Convenience wrapper for `fetchItemList()` that returns a complete item list.
 	 */
-	internal func fetchItemListExhaustively(forFolderAt cleartextURL: URL, appendTo itemList: CloudItemList = CloudItemList(items: [])) -> Promise<CloudItemList> {
+	func fetchItemListExhaustively(forFolderAt cleartextURL: URL, appendTo itemList: CloudItemList = CloudItemList(items: [])) -> Promise<CloudItemList> {
 		return fetchItemList(forFolderAt: cleartextURL, withPageToken: itemList.nextPageToken).then { nextItems -> Promise<CloudItemList> in
 			let combinedList = itemList + nextItems
 			if combinedList.nextPageToken == nil {
@@ -29,9 +29,10 @@ public extension CloudProvider {
 	 */
 	func deleteItemIfExists(at remoteURL: URL) -> Promise<Void> {
 		return deleteItem(at: remoteURL).recover { error -> Promise<Void> in
-			if case CloudProviderError.itemNotFound = error {
+			switch error {
+			case CloudProviderError.itemNotFound:
 				return Promise(())
-			} else {
+			default:
 				return Promise(error)
 			}
 		}
@@ -44,9 +45,10 @@ public extension CloudProvider {
 		return fetchItemMetadata(at: remoteURL).then { _ in
 			return Promise(true)
 		}.recover { error -> Promise<Bool> in
-			if case CloudProviderError.itemNotFound = error {
+			switch error {
+			case CloudProviderError.itemNotFound:
 				return Promise(false)
-			} else {
+			default:
 				return Promise(error)
 			}
 		}

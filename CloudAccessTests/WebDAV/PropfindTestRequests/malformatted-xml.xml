@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<d:multistatus xmlns:d="DAV:">
+	<d:response>
+		<d:href />/</d:href>
+		<d:propstat>
+			<d:status>HTTP/1.1 200 OK</d:status>
+			<d:prop>
+				<d:getlastmodified>Thu, 18 May 2017 09:51:59 GMT</d:getlastmodified>
+				<d:getcontentlength>0</d:getcontentlength>
+				<d:resourcetype>
+					<d:collection />
+				</d:resourcetype>
+			</d:prop>
+		</d:propstat>
+	</d:response>
+</d:multistatus>

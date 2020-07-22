@@ -10,7 +10,7 @@ import CryptomatorCryptoLib
 import Foundation
 import Promises
 
-enum VaultFormat7Error: Error {
+public enum VaultFormat7Error: Error {
 	case encounteredUnrelatedFile
 }
 
@@ -136,24 +136,26 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	public func fetchItemMetadata(at cleartextURL: URL) -> Promise<CloudItemMetadata> {
 		precondition(cleartextURL.isFileURL)
-		return getCiphertextURL(cleartextURL).then { ciphertextURL in
+		let cleartextParentURL = cleartextURL.deletingLastPathComponent()
+		let parentDirIdPromise = getDirId(cleartextParentURL)
+		let ciphertextMetadataPromise = parentDirIdPromise.then { parentDirId in
+			return try self.getCiphertextURL(cleartextURL, parentDirId: parentDirId)
+		}.then { ciphertextURL in
 			return self.delegate.fetchItemMetadata(at: ciphertextURL)
-		}.then { ciphertextMetadata in
-			return self.getCleartextMetadata(ciphertextMetadata, cleartextParentURL: cleartextURL.deletingLastPathComponent())
+		}
+		return all(ciphertextMetadataPromise, parentDirIdPromise).then { ciphertextMetadata, parentDirId in
+			try self.toCleartextMetadata(ciphertextMetadata, cleartextParentURL: cleartextURL.deletingLastPathComponent(), parentDirId: parentDirId)
 		}
 	}
 
 	public func fetchItemList(forFolderAt cleartextURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		precondition(cleartextURL.isFileURL)
 		precondition(cleartextURL.hasDirectoryPath)
-		return getDirURL(cleartextURL).then { dirURL in
+		let ciphertextListPromise = getDirURL(cleartextURL).then { dirURL in
 			return self.delegate.fetchItemList(forFolderAt: dirURL, withPageToken: pageToken)
-		}.then { itemList -> Promise<CloudItemList> in
-			let cleartextItemPromises = itemList.items.map { self.getCleartextMetadata($0, cleartextParentURL: cleartextURL) }
-			return any(cleartextItemPromises).then { maybeCleartextItems -> CloudItemList in
-				let cleartextItems = maybeCleartextItems.filter { $0.value != nil }.map { $0.value! }
-				return CloudItemList(items: cleartextItems, nextPageToken: itemList.nextPageToken)
-			}
+		}
+		return all(ciphertextListPromise, getDirId(cleartextURL)).then { ciphertextList, parentDirId in
+			try self.toCleartextList(ciphertextList, cleartextParentURL: cleartextURL, parentDirId: parentDirId)
 		}
 	}
 
@@ -184,7 +186,11 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		precondition(!remoteCleartextURL.hasDirectoryPath)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let localCiphertextURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return getCiphertextURL(remoteCleartextURL).then { remoteCiphertextURL in
+		let remoteCleartextParentURL = remoteCleartextURL.deletingLastPathComponent()
+		let parentDirIdPromise = getDirId(remoteCleartextParentURL)
+		let uploadFilePromise = parentDirIdPromise.then { parentDirId in
+			return try self.getCiphertextURL(remoteCleartextURL, parentDirId: parentDirId)
+		}.then { remoteCiphertextURL -> Promise<CloudItemMetadata> in
 			overallProgress.becomeCurrent(withPendingUnitCount: 1)
 			try self.cryptor.encryptContent(from: localCleartextURL, to: localCiphertextURL)
 			overallProgress.resignCurrent()
@@ -192,10 +198,11 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let uploadFilePromise = self.delegate.uploadFile(from: localCiphertextURL, to: remoteCiphertextURL, replaceExisting: replaceExisting)
 			overallProgress.resignCurrent()
 			return uploadFilePromise
-		}.then { ciphertextMetadata in
-			return self.getCleartextMetadata(ciphertextMetadata, cleartextParentURL: remoteCleartextURL.deletingLastPathComponent())
 		}.always {
 			try? FileManager.default.removeItem(at: localCiphertextURL)
+		}
+		return all(uploadFilePromise, parentDirIdPromise).then { ciphertextMetadata, parentDirId in
+			return try self.toCleartextMetadata(ciphertextMetadata, cleartextParentURL: remoteCleartextURL.deletingLastPathComponent(), parentDirId: parentDirId)
 		}
 	}
 
@@ -221,9 +228,10 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			let parentDirURL = dirURL.deletingLastPathComponent()
 			return self.delegate.createFolder(at: parentDirURL)
 		}.recover { error -> Promise<Void> in
-			if case CloudProviderError.itemAlreadyExists = error {
+			switch error {
+			case CloudProviderError.itemAlreadyExists:
 				return Promise(())
-			} else {
+			default:
 				return Promise(error)
 			}
 		}.then { () -> Promise<Void> in
@@ -290,34 +298,37 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	private func getCiphertextURL(_ cleartextURL: URL) -> Promise<URL> {
-		let cleartextParent = cleartextURL.deletingLastPathComponent()
-		return getDirId(cleartextParent).then { parentDirId in
+		let cleartextParentURL = cleartextURL.deletingLastPathComponent()
+		return getDirId(cleartextParentURL).then { parentDirId in
 			return try self.getCiphertextURL(cleartextURL, parentDirId: parentDirId)
 		}
 	}
 
 	// MARK: - Decryption
 
-	private func getCleartextMetadata(_ ciphertextMetadata: CloudItemMetadata, cleartextParentURL: URL) -> Promise<CloudItemMetadata> {
-		getDirId(cleartextParentURL).then { parentDirId -> CloudItemMetadata in
-			guard String(ciphertextMetadata.name.suffix(4)) == ".c9r" else {
-				throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
-			}
-			let ciphertextBaseName = String(ciphertextMetadata.name.prefix(ciphertextMetadata.name.count - 4))
-			let cleartextName = try self.cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)
-			let cleartextURL = cleartextParentURL.appendingPathComponent(cleartextName, isDirectory: ciphertextMetadata.itemType == .folder)
-			let cleartextSize = try { () -> Int? in
-				guard let ciphertextSize = ciphertextMetadata.size else {
-					return nil
-				}
-				if ciphertextMetadata.itemType == .file {
-					return try self.cryptor.calculateCleartextSize(ciphertextSize)
-				} else {
-					return ciphertextSize
-				}
-			}()
-			return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
+	private func toCleartextMetadata(_ ciphertextMetadata: CloudItemMetadata, cleartextParentURL: URL, parentDirId: Data) throws -> CloudItemMetadata {
+		guard String(ciphertextMetadata.name.suffix(4)) == ".c9r" else {
+			throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
 		}
+		let ciphertextBaseName = String(ciphertextMetadata.name.dropLast(4))
+		let cleartextName = try cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)
+		let cleartextURL = cleartextParentURL.appendingPathComponent(cleartextName, isDirectory: ciphertextMetadata.itemType == .folder)
+		let cleartextSize = try { () -> Int? in
+			guard let ciphertextSize = ciphertextMetadata.size else {
+				return nil
+			}
+			if ciphertextMetadata.itemType == .file {
+				return try self.cryptor.calculateCleartextSize(ciphertextSize)
+			} else {
+				return ciphertextSize
+			}
+		}()
+		return CloudItemMetadata(name: cleartextName, remoteURL: cleartextURL, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
+	}
+
+	private func toCleartextList(_ ciphertextList: CloudItemList, cleartextParentURL: URL, parentDirId: Data) throws -> CloudItemList {
+		let cleartextItems = ciphertextList.items.compactMap { try? self.toCleartextMetadata($0, cleartextParentURL: cleartextParentURL, parentDirId: parentDirId) }
+		return CloudItemList(items: cleartextItems, nextPageToken: ciphertextList.nextPageToken)
 	}
 
 	// MARK: - Convenience

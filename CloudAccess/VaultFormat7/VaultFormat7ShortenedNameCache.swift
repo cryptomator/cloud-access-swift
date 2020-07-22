@@ -88,7 +88,7 @@ private extension URL {
 	}
 }
 
-internal class VaultFormat7ShortenedNameCache {
+class VaultFormat7ShortenedNameCache {
 	static let threshold = 220
 	static let c9sSuffix = ".c9s"
 
@@ -116,7 +116,7 @@ internal class VaultFormat7ShortenedNameCache {
 	 - Parameter originalURL: The unshortened URL.
 	 - Returns: A `ShorteningResult` object that is either based on the `originalURL` (if no shortening is required) or a shortened URL.
 	 */
-	public func getShortenedURL(_ originalURL: URL) -> ShorteningResult {
+	func getShortenedURL(_ originalURL: URL) -> ShorteningResult {
 		if originalURL.pathComponents.count <= ciphertextNameCompIdx {
 			return ShorteningResult(url: originalURL, c9sDir: nil)
 		}
@@ -141,7 +141,7 @@ internal class VaultFormat7ShortenedNameCache {
 	 - Parameter c9sDirURL: The URL of a `.c9s` directory, whose original name should be loaded.
 	 - Returns: Either `shortenedURL` if no shortening was applied or the original ("inflated") URL.
 	 */
-	public func getOriginalURL(_ shortenedURL: URL, nameC9SLoader loadNameC9S: (_ c9sDirURL: URL) -> Promise<Data>) -> Promise<URL> {
+	func getOriginalURL(_ shortenedURL: URL, nameC9SLoader loadNameC9S: (_ c9sDirURL: URL) -> Promise<Data>) -> Promise<URL> {
 		if shortenedURL.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
 			let cutOff = shortenedURL.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirURL = shortenedURL.deletingLastPathComponents(cutOff)
@@ -165,9 +165,7 @@ internal class VaultFormat7ShortenedNameCache {
 		}
 	}
 
-	internal func replaceCiphertextFileNameInURL(_ url: URL, with replacement: String) -> URL {
-		return url.replacingPathComponent(atIndex: ciphertextNameCompIdx, with: replacement, isDirectory: url.hasDirectoryPath)
-	}
+	// MARK: - Internal
 
 	private func deflateFileName(_ inflatedName: String) -> String {
 		let bytes = [UInt8](inflatedName.precomposedStringWithCanonicalMapping.utf8)
@@ -176,13 +174,17 @@ internal class VaultFormat7ShortenedNameCache {
 		return Data(digest).base64UrlEncodedString()
 	}
 
-	internal func addToCache(_ shortenedName: String, originalName: String) throws {
+	func replaceCiphertextFileNameInURL(_ url: URL, with replacement: String) -> URL {
+		return url.replacingPathComponent(atIndex: ciphertextNameCompIdx, with: replacement, isDirectory: url.hasDirectoryPath)
+	}
+
+	func addToCache(_ shortenedName: String, originalName: String) throws {
 		try inMemoryDB.write { db in
 			try CachedEntry(shortenedName: shortenedName, originalName: originalName).save(db)
 		}
 	}
 
-	internal func getCached(_ shortenedName: String) throws -> String? {
+	func getCached(_ shortenedName: String) throws -> String? {
 		let entry: CachedEntry? = try inMemoryDB.read { db in
 			return try CachedEntry.fetchOne(db, key: shortenedName)
 		}

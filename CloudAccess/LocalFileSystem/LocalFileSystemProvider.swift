@@ -80,11 +80,11 @@ public class LocalFileSystemProvider: CloudProvider {
 	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken _: String?) -> Promise<CloudItemList> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		guard remoteURL.startAccessingSecurityScopedResource() else {
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			remoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		var contents: [URL]?
 		var err: NSError?
@@ -121,12 +121,12 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!remoteURL.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		guard localURL.startAccessingSecurityScopedResource(), remoteURL.startAccessingSecurityScopedResource() else {
+
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			localURL.stopAccessingSecurityScopedResource()
-			remoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		do {
 			guard try validateItemType(at: remoteURL) else {
@@ -167,12 +167,11 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(remoteURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!remoteURL.hasDirectoryPath)
-		guard localURL.startAccessingSecurityScopedResource(), remoteURL.startAccessingSecurityScopedResource() else {
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			localURL.stopAccessingSecurityScopedResource()
-			remoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		do {
 			guard try validateItemType(at: localURL) else {
@@ -238,11 +237,11 @@ public class LocalFileSystemProvider: CloudProvider {
 	public func createFolder(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		guard remoteURL.startAccessingSecurityScopedResource() else {
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			remoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		var err: NSError?
 		var providerErr: CloudProviderError?
@@ -272,11 +271,11 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
-		guard remoteURL.startAccessingSecurityScopedResource() else {
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			remoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		do {
 			guard try validateItemType(at: remoteURL) else {
@@ -314,12 +313,11 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(oldRemoteURL.isFileURL)
 		precondition(newRemoteURL.isFileURL)
 		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		guard oldRemoteURL.startAccessingSecurityScopedResource(), newRemoteURL.startAccessingSecurityScopedResource() else {
+		guard startURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
 		defer {
-			oldRemoteURL.stopAccessingSecurityScopedResource()
-			newRemoteURL.stopAccessingSecurityScopedResource()
+			startURL.stopAccessingSecurityScopedResource()
 		}
 		do {
 			guard try validateItemType(at: oldRemoteURL) else {

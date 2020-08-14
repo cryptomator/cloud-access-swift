@@ -245,6 +245,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		precondition(cleartextURL.isFileURL)
 		if cleartextURL.hasDirectoryPath {
 			// TODO: recover from error if `getDirId()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because it's probably a symlink)
+			// TODO: recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
 			return getDirId(cleartextURL).then { dirId in
 				return self.deleteCiphertextDir(dirId)
 			}.then {

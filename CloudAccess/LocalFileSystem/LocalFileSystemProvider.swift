@@ -9,10 +9,15 @@
 import Foundation
 import Promises
 
+public enum LocalFileSystemProviderError: Error {
+	case resolvingURLFailed
+	case invalidState
+}
+
 private extension FileManager {
 	func copyItemWithOverwrite(at srcURL: URL, to dstURL: URL) throws {
 		let tmpDstURL = dstURL.appendingPathExtension(UUID().uuidString)
-		try moveItem(at: dstURL, to: tmpDstURL)
+		try? moveItem(at: dstURL, to: tmpDstURL)
 		do {
 			try copyItem(at: srcURL, to: dstURL)
 		} catch {
@@ -30,53 +35,91 @@ private extension FileManager {
  Since the local file system is not actually a cloud, the naming might be confusing. Even though this library is dedicated to provide access to many cloud storage services, access to the local file system still might be useful.
  */
 public class LocalFileSystemProvider: CloudProvider {
-	let fileManager = FileManager()
+	private let fileManager = FileManager()
+	private let baseURL: URL
 
-	public init() {}
+	public init(baseURL: URL) {
+		self.baseURL = baseURL
+	}
 
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
 		precondition(remoteURL.isFileURL)
-		let attributes: [FileAttributeKey: Any]
-		do {
-			attributes = try fileManager.attributesOfItem(atPath: remoteURL.path)
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch {
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<CloudItemMetadata>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(readingItemAt: url, options: .immediatelyAvailableMetadataOnly, error: &error) { url in
+			do {
+				let attributes = try fileManager.attributesOfItem(atPath: url.path)
+				let name = url.lastPathComponent
+				let size = attributes[FileAttributeKey.size] as? Int
+				let lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
+				let itemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
+				guard validateItemType(at: remoteURL, with: itemType) else {
+					promise = Promise(CloudProviderError.itemTypeMismatch)
+					return
+				}
+				promise = Promise(CloudItemMetadata(name: name, remoteURL: remoteURL, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch {
+				promise = Promise(error)
+			}
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
-		let name = remoteURL.lastPathComponent
-		let size = attributes[FileAttributeKey.size] as? Int
-		let lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
-		let itemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
-		guard validateItemType(at: remoteURL, with: itemType) else {
-			return Promise(CloudProviderError.itemTypeMismatch)
-		}
-		return Promise(CloudItemMetadata(name: name, remoteURL: remoteURL, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 	}
 
 	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken _: String?) -> Promise<CloudItemList> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		let contents: [URL]
-		do {
-			contents = try fileManager.contentsOfDirectory(at: remoteURL, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey], options: .skipsHiddenFiles)
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch CocoaError.fileReadUnknown {
-			return Promise(CloudProviderError.itemTypeMismatch)
-		} catch {
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<CloudItemList>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(readingItemAt: url, options: .immediatelyAvailableMetadataOnly, error: &error) { url in
+			do {
+				let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey], options: .skipsHiddenFiles)
+				let metadatas = contents.map { url -> CloudItemMetadata in
+					let name = url.lastPathComponent
+					let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+					let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+					let itemType = getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
+					return CloudItemMetadata(name: name, remoteURL: url, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+				}
+				promise = Promise(CloudItemList(items: metadatas, nextPageToken: nil))
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileReadUnknown {
+				promise = Promise(CloudProviderError.itemTypeMismatch)
+			} catch {
+				promise = Promise(error)
+			}
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
-		let metadatas = contents.map { url -> CloudItemMetadata in
-			let name = url.lastPathComponent
-			let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
-			let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-			let itemType = getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
-			return CloudItemMetadata(name: name, remoteURL: url, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-		}
-		return Promise(CloudItemList(items: metadatas, nextPageToken: nil))
 	}
 
 	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {
@@ -84,18 +127,37 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!remoteURL.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		do {
-			guard try validateItemType(at: remoteURL) else {
-				return Promise(CloudProviderError.itemTypeMismatch)
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<Void>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { url in
+			do {
+				guard try validateItemType(at: url) else {
+					promise = Promise(CloudProviderError.itemTypeMismatch)
+					return
+				}
+				try fileManager.copyItem(at: url, to: localURL)
+				promise = Promise(())
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileWriteFileExists {
+				promise = Promise(CloudProviderError.itemAlreadyExists)
+			} catch {
+				promise = Promise(error)
 			}
-			try fileManager.copyItem(at: remoteURL, to: localURL)
-			return Promise(())
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} catch {
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
 	}
 
@@ -104,61 +166,121 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(remoteURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!remoteURL.hasDirectoryPath)
-		do {
-			guard try validateItemType(at: localURL) else {
-				return Promise(CloudProviderError.itemTypeMismatch)
-			}
-			if replaceExisting {
-				guard try validateItemType(at: remoteURL) else {
-					return Promise(CloudProviderError.itemTypeMismatch)
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<CloudItemMetadata>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(writingItemAt: url, options: replaceExisting ? .forReplacing : [], error: &error) { url in
+			do {
+				guard try validateItemType(at: localURL) else {
+					promise = Promise(CloudProviderError.itemTypeMismatch)
+					return
 				}
-				try fileManager.copyItemWithOverwrite(at: localURL, to: remoteURL)
-			} else {
-				try fileManager.copyItem(at: localURL, to: remoteURL)
+				if replaceExisting {
+					do {
+						guard try validateItemType(at: url) else {
+							promise = Promise(CloudProviderError.itemTypeMismatch)
+							return
+						}
+					} catch CocoaError.fileReadNoSuchFile {
+						// no-op
+					}
+					try fileManager.copyItemWithOverwrite(at: localURL, to: url)
+				} else {
+					try fileManager.copyItem(at: localURL, to: url)
+				}
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileWriteFileExists {
+				promise = Promise(CloudProviderError.itemAlreadyExists)
+			} catch CocoaError.fileNoSuchFile {
+				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
+			} catch CocoaError.fileWriteOutOfSpace {
+				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch {
+				promise = Promise(error)
 			}
-			return fetchItemMetadata(at: remoteURL)
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} catch CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} catch CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} catch {
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return fetchItemMetadata(at: remoteURL)
 		}
 	}
 
 	public func createFolder(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
 		precondition(remoteURL.hasDirectoryPath)
-		do {
-			try fileManager.createDirectory(at: remoteURL, withIntermediateDirectories: false, attributes: nil)
-			return Promise(())
-		} catch CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} catch CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} catch CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} catch {
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<Void>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(writingItemAt: url, error: &error) { url in
+			do {
+				try fileManager.createDirectory(at: url, withIntermediateDirectories: false, attributes: nil)
+				promise = Promise(())
+			} catch CocoaError.fileWriteFileExists {
+				promise = Promise(CloudProviderError.itemAlreadyExists)
+			} catch CocoaError.fileNoSuchFile {
+				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
+			} catch CocoaError.fileWriteOutOfSpace {
+				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch {
+				promise = Promise(error)
+			}
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
 	}
 
 	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
 		precondition(remoteURL.isFileURL)
-		do {
-			guard try validateItemType(at: remoteURL) else {
-				return Promise(CloudProviderError.itemTypeMismatch)
+		guard let url = resolve(remoteURL) else {
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<Void>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &error) { url in
+			do {
+				guard try validateItemType(at: url) else {
+					promise = Promise(CloudProviderError.itemTypeMismatch)
+					return
+				}
+				try fileManager.removeItem(at: url)
+				promise = Promise(())
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch {
+				promise = Promise(error)
 			}
-			try fileManager.removeItem(at: remoteURL)
-			return Promise(())
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch {
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
 	}
 
@@ -166,26 +288,49 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(oldRemoteURL.isFileURL)
 		precondition(newRemoteURL.isFileURL)
 		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		do {
-			guard try validateItemType(at: oldRemoteURL) else {
-				return Promise(CloudProviderError.itemTypeMismatch)
+		guard let sourceURL = resolve(oldRemoteURL), let destinationURL = resolve(newRemoteURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		guard baseURL.startAccessingSecurityScopedResource() else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		defer { baseURL.stopAccessingSecurityScopedResource() }
+		var promise: Promise<Void>?
+		var error: NSError?
+		NSFileCoordinator().coordinate(writingItemAt: sourceURL, options: .forMoving, error: &error) { sourceURL in
+			do {
+				guard try validateItemType(at: sourceURL) else {
+					promise = Promise(CloudProviderError.itemTypeMismatch)
+					return
+				}
+				try fileManager.moveItem(at: sourceURL, to: destinationURL)
+				promise = Promise(())
+			} catch CocoaError.fileReadNoSuchFile {
+				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileWriteFileExists {
+				promise = Promise(CloudProviderError.itemAlreadyExists)
+			} catch CocoaError.fileNoSuchFile {
+				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
+			} catch CocoaError.fileWriteOutOfSpace {
+				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch {
+				promise = Promise(error)
 			}
-			try fileManager.moveItem(at: oldRemoteURL, to: newRemoteURL)
-			return Promise(())
-		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch CocoaError.fileWriteFileExists {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		} catch CocoaError.fileNoSuchFile {
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		} catch CocoaError.fileWriteOutOfSpace {
-			return Promise(CloudProviderError.quotaInsufficient)
-		} catch {
+		}
+		if let error = error {
 			return Promise(error)
+		} else if let promise = promise {
+			return promise
+		} else {
+			return Promise(LocalFileSystemProviderError.invalidState)
 		}
 	}
 
 	// MARK: - Internal
+
+	private func resolve(_ remoteURL: URL) -> URL? {
+		return baseURL.appendingPathComponent(remoteURL.path, isDirectory: remoteURL.hasDirectoryPath)
+	}
 
 	private func getItemType(at localURL: URL) throws -> CloudItemType {
 		let attributes = try fileManager.attributesOfItem(atPath: localURL.path)

@@ -12,8 +12,6 @@ import Promises
 /**
  Protocol for a cloud provider.
 
- If your cloud provider requires authentication, see `CloudAuthentication`. In that case, the best practice would be to pass the specific authentication object as a parameter in `init()`.
-
  The `remoteURL`s of the methods are expected to be file URLs and not the actual `URL` that might be used internally by the cloud provider implementation. Even though the `remoteURL`s are not actual file URLs, it's more convenient to instantiate them with `URL(fileURLWithPath:)`. E.g., you can expect the path `/` to be the root of the cloud provider. The implementation has to consistently resolve the path if needed.
  */
 public protocol CloudProvider {

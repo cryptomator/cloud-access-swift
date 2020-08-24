@@ -9,17 +9,9 @@
 import Foundation
 
 public struct CloudItemMetadata {
-	public let name: String
-	public let remoteURL: URL
-	public let itemType: CloudItemType
-	public let lastModifiedDate: Date?
-	public let size: Int?
-
-	public init(name: String, remoteURL: URL, itemType: CloudItemType, lastModifiedDate: Date?, size: Int?) {
-		self.name = name
-		self.remoteURL = remoteURL
-		self.itemType = itemType
-		self.lastModifiedDate = lastModifiedDate
-		self.size = size
-	}
+	let name: String
+	let remoteURL: URL
+	let itemType: CloudItemType
+	let lastModifiedDate: Date?
+	let size: Int?
 }

@@ -6,9 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CloudAccess
 import Foundation
 import Promises
+@testable import CloudAccess
 
 /**
  ```

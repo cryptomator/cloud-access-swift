@@ -9,8 +9,8 @@
 import Foundation
 
 public struct CloudItemList {
-	public let items: [CloudItemMetadata]
-	public let nextPageToken: String?
+	let items: [CloudItemMetadata]
+	let nextPageToken: String?
 
 	public init(items: [CloudItemMetadata], nextPageToken: String? = nil) {
 		self.items = items

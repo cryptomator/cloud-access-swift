@@ -62,7 +62,8 @@ public struct CloudPath: Equatable {
 	}
 
 	public var pathComponents: [String] {
-		let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+		let sanitizedPath = path.replacingOccurrences(of: "/+", with: "/", options: .regularExpression)
+		let trimmedPath = sanitizedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
 		if trimmedPath.isEmpty, isAbsolute {
 			return ["/"]
 		}

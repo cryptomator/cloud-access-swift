@@ -28,6 +28,32 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual("/../../foo/baz", cloudPath.path)
 	}
 
+	func testPathComponents() {
+		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar/").pathComponents)
+		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar").pathComponents)
+		XCTAssertEqual(["/", "foo"], CloudPath("/foo/").pathComponents)
+		XCTAssertEqual(["/", "foo"], CloudPath("/foo").pathComponents)
+		XCTAssertEqual(["foo"], CloudPath("foo/").pathComponents)
+		XCTAssertEqual(["foo"], CloudPath("foo").pathComponents)
+
+		XCTAssertEqual(["/", "foo"], CloudPath("///foo///").pathComponents)
+		XCTAssertEqual(["foo"], CloudPath("foo///").pathComponents)
+		XCTAssertEqual(["/", "foo"], CloudPath("///foo").pathComponents)
+		XCTAssertEqual(["foo", "bar"], CloudPath("foo///bar").pathComponents)
+
+		XCTAssertEqual(["/", ".."], CloudPath("/../").pathComponents)
+		XCTAssertEqual(["/", ".."], CloudPath("/..").pathComponents)
+		XCTAssertEqual([".."], CloudPath("../").pathComponents)
+		XCTAssertEqual([".."], CloudPath("..").pathComponents)
+		XCTAssertEqual(["/", "."], CloudPath("/./").pathComponents)
+		XCTAssertEqual(["/", "."], CloudPath("/.").pathComponents)
+		XCTAssertEqual(["."], CloudPath("./").pathComponents)
+		XCTAssertEqual(["."], CloudPath(".").pathComponents)
+
+		XCTAssertEqual(["/"], CloudPath("/").pathComponents)
+		XCTAssertEqual([""], CloudPath("").pathComponents)
+	}
+
 	func testLastPathComponent() {
 		XCTAssertEqual("bar", CloudPath("/foo/bar/").lastPathComponent)
 		XCTAssertEqual("bar", CloudPath("/foo/bar").lastPathComponent)

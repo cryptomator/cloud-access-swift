@@ -45,22 +45,32 @@ private extension Array {
 
 private extension CloudPath {
 	func lastPathComponents(_ count: Int) -> [String] {
-		let components = path.components(separatedBy: "/")
-		return Array(components[(components.count - count)...])
+		precondition(count > 0)
+		var lastPathComponents: [String] = []
+		var cloudPath = self
+		for _ in 1 ... count {
+			lastPathComponents.append(cloudPath.lastPathComponent)
+			cloudPath = cloudPath.deletingLastPathComponent()
+		}
+		return lastPathComponents
 	}
 
-	func appendingPathComponents(pathComponents: [String]) -> CloudPath {
-		let components = path.components(separatedBy: "/") + pathComponents
-		let path = components.joined(separator: "/")
-		return CloudPath(path)
+	func appendingPathComponents(_ pathComponents: [String]) -> CloudPath {
+		if pathComponents.count == 1 {
+			return appendingPathComponent(pathComponents[0])
+		} else {
+			let remainingComponents = Array(pathComponents[1...])
+			return appendingPathComponent(pathComponents[0]).appendingPathComponents(remainingComponents)
+		}
 	}
 
 	func deletingLastPathComponents(_ count: Int) -> CloudPath {
 		precondition(count >= 0)
-		var components = path.components(separatedBy: "/")
-		components.removeLast(count)
-		let path = components.joined(separator: "/")
-		return CloudPath(path)
+		if count == 0 {
+			return self
+		} else {
+			return deletingLastPathComponents(count - 1).deletingLastPathComponent()
+		}
 	}
 
 	func replacingPathComponent(at index: Int, with replacement: String) -> CloudPath {
@@ -68,16 +78,19 @@ private extension CloudPath {
 		precondition(index < components.count)
 		let tailSize = components.count - index
 		assert(tailSize > 0)
-		var tail = lastPathComponents(tailSize)
+		var tail = Array(components[(components.count - tailSize)...])
 		tail[0] = replacement
-		let prefix = deletingLastPathComponents(tailSize)
-		return prefix.appendingPathComponents(pathComponents: tail)
+		let prefix = Array(components[..<(components.count - tailSize)])
+		return CloudPath((prefix + tail).joined(separator: "/"))
 	}
 
 	func trimmingToPathComponent(at index: Int) -> CloudPath {
 		let components = path.components(separatedBy: "/")
+		precondition(index < components.count)
 		let toBeRemoved = components.count - components.index(after: index)
-		return deletingLastPathComponents(toBeRemoved)
+		assert(toBeRemoved >= 0)
+		let remainingComponents = Array(components[..<(components.count - toBeRemoved)])
+		return CloudPath(remainingComponents.joined(separator: "/"))
 	}
 
 	func directoryPath() -> CloudPath {

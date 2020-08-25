@@ -9,8 +9,8 @@
 import Foundation
 
 public struct WebDAVCredential {
-	let baseURL: URL
-	let username: String
-	let password: String
-	let allowedCertificate: Data?
+	public let baseURL: URL
+	public let username: String
+	public let password: String
+	public let allowedCertificate: Data?
 }

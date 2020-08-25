@@ -14,12 +14,6 @@ public enum TLSCertificateValidatorError: Error {
 	case validationFailed
 }
 
-public struct TestedCertificate {
-	let data: Data
-	let isTrusted: Bool
-	let fingerprint: String
-}
-
 private extension Sequence where Element == UInt8 {
 	func toHexString(separator: String = "") -> String {
 		return map { String(format: "%02lx", $0) }.joined(separator: separator)
@@ -27,7 +21,7 @@ private extension Sequence where Element == UInt8 {
 }
 
 private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
-	var testedCertificate: TestedCertificate?
+	var testedCertificate: TLSCertificate?
 
 	// MARK: - URLSessionDelegate
 
@@ -36,7 +30,7 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 			var trustResultType: SecTrustResultType = .invalid
 			let isTrusted = SecTrustEvaluate(trust, &trustResultType) == errSecSuccess
 			let fingerprint = calculateFingerprint(from: certificate)
-			testedCertificate = TestedCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
+			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
 		}
 		completionHandler(.cancelAuthenticationChallenge, nil)
 	}
@@ -82,7 +76,7 @@ public class TLSCertificateValidator {
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 	}
 
-	public func validate() -> Promise<TestedCertificate> {
+	public func validate() -> Promise<TLSCertificate> {
 		var request = URLRequest(url: baseURL)
 		request.httpMethod = "GET"
 		return urlSession.performDownloadTask(with: request).then { _, _ in

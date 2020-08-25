@@ -14,7 +14,7 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testFetchItemListExhaustively() {
 		let expectation = XCTestExpectation(description: "fetchItemListExhaustively")
 		let provider = ConvenienceCloudProviderMock()
-		provider.fetchItemListExhaustively(forFolderAt: URL(fileURLWithPath: "/", isDirectory: true)).then { cloudItemList in
+		provider.fetchItemListExhaustively(forFolderAt: CloudPath("/")).then { cloudItemList in
 			XCTAssertEqual(6, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "a" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "b" }))
@@ -32,9 +32,9 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 
 	func testDeleteItemIfExistsFulfillsForMissingItem() {
 		let expectation = XCTestExpectation(description: "deleteItemIfExists fulfills if the item does not exist in the cloud")
-		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFolder/", isDirectory: true)
+		let nonExistentItemPath = CloudPath("/nonExistentFolder/")
 		let provider = ConvenienceCloudProviderMock()
-		provider.deleteItemIfExists(at: nonExistentItemURL).catch { error in
+		provider.deleteItemIfExists(at: nonExistentItemPath).catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
 			expectation.fulfill()
@@ -44,9 +44,9 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 
 	func testDeleteItemIfExistsFulfillsForExistingItem() {
 		let expectation = XCTestExpectation(description: "deleteItemIfExists fulfills if the item does exist in the cloud")
-		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
+		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud/")
 		let provider = ConvenienceCloudProviderMock()
-		provider.deleteItemIfExists(at: existingItemURL).catch { error in
+		provider.deleteItemIfExists(at: existingItemPath).catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
 			expectation.fulfill()
@@ -56,9 +56,9 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 
 	func testDeleteItemIfExistsRejectsWithErrorOtherThanItemNotFound() {
 		let expectation = XCTestExpectation(description: "deleteItemIfExists rejects if deleteItem rejects with an error other than CloudProviderError.itemNotFound")
-		let itemURL = URL(fileURLWithPath: "/AAAAA/BBBB/", isDirectory: true)
+		let itemPath = CloudPath("/AAAAA/BBBB/")
 		let provider = ConvenienceCloudProviderMock()
-		provider.deleteItemIfExists(at: itemURL).then {
+		provider.deleteItemIfExists(at: itemPath).then {
 			XCTFail("Promise fulfilled although we expect an CloudProviderError.noInternetConnection")
 		}.catch { error in
 			guard case CloudProviderError.noInternetConnection = error else {
@@ -74,8 +74,8 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testCheckForItemExistenceFulfillsForExistingItem() {
 		let expectation = XCTestExpectation(description: "checkForItemExistence fulfills with true if the item exists")
 		let provider = ConvenienceCloudProviderMock()
-		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
-		provider.checkForItemExistence(at: existingItemURL).then { itemExists in
+		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud/")
+		provider.checkForItemExistence(at: existingItemPath).then { itemExists in
 			XCTAssertTrue(itemExists)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -88,8 +88,8 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testCheckForItemExistenceFulfillsForMissingItem() {
 		let expectation = XCTestExpectation(description: "checkForItemExistence fulfills with false if the item does not exist")
 		let provider = ConvenienceCloudProviderMock()
-		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFile", isDirectory: false)
-		provider.checkForItemExistence(at: nonExistentItemURL).then { itemExists in
+		let nonExistentItemPath = CloudPath("/nonExistentFile")
+		provider.checkForItemExistence(at: nonExistentItemPath).then { itemExists in
 			XCTAssertFalse(itemExists)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -102,8 +102,8 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testCheckForItemExistenceRejectsWithErrorOtherThanItemNotFound() {
 		let expectation = XCTestExpectation(description: "checkForItemExistence rejects if fetchItemMetadata rejects with an error other than CloudProviderError.itemNotFound")
 		let provider = ConvenienceCloudProviderMock()
-		let itemURL = URL(fileURLWithPath: "/AAAAA/BBBB/", isDirectory: true)
-		provider.checkForItemExistence(at: itemURL).then { _ in
+		let itemPath = CloudPath("/AAAAA/BBBB/")
+		provider.checkForItemExistence(at: itemPath).then { _ in
 			XCTFail("Promise fulfilled although we expect an CloudProviderError.noInternetConnection")
 		}.catch { error in
 			guard case CloudProviderError.noInternetConnection = error else {
@@ -120,33 +120,33 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 private class ConvenienceCloudProviderMock: CloudProvider {
 	let pages = [
 		"0": [
-			CloudItemMetadata(name: "a", remoteURL: URL(fileURLWithPath: "/a", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "b", remoteURL: URL(fileURLWithPath: "/b", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "a", cloudPath: CloudPath("/a"), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "b", cloudPath: CloudPath("/b"), itemType: .file, lastModifiedDate: nil, size: nil)
 		],
 		"1": [
-			CloudItemMetadata(name: "c", remoteURL: URL(fileURLWithPath: "/c", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "c", cloudPath: CloudPath("/c"), itemType: .file, lastModifiedDate: nil, size: nil)
 		],
 		"2": [
-			CloudItemMetadata(name: "d", remoteURL: URL(fileURLWithPath: "/d", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "e", remoteURL: URL(fileURLWithPath: "/e", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "f", remoteURL: URL(fileURLWithPath: "/f", isDirectory: false), itemType: .file, lastModifiedDate: nil, size: nil)
+			CloudItemMetadata(name: "d", cloudPath: CloudPath("/d"), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "e", cloudPath: CloudPath("/e"), itemType: .file, lastModifiedDate: nil, size: nil),
+			CloudItemMetadata(name: "f", cloudPath: CloudPath("/f"), itemType: .file, lastModifiedDate: nil, size: nil)
 		]
 	]
 
-	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
-		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFile", isDirectory: false)
-		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
-		switch remoteURL {
-		case nonExistentItemURL:
+	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		let nonExistentItemPath = CloudPath("/nonExistentFile")
+		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud/")
+		switch cloudPath {
+		case nonExistentItemPath:
 			return Promise(CloudProviderError.itemNotFound)
-		case existingItemURL:
-			return Promise(CloudItemMetadata(name: "thisFolderExistsInTheCloud", remoteURL: existingItemURL, itemType: .folder, lastModifiedDate: nil, size: nil))
+		case existingItemPath:
+			return Promise(CloudItemMetadata(name: "thisFolderExistsInTheCloud", cloudPath: existingItemPath, itemType: .folder, lastModifiedDate: nil, size: nil))
 		default:
 			return Promise(CloudProviderError.noInternetConnection)
 		}
 	}
 
-	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		switch pageToken {
 		case nil:
 			return Promise(CloudItemList(items: pages["0"]!, nextPageToken: "1"))
@@ -159,32 +159,32 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		}
 	}
 
-	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func createFolder(at remoteURL: URL) -> Promise<Void> {
+	func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 
-	func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		let nonExistentItemURL = URL(fileURLWithPath: "/nonExistentFolder/", isDirectory: true)
-		let existingItemURL = URL(fileURLWithPath: "/thisFolderExistsInTheCloud/", isDirectory: true)
-		switch remoteURL {
-		case nonExistentItemURL:
+	func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+		let nonExistentItemPath = CloudPath("/nonExistentFolder/")
+		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud/")
+		switch cloudPath {
+		case nonExistentItemPath:
 			return Promise(CloudProviderError.itemNotFound)
-		case existingItemURL:
+		case existingItemPath:
 			return Promise(())
 		default:
 			return Promise(CloudProviderError.noInternetConnection)
 		}
 	}
 
-	func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
+	func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 }

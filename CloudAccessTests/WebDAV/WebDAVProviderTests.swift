@@ -40,10 +40,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.fetchItemMetadata(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then { metadata in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { metadata in
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual("About.txt", metadata.name)
-			XCTAssertEqual("/Documents/About.txt", metadata.remoteURL.path)
+			XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
@@ -63,10 +63,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
 
-		provider.fetchItemMetadata(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then { _ in
+		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { _ in
 			XCTFail("Fetching metdata of a non-existing item should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -85,10 +85,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.fetchItemMetadata(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: true)).then { _ in
+		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt/")).then { _ in
 			XCTFail("Fetching metadata of a folder that is actually a file should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -106,8 +106,8 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.fetchItemList(forFolderAt: URL(fileURLWithPath: "/", isDirectory: true), withPageToken: nil).then { itemList in
-			XCTAssertTrue(self.client.propfindRequests["/"] == .one)
+		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in
+			XCTAssertTrue(self.client.propfindRequests["."] == .one)
 			XCTAssertEqual(5, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Documents" }))
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Nextcloud Manual.pdf" }))
@@ -129,10 +129,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
 
-		provider.fetchItemList(forFolderAt: URL(fileURLWithPath: "/", isDirectory: true), withPageToken: nil).then { _ in
+		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a non-existing folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/"] == .one)
+			XCTAssertTrue(self.client.propfindRequests["."] == .one)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -151,10 +151,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.fetchItemList(forFolderAt: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: true), withPageToken: nil).then { _ in
+		provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt/"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a folder that is actually a file should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .one)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .one)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -178,9 +178,9 @@ class WebDAVProviderTests: XCTestCase {
 		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: getData, response: getResponse, error: nil))
 
-		provider.downloadFile(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: localURL).then {
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.getRequests.contains("/Documents/About.txt"))
+		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
 			let expectedData = try self.getTestData(forResource: "item-data", withExtension: "txt")
 			let actualData = try Data(contentsOf: localURL)
 			XCTAssertEqual(expectedData, actualData)
@@ -205,11 +205,11 @@ class WebDAVProviderTests: XCTestCase {
 		let getError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: getResponse, error: getError))
 
-		provider.downloadFile(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: localURL).then {
+		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading non-existing file should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.getRequests.contains("/Documents/About.txt"))
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -234,11 +234,11 @@ class WebDAVProviderTests: XCTestCase {
 		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: getData, response: getResponse, error: nil))
 
-		provider.downloadFile(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: localURL).then {
+		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading file to an existing resource should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.getRequests.contains("/Documents/About.txt"))
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -258,10 +258,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.downloadFile(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: localURL).then {
+		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual(0, self.client.getRequests.count)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
@@ -287,11 +287,11 @@ class WebDAVProviderTests: XCTestCase {
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: putData, response: putResponse, error: nil))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: false).then { metadata in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.putRequests.contains("/Documents/About.txt"))
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { metadata in
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			XCTAssertEqual("About.txt", metadata.name)
-			XCTAssertEqual("/Documents/About.txt", metadata.remoteURL.path)
+			XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
@@ -317,11 +317,11 @@ class WebDAVProviderTests: XCTestCase {
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: putData, response: putResponse, error: nil))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: true).then { metadata in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.putRequests.contains("/Documents/About.txt"))
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { metadata in
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			XCTAssertEqual("About.txt", metadata.name)
-			XCTAssertEqual("/Documents/About.txt", metadata.remoteURL.path)
+			XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
@@ -336,7 +336,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testUploadFileWithNotFoundError() throws {
 		let expectation = XCTestExpectation(description: "uploadFile with itemNotFound error")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: true).then { _ in
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { _ in
 			XCTFail("Uploading non-existing file should fail")
 		}.catch { error in
 			XCTAssertEqual(0, self.client.propfindRequests.count)
@@ -361,10 +361,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: false).then { _ in
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file to an existing item should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual(0, self.client.putRequests.count)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
@@ -389,11 +389,11 @@ class WebDAVProviderTests: XCTestCase {
 		let putError = POSIXError(.EISDIR)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: nil, error: putError))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: false).then { _ in
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.putRequests.contains("/Documents/About.txt"))
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -414,10 +414,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: true).then { _ in
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { _ in
 			XCTFail("Uploading and replacing file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual(0, self.client.putRequests.count)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
@@ -443,11 +443,11 @@ class WebDAVProviderTests: XCTestCase {
 		let putError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: putResponse, error: putError))
 
-		provider.uploadFile(from: localURL, to: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), replaceExisting: false).then { _ in
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file into a non-existing parent folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.putRequests.contains("/Documents/About.txt"))
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -465,8 +465,8 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: nil))
 
-		provider.createFolder(at: URL(fileURLWithPath: "/foo", isDirectory: true)).then {
-			XCTAssertTrue(self.client.mkcolRequests.contains("/foo"))
+		provider.createFolder(at: CloudPath("/foo/")).then {
+			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -483,10 +483,10 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: mkcolError))
 
-		provider.createFolder(at: URL(fileURLWithPath: "/foo", isDirectory: true)).then {
+		provider.createFolder(at: CloudPath("/foo/")).then {
 			XCTFail("Creating folder at an existing item should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.mkcolRequests.contains("/foo"))
+			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -505,10 +505,10 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: mkcolError))
 
-		provider.createFolder(at: URL(fileURLWithPath: "/foo", isDirectory: true)).then {
+		provider.createFolder(at: CloudPath("/foo/")).then {
 			XCTFail("Creating folder at a non-existing parent folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.mkcolRequests.contains("/foo"))
+			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -530,9 +530,9 @@ class WebDAVProviderTests: XCTestCase {
 		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: deleteResponse, error: nil))
 
-		provider.deleteItem(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then {
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.deleteRequests.contains("/Documents/About.txt"))
+		provider.deleteItem(at: CloudPath("/Documents/About.txt")).then {
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -553,11 +553,11 @@ class WebDAVProviderTests: XCTestCase {
 		let deleteError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: deleteResponse, error: deleteError))
 
-		provider.deleteItem(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then {
+		provider.deleteItem(at: CloudPath("/Documents/About.txt")).then {
 			XCTFail("Deleting non-existing item should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.deleteRequests.contains("/Documents/About.txt"))
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -576,10 +576,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.deleteItem(at: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false)).then {
+		provider.deleteItem(at: CloudPath("/Documents/About.txt")).then {
 			XCTFail("Deleting file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual(0, self.client.deleteRequests.count)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
@@ -602,9 +602,9 @@ class WebDAVProviderTests: XCTestCase {
 		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: nil))
 
-		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.moveRequests["/Documents/About.txt"] == "/Documents/Foobar.txt")
+		provider.moveItem(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -625,11 +625,11 @@ class WebDAVProviderTests: XCTestCase {
 		let moveError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: moveError))
 
-		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
+		provider.moveItem(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving non-existing item should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.moveRequests["/Documents/About.txt"] == "/Documents/Foobar.txt")
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -653,11 +653,11 @@ class WebDAVProviderTests: XCTestCase {
 		let moveError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: moveData, response: moveResponse, error: moveError))
 
-		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
+		provider.moveItem(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving item to an existing resource should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.moveRequests["/Documents/About.txt"] == "/Documents/Foobar.txt")
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -676,10 +676,10 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
 
-		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
+		provider.moveItem(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
 			XCTAssertEqual(0, self.client.moveRequests.count)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
@@ -703,11 +703,11 @@ class WebDAVProviderTests: XCTestCase {
 		let moveError = URLSessionErrorMock.expectedFailure
 		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: moveError))
 
-		provider.moveItem(from: URL(fileURLWithPath: "/Documents/About.txt", isDirectory: false), to: URL(fileURLWithPath: "/Documents/Foobar.txt", isDirectory: false)).then {
+		provider.moveItem(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving item to a non-existing parent folder should fail")
 		}.catch { error in
-			XCTAssertTrue(self.client.propfindRequests["/Documents/About.txt"] == .zero)
-			XCTAssertTrue(self.client.moveRequests["/Documents/About.txt"] == "/Documents/Foobar.txt")
+			XCTAssertTrue(self.client.propfindRequests["Documents/About.txt"] == .zero)
+			XCTAssertTrue(self.client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return

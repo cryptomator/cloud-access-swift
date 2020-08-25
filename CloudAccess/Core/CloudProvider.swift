@@ -9,24 +9,18 @@
 import Foundation
 import Promises
 
-/**
- Protocol for a cloud provider.
-
- The `remoteURL`s of the methods are expected to be file URLs and not the actual `URL` that might be used internally by the cloud provider implementation. Even though the `remoteURL`s are not actual file URLs, it's more convenient to instantiate them with `URL(fileURLWithPath:)`. E.g., you can expect the path `/` to be the root of the cloud provider. The implementation has to consistently resolve the path if needed.
- */
 public protocol CloudProvider {
 	/**
 	 Fetches the metadata for a file or folder.
 
-	 - Parameter remoteURL: The remote URL of the file or folder to fetch metadata.
-	 - Precondition: `remoteURL` must be a file URL.
+	 - Parameter cloudPath: The cloud path of the file or folder to fetch metadata.
 	 - Returns: Promise with the metadata for a file or folder. If the fetch fails, promise is rejected with:
-	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `remoteURL`.
-	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
+	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at `cloudPath`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `cloudPath`.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata>
+	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata>
 
 	/**
 	 Starts fetching the contents of a folder.
@@ -34,37 +28,36 @@ public protocol CloudProvider {
 	 If the result's `CloudItemList` has a `nextPageToken`, call `fetchItemList()` with the returned `nextPageToken` to retrieve more entries.
 	 If on the other hand the end of the list is reached, `nextPageToken` will not be set.
 
-	 - Parameter remoteURL: The remote URL of the folder to fetch item list.
+	 - Parameter cloudPath: The cloud path of the folder to fetch item list.
 	 - Parameter pageToken: (Optional) The page token returned by your last call to `fetchItemList()`.
-	 - Precondition: `remoteURL` must be a file URL.
-	 - Precondition: `remoteURL` must point to a folder and therefore `hasDirectoryPath` must be `true`.
+	 - Precondition: `cloudPath` must point to a folder and therefore `hasDirectoryPath` must be `true`.
 	 - Returns: Promise with the item list for a folder (at page token if specified). If the fetch fails, promise is rejected with:
-	   - `CloudProviderError.itemNotFound` if the folder does not exist at the `remoteURL`.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `remoteURL`.
+	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`.
+	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `cloudPath`.
 	   - `CloudProviderError.pageTokenInvalid` if the `pageToken` is invalid.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func fetchItemList(forFolderAt remoteURL: URL, withPageToken pageToken: String?) -> Promise<CloudItemList>
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList>
 
 	/**
 	 Downloads a file.
 
 	 This method supports implicit progress composition.
 
-	 - Parameter remoteURL: The remote URL of the file to download.
+	 - Parameter cloudPath: The cloud path of the file to download.
 	 - Parameter localURL: The local URL of the desired download location.
-	 - Precondition: `remoteURL` and `localURL` must be a file URL.
-	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false` .
-	 - Postcondition: The file is stored under the `localURL`.
+	 - Precondition: `localURL` must be a file URL.
+	 - Precondition: `cloudPath` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false` .
+	 - Postcondition: The file is stored at `localURL`.
 	 - Returns: Empty promise. If the download fails, promise is rejected with:
-	   - `CloudProviderError.itemNotFound` if the file does not exist at the `remoteURL`.
+	   - `CloudProviderError.itemNotFound` if the file does not exist at `cloudPath`.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `localURL`.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `remoteURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `cloudPath`.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void>
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void>
 
 	/**
 	 Uploads a file.
@@ -72,65 +65,62 @@ public protocol CloudProvider {
 	 This method supports implicit progress composition.
 
 	 - Parameter localURL: The local URL of the file to upload.
-	 - Parameter remoteURL: The remote URL of the desired upload location.
-	 - Parameter replaceExisting: If true, overwrite the existing file at the `remoteURL`.
-	 - Precondition: `remoteURL` and `localURL` must be a file URL.
-	 - Precondition: `remoteURL` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false`.
-	 - Postcondition: The file is stored under the `remoteURL` of the cloud provider.
+	 - Parameter cloudPath: The cloud path of the desired upload location.
+	 - Parameter replaceExisting: If true, overwrite the existing file at `cloudPath`.
+	 - Precondition: `localURL` must be a file URL.
+	 - Precondition: `cloudPath` and `localURL` must point to a file and therefore `hasDirectoryPath` must be `false`.
+	 - Postcondition: The file is stored at `cloudPath`.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
-	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `remoteURL` with `!replaceExisting`.
-	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or the cloud provider finds a folder instead of a file at `remoteURL` with `replaceExisting`.
+	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `cloudPath` with `!replaceExisting`.
+	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or the cloud provider finds a folder instead of a file at `cloudPath` with `replaceExisting`.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
-	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
+	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `cloudPath` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata>
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata>
 
 	/**
 	 Creates a folder.
 
-	 - Parameter remoteURL: The remote URL of the folder to create.
-	 - Precondition: `remoteURL` must be a file URL.
-	 - Precondition: `remoteURL` must point to a folder and therefore `hasDirectoryPath` must be `true`.
+	 - Parameter cloudPath: The cloud path of the folder to create.
+	 - Precondition: `cloudPath` must point to a folder and therefore `hasDirectoryPath` must be `true`.
 	 - Returns: Empty promise. If the folder creation fails, promise is rejected with:
-	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `remoteURL`.
-	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `remoteURL` does not exist.
+	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `cloudPath`.
+	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `cloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func createFolder(at remoteURL: URL) -> Promise<Void>
+	func createFolder(at cloudPath: CloudPath) -> Promise<Void>
 
 	/**
 	 Recursively deletes a file or folder.
 
-	 - Parameter remoteURL: The remote URL of the file or folder to delete.
-	 - Precondition: `remoteURL` must be a file URL.
+	 - Parameter cloudPath: The cloud path of the file or folder to delete.
 	 - Returns: Empty promise. If the deletion fails, promise is rejected with:
-	   - `CloudProviderError.itemNotFound` if a file or folder does not exist at the `remoteURL`.
-	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `remoteURL`.
+	   - `CloudProviderError.itemNotFound` if a file or folder does not exist at `cloudPath`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `cloudPath`.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func deleteItem(at remoteURL: URL) -> Promise<Void>
+	func deleteItem(at cloudPath: CloudPath) -> Promise<Void>
 
 	/**
 	 Moves a file or folder to a different location.
 
-	 - Parameter oldRemoteURL: The remote URL of the file or folder to be moved.
-	 - Parameter newRemoteURL: The remote URL of the desired destination.
-	 - Precondition: `oldRemoteURL` and `newRemoteURL` must be a file URL.
-	 - Precondition: `oldRemoteURL` and `newRemoteURL` point to the same item type (both point to a folder or both point to a file).
+	 - Parameter sourceCloudPath: The cloud path of the file or folder to be moved.
+	 - Parameter targetCloudPath: The cloud path of the desired destination.
+	 - Precondition: `sourceCloudPath` and `targetCloudPath` point to the same item type (both point to a folder or both point to a file).
 	 - Returns: Empty promise. If the move fails, promise is rejected with:
-	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at the `oldRemoteURL`.
-	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `newRemoteURL`.
-	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `oldRemoteURL`.
-	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `newRemoteURL` does not exist.
+	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at `sourceCloudPath`.
+	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`.
+	   - `CloudProviderError.itemTypeMismatch` if the file or folder does not match the item type specified in `sourceCloudPath`.
+	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insuffient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void>
+	func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void>
 }

@@ -11,12 +11,11 @@ import XCTest
 @testable import CloudAccess
 
 class VaultFormat7ShortenedNameCacheTests: XCTestCase {
-	var vaultRoot: URL!
+	let vaultPath = CloudPath("/foo/bar/")
 	var cache: VaultFormat7ShortenedNameCache!
 
 	override func setUpWithError() throws {
-		vaultRoot = URL(fileURLWithPath: "/foo/bar", isDirectory: true)
-		cache = try VaultFormat7ShortenedNameCache(vaultURL: vaultRoot)
+		cache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath)
 	}
 
 	func testGetCached() throws {
@@ -28,50 +27,50 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual(originalName, try cache.getCached(shortenedName))
 	}
 
-	func testGetShortenedURL1() throws {
+	func testgetShortenedPath1() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r", isDirectory: false)
-		let shortened = cache.getShortenedURL(originalURL)
+		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r")
+		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.url.path)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.url.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.cloudPath.path)
 		XCTAssertTrue(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.c9sDir!.url.hasDirectoryPath)
-		XCTAssertFalse(shortened.url.hasDirectoryPath)
+		XCTAssertTrue(shortened.c9sDir!.cloudPath.hasDirectoryPath)
+		XCTAssertFalse(shortened.cloudPath.hasDirectoryPath)
 	}
 
-	func testGetShortenedURL2() throws {
+	func testgetShortenedPath2() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/\(longName).c9r/dir.c9r", isDirectory: true)
-		let shortened = cache.getShortenedURL(originalURL)
+		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r/dir.c9r/")
+		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.url.path)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.url.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r/", shortened.cloudPath.path)
 		XCTAssertFalse(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.c9sDir!.url.hasDirectoryPath)
-		XCTAssertTrue(shortened.url.hasDirectoryPath)
+		XCTAssertTrue(shortened.c9sDir!.cloudPath.hasDirectoryPath)
+		XCTAssertTrue(shortened.cloudPath.hasDirectoryPath)
 	}
 
-	func testGetShortenedURL3() throws {
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30", isDirectory: true)
-		let shortened = cache.getShortenedURL(originalURL)
+	func testgetShortenedPath3() throws {
+		let originalPath = CloudPath("/foo/bar/d/2/30/")
+		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNil(shortened.c9sDir)
-		XCTAssertEqual("/foo/bar/d/2/30", shortened.url.path)
+		XCTAssertEqual("/foo/bar/d/2/30/", shortened.cloudPath.path)
 		XCTAssertFalse(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.url.hasDirectoryPath)
+		XCTAssertTrue(shortened.cloudPath.hasDirectoryPath)
 	}
 
-	func testGetOriginalURL1() {
-		let shortened = URL(fileURLWithPath: "/foo/bar/d/2/30/shortened.c9s", isDirectory: false)
+	func testgetOriginalPath1() {
+		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
 		let expectation = XCTestExpectation(description: "callback called")
 
-		cache.getOriginalURL(shortened) { url -> Promise<Data> in
-			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", url.path)
+		cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
+			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
 			return Promise("loooong.c9r".data(using: .utf8)!)
 		}.then { longName in
 			XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
@@ -81,12 +80,12 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testGetOriginalURL2() {
-		let shortened = URL(fileURLWithPath: "/foo/bar/d/2/30/shortened.c9s/dir.c9r", isDirectory: false)
+	func testgetOriginalPath2() {
+		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s/dir.c9r")
 		let expectation = XCTestExpectation(description: "callback called")
 
-		cache.getOriginalURL(shortened) { url -> Promise<Data> in
-			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", url.path)
+		cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
+			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
 			return Promise("loooong.c9r".data(using: .utf8)!)
 		}.then { longName in
 			XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
@@ -96,27 +95,27 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testReplaceCiphertextFileNameInURL1() throws {
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/loooooong.c9r/dir.c9r", isDirectory: true)
-		let shortened = cache.replaceCiphertextFileNameInURL(originalURL, with: "short.c9s")
+	func testDeflatePath1() throws {
+		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r/")
+		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
-		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r", shortened.path)
+		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r/", shortened.path)
 		XCTAssertTrue(shortened.hasDirectoryPath)
 	}
 
-	func testReplaceCiphertextFileNameInURL2() throws {
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/loooooong.c9r", isDirectory: false)
-		let shortened = cache.replaceCiphertextFileNameInURL(originalURL, with: "short.c9s")
+	func testDeflatePath2() throws {
+		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r")
+		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
 		XCTAssertEqual("/foo/bar/d/2/30/short.c9s", shortened.path)
 		XCTAssertFalse(shortened.hasDirectoryPath)
 	}
 
-	func testReplaceCiphertextFileNameInURL3() throws {
-		let originalURL = URL(fileURLWithPath: "/foo/bar/d/2/30/loooooong.c9r/dir.c9r/bullshit", isDirectory: false)
-		let shortened = cache.replaceCiphertextFileNameInURL(originalURL, with: "short.c9s")
+	func testDeflatePath3() throws {
+		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r/baz")
+		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
-		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r/bullshit", shortened.path)
+		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r/baz", shortened.path)
 		XCTAssertFalse(shortened.hasDirectoryPath)
 	}
 }

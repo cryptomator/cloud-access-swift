@@ -36,6 +36,8 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
+		74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DF965D24F3DE6400763713 /* CloudPathTests.swift */; };
 		74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */; };
 		74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5D24BCB6B9003379FA /* item-metadata.xml */; };
 		74E54F6424BCB6B9003379FA /* item-list.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5E24BCB6B9003379FA /* item-list.xml */; };
@@ -100,6 +102,8 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
+		74DF965D24F3DE6400763713 /* CloudPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPathTests.swift; sourceTree = "<group>"; };
 		74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-move-412-error.xml"; sourceTree = "<group>"; };
 		74E54F5D24BCB6B9003379FA /* item-metadata.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-metadata.xml"; sourceTree = "<group>"; };
 		74E54F5E24BCB6B9003379FA /* item-list.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-list.xml"; sourceTree = "<group>"; };
@@ -197,6 +201,7 @@
 				4A05900D2451A145008831F9 /* CloudItemList.swift */,
 				4A0590112451A180008831F9 /* CloudItemMetadata.swift */,
 				4A7C214C245305BB00DE81E6 /* CloudItemType.swift */,
+				74C596E724F022AF00FFD17E /* CloudPath.swift */,
 				4A05900B2451A107008831F9 /* CloudProvider.swift */,
 				9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */,
 				4A05901C2451DD26008831F9 /* CloudProviderError.swift */,
@@ -319,6 +324,7 @@
 		9EE62A0E247D54CD0089DAF7 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				74DF965D24F3DE6400763713 /* CloudPathTests.swift */,
 				9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */,
 			);
 			path = Core;
@@ -543,6 +549,7 @@
 				7477BD5E24AF2871005F2F31 /* URLSession+Promises.swift in Sources */,
 				748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */,
 				748A42C024AB424500DEB6D0 /* WebDAVClient.swift in Sources */,
+				74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */,
 				4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -551,6 +558,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */,
 				74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */,
 				9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */,
 				9ED0E624246198F600FDB438 /* CloudProviderMockTests.swift in Sources */,

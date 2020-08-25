@@ -36,23 +36,23 @@ private extension FileManager {
  */
 public class LocalFileSystemProvider: CloudProvider {
 	private let fileManager = FileManager()
-	private let baseURL: URL
+	private let rootURL: URL
 
-	public init(baseURL: URL) {
-		self.baseURL = baseURL
+	public init(rootURL: URL) {
+		precondition(rootURL.isFileURL)
+		self.rootURL = rootURL
 	}
 
 	// MARK: - CloudProvider API
 
-	public func fetchItemMetadata(at remoteURL: URL) -> Promise<CloudItemMetadata> {
-		precondition(remoteURL.isFileURL)
-		guard let url = resolve(remoteURL) else {
+	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<CloudItemMetadata>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(readingItemAt: url, options: .immediatelyAvailableMetadataOnly, error: &error) { url in
@@ -62,11 +62,11 @@ public class LocalFileSystemProvider: CloudProvider {
 				let size = attributes[FileAttributeKey.size] as? Int
 				let lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
 				let itemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
-				guard validateItemType(at: remoteURL, with: itemType) else {
+				guard validateItemType(at: url, with: itemType) else {
 					promise = Promise(CloudProviderError.itemTypeMismatch)
 					return
 				}
-				promise = Promise(CloudItemMetadata(name: name, remoteURL: remoteURL, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
+				promise = Promise(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
 			} catch {
@@ -82,16 +82,15 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func fetchItemList(forFolderAt remoteURL: URL, withPageToken _: String?) -> Promise<CloudItemList> {
-		precondition(remoteURL.isFileURL)
-		precondition(remoteURL.hasDirectoryPath)
-		guard let url = resolve(remoteURL) else {
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		precondition(cloudPath.hasDirectoryPath)
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<CloudItemList>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(readingItemAt: url, options: .immediatelyAvailableMetadataOnly, error: &error) { url in
@@ -102,7 +101,7 @@ public class LocalFileSystemProvider: CloudProvider {
 					let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
 					let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
 					let itemType = getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
-					return CloudItemMetadata(name: name, remoteURL: url, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+					return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 				}
 				promise = Promise(CloudItemList(items: metadatas, nextPageToken: nil))
 			} catch CocoaError.fileReadNoSuchFile {
@@ -122,18 +121,17 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from remoteURL: URL, to localURL: URL) -> Promise<Void> {
-		precondition(remoteURL.isFileURL)
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
-		precondition(!remoteURL.hasDirectoryPath)
+		precondition(!cloudPath.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		guard let url = resolve(remoteURL) else {
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<Void>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { url in
@@ -161,18 +159,17 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to remoteURL: URL, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
-		precondition(remoteURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
-		precondition(!remoteURL.hasDirectoryPath)
-		guard let url = resolve(remoteURL) else {
+		precondition(!cloudPath.hasDirectoryPath)
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<CloudItemMetadata>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: url, options: replaceExisting ? .forReplacing : [], error: &error) { url in
@@ -211,20 +208,19 @@ public class LocalFileSystemProvider: CloudProvider {
 		} else if let promise = promise {
 			return promise
 		} else {
-			return fetchItemMetadata(at: remoteURL)
+			return fetchItemMetadata(at: cloudPath)
 		}
 	}
 
-	public func createFolder(at remoteURL: URL) -> Promise<Void> {
-		precondition(remoteURL.isFileURL)
-		precondition(remoteURL.hasDirectoryPath)
-		guard let url = resolve(remoteURL) else {
+	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		precondition(cloudPath.hasDirectoryPath)
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<Void>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: url, error: &error) { url in
@@ -250,15 +246,14 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func deleteItem(at remoteURL: URL) -> Promise<Void> {
-		precondition(remoteURL.isFileURL)
-		guard let url = resolve(remoteURL) else {
+	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+		guard let url = cloudPath.resolve(against: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<Void>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &error) { url in
@@ -284,17 +279,15 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func moveItem(from oldRemoteURL: URL, to newRemoteURL: URL) -> Promise<Void> {
-		precondition(oldRemoteURL.isFileURL)
-		precondition(newRemoteURL.isFileURL)
-		precondition(oldRemoteURL.hasDirectoryPath == newRemoteURL.hasDirectoryPath)
-		guard let sourceURL = resolve(oldRemoteURL), let destinationURL = resolve(newRemoteURL) else {
+	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
+		guard let sourceURL = sourceCloudPath.resolve(against: rootURL), let targetURL = targetCloudPath.resolve(against: rootURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		guard baseURL.startAccessingSecurityScopedResource() else {
+		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { baseURL.stopAccessingSecurityScopedResource() }
+		defer { rootURL.stopAccessingSecurityScopedResource() }
 		var promise: Promise<Void>?
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: sourceURL, options: .forMoving, error: &error) { sourceURL in
@@ -303,7 +296,7 @@ public class LocalFileSystemProvider: CloudProvider {
 					promise = Promise(CloudProviderError.itemTypeMismatch)
 					return
 				}
-				try fileManager.moveItem(at: sourceURL, to: destinationURL)
+				try fileManager.moveItem(at: sourceURL, to: targetURL)
 				promise = Promise(())
 			} catch CocoaError.fileReadNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
@@ -327,10 +320,6 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	// MARK: - Internal
-
-	private func resolve(_ remoteURL: URL) -> URL? {
-		return baseURL.appendingPathComponent(remoteURL.path, isDirectory: remoteURL.hasDirectoryPath)
-	}
 
 	private func getItemType(at localURL: URL) throws -> CloudItemType {
 		let attributes = try fileManager.attributesOfItem(atPath: localURL.path)

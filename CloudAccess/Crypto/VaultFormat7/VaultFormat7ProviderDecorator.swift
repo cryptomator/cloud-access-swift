@@ -281,8 +281,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func getCiphertextPath(_ cleartextPath: CloudPath, parentDirId: Data) throws -> CloudPath {
 		let ciphertextBaseName = try cryptor.encryptFileName(cleartextPath.lastPathComponent, dirId: parentDirId)
 		let ciphertextName = "\(ciphertextBaseName).c9r"
-		let isDirectory = cleartextPath.hasDirectoryPath
-		return try getDirPath(parentDirId).appendingPathComponent(ciphertextName + (isDirectory ? "/" : ""))
+		return try getDirPath(parentDirId).appendingPathComponent("\(ciphertextName)\(cleartextPath.hasDirectoryPath ? "/" : "")")
 	}
 
 	private func getCiphertextPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
@@ -301,7 +300,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		let ciphertextBaseName = String(ciphertextMetadata.name.dropLast(4))
 		let cleartextName = try cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)
 		let isDirectory = ciphertextMetadata.itemType == .folder
-		let cleartextPath = cleartextParentPath.appendingPathComponent(cleartextName + (isDirectory ? "/" : ""))
+		let cleartextPath = cleartextParentPath.appendingPathComponent("\(cleartextName)\(isDirectory ? "/" : "")")
 		let cleartextSize = try { () -> Int? in
 			guard let ciphertextSize = ciphertextMetadata.size else {
 				return nil

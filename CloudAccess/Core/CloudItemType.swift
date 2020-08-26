@@ -11,5 +11,6 @@ import Foundation
 public enum CloudItemType: String, Codable {
 	case file
 	case folder
+	case symlink
 	case unknown
 }

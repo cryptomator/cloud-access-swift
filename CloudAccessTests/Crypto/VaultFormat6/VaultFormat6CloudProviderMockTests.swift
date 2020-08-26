@@ -1,8 +1,8 @@
 //
-//  CloudProviderMockTests.swift
+//  VaultFormat6CloudProviderMockTests.swift
 //  CloudAccessTests
 //
-//  Created by Sebastian Stenzel on 05.05.20.
+//  Created by Tobias Hagemann on 26.08.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
@@ -10,7 +10,7 @@ import Promises
 import XCTest
 @testable import CloudAccess
 
-class CloudProviderMockTests: XCTestCase {
+class VaultFormat6CloudProviderMockTests: XCTestCase {
 	var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
@@ -24,15 +24,12 @@ class CloudProviderMockTests: XCTestCase {
 
 	func testVaultRootContainsFiles() {
 		let expectation = XCTestExpectation(description: "vaultRootContainsFiles")
-		let provider = CloudProviderMock()
+		let provider = VaultFormat6CloudProviderMock()
 		provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/"), withPageToken: nil).then { cloudItemList in
-			XCTAssertEqual(6, cloudItemList.items.count)
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1.c9r" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2.c9r" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s" }))
+			XCTAssertEqual(3, cloudItemList.items.count)
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -43,9 +40,9 @@ class CloudProviderMockTests: XCTestCase {
 
 	func testDir1FileContainsDirId() {
 		let expectation = XCTestExpectation(description: "dir1FileContainsDirId")
-		let provider = CloudProviderMock()
+		let provider = VaultFormat6CloudProviderMock()
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")).then { metadata -> Promise<Void> in
+		provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1")).then { metadata -> Promise<Void> in
 			XCTAssertEqual(.file, metadata.itemType)
 			return provider.downloadFile(from: metadata.cloudPath, to: localURL)
 		}.then {

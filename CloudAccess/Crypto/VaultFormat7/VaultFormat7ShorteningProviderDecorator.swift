@@ -180,7 +180,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 				return self.fetchC9SItemMetadata(c9sDir).then { c9sItemMetadata -> CloudItemMetadata in
 					let originalItemType = self.guessItemTypeByC9SItemName(c9sItemMetadata.name)
 					let originalLastModifiedDate = originalItemType == .folder ? shortenedMetadata.lastModifiedDate : c9sItemMetadata.lastModifiedDate
-					let originalSize = originalPath.hasDirectoryPath ? shortenedMetadata.size : c9sItemMetadata.size
+					let originalSize = originalItemType == .folder ? shortenedMetadata.size : c9sItemMetadata.size
 					return CloudItemMetadata(name: c9sDir.originalName, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: originalLastModifiedDate, size: originalSize)
 				}
 			} else {
@@ -203,9 +203,7 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		return delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: nil).then { itemList -> CloudItemMetadata in
 			for item in itemList.items {
 				switch item.name {
-				case "contents.c9r":
-					return item
-				case "dir.c9r":
+				case "contents.c9r", "dir.c9r", "symlink.c9r":
 					return item
 				default:
 					continue
@@ -221,6 +219,8 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 			return .file
 		case "dir.c9r":
 			return .folder
+		case "symlink.c9r":
+			return .symlink
 		default:
 			return .unknown
 		}

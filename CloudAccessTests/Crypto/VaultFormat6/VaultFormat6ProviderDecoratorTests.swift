@@ -1,8 +1,8 @@
 //
-//  VaultFormat7ProviderDecoratorTests.swift
+//  VaultFormat6ProviderDecoratorTests.swift
 //  CloudAccessTests
 //
-//  Created by Sebastian Stenzel on 05.05.20.
+//  Created by Tobias Hagemann on 26.08.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
@@ -11,18 +11,18 @@ import XCTest
 @testable import CloudAccess
 @testable import CryptomatorCryptoLib
 
-class VaultFormat7ProviderDecoratorTests: XCTestCase {
+class VaultFormat6ProviderDecoratorTests: XCTestCase {
 	let vaultPath = CloudPath("pathToVault/")
 	let cryptor = CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
 	var tmpDirURL: URL!
-	var provider: CloudProviderMock!
-	var decorator: VaultFormat7ProviderDecorator!
+	var provider: VaultFormat6CloudProviderMock!
+	var decorator: VaultFormat6ProviderDecorator!
 
 	override func setUpWithError() throws {
 		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		provider = CloudProviderMock()
-		decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		provider = VaultFormat6CloudProviderMock()
+		decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
 	override func tearDownWithError() throws {
@@ -105,7 +105,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		progress.becomeCurrent(withPendingUnitCount: 1)
 		decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false).then { metadata in
 			XCTAssertEqual(1, self.provider.createdFiles.count)
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "ciphertext1".data(using: .utf8))
+			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"] == "ciphertext1".data(using: .utf8))
 			XCTAssertEqual("File 1", metadata.name)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual("/File 1", metadata.cloudPath.path)
@@ -123,12 +123,11 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	func testCreateFolder() {
 		let expectation = XCTestExpectation(description: "createFolder")
 		decorator.createFolder(at: CloudPath("/Directory 1/")).then {
-			XCTAssertEqual(3, self.provider.createdFolders.count)
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/"))
+			XCTAssertEqual(2, self.provider.createdFolders.count)
 			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/"))
 			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/"))
 			XCTAssertEqual(1, self.provider.createdFiles.count)
-			XCTAssertNotNil(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
+			XCTAssertNotNil(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -143,7 +142,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 			XCTAssertEqual(3, self.provider.deleted.count)
 			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/"))
 			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/"))
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -156,7 +155,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "deleteItem on file")
 		decorator.deleteItem(at: CloudPath("/Directory 1/File 3")).then {
 			XCTAssertEqual(1, self.provider.deleted.count)
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -169,7 +168,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveItem")
 		decorator.moveItem(from: CloudPath("/File 1"), to: CloudPath("/Directory 1/File 2")).then {
 			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2.c9r")
+			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"] == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file2")
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

@@ -44,7 +44,7 @@ public class WebDAVProvider: CloudProvider {
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		return client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemMetadata in
@@ -76,7 +76,7 @@ public class WebDAVProvider: CloudProvider {
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken _: String?) -> Promise<CloudItemList> {
 		precondition(cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		return client.PROPFIND(url: url, depth: .one, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemList in
@@ -113,7 +113,7 @@ public class WebDAVProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!cloudPath.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		// GET requests on collections are possible so that it doesn't respond with an error as needed
@@ -146,7 +146,7 @@ public class WebDAVProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		guard FileManager.default.fileExists(atPath: localURL.path) else {
@@ -200,7 +200,7 @@ public class WebDAVProvider: CloudProvider {
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		precondition(cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		return client.MKCOL(url: url).then { _, _ -> Void in
@@ -224,7 +224,7 @@ public class WebDAVProvider: CloudProvider {
 	}
 
 	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = cloudPath.resolve(against: client.baseURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		// DELETE requests have no distinction between collections and non-collections
@@ -250,7 +250,7 @@ public class WebDAVProvider: CloudProvider {
 
 	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
-		guard let sourceURL = sourceCloudPath.resolve(against: client.baseURL), let targetURL = targetCloudPath.resolve(against: client.baseURL) else {
+		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: client.baseURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		// MOVE requests have no distinction between collections and non-collections

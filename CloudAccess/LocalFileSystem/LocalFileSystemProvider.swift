@@ -46,7 +46,7 @@ public class LocalFileSystemProvider: CloudProvider {
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -84,7 +84,7 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		precondition(cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -125,7 +125,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!cloudPath.hasDirectoryPath)
 		precondition(!localURL.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -163,7 +163,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		precondition(!localURL.hasDirectoryPath)
 		precondition(!cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -214,7 +214,7 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		precondition(cloudPath.hasDirectoryPath)
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -247,7 +247,7 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = cloudPath.resolve(against: rootURL) else {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
@@ -281,7 +281,7 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
-		guard let sourceURL = sourceCloudPath.resolve(against: rootURL), let targetURL = targetCloudPath.resolve(against: rootURL) else {
+		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: rootURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: rootURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {

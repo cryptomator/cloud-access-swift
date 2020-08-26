@@ -8,6 +8,20 @@
 
 import Foundation
 
+public extension URL {
+	init?(cloudPath: CloudPath, relativeTo base: URL) {
+		let trimmedPath = cloudPath.path.trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/"))
+		if trimmedPath.isEmpty {
+			self.init(string: ".", relativeTo: base)
+		} else {
+			guard let percentEncodedPath = trimmedPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+				return nil
+			}
+			self.init(string: percentEncodedPath, relativeTo: base)
+		}
+	}
+}
+
 extension String {
 	func trimmingLeadingCharacters(in set: CharacterSet) -> String {
 		var string = self
@@ -114,16 +128,5 @@ public struct CloudPath: Equatable {
 		}
 		components.append("")
 		return CloudPath(components.joined(separator: "/"))
-	}
-
-	public func resolve(against baseURL: URL) -> URL? {
-		let trimmedPath = path.trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/"))
-		if trimmedPath.isEmpty {
-			return URL(string: ".", relativeTo: baseURL)
-		}
-		guard let percentEncodedPath = trimmedPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
-			return nil
-		}
-		return URL(string: percentEncodedPath, relativeTo: baseURL)
 	}
 }

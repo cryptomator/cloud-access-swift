@@ -13,4 +13,11 @@ public struct WebDAVCredential {
 	public let username: String
 	public let password: String
 	public let allowedCertificate: Data?
+
+	public init(baseURL: URL, username: String, password: String, allowedCertificate: Data?) {
+		self.baseURL = baseURL
+		self.username = username
+		self.password = password
+		self.allowedCertificate = allowedCertificate
+	}
 }

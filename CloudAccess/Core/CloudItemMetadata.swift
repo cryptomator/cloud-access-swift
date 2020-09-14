@@ -14,4 +14,12 @@ public struct CloudItemMetadata {
 	public let itemType: CloudItemType
 	public let lastModifiedDate: Date?
 	public let size: Int?
+
+	public init(name: String, cloudPath: CloudPath, itemType: CloudItemType, lastModifiedDate: Date?, size: Int?) {
+		self.name = name
+		self.cloudPath = cloudPath
+		self.itemType = itemType
+		self.lastModifiedDate = lastModifiedDate
+		self.size = size
+	}
 }

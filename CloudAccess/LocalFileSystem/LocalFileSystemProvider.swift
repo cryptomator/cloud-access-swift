@@ -282,7 +282,7 @@ public class LocalFileSystemProvider: CloudProvider {
 	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
 		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: rootURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: rootURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)

@@ -82,8 +82,8 @@ class LocalFileSystemTests: XCTestCase {
 		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
 		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
-			XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" }))
-			XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" }))
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath == CloudPath("/dir/") }))
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath == CloudPath("/file") }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

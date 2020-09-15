@@ -101,7 +101,8 @@ public class LocalFileSystemProvider: CloudProvider {
 					let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
 					let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
 					let itemType = getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
-					return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+					let itemCloudPath = getRelativeCloudPath(from: url)
+					return CloudItemMetadata(name: name, cloudPath: itemCloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 				}
 				promise = Promise(CloudItemList(items: metadatas, nextPageToken: nil))
 			} catch CocoaError.fileReadNoSuchFile {
@@ -355,5 +356,18 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	private func validateItemType(at url: URL, with itemType: CloudItemType) -> Bool {
 		return url.hasDirectoryPath == (itemType == .folder) || !url.hasDirectoryPath == (itemType == .file)
+	}
+
+	private func getRelativeCloudPath(from url: URL) -> CloudPath {
+		assert(url.isFileURL)
+		let relativePath = url.path.deletingPrefix(rootURL.path)
+		return CloudPath(relativePath + (url.hasDirectoryPath ? "/" : ""))
+	}
+}
+
+private extension String {
+	func deletingPrefix(_ prefix: String) -> String {
+		guard hasPrefix(prefix) else { return self }
+		return String(dropFirst(prefix.count))
 	}
 }

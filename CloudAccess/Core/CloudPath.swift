@@ -91,6 +91,22 @@ public struct CloudPath: Equatable, Codable {
 		return pathComponents.last ?? ""
 	}
 
+	public var pathExtension: String {
+		let lastComponent = lastPathComponent
+		if !lastComponent.contains(".") {
+			return ""
+		}
+		let extensionComponents = lastComponent.components(separatedBy: ".")
+		guard let lastExtensionComponent = extensionComponents.last else {
+			return ""
+		}
+		if lastExtensionComponent.isEmpty || lastExtensionComponent.contains(" ") {
+			return ""
+		} else {
+			return lastExtensionComponent
+		}
+	}
+
 	public init(_ path: String) {
 		self.path = path.standardizedPath()
 	}
@@ -114,6 +130,31 @@ public struct CloudPath: Equatable, Codable {
 			components.append("..")
 			components.append("..")
 		}
+		return CloudPath(components.joined(separator: "/"))
+	}
+
+	public func appendingPathExtension(_ pathExtension: String) -> CloudPath {
+		if pathExtension.isEmpty || pathExtension.contains(" ") || pathExtension.contains("/") || pathExtension.last == "." {
+			return self
+		}
+		var components = path.components(separatedBy: "/")
+		let lastComponent = components.removeLast()
+		components.append("\(lastComponent).\(pathExtension)")
+		return CloudPath(components.joined(separator: "/"))
+	}
+
+	public func deletingPathExtension() -> CloudPath {
+		var components = path.components(separatedBy: "/")
+		let lastComponent = components.removeLast()
+		if lastComponent.isEmpty || lastComponent == "." || lastComponent == ".." {
+			return self
+		}
+		var extensionComponents = lastComponent.components(separatedBy: ".")
+		let lastExtensionComponent = extensionComponents.removeLast()
+		if extensionComponents.isEmpty || lastExtensionComponent.isEmpty {
+			return self
+		}
+		components.append(extensionComponents.joined(separator: "."))
 		return CloudPath(components.joined(separator: "/"))
 	}
 }

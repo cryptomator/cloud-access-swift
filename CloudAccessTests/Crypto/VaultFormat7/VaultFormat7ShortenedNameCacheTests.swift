@@ -11,7 +11,7 @@ import XCTest
 @testable import CloudAccess
 
 class VaultFormat7ShortenedNameCacheTests: XCTestCase {
-	let vaultPath = CloudPath("/foo/bar/")
+	let vaultPath = CloudPath("/foo/bar")
 	var cache: VaultFormat7ShortenedNameCache!
 
 	override func setUpWithError() throws {
@@ -34,35 +34,30 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 
 		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.cloudPath.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.cloudPath.path)
 		XCTAssertTrue(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.c9sDir!.cloudPath.hasDirectoryPath)
-		XCTAssertFalse(shortened.cloudPath.hasDirectoryPath)
 	}
 
 	func testgetShortenedPath2() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
-		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r/dir.c9r/")
+		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r/dir.c9r")
 		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNotNil(shortened.c9sDir)
 		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/", shortened.c9sDir!.cloudPath.path)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r/", shortened.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.cloudPath.path)
 		XCTAssertFalse(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.c9sDir!.cloudPath.hasDirectoryPath)
-		XCTAssertTrue(shortened.cloudPath.hasDirectoryPath)
 	}
 
 	func testgetShortenedPath3() throws {
-		let originalPath = CloudPath("/foo/bar/d/2/30/")
+		let originalPath = CloudPath("/foo/bar/d/2/30")
 		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNil(shortened.c9sDir)
-		XCTAssertEqual("/foo/bar/d/2/30/", shortened.cloudPath.path)
+		XCTAssertEqual("/foo/bar/d/2/30", shortened.cloudPath.path)
 		XCTAssertFalse(shortened.pointsToC9S)
-		XCTAssertTrue(shortened.cloudPath.hasDirectoryPath)
 	}
 
 	func testgetOriginalPath1() {
@@ -85,7 +80,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "callback called")
 
 		cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
-			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s/", cloudPath.path)
+			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
 			return Promise("loooong.c9r".data(using: .utf8)!)
 		}.then { longName in
 			XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
@@ -96,11 +91,10 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 	}
 
 	func testDeflatePath1() throws {
-		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r/")
+		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r")
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
-		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r/", shortened.path)
-		XCTAssertTrue(shortened.hasDirectoryPath)
+		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r", shortened.path)
 	}
 
 	func testDeflatePath2() throws {
@@ -108,7 +102,6 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
 		XCTAssertEqual("/foo/bar/d/2/30/short.c9s", shortened.path)
-		XCTAssertFalse(shortened.hasDirectoryPath)
 	}
 
 	func testDeflatePath3() throws {
@@ -116,6 +109,5 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
 		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r/baz", shortened.path)
-		XCTAssertFalse(shortened.hasDirectoryPath)
 	}
 }

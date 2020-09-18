@@ -36,11 +36,10 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken _: String?) -> Promise<CloudItemList> {
-		precondition(cloudPath.hasDirectoryPath)
 		let parentPath = cloudPath.path
 		let parentPathLvl = parentPath.components(separatedBy: "/").count
 		let childDirs = folders.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
-		let childFiles = files.keys.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl }
+		let childFiles = files.keys.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
 		let children = childDirs + childFiles
 		let metadataPromises = children.map { self.fetchItemMetadata(at: CloudPath($0)) }
 		return all(metadataPromises).then { metadata in
@@ -50,8 +49,6 @@ public class CloudProviderMock: CloudProvider {
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
-		precondition(!cloudPath.hasDirectoryPath)
-		precondition(!localURL.hasDirectoryPath)
 		if let data = files[cloudPath.path] {
 			do {
 				try data.write(to: localURL, options: .withoutOverwriting)
@@ -66,8 +63,6 @@ public class CloudProviderMock: CloudProvider {
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
-		precondition(!localURL.hasDirectoryPath)
-		precondition(!cloudPath.hasDirectoryPath)
 		do {
 			let data = try Data(contentsOf: localURL)
 			createdFiles[cloudPath.path] = data
@@ -78,18 +73,32 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		precondition(cloudPath.hasDirectoryPath)
 		createdFolders.append(cloudPath.path)
 		return Promise(())
 	}
 
-	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
 		deleted.append(cloudPath.path)
 		return Promise(())
 	}
 
-	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		moved[sourceCloudPath.path] = targetCloudPath.path
 		return Promise(())
 	}

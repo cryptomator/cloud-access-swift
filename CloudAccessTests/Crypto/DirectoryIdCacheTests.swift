@@ -24,7 +24,7 @@ class DirectoryIdCacheTests: XCTestCase {
 	}
 
 	func testGetCached() throws {
-		let path = CloudPath("/foo/bar/")
+		let path = CloudPath("/foo/bar")
 		let dirId = Data("foobar".utf8)
 
 		try cache.addToCache(path, dirId: dirId)
@@ -33,10 +33,10 @@ class DirectoryIdCacheTests: XCTestCase {
 	}
 
 	func testInvalidate() throws {
-		let path = CloudPath("/foo/")
-		let subPath1 = CloudPath("/foo/bar/")
-		let subPath2 = CloudPath("/foo/baz/")
-		let siblingPath = CloudPath("/bar/foo/")
+		let path = CloudPath("/foo")
+		let subPath1 = CloudPath("/foo/bar")
+		let subPath2 = CloudPath("/foo/baz")
+		let siblingPath = CloudPath("/bar/foo")
 		let dirId = Data("foobar".utf8)
 
 		try cache.addToCache(path, dirId: dirId)
@@ -53,7 +53,7 @@ class DirectoryIdCacheTests: XCTestCase {
 
 	func testRecursiveGet() throws {
 		let expectation = XCTestExpectation(description: "recursiveGet")
-		let path = CloudPath("/one/two/three/")
+		let path = CloudPath("/one/two/three")
 
 		var misses: [String] = []
 		let result = cache.get(path, onMiss: { (cleartextPath, parentDirId) -> Promise<Data> in

@@ -57,23 +57,6 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testFetchItemMetadataWithTypeMismatchError() throws {
-		let expectation = XCTestExpectation(description: "fetchItemMetadata with itemTypeMismatch error")
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: true)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		provider.fetchItemMetadata(at: CloudPath("/file/")).then { _ in
-			XCTFail("Fetching metadata of a file that is actually a folder should fail")
-		}.catch { error in
-			guard case CloudProviderError.itemTypeMismatch = error else {
-				XCTFail(error.localizedDescription)
-				return
-			}
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
-	}
-
 	func testFetchItemList() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
@@ -82,8 +65,8 @@ class LocalFileSystemTests: XCTestCase {
 		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
 		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
-			XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath == CloudPath("/dir/") }))
-			XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath == CloudPath("/file") }))
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -94,7 +77,7 @@ class LocalFileSystemTests: XCTestCase {
 
 	func testFetchItemListWithNotFoundError() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList with itemNotFound error")
-		provider.fetchItemList(forFolderAt: CloudPath("/dir/"), withPageToken: nil).then { _ in
+		provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a non-existing folder should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemNotFound = error else {
@@ -111,7 +94,7 @@ class LocalFileSystemTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "fetchItemList with itemTypeMismatch error")
 		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
 		FileManager.default.createFile(atPath: dirURL.path, contents: nil, attributes: nil)
-		provider.fetchItemList(forFolderAt: CloudPath("/dir/"), withPageToken: nil).then { _ in
+		provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a folder that is actually a file should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemTypeMismatch = error else {
@@ -341,7 +324,7 @@ class LocalFileSystemTests: XCTestCase {
 	func testCreateFolder() throws {
 		let expectation = XCTestExpectation(description: "createFolder")
 		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		provider.createFolder(at: CloudPath("/dir/")).then {
+		provider.createFolder(at: CloudPath("/dir")).then {
 			var isDirectory: ObjCBool = false
 			XCTAssertTrue(FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDirectory))
 			XCTAssertTrue(isDirectory.boolValue)
@@ -357,7 +340,7 @@ class LocalFileSystemTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "createFolder with itemAlreadyExists error")
 		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
 		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		provider.createFolder(at: CloudPath("/dir/")).then {
+		provider.createFolder(at: CloudPath("/dir")).then {
 			XCTFail("Creating folder at an existing item should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemAlreadyExists = error else {
@@ -372,7 +355,7 @@ class LocalFileSystemTests: XCTestCase {
 
 	func testCreateFolderWithParentFolderDoesNotExistError() throws {
 		let expectation = XCTestExpectation(description: "createFolder with parentFolderDoesNotExist error")
-		provider.createFolder(at: CloudPath("/dir/dir/")).then {
+		provider.createFolder(at: CloudPath("/dir/dir")).then {
 			XCTFail("Creating folder at a non-existing parent folder should fail")
 		}.catch { error in
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
@@ -385,27 +368,11 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testDeleteFolder() throws {
-		let expectation = XCTestExpectation(description: "deleteItem on folder")
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("dir/file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		provider.deleteItem(at: CloudPath("/dir/")).then {
-			XCTAssertFalse(FileManager.default.fileExists(atPath: dirURL.path))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
-	}
-
 	func testDeleteFile() throws {
-		let expectation = XCTestExpectation(description: "deleteItem on file")
+		let expectation = XCTestExpectation(description: "deleteFile")
 		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
 		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		provider.deleteItem(at: CloudPath("/file")).then {
+		provider.deleteFile(at: CloudPath("/file")).then {
 			XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -415,9 +382,9 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testDeleteItemWithNotFoundError() throws {
-		let expectation = XCTestExpectation(description: "deleteItem with itemNotFound error")
-		provider.deleteItem(at: CloudPath("/file")).then {
+	func testDeleteFileWithNotFoundError() throws {
+		let expectation = XCTestExpectation(description: "deleteFile with itemNotFound error")
+		provider.deleteFile(at: CloudPath("/file")).then {
 			XCTFail("Deleting non-existing item should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemNotFound = error else {
@@ -430,29 +397,28 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testDeleteItemWithTypeMismatchError() throws {
-		let expectation = XCTestExpectation(description: "deleteItem with itemTypeMismatch error")
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+	func testDeleteFolder() throws {
+		let expectation = XCTestExpectation(description: "deleteFolder")
+		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+		let fileURL = tmpDirURL.appendingPathComponent("dir/file", isDirectory: false)
 		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		provider.deleteItem(at: CloudPath("/file/")).then {
-			XCTFail("Deleting folder that is actually a file should fail")
+		provider.deleteFolder(at: CloudPath("/dir")).then {
+			XCTAssertFalse(FileManager.default.fileExists(atPath: dirURL.path))
 		}.catch { error in
-			guard case CloudProviderError.itemTypeMismatch = error else {
-				XCTFail(error.localizedDescription)
-				return
-			}
+			XCTFail("Error in promise: \(error)")
 		}.always {
 			expectation.fulfill()
 		}
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testMoveItem() throws {
-		let expectation = XCTestExpectation(description: "moveItem")
+	func testMoveFile() throws {
+		let expectation = XCTestExpectation(description: "moveFile")
 		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
 		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
 		let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
-		provider.moveItem(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
+		provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
 			XCTAssertFalse(FileManager.default.fileExists(atPath: sourceURL.path))
 			XCTAssertTrue(FileManager.default.fileExists(atPath: destinationURL.path))
 		}.catch { error in
@@ -463,9 +429,9 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testMoveItemWithNotFoundError() throws {
-		let expectation = XCTestExpectation(description: "moveItem with itemNotFound error")
-		provider.moveItem(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
+	func testMoveFileWithNotFoundError() throws {
+		let expectation = XCTestExpectation(description: "moveFile with itemNotFound error")
+		provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
 			XCTFail("Moving non-existing item should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemNotFound = error else {
@@ -478,13 +444,13 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testMoveItemWithAlreadyExistsError() throws {
-		let expectation = XCTestExpectation(description: "moveItem with itemAlreadyExists error")
+	func testMoveFileWithAlreadyExistsError() throws {
+		let expectation = XCTestExpectation(description: "moveFile with itemAlreadyExists error")
 		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
 		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
 		let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
 		FileManager.default.createFile(atPath: destinationURL.path, contents: nil, attributes: nil)
-		provider.moveItem(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
+		provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar")).then {
 			XCTFail("Moving item to an existing item should fail")
 		}.catch { error in
 			guard case CloudProviderError.itemAlreadyExists = error else {
@@ -497,28 +463,11 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testMoveItemWithTypeMismatchError() throws {
-		let expectation = XCTestExpectation(description: "moveItem with itemTypeMismatch error")
-		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: true)
-		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
-		provider.moveItem(from: CloudPath("/foo/"), to: CloudPath("/bar/")).then {
-			XCTFail("Moving folder that is actually a file should fail")
-		}.catch { error in
-			guard case CloudProviderError.itemTypeMismatch = error else {
-				XCTFail(error.localizedDescription)
-				return
-			}
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
-	}
-
-	func testMoveItemWithParentFolderDoesNotExistError() throws {
-		let expectation = XCTestExpectation(description: "moveItem with parentFolderDoesNotExist error")
+	func testMoveFileWithParentFolderDoesNotExistError() throws {
+		let expectation = XCTestExpectation(description: "moveFile with parentFolderDoesNotExist error")
 		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
 		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
-		provider.moveItem(from: CloudPath("/foo"), to: CloudPath("/bar/baz")).then {
+		provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar/baz")).then {
 			XCTFail("Moving item to a non-existing parent folder should fail")
 		}.catch { error in
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {

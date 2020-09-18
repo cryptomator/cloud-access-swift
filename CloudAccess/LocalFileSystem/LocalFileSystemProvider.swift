@@ -62,10 +62,6 @@ public class LocalFileSystemProvider: CloudProvider {
 				let size = attributes[FileAttributeKey.size] as? Int
 				let lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
 				let itemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
-				guard validateItemType(at: url, with: itemType) else {
-					promise = Promise(CloudProviderError.itemTypeMismatch)
-					return
-				}
 				promise = Promise(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
@@ -83,7 +79,6 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		precondition(cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -101,8 +96,7 @@ public class LocalFileSystemProvider: CloudProvider {
 					let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
 					let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
 					let itemType = getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
-					let itemCloudPath = getRelativeCloudPath(from: url)
-					return CloudItemMetadata(name: name, cloudPath: itemCloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+					return CloudItemMetadata(name: name, cloudPath: cloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 				}
 				promise = Promise(CloudItemList(items: metadatas, nextPageToken: nil))
 			} catch CocoaError.fileReadNoSuchFile {
@@ -124,8 +118,6 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
-		precondition(!cloudPath.hasDirectoryPath)
-		precondition(!localURL.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -137,7 +129,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		var error: NSError?
 		NSFileCoordinator().coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { url in
 			do {
-				guard try validateItemType(at: url) else {
+				guard try validateItemType(at: url, with: .file) else {
 					promise = Promise(CloudProviderError.itemTypeMismatch)
 					return
 				}
@@ -162,8 +154,6 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
-		precondition(!localURL.hasDirectoryPath)
-		precondition(!cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -175,13 +165,13 @@ public class LocalFileSystemProvider: CloudProvider {
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: url, options: replaceExisting ? .forReplacing : [], error: &error) { url in
 			do {
-				guard try validateItemType(at: localURL) else {
+				guard try validateItemType(at: localURL, with: .file) else {
 					promise = Promise(CloudProviderError.itemTypeMismatch)
 					return
 				}
 				if replaceExisting {
 					do {
-						guard try validateItemType(at: url) else {
+						guard try validateItemType(at: url, with: .file) else {
 							promise = Promise(CloudProviderError.itemTypeMismatch)
 							return
 						}
@@ -214,7 +204,6 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		precondition(cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -247,7 +236,15 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -259,13 +256,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &error) { url in
 			do {
-				guard try validateItemType(at: url) else {
-					promise = Promise(CloudProviderError.itemTypeMismatch)
-					return
-				}
 				try fileManager.removeItem(at: url)
 				promise = Promise(())
-			} catch CocoaError.fileReadNoSuchFile {
+			} catch CocoaError.fileNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
 			} catch {
 				promise = Promise(error)
@@ -280,8 +273,15 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: rootURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -293,18 +293,16 @@ public class LocalFileSystemProvider: CloudProvider {
 		var error: NSError?
 		NSFileCoordinator().coordinate(writingItemAt: sourceURL, options: .forMoving, error: &error) { sourceURL in
 			do {
-				guard try validateItemType(at: sourceURL) else {
-					promise = Promise(CloudProviderError.itemTypeMismatch)
-					return
-				}
 				try fileManager.moveItem(at: sourceURL, to: targetURL)
 				promise = Promise(())
-			} catch CocoaError.fileReadNoSuchFile {
-				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileNoSuchFile {
+				if fileManager.fileExists(atPath: targetURL.deletingLastPathComponent().path) {
+					promise = Promise(CloudProviderError.itemNotFound)
+				} else {
+					promise = Promise(CloudProviderError.parentFolderDoesNotExist)
+				}
 			} catch CocoaError.fileWriteFileExists {
 				promise = Promise(CloudProviderError.itemAlreadyExists)
-			} catch CocoaError.fileNoSuchFile {
-				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
 			} catch CocoaError.fileWriteOutOfSpace {
 				promise = Promise(CloudProviderError.quotaInsufficient)
 			} catch {
@@ -322,8 +320,8 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	// MARK: - Internal
 
-	private func getItemType(at localURL: URL) throws -> CloudItemType {
-		let attributes = try fileManager.attributesOfItem(atPath: localURL.path)
+	private func getItemType(from url: URL) throws -> CloudItemType {
+		let attributes = try fileManager.attributesOfItem(atPath: url.path)
 		return getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 	}
 
@@ -349,25 +347,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	private func validateItemType(at localURL: URL) throws -> Bool {
-		let itemType = try getItemType(at: localURL)
-		return validateItemType(at: localURL, with: itemType)
-	}
-
-	private func validateItemType(at url: URL, with itemType: CloudItemType) -> Bool {
-		return url.hasDirectoryPath == (itemType == .folder) || !url.hasDirectoryPath == (itemType == .file)
-	}
-
-	private func getRelativeCloudPath(from url: URL) -> CloudPath {
-		assert(url.isFileURL)
-		let relativePath = url.path.deletingPrefix(rootURL.path)
-		return CloudPath(relativePath + (url.hasDirectoryPath ? "/" : ""))
-	}
-}
-
-private extension String {
-	func deletingPrefix(_ prefix: String) -> String {
-		guard hasPrefix(prefix) else { return self }
-		return String(dropFirst(prefix.count))
+	private func validateItemType(at url: URL, with itemType: CloudItemType) throws -> Bool {
+		return try getItemType(from: url) == itemType
 	}
 }

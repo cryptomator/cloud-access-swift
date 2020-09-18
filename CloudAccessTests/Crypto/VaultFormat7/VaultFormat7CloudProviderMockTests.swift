@@ -25,7 +25,7 @@ class VaultFormat7CloudProviderMockTests: XCTestCase {
 	func testVaultRootContainsFiles() {
 		let expectation = XCTestExpectation(description: "vaultRootContainsFiles")
 		let provider = VaultFormat7CloudProviderMock()
-		provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/"), withPageToken: nil).then { cloudItemList in
+		provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).then { cloudItemList in
 			XCTAssertEqual(6, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s" }))

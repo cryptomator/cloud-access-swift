@@ -54,7 +54,7 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 
 	func testFetchItemListForSubDirWithLongName() {
 		let expectation = XCTestExpectation(description: "fetchItemList for sub dir with long name")
-		decorator.fetchItemList(forFolderAt: CloudPath("/Directory 3 (Long)/"), withPageToken: nil).then { itemList in
+		decorator.fetchItemList(forFolderAt: CloudPath("/Directory 3 (Long)"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(2, itemList.items.count)
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 6 (Long)" }))
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Directory 4 (Long)" }))
@@ -86,8 +86,8 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
 		decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false).then { metadata in
 			XCTAssertEqual(2, self.provider.createdFiles.count)
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"] == "ciphertext4".data(using: .utf8))
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"] == "\(String(repeating: "file4", count: 44)).c9r".data(using: .utf8))
+			XCTAssertEqual("ciphertext4".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"])
+			XCTAssertEqual("\(String(repeating: "file4", count: 44)).c9r".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"])
 			XCTAssertEqual("File 4 (Long)", metadata.name)
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual("/File 4 (Long)", metadata.cloudPath.path)
@@ -101,29 +101,14 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 
 	func testCreateFolderWithLongName() {
 		let expectation = XCTestExpectation(description: "createFolder with long name")
-		decorator.createFolder(at: CloudPath("/Directory 3 (Long)/")).then {
+		decorator.createFolder(at: CloudPath("/Directory 3 (Long)")).then {
 			XCTAssertEqual(3, self.provider.createdFolders.count)
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/"))
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/"))
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/"))
+			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"))
+			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99"))
+			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
 			XCTAssertEqual(2, self.provider.createdFiles.count)
 			XCTAssertNotNil(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/dir.c9r"])
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"] == "\(String(repeating: "dir3", count: 55)).c9r".data(using: .utf8))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
-	}
-
-	func testDeleteFolderWithLongName() {
-		let expectation = XCTestExpectation(description: "deleteItem on folder with long name")
-		decorator.deleteItem(at: CloudPath("/Directory 3 (Long)/")).then {
-			XCTAssertEqual(3, self.provider.deleted.count)
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE/"))
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/"))
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/"))
+			XCTAssertEqual("\(String(repeating: "dir3", count: 55)).c9r".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -133,10 +118,10 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 	}
 
 	func testDeleteFileWithLongName() {
-		let expectation = XCTestExpectation(description: "deleteItem on file with long name")
-		decorator.deleteItem(at: CloudPath("/Directory 3 (Long)/File 6 (Long)")).then {
+		let expectation = XCTestExpectation(description: "deleteFile with long name")
+		decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)")).then {
 			XCTAssertEqual(1, self.provider.deleted.count)
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -145,13 +130,13 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testMoveFolderFromShortToLongName() {
-		let expectation = XCTestExpectation(description: "moveItem on folder from short to long name")
-		decorator.moveItem(from: CloudPath("/Directory 1/"), to: CloudPath("/Directory 3 (Long)/")).then {
-			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/")
-			XCTAssertEqual(1, self.provider.createdFiles.count)
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"] == "\(String(repeating: "dir3", count: 55)).c9r".data(using: .utf8))
+	func testDeleteFolderWithLongName() {
+		let expectation = XCTestExpectation(description: "deleteFolder with long name")
+		decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)")).then {
+			XCTAssertEqual(3, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -161,29 +146,14 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 	}
 
 	func testMoveFileFromShortToLongName() {
-		let expectation = XCTestExpectation(description: "moveItem on file from short to long name")
-		decorator.moveItem(from: CloudPath("/File 1"), to: CloudPath("/File 4 (Long)")).then {
+		let expectation = XCTestExpectation(description: "moveFile from short to long name")
+		decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/File 4 (Long)")).then {
 			XCTAssertEqual(1, self.provider.createdFolders.count)
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/"))
+			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"))
 			XCTAssertEqual(1, self.provider.createdFiles.count)
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"] == "\(String(repeating: "file4", count: 44)).c9r".data(using: .utf8))
+			XCTAssertEqual("\(String(repeating: "file4", count: 44)).c9r".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"])
 			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r")
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
-	}
-
-	func testMoveFolderFromLongToShortName() {
-		let expectation = XCTestExpectation(description: "moveItem on folder from long to short name")
-		decorator.moveItem(from: CloudPath("/Directory 3 (Long)/"), to: CloudPath("/Directory 1/")).then {
-			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/")
-			XCTAssertEqual(1, self.provider.deleted.count)
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/name.c9s"))
+			XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r", self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r"])
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -193,12 +163,12 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 	}
 
 	func testMoveFileFromLongToShortName() {
-		let expectation = XCTestExpectation(description: "moveItem on file from long to short name")
-		decorator.moveItem(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1")).then {
+		let expectation = XCTestExpectation(description: "moveFile from long to short name")
+		decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1")).then {
 			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r")
+			XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1.c9r", self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"])
 			XCTAssertEqual(1, self.provider.deleted.count)
-			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/"))
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -208,12 +178,42 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 	}
 
 	func testMoveFileFromLongToLongName() {
-		let expectation = XCTestExpectation(description: "moveItem on file from long to long name")
-		decorator.moveItem(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)")).then {
+		let expectation = XCTestExpectation(description: "moveFile from long to long name")
+		decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)")).then {
 			XCTAssertEqual(1, self.provider.moved.count)
-			XCTAssertTrue(self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/")
+			XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s", self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"])
 			XCTAssertEqual(1, self.provider.createdFiles.count)
-			XCTAssertTrue(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s"] == "\(String(repeating: "file5", count: 44)).c9r".data(using: .utf8))
+			XCTAssertEqual("\(String(repeating: "file5", count: 44)).c9r".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s"])
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
+	func testMoveFolderFromShortToLongName() {
+		let expectation = XCTestExpectation(description: "moveFolder from short to long name")
+		decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 3 (Long)")).then {
+			XCTAssertEqual(1, self.provider.moved.count)
+			XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s", self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+			XCTAssertEqual(1, self.provider.createdFiles.count)
+			XCTAssertEqual("\(String(repeating: "dir3", count: 55)).c9r".data(using: .utf8), self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
+	func testMoveFolderFromLongToShortName() {
+		let expectation = XCTestExpectation(description: "moveFolder from long to short name")
+		decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1")).then {
+			XCTAssertEqual(1, self.provider.moved.count)
+			XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", self.provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"])
+			XCTAssertEqual(1, self.provider.deleted.count)
+			XCTAssertTrue(self.provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/name.c9s"))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

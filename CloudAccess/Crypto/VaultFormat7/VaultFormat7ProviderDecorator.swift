@@ -84,7 +84,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 				let masterkeyCloudPath = vaultPath.appendingMasterkeyFileComponent()
 				return delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
 			}.then { _ -> Promise<Void> in
-				let dPath = vaultPath.appendingPathComponent("d/")
+				let dPath = vaultPath.appendingPathComponent("d")
 				return delegate.createFolder(at: dPath)
 			}.then { () -> Promise<Void> in
 				let twoCharsPath = rootDirPath.deletingLastPathComponent()
@@ -143,7 +143,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		precondition(cleartextCloudPath.hasDirectoryPath)
 		let ciphertextListPromise = getDirPath(cleartextCloudPath).then { dirPath in
 			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 		}
@@ -154,8 +153,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	public func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL) -> Promise<Void> {
 		precondition(cleartextLocalURL.isFileURL)
-		precondition(!cleartextCloudPath.hasDirectoryPath)
-		precondition(!cleartextLocalURL.hasDirectoryPath)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return getCiphertextPath(cleartextCloudPath).then { ciphertextCloudPath in
@@ -173,8 +170,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	public func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(cleartextLocalURL.isFileURL)
-		precondition(!cleartextLocalURL.hasDirectoryPath)
-		precondition(!cleartextCloudPath.hasDirectoryPath)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let cleartextParentCloudPath = cleartextCloudPath.deletingLastPathComponent()
@@ -198,7 +193,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func createFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
-		precondition(cleartextCloudPath.hasDirectoryPath)
 		let dirId = UUID().uuidString.data(using: .utf8)!
 		let localDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let dirPath: CloudPath
@@ -231,28 +225,33 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func deleteItem(at cleartextCloudPath: CloudPath) -> Promise<Void> {
-		if cleartextCloudPath.hasDirectoryPath {
-			// TODO: recover from error if `getDirId()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because it's probably a symlink)
-			// TODO: recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
-			return getDirId(cleartextCloudPath).then { dirId in
-				return self.deleteCiphertextDir(dirId)
-			}.then {
-				return self.getCiphertextPath(cleartextCloudPath)
-			}.then { ciphertextCloudPath in
-				return self.delegate.deleteItem(at: ciphertextCloudPath)
-			}
-		} else {
-			return getCiphertextPath(cleartextCloudPath).then { ciphertextCloudPath in
-				return self.delegate.deleteItem(at: ciphertextCloudPath)
-			}
+	public func deleteFile(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+		return getCiphertextPath(cleartextCloudPath).then { ciphertextCloudPath in
+			return self.delegate.deleteFile(at: ciphertextCloudPath)
 		}
 	}
 
-	public func moveItem(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
-		precondition(cleartextSourceCloudPath.hasDirectoryPath == cleartextTargetCloudPath.hasDirectoryPath)
+	public func deleteFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+		// TODO: recover from error if `getDirId()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because it's probably a symlink)
+		// TODO: recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
+		return getDirId(cleartextCloudPath).then { dirId in
+			return self.deleteCiphertextDir(dirId)
+		}.then {
+			return self.getCiphertextPath(cleartextCloudPath)
+		}.then { ciphertextCloudPath in
+			return self.delegate.deleteFolder(at: ciphertextCloudPath)
+		}
+	}
+
+	public func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
 		return all(getCiphertextPath(cleartextSourceCloudPath), getCiphertextPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
-			return self.delegate.moveItem(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
+			return self.delegate.moveFile(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
+		}
+	}
+
+	public func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
+		return all(getCiphertextPath(cleartextSourceCloudPath), getCiphertextPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
+			return self.delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
 		}
 	}
 
@@ -269,7 +268,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func getDirPath(_ dirId: Data) throws -> CloudPath {
 		let digest = try cryptor.encryptDirId(dirId)
 		let i = digest.index(digest.startIndex, offsetBy: 2)
-		return vaultPath.appendingPathComponent("d/\(digest[..<i])/\(digest[i...])/")
+		return vaultPath.appendingPathComponent("d/\(digest[..<i])/\(digest[i...])")
 	}
 
 	private func getDirPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
@@ -281,7 +280,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	private func getCiphertextPath(_ cleartextPath: CloudPath, parentDirId: Data) throws -> CloudPath {
 		let ciphertextBaseName = try cryptor.encryptFileName(cleartextPath.lastPathComponent, dirId: parentDirId)
 		let ciphertextName = "\(ciphertextBaseName).c9r"
-		return try getDirPath(parentDirId).appendingPathComponent("\(ciphertextName)\(cleartextPath.hasDirectoryPath ? "/" : "")")
+		return try getDirPath(parentDirId).appendingPathComponent(ciphertextName)
 	}
 
 	private func getCiphertextPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
@@ -299,8 +298,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 		let ciphertextBaseName = String(ciphertextMetadata.name.dropLast(4))
 		let cleartextName = try cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)
-		let isDirectory = ciphertextMetadata.itemType == .folder
-		let cleartextPath = cleartextParentPath.appendingPathComponent("\(cleartextName)\(isDirectory ? "/" : "")")
+		let cleartextPath = cleartextParentPath.appendingPathComponent(cleartextName)
 		let cleartextSize = try { () -> Int? in
 			guard let ciphertextSize = ciphertextMetadata.size else {
 				return nil
@@ -338,7 +336,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 			return Promise(error)
 		}
 		return delegate.fetchItemListExhaustively(forFolderAt: dirPath).then { itemList in
-			let subDirs = itemList.items.filter { $0.cloudPath.hasDirectoryPath }
+			let subDirs = itemList.items.filter { $0.itemType == .folder }
 			let subDirItemListPromises = subDirs.map { self.delegate.fetchItemListExhaustively(forFolderAt: $0.cloudPath) }
 			return all(subDirItemListPromises).then { subDirItemLists -> Promise<[Maybe<Data>]> in
 				// find subdirectories
@@ -351,7 +349,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 				return any(recursiveDeleteOperations)
 			}.then { _ in
 				// delete self
-				return self.delegate.deleteItem(at: dirPath)
+				return self.delegate.deleteFolder(at: dirPath)
 			}
 		}
 	}

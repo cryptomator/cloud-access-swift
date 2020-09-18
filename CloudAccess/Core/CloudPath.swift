@@ -31,16 +31,16 @@ extension String {
 		return string
 	}
 
-	func trimmingTrailingCharacters(in set: CharacterSet) -> String {
-		var string = self
-		while let range = string.rangeOfCharacter(from: set, options: [.anchored, .backwards]) {
-			string = String(string[..<range.lowerBound])
-		}
-		return string
+	func standardizedPath() -> String {
+		return components(separatedBy: "/").standardized().joined(separator: "/")
 	}
 }
 
 private extension Array where Element == String {
+	subscript(safe index: Index) -> Element? {
+		return indices.contains(index) ? self[index] : nil
+	}
+
 	func standardized() -> [String] {
 		var standardized: [String] = []
 		for element in self {
@@ -52,7 +52,11 @@ private extension Array where Element == String {
 				standardized.append(element)
 			}
 		}
-		if let isAbsolute = first?.isEmpty, isAbsolute {
+		if count > 1, standardized.isEmpty, let isAbsolute = first?.isEmpty, isAbsolute {
+			return ["", ""]
+		} else if standardized.isEmpty {
+			return ["."]
+		} else if let isAbsolute = first?.isEmpty, isAbsolute {
 			standardized.insert("", at: 0)
 		}
 		return standardized
@@ -64,25 +68,20 @@ private extension Array where Element == String {
 
  This type mimics the behavior of `URL` but does not implement it and has a reduced set of methods. E.g., a `CloudPath` is not bound to a certain cloud provider or file system and the same path can be used for different providers.
  */
-public struct CloudPath: Equatable {
+public struct CloudPath: Equatable, Codable {
 	public let path: String
 
 	public var isAbsolute: Bool {
 		return path.first == "/"
 	}
 
-	public var hasDirectoryPath: Bool {
-		return path.last == "/"
-	}
-
 	public var pathComponents: [String] {
-		let sanitizedPath = path.replacingOccurrences(of: "/+", with: "/", options: .regularExpression)
-		let trimmedPath = sanitizedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-		if trimmedPath.isEmpty, isAbsolute {
+		if path == "/" {
 			return ["/"]
 		}
-		var components = trimmedPath.components(separatedBy: "/")
+		var components = path.components(separatedBy: "/")
 		if isAbsolute {
+			components.removeFirst()
 			components.insert("/", at: 0)
 		}
 		return components
@@ -92,13 +91,8 @@ public struct CloudPath: Equatable {
 		return pathComponents.last ?? ""
 	}
 
-	public var standardized: CloudPath {
-		let standardizedPathComponents = path.components(separatedBy: "/").standardized()
-		return CloudPath(standardizedPathComponents.joined(separator: "/"))
-	}
-
 	public init(_ path: String) {
-		self.path = path
+		self.path = path.standardizedPath()
 	}
 
 	public func appendingPathComponent(_ pathComponent: String) -> CloudPath {
@@ -110,23 +104,16 @@ public struct CloudPath: Equatable {
 	}
 
 	public func deletingLastPathComponent() -> CloudPath {
-		if path.isEmpty {
-			return CloudPath("../")
-		} else if path == "/" {
-			return CloudPath("/../")
-		} else if lastPathComponent == ".." {
-			return appendingPathComponent("../")
-		}
-		let trimmedPath = path.trimmingTrailingCharacters(in: CharacterSet(charactersIn: "/"))
-		var components = trimmedPath.components(separatedBy: "/")
+		var components = pathComponents
 		let lastComponent = components.removeLast()
-		if components.isEmpty, lastComponent != "." {
-			components.append(".")
-		}
-		if lastComponent.isEmpty || lastComponent == "." {
+		if lastComponent == "/" {
+			return CloudPath("/..")
+		} else if lastComponent == "." {
+			return CloudPath("..")
+		} else if lastComponent == ".." {
+			components.append("..")
 			components.append("..")
 		}
-		components.append("")
 		return CloudPath(components.joined(separator: "/"))
 	}
 }

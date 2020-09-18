@@ -23,12 +23,12 @@ import Promises
 public class VaultFormat6CloudProviderMock: CloudProviderMock {
 	convenience init() {
 		let folders: Set = [
-			"pathToVault/",
-			"pathToVault/d/",
-			"pathToVault/d/00/",
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/",
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/",
-			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/"
+			"pathToVault",
+			"pathToVault/d",
+			"pathToVault/d/00",
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 		]
 		let files = [
 			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": "dir1-id".data(using: .utf8)!,

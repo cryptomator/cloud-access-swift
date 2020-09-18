@@ -12,24 +12,24 @@ import XCTest
 
 class CloudPathTests: XCTestCase {
 	func testURLInitWithCloudPathRelativeToBase() {
-		XCTAssertEqual("///foo/bar/", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
+		XCTAssertEqual("///foo/bar", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
 		XCTAssertEqual("///foo/bar", URL(cloudPath: CloudPath("/bar"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
-		XCTAssertEqual("///foo/bar/", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
+		XCTAssertEqual("///foo/bar", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
 		XCTAssertEqual("///foo/bar", URL(cloudPath: CloudPath("bar"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
 
-		XCTAssertEqual("///bar/", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "/foo")!)!.absoluteString)
+		XCTAssertEqual("///bar", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "/foo")!)!.absoluteString)
 		XCTAssertEqual("///bar", URL(cloudPath: CloudPath("/bar"), relativeTo: URL(string: "/foo")!)!.absoluteString)
-		XCTAssertEqual("///bar/", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "/foo")!)!.absoluteString)
+		XCTAssertEqual("///bar", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "/foo")!)!.absoluteString)
 		XCTAssertEqual("///bar", URL(cloudPath: CloudPath("bar"), relativeTo: URL(string: "/foo")!)!.absoluteString)
 
-		XCTAssertEqual("//foo/bar/", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "foo/")!)!.absoluteString)
+		XCTAssertEqual("//foo/bar", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "foo/")!)!.absoluteString)
 		XCTAssertEqual("//foo/bar", URL(cloudPath: CloudPath("/bar"), relativeTo: URL(string: "foo/")!)!.absoluteString)
-		XCTAssertEqual("//foo/bar/", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "foo/")!)!.absoluteString)
+		XCTAssertEqual("//foo/bar", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "foo/")!)!.absoluteString)
 		XCTAssertEqual("//foo/bar", URL(cloudPath: CloudPath("bar"), relativeTo: URL(string: "foo/")!)!.absoluteString)
 
-		XCTAssertEqual("//bar/", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "foo")!)!.absoluteString)
+		XCTAssertEqual("//bar", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "foo")!)!.absoluteString)
 		XCTAssertEqual("//bar", URL(cloudPath: CloudPath("/bar"), relativeTo: URL(string: "foo")!)!.absoluteString)
-		XCTAssertEqual("//bar/", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "foo")!)!.absoluteString)
+		XCTAssertEqual("//bar", URL(cloudPath: CloudPath("bar/"), relativeTo: URL(string: "foo")!)!.absoluteString)
 		XCTAssertEqual("//bar", URL(cloudPath: CloudPath("bar"), relativeTo: URL(string: "foo")!)!.absoluteString)
 
 		XCTAssertEqual("///foo/", URL(cloudPath: CloudPath("/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)
@@ -37,9 +37,9 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual("//foo/", URL(cloudPath: CloudPath("/"), relativeTo: URL(string: "foo/")!)!.absoluteString)
 		XCTAssertEqual("//.", URL(cloudPath: CloudPath("/"), relativeTo: URL(string: "foo")!)!.absoluteString)
 
-		XCTAssertEqual("///foo/", URL(cloudPath: CloudPath("/foo/"), relativeTo: URL(string: "/")!)!.absoluteString)
+		XCTAssertEqual("///foo", URL(cloudPath: CloudPath("/foo/"), relativeTo: URL(string: "/")!)!.absoluteString)
 		XCTAssertEqual("///foo", URL(cloudPath: CloudPath("/foo"), relativeTo: URL(string: "/")!)!.absoluteString)
-		XCTAssertEqual("///foo/", URL(cloudPath: CloudPath("foo/"), relativeTo: URL(string: "/")!)!.absoluteString)
+		XCTAssertEqual("///foo", URL(cloudPath: CloudPath("foo/"), relativeTo: URL(string: "/")!)!.absoluteString)
 		XCTAssertEqual("///foo", URL(cloudPath: CloudPath("foo"), relativeTo: URL(string: "/")!)!.absoluteString)
 	}
 
@@ -49,14 +49,8 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual("foo///bar", "foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
 	}
 
-	func testTrimmingTrailingCharacters() {
-		XCTAssertEqual("foo", "foo///".trimmingTrailingCharacters(in: CharacterSet(charactersIn: "/")))
-		XCTAssertEqual("foo///bar", "foo///bar/".trimmingTrailingCharacters(in: CharacterSet(charactersIn: "/")))
-		XCTAssertEqual("foo///bar", "foo///bar".trimmingTrailingCharacters(in: CharacterSet(charactersIn: "/")))
-	}
-
-	func testStandardized() {
-		XCTAssertEqual("/../../foo/baz", CloudPath("/../../foo/bar/.///../baz").standardized.path)
+	func testStandardizedPath() {
+		XCTAssertEqual("/../../foo/baz", "/../../foo/bar/.///../baz".standardizedPath())
 	}
 
 	func testPathComponents() {
@@ -76,13 +70,13 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual(["/", ".."], CloudPath("/..").pathComponents)
 		XCTAssertEqual([".."], CloudPath("../").pathComponents)
 		XCTAssertEqual([".."], CloudPath("..").pathComponents)
-		XCTAssertEqual(["/", "."], CloudPath("/./").pathComponents)
-		XCTAssertEqual(["/", "."], CloudPath("/.").pathComponents)
+		XCTAssertEqual(["/"], CloudPath("/./").pathComponents)
+		XCTAssertEqual(["/"], CloudPath("/.").pathComponents)
 		XCTAssertEqual(["."], CloudPath("./").pathComponents)
 		XCTAssertEqual(["."], CloudPath(".").pathComponents)
 
 		XCTAssertEqual(["/"], CloudPath("/").pathComponents)
-		XCTAssertEqual([""], CloudPath("").pathComponents)
+		XCTAssertEqual(["."], CloudPath("").pathComponents)
 	}
 
 	func testLastPathComponent() {
@@ -102,64 +96,64 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual("..", CloudPath("/..").lastPathComponent)
 		XCTAssertEqual("..", CloudPath("../").lastPathComponent)
 		XCTAssertEqual("..", CloudPath("..").lastPathComponent)
-		XCTAssertEqual(".", CloudPath("/./").lastPathComponent)
-		XCTAssertEqual(".", CloudPath("/.").lastPathComponent)
+		XCTAssertEqual("/", CloudPath("/./").lastPathComponent)
+		XCTAssertEqual("/", CloudPath("/.").lastPathComponent)
 		XCTAssertEqual(".", CloudPath("./").lastPathComponent)
 		XCTAssertEqual(".", CloudPath(".").lastPathComponent)
 
 		XCTAssertEqual("/", CloudPath("/").lastPathComponent)
-		XCTAssertEqual("", CloudPath("").lastPathComponent)
+		XCTAssertEqual(".", CloudPath("").lastPathComponent)
 	}
 
 	func testAppendingPathComponent() {
-		XCTAssertEqual("/foo//bar/", CloudPath("/foo/").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("/foo//bar", CloudPath("/foo/").appendingPathComponent("/bar").path)
-		XCTAssertEqual("/foo/bar/", CloudPath("/foo/").appendingPathComponent("bar/").path)
+		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("/bar/").path)
+		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("/bar").path)
+		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("bar/").path)
 		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("bar").path)
 
-		XCTAssertEqual("/foo/bar/", CloudPath("/foo").appendingPathComponent("/bar/").path)
+		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("/bar/").path)
 		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("/bar").path)
-		XCTAssertEqual("/foo/bar/", CloudPath("/foo").appendingPathComponent("bar/").path)
+		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("bar/").path)
 		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("bar").path)
 
-		XCTAssertEqual("foo//bar/", CloudPath("foo/").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("foo//bar", CloudPath("foo/").appendingPathComponent("/bar").path)
-		XCTAssertEqual("foo/bar/", CloudPath("foo/").appendingPathComponent("bar/").path)
+		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("/bar/").path)
+		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("/bar").path)
+		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("bar/").path)
 		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("bar").path)
 
-		XCTAssertEqual("foo/bar/", CloudPath("foo").appendingPathComponent("/bar/").path)
+		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("/bar/").path)
 		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("/bar").path)
-		XCTAssertEqual("foo/bar/", CloudPath("foo").appendingPathComponent("bar/").path)
+		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("bar/").path)
 		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("bar").path)
 
-		XCTAssertEqual("///foo//////bar///", CloudPath("///foo///").appendingPathComponent("///bar///").path)
+		XCTAssertEqual("/foo/bar", CloudPath("///foo///").appendingPathComponent("///bar///").path)
 		XCTAssertEqual("/foo", CloudPath("/").appendingPathComponent("foo").path)
 		XCTAssertEqual("foo", CloudPath("").appendingPathComponent("foo").path)
 	}
 
 	func testDeletingLastPathComponent() {
-		XCTAssertEqual("/foo/", CloudPath("/foo/bar/").deletingLastPathComponent().path)
-		XCTAssertEqual("/foo/", CloudPath("/foo/bar").deletingLastPathComponent().path)
+		XCTAssertEqual("/foo", CloudPath("/foo/bar/").deletingLastPathComponent().path)
+		XCTAssertEqual("/foo", CloudPath("/foo/bar").deletingLastPathComponent().path)
 		XCTAssertEqual("/", CloudPath("/foo/").deletingLastPathComponent().path)
 		XCTAssertEqual("/", CloudPath("/foo").deletingLastPathComponent().path)
-		XCTAssertEqual("./", CloudPath("foo/").deletingLastPathComponent().path)
-		XCTAssertEqual("./", CloudPath("foo").deletingLastPathComponent().path)
+		XCTAssertEqual(".", CloudPath("foo/").deletingLastPathComponent().path)
+		XCTAssertEqual(".", CloudPath("foo").deletingLastPathComponent().path)
 
-		XCTAssertEqual("///", CloudPath("///foo///").deletingLastPathComponent().path)
-		XCTAssertEqual("./", CloudPath("foo///").deletingLastPathComponent().path)
-		XCTAssertEqual("///", CloudPath("///foo").deletingLastPathComponent().path)
-		XCTAssertEqual("foo///", CloudPath("foo///bar").deletingLastPathComponent().path)
+		XCTAssertEqual("/", CloudPath("///foo///").deletingLastPathComponent().path)
+		XCTAssertEqual(".", CloudPath("foo///").deletingLastPathComponent().path)
+		XCTAssertEqual("/", CloudPath("///foo").deletingLastPathComponent().path)
+		XCTAssertEqual("foo", CloudPath("foo///bar").deletingLastPathComponent().path)
 
-		XCTAssertEqual("/../../", CloudPath("/../").deletingLastPathComponent().path)
-		XCTAssertEqual("/../../", CloudPath("/..").deletingLastPathComponent().path)
-		XCTAssertEqual("../../", CloudPath("../").deletingLastPathComponent().path)
-		XCTAssertEqual("../../", CloudPath("..").deletingLastPathComponent().path)
-		XCTAssertEqual("/../", CloudPath("/./").deletingLastPathComponent().path)
-		XCTAssertEqual("/../", CloudPath("/.").deletingLastPathComponent().path)
-		XCTAssertEqual("../", CloudPath("./").deletingLastPathComponent().path)
-		XCTAssertEqual("../", CloudPath(".").deletingLastPathComponent().path)
+		XCTAssertEqual("/../..", CloudPath("/../").deletingLastPathComponent().path)
+		XCTAssertEqual("/../..", CloudPath("/..").deletingLastPathComponent().path)
+		XCTAssertEqual("../..", CloudPath("../").deletingLastPathComponent().path)
+		XCTAssertEqual("../..", CloudPath("..").deletingLastPathComponent().path)
+		XCTAssertEqual("/..", CloudPath("/./").deletingLastPathComponent().path)
+		XCTAssertEqual("/..", CloudPath("/.").deletingLastPathComponent().path)
+		XCTAssertEqual("..", CloudPath("./").deletingLastPathComponent().path)
+		XCTAssertEqual("..", CloudPath(".").deletingLastPathComponent().path)
 
-		XCTAssertEqual("/../", CloudPath("/").deletingLastPathComponent().path)
-		XCTAssertEqual("../", CloudPath("").deletingLastPathComponent().path)
+		XCTAssertEqual("/..", CloudPath("/").deletingLastPathComponent().path)
+		XCTAssertEqual("..", CloudPath("").deletingLastPathComponent().path)
 	}
 }

@@ -55,11 +55,7 @@ public class WebDAVProvider: CloudProvider {
 			guard let firstElement = try parser.getElements().first else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			let metadata = CloudItemMetadata(firstElement, cloudPath: cloudPath)
-			guard self.validateItemType(at: url, with: metadata.itemType) else {
-				throw CloudProviderError.itemTypeMismatch
-			}
-			return metadata
+			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
 		}.recover { error -> Promise<CloudItemMetadata> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
@@ -75,7 +71,6 @@ public class WebDAVProvider: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken _: String?) -> Promise<CloudItemList> {
-		precondition(cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
@@ -111,15 +106,15 @@ public class WebDAVProvider: CloudProvider {
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
-		precondition(!cloudPath.hasDirectoryPath)
-		precondition(!localURL.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
 		// GET requests on collections are possible so that it doesn't respond with an error as needed
 		// therefore a fetchItemMetadata() is called first to ensure that it's actually a file on remote
-		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
-		return fetchItemMetadata(at: cloudPath).then { _ in
+		return fetchItemMetadata(at: cloudPath).then { metadata -> Promise<(HTTPURLResponse, URL?)> in
+			guard metadata.itemType == .file else {
+				throw CloudProviderError.itemTypeMismatch
+			}
 			return self.client.GET(url: url)
 		}.then { _, fileURL -> Void in
 			guard let fileURL = fileURL else {
@@ -144,8 +139,6 @@ public class WebDAVProvider: CloudProvider {
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
-		precondition(!localURL.hasDirectoryPath)
-		precondition(!cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
@@ -154,18 +147,19 @@ public class WebDAVProvider: CloudProvider {
 		}
 		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
 		// therefore a fetchItemMetadata() is called first to make that distinction
-		return fetchItemMetadata(at: cloudPath).then { _ in
+		return fetchItemMetadata(at: cloudPath).then { metadata in
 			if replaceExisting {
+				guard metadata.itemType == .file else {
+					throw CloudProviderError.itemTypeMismatch
+				}
 				return self.client.PUT(url: url, fileURL: localURL)
 			} else {
 				return Promise(CloudProviderError.itemAlreadyExists)
 			}
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
-			switch (error, replaceExisting) {
-			case (CloudProviderError.itemNotFound, _):
+			switch error {
+			case CloudProviderError.itemNotFound:
 				return self.client.PUT(url: url, fileURL: localURL)
-			case (CloudProviderError.itemTypeMismatch, false):
-				return Promise(CloudProviderError.itemAlreadyExists)
 			default:
 				return Promise(error)
 			}
@@ -199,7 +193,6 @@ public class WebDAVProvider: CloudProvider {
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		precondition(cloudPath.hasDirectoryPath)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
@@ -223,16 +216,19 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
-	public func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		return deleteItem(at: cloudPath)
+	}
+
+	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		// DELETE requests have no distinction between collections and non-collections
-		// therefore a fetchItemMetadata() is called first to ensure that the expected file type matches on remote
-		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
-		return fetchItemMetadata(at: cloudPath).then { _ in
-			return self.client.DELETE(url: url)
-		}.then { _, _ -> Void in
+		return client.DELETE(url: url).then { _, _ -> Void in
 			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
@@ -248,17 +244,19 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
-	public func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		precondition(sourceCloudPath.hasDirectoryPath == targetCloudPath.hasDirectoryPath)
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: client.baseURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
-		// MOVE requests have no distinction between collections and non-collections
-		// therefore a fetchItemMetadata() is called first to ensure that the expected file type matches on remote
-		// CloudProviderError.itemTypeMismatch is already thrown by fetchItemMetadata() so it doesn't need to be catched
-		return fetchItemMetadata(at: sourceCloudPath).then { _ in
-			return self.client.MOVE(sourceURL: sourceURL, destinationURL: targetURL)
-		}.then { _, _ -> Void in
+		return client.MOVE(sourceURL: sourceURL, destinationURL: targetURL).then { _, _ -> Void in
 			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
@@ -278,11 +276,5 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(error)
 			}
 		}
-	}
-
-	// MARK: - Internal
-
-	private func validateItemType(at url: URL, with itemType: CloudItemType) -> Bool {
-		return url.hasDirectoryPath == (itemType == .folder) || !url.hasDirectoryPath == (itemType == .file)
 	}
 }

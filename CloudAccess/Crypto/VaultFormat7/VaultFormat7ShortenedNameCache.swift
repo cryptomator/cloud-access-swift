@@ -19,7 +19,7 @@ struct C9SDir {
 struct ShorteningResult {
 	let cloudPath: CloudPath
 	let c9sDir: C9SDir?
-	var pointsToC9S: Bool { cloudPath.standardized.path == c9sDir?.cloudPath.standardized.path }
+	var pointsToC9S: Bool { cloudPath == c9sDir?.cloudPath }
 }
 
 private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
@@ -92,23 +92,14 @@ private extension CloudPath {
 		let remainingComponents = Array(components[..<(components.count - toBeRemoved)])
 		return CloudPath(remainingComponents.joined(separator: "/"))
 	}
-
-	func directoryPath() -> CloudPath {
-		if hasDirectoryPath {
-			return self
-		} else {
-			return CloudPath(path + "/")
-		}
-	}
 }
 
 class VaultFormat7ShortenedNameCache {
-	static let threshold = 220
-	static let c9sSuffix = ".c9s"
+	private static let threshold = 220
+	private static let c9sSuffix = ".c9s"
 
-	let vaultPath: CloudPath
-	let ciphertextNameCompIdx: Int
-
+	private let vaultPath: CloudPath
+	private let ciphertextNameCompIdx: Int
 	private let inMemoryDB: DatabaseQueue
 
 	init(vaultPath: CloudPath) throws {
@@ -138,7 +129,7 @@ class VaultFormat7ShortenedNameCache {
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
 			let shortenedName = deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedPath = deflatePath(originalPath, with: shortenedName)
-			let c9sDirPath = shortenedPath.trimmingToPathComponent(at: ciphertextNameCompIdx).directoryPath()
+			let c9sDirPath = shortenedPath.trimmingToPathComponent(at: ciphertextNameCompIdx)
 			let c9sDir = C9SDir(cloudPath: c9sDirPath, originalName: originalName)
 			try? addToCache(shortenedName, originalName: originalName)
 			return ShorteningResult(cloudPath: shortenedPath, c9sDir: c9sDir)
@@ -156,10 +147,13 @@ class VaultFormat7ShortenedNameCache {
 	 - Returns: Either `shortenedPath` if no shortening was applied or the original ("inflated") path.
 	 */
 	func getOriginalPath(_ shortenedPath: CloudPath, nameC9SLoader loadNameC9S: (_ c9sDirPath: CloudPath) -> Promise<Data>) -> Promise<CloudPath> {
-		if shortenedPath.pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
+		if shortenedPath.pathComponents.count <= ciphertextNameCompIdx {
+			return Promise(shortenedPath)
+		}
+		let shortenedName = shortenedPath.pathComponents[ciphertextNameCompIdx]
+		if shortenedName.hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
 			let cutOff = shortenedPath.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirPath = shortenedPath.deletingLastPathComponents(cutOff)
-			let shortenedName = c9sDirPath.lastPathComponent
 			return inflateName(shortenedName, c9sDirPath: c9sDirPath, nameC9SLoader: loadNameC9S).then { originalName in
 				return self.inflatePath(shortenedPath, with: originalName)
 			}

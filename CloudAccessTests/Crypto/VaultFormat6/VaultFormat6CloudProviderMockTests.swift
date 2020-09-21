@@ -26,10 +26,13 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "vaultRootContainsFiles")
 		let provider = VaultFormat6CloudProviderMock()
 		provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).then { cloudItemList in
-			XCTAssertEqual(3, cloudItemList.items.count)
+			XCTAssertEqual(6, cloudItemList.items.count)
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1" }))
 			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng" }))
+			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng" }))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

@@ -126,7 +126,6 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 
 		enum PathState { case shortened, unshortened }
-		enum ItemType { case folder, file }
 		let oldState: PathState = shortenedSource.pointsToC9S ? .shortened : .unshortened
 		let newState: PathState = shortenedTarget.pointsToC9S ? .shortened : .unshortened
 
@@ -153,7 +152,6 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 
 		enum PathState { case shortened, unshortened }
-		enum ItemType { case folder, file }
 		let oldState: PathState = shortenedSource.pointsToC9S ? .shortened : .unshortened
 		let newState: PathState = shortenedTarget.pointsToC9S ? .shortened : .unshortened
 

@@ -16,7 +16,7 @@ struct C9SDir {
 	let originalName: String
 }
 
-struct ShorteningResult {
+struct VaultFormat7ShorteningResult {
 	let cloudPath: CloudPath
 	let c9sDir: C9SDir?
 	var pointsToC9S: Bool { cloudPath == c9sDir?.cloudPath }
@@ -119,11 +119,11 @@ class VaultFormat7ShortenedNameCache {
 	 This **does not** persist the original name to `name.c9s`, though.
 
 	 - Parameter originalPath: The unshortened path.
-	 - Returns: A `ShorteningResult` object that is either based on the `originalPath` (if no shortening is required) or a shortened path.
+	 - Returns: A `VaultFormat7ShorteningResult` object that is either based on the `originalPath` (if no shortening is required) or a shortened path.
 	 */
-	func getShortenedPath(_ originalPath: CloudPath) -> ShorteningResult {
+	func getShortenedPath(_ originalPath: CloudPath) -> VaultFormat7ShorteningResult {
 		if originalPath.pathComponents.count <= ciphertextNameCompIdx {
-			return ShorteningResult(cloudPath: originalPath, c9sDir: nil)
+			return VaultFormat7ShorteningResult(cloudPath: originalPath, c9sDir: nil)
 		}
 		let originalName = originalPath.pathComponents[ciphertextNameCompIdx]
 		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
@@ -132,9 +132,9 @@ class VaultFormat7ShortenedNameCache {
 			let c9sDirPath = shortenedPath.trimmingToPathComponent(at: ciphertextNameCompIdx)
 			let c9sDir = C9SDir(cloudPath: c9sDirPath, originalName: originalName)
 			try? addToCache(shortenedName, originalName: originalName)
-			return ShorteningResult(cloudPath: shortenedPath, c9sDir: c9sDir)
+			return VaultFormat7ShorteningResult(cloudPath: shortenedPath, c9sDir: c9sDir)
 		} else {
-			return ShorteningResult(cloudPath: originalPath, c9sDir: nil)
+			return VaultFormat7ShorteningResult(cloudPath: originalPath, c9sDir: nil)
 		}
 	}
 

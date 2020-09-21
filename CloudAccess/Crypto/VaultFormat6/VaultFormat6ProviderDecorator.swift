@@ -163,14 +163,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 			return self.delegate.uploadFile(from: localDirFileURL, to: ciphertextCloudPath, replaceExisting: false)
 		}.then { _ -> Promise<Void> in
 			let parentDirPath = dirPath.deletingLastPathComponent()
-			return self.delegate.createFolder(at: parentDirPath)
-		}.recover { error -> Promise<Void> in
-			switch error {
-			case CloudProviderError.itemAlreadyExists:
-				return Promise(())
-			default:
-				return Promise(error)
-			}
+			return self.delegate.createFolderIfMissing(at: parentDirPath)
 		}.then { () -> Promise<Void> in
 			return self.delegate.createFolder(at: dirPath)
 		}.always {

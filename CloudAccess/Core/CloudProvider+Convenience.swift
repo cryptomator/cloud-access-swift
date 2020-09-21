@@ -25,9 +25,23 @@ public extension CloudProvider {
 	}
 
 	/**
+	 Convenience wrapper for `createFolder()` that also satisfies if the item is present.
+	 */
+	func createFolderIfMissing(at cloudPath: CloudPath) -> Promise<Void> {
+		return createFolder(at: cloudPath).recover { error -> Promise<Void> in
+			switch error {
+			case CloudProviderError.itemAlreadyExists:
+				return Promise(())
+			default:
+				return Promise(error)
+			}
+		}
+	}
+
+	/**
 	 Convenience wrapper for `deleteFile()` that also satisfies if the item is not present.
 	 */
-	func deleteFileIfExists(at cloudPath: CloudPath) -> Promise<Void> {
+	func deleteFileIfExisting(at cloudPath: CloudPath) -> Promise<Void> {
 		return deleteFile(at: cloudPath).recover { error -> Promise<Void> in
 			switch error {
 			case CloudProviderError.itemNotFound:
@@ -41,7 +55,7 @@ public extension CloudProvider {
 	/**
 	 Convenience wrapper for `deleteFolder()` that also satisfies if the item is not present.
 	 */
-	func deleteFolderIfExists(at cloudPath: CloudPath) -> Promise<Void> {
+	func deleteFolderIfExisting(at cloudPath: CloudPath) -> Promise<Void> {
 		return deleteFolder(at: cloudPath).recover { error -> Promise<Void> in
 			switch error {
 			case CloudProviderError.itemNotFound:

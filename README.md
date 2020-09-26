@@ -11,13 +11,25 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 ## Requirements
 
 - iOS 9.0 or higher
+- macOS 10.12 or higher
 
 ## Installation
 
-The easiest way to use Cloud Access Swift in your app is via [CocoaPods](https://cocoapods.org/ "CocoaPods").
+### Swift Package Manager
 
-1. Add the following line in the project's Podfile file: `pod 'CryptomatorCloudAccess', '~> 1.0.0'`
-2. Run the command `pod install` from the Podfile folder directory.
+You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
+
+```swift
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.0.0"))
+```
+
+### CocoaPods
+
+You can use [CocoaPods](https://cocoapods.org/ "CocoaPods").
+
+```ruby
+`pod 'CryptomatorCloudAccess', '~> 1.0.0'`
+```
 
 ## Contributing to Cloud Access Swift
 

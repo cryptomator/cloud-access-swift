@@ -2,7 +2,7 @@
 
 //
 //  Package.swift
-//  CloudAccess
+//  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 24.09.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
@@ -11,21 +11,22 @@
 import PackageDescription
 
 let package = Package(
-	name: "CloudAccess",
+	name: "CryptomatorCloudAccess",
 	platforms: [
-		.iOS(.v9)
+		.iOS(.v9),
+		.macOS(.v10_12)
 	],
 	products: [
-		.library(name: "CloudAccess", targets: ["CloudAccess"])
+		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "0.8.1")),
+		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "0.9.0")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "4.14.0")),
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0"))
 	],
 	targets: [
-		.target(name: "CloudAccess", dependencies: ["CryptoLib", "GRDB", "Promises"], path: "CloudAccess"),
-		.testTarget(name: "CloudAccessTests", dependencies: ["CloudAccess"], path: "CloudAccessTests")
+		.target(name: "CryptomatorCloudAccess", dependencies: ["CryptomatorCryptoLib", "GRDB", "Promises"]),
+		.testTarget(name: "CryptomatorCloudAccessTests", dependencies: ["CryptomatorCloudAccess"])
 	],
 	swiftLanguageVersions: [.v5]
 )

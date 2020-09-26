@@ -28,7 +28,7 @@ You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Pa
 You can use [CocoaPods](https://cocoapods.org/ "CocoaPods").
 
 ```ruby
-`pod 'CryptomatorCloudAccess', '~> 1.0.0'`
+pod 'CryptomatorCloudAccess', '~> 1.0.0'
 ```
 
 ## Contributing to Cloud Access Swift

@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
   s.source_files = 'Sources/CryptomatorCloudAccess/CryptomatorCloudAccess.h'
   s.ios.deployment_target = '9.0'
   s.osx.deployment_target = '10.12'
-  s.swift_version = '5.0'
+  s.swift_version = '5.1'
 
   s.subspec 'Core' do |ss|
     ss.source_files = 'Sources/CryptomatorCloudAccess/Core/**/*.swift'

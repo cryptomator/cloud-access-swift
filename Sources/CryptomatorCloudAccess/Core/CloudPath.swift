@@ -68,7 +68,7 @@ private extension Array where Element == String {
 
  This type mimics the behavior of `URL` but does not implement it and has a reduced set of methods. E.g., a `CloudPath` is not bound to a certain cloud provider or file system and the same path can be used for different providers.
  */
-public struct CloudPath: Equatable {
+public struct CloudPath: Equatable, Codable {
 	public let path: String
 
 	public var isAbsolute: Bool {

@@ -37,8 +37,13 @@ class WebDAVProviderTests: XCTestCase {
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { metadata in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
@@ -59,9 +64,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata with itemNotFound error")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let propfindError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
 
 		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { _ in
 			XCTFail("Fetching metdata of a non-existing item should fail")
@@ -81,8 +90,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == self.baseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in
 			XCTAssertEqual(.one, self.client.propfindRequests["."])
@@ -103,9 +117,13 @@ class WebDAVProviderTests: XCTestCase {
 	func testFetchItemListWithNotFoundError() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList with itemNotFound error")
 
-		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let propfindError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
+		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == self.baseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
 
 		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a non-existing folder should fail")
@@ -126,8 +144,13 @@ class WebDAVProviderTests: XCTestCase {
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt"), withPageToken: nil).then { _ in
 			XCTFail("Fetching item list for a folder that is actually a file should fail")
@@ -149,12 +172,22 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: getData, response: getResponse, error: nil))
+		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (getResponse, getData)
+		})
 
 		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
@@ -176,12 +209,21 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let getError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: getResponse, error: getError))
+		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (getResponse, nil)
+		})
 
 		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading non-existing file should fail")
@@ -205,12 +247,22 @@ class WebDAVProviderTests: XCTestCase {
 		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: getData, response: getResponse, error: nil))
+		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (getResponse, getData)
+		})
 
 		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading file to an existing resource should fail")
@@ -233,8 +285,13 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).then {
 			XCTFail("Downloading file that is actually a folder should fail")
@@ -257,13 +314,22 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let propfindError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
 
 		let putData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: putData, response: putResponse, error: nil))
+		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (putResponse, putData)
+		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { metadata in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
@@ -288,12 +354,22 @@ class WebDAVProviderTests: XCTestCase {
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		let putData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: putData, response: putResponse, error: nil))
+		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (putResponse, putData)
+		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { metadata in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
@@ -336,8 +412,13 @@ class WebDAVProviderTests: XCTestCase {
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file to an existing item should fail")
@@ -360,12 +441,18 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false, attributes: nil)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let propfindError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
 
 		let putError = POSIXError(.EISDIR)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: nil, error: putError))
+		MockURLProtocol.requestHandler.append({ _ in
+			throw putError
+		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file that is actually a folder should fail")
@@ -389,8 +476,13 @@ class WebDAVProviderTests: XCTestCase {
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: propfindData, response: propfindResponse, error: nil))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { _ in
 			XCTFail("Uploading and replacing file that is actually a folder should fail")
@@ -413,14 +505,21 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let propfindError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: propfindResponse, error: propfindError))
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
 
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)
-		let putError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: putResponse, error: putError))
-
+		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (putResponse, nil)
+		})
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file into a non-existing parent folder should fail")
 		}.catch { error in
@@ -440,9 +539,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "createFolder")
 		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: nil))
-
+		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (mkcolResponse, nil)
+		})
 		provider.createFolder(at: CloudPath("/foo")).then {
 			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 		}.catch { error in
@@ -457,10 +560,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "createFolder with itemAlreadyExists error")
 		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil)
-		let mkcolError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: mkcolError))
-
+		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (mkcolResponse, nil)
+		})
 		provider.createFolder(at: CloudPath("/foo")).then {
 			XCTFail("Creating folder at an existing item should fail")
 		}.catch { error in
@@ -479,10 +585,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "createFolder with parentFolderDoesNotExist error")
 		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)
-		let mkcolError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: mkcolResponse, error: mkcolError))
-
+		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (mkcolResponse, nil)
+		})
 		provider.createFolder(at: CloudPath("/foo")).then {
 			XCTFail("Creating folder at a non-existing parent folder should fail")
 		}.catch { error in
@@ -501,9 +610,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "deleteFile")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: deleteResponse, error: nil))
-
+		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (deleteResponse, nil)
+		})
 		provider.deleteFile(at: CloudPath("/Documents/About.txt")).then {
 			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
 		}.catch { error in
@@ -518,9 +631,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "deleteFile with itemNotFound error")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let deleteError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: deleteResponse, error: deleteError))
+		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (deleteResponse, nil)
+		})
 
 		provider.deleteFile(at: CloudPath("/Documents/About.txt")).then {
 			XCTFail("Deleting non-existing item should fail")
@@ -540,8 +657,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFile")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: nil))
+		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (moveResponse, nil)
+		})
 
 		provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
@@ -557,9 +679,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFile with itemNotFound error")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
-		let moveError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: moveError))
+		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (moveResponse, nil)
+		})
 
 		provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving non-existing item should fail")
@@ -580,9 +706,13 @@ class WebDAVProviderTests: XCTestCase {
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
 		let moveData = try getTestData(forResource: "item-move-412-error", withExtension: "xml")
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil)
-		let moveError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: moveData, response: moveResponse, error: moveError))
+		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (moveResponse, moveData)
+		})
 
 		provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving item to an existing resource should fail")
@@ -602,9 +732,13 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFile with parentFolderDoesNotExist error")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)
-		let moveError = URLSessionErrorMock.expectedFailure
-		client.urlSession.completionMocks.append(URLSessionCompletionMock(data: nil, response: moveResponse, error: moveError))
+		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (moveResponse, nil)
+		})
 
 		provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTFail("Moving item to a non-existing parent folder should fail")

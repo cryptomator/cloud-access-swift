@@ -10,102 +10,7 @@ import Foundation
 import Promises
 @testable import CryptomatorCloudAccess
 
-enum URLSessionErrorMock: Error {
-	case missingCompletionMock
-	case expectedFailure
-}
-
-struct URLSessionCompletionMock {
-	let data: Data?
-	let response: URLResponse?
-	let error: Error?
-}
-
-class URLSessionDataTaskMock: URLSessionDataTask {
-	private let completionHandler: () -> Void
-
-	init(completionHandler: @escaping () -> Void) {
-		self.completionHandler = completionHandler
-	}
-
-	override func resume() {
-		completionHandler()
-	}
-}
-
-class URLSessionDownloadTaskMock: URLSessionDownloadTask {
-	private let completionHandler: () -> Void
-
-	init(completionHandler: @escaping () -> Void) {
-		self.completionHandler = completionHandler
-	}
-
-	override func resume() {
-		completionHandler()
-	}
-}
-
-class URLSessionUploadTaskMock: URLSessionUploadTask {
-	private let completionHandler: () -> Void
-
-	init(completionHandler: @escaping () -> Void) {
-		self.completionHandler = completionHandler
-	}
-
-	override func resume() {
-		completionHandler()
-	}
-}
-
-class URLSessionMock: URLSession {
-	let tmpDirURL: URL
-
-	var completionMocks: [URLSessionCompletionMock] = []
-
-	override init() {
-		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try? FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-	}
-
-	override func dataTask(with request: URLRequest, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask {
-		return URLSessionDataTaskMock {
-			guard !self.completionMocks.isEmpty else {
-				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
-				return
-			}
-			let completionMock = self.completionMocks.removeFirst()
-			completionHandler(completionMock.data, completionMock.response, completionMock.error)
-		}
-	}
-
-	override func downloadTask(with request: URLRequest, completionHandler: @escaping (URL?, URLResponse?, Error?) -> Void) -> URLSessionDownloadTask {
-		return URLSessionDownloadTaskMock {
-			guard !self.completionMocks.isEmpty else {
-				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
-				return
-			}
-			let completionMock = self.completionMocks.removeFirst()
-			let url = self.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try? completionMock.data?.write(to: url)
-			completionHandler(url, completionMock.response, completionMock.error)
-		}
-	}
-
-	override func uploadTask(with request: URLRequest, fromFile fileURL: URL, completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionUploadTask {
-		return URLSessionUploadTaskMock {
-			guard !self.completionMocks.isEmpty else {
-				completionHandler(nil, nil, URLSessionErrorMock.missingCompletionMock)
-				return
-			}
-			let completionMock = self.completionMocks.removeFirst()
-			completionHandler(completionMock.data, completionMock.response, completionMock.error)
-		}
-	}
-}
-
 class WebDAVClientMock: WebDAVClient {
-	var urlSession = URLSessionMock()
-
 	var optionsRequests: [String] = []
 	var headRequests: [String] = []
 	var propfindRequests: [String: PropfindDepth] = [:]
@@ -116,7 +21,12 @@ class WebDAVClientMock: WebDAVClient {
 	var moveRequests: [String: String] = [:]
 
 	init(baseURL: URL) {
-		super.init(credential: WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil), urlSession: urlSession)
+		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
+		let delegate = WebDAVClientURLSessionDelegate(credential: credential)
+		let configuration = URLSessionConfiguration.default
+		configuration.protocolClasses = [MockURLProtocol.self]
+		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+		super.init(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
 	}
 
 	override func OPTIONS(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
@@ -134,9 +44,9 @@ class WebDAVClientMock: WebDAVClient {
 		return super.PROPFIND(url: url, depth: depth, propertyNames: propertyNames)
 	}
 
-	override func GET(url: URL) -> Promise<(HTTPURLResponse, URL?)> {
+	override func GET(from url: URL, to localURL: URL) -> Promise<HTTPURLResponse> {
 		getRequests.append(url.relativePath)
-		return super.GET(url: url)
+		return super.GET(from: url, to: localURL)
 	}
 
 	override func PUT(url: URL, fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {

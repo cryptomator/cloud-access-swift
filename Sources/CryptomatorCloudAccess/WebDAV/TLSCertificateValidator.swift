@@ -75,7 +75,7 @@ public class TLSCertificateValidator {
 	}
 
 	private static func createURLSession(sharedContainerIdentifier: String, delegate: URLSessionDelegate) -> URLSession {
-		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessTLSCertificateValidator_\(UUID().uuidString)")
+		let configuration = URLSessionConfiguration.default
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)

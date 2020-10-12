@@ -111,16 +111,13 @@ public class WebDAVProvider: CloudProvider {
 		}
 		// GET requests on collections are possible so that it doesn't respond with an error as needed
 		// therefore a fetchItemMetadata() is called first to ensure that it's actually a file on remote
-		return fetchItemMetadata(at: cloudPath).then { metadata -> Promise<(HTTPURLResponse, URL?)> in
+		return fetchItemMetadata(at: cloudPath).then { metadata -> Promise<HTTPURLResponse> in
 			guard metadata.itemType == .file else {
 				throw CloudProviderError.itemTypeMismatch
 			}
-			return self.client.GET(url: url)
-		}.then { _, fileURL -> Void in
-			guard let fileURL = fileURL else {
-				throw WebDAVProviderError.invalidResponse
-			}
-			try FileManager.default.moveItem(at: fileURL, to: localURL)
+			return self.client.GET(from: url, to: localURL)
+		}.then { _ -> Void in
+			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):

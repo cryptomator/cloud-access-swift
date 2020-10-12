@@ -10,7 +10,7 @@ import Foundation
 import Promises
 
 public enum URLSessionError: Error {
-	case httpError(_ error: Error, statusCode: Int)
+	case httpError(_ error: Error?, statusCode: Int)
 	case unexpectedResponse
 }
 

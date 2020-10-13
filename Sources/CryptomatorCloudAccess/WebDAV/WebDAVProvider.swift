@@ -160,15 +160,8 @@ public class WebDAVProvider: CloudProvider {
 			default:
 				return Promise(error)
 			}
-		}.then { response, data -> CloudItemMetadata in
-			guard let data = data else {
-				throw WebDAVProviderError.invalidResponse
-			}
-			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
-			guard let firstElement = try parser.getElements().first else {
-				throw WebDAVProviderError.invalidResponse
-			}
-			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
+		}.then { _, _ in
+			return self.fetchItemMetadata(at: cloudPath)
 		}.recover { error -> Promise<CloudItemMetadata> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):

@@ -80,8 +80,8 @@ public class WebDAVClient {
 	public func MOVE(sourceURL: URL, destinationURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: sourceURL)
 		request.httpMethod = "MOVE"
-		request.setValue("Destination", forHTTPHeaderField: destinationURL.absoluteString)
-		request.setValue("Overwrite", forHTTPHeaderField: "F")
+		request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
+		request.setValue("F", forHTTPHeaderField: "Overwrite")
 		return webDAVSession.performDataTask(with: request)
 	}
 

@@ -553,6 +553,42 @@ class WebDAVProviderTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
+	func testUploadFileWithParentFolderDoesNotExistErrorWhenReceiving404Error() throws {
+		let expectation = XCTestExpectation(description: "uploadFile with parentFolderDoesNotExist error")
+		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
+
+		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (putResponse, nil)
+		})
+		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
+			XCTFail("Uploading file into a non-existing parent folder should fail")
+		}.catch { error in
+			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
+			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
+			guard case CloudProviderError.parentFolderDoesNotExist = error else {
+				XCTFail(error.localizedDescription)
+				return
+			}
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
 	func testCreateFolder() throws {
 		let expectation = XCTestExpectation(description: "createFolder")
 		let responseURL = URL(string: "foo/", relativeTo: baseURL)!

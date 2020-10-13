@@ -166,7 +166,7 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 405):
 				return Promise(CloudProviderError.itemTypeMismatch)
-			case URLSessionError.httpError(_, statusCode: 409):
+			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
 			case URLSessionError.httpError(_, statusCode: 507):
 				return Promise(CloudProviderError.quotaInsufficient)

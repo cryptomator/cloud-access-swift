@@ -66,6 +66,10 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		switch (task, task.response, error) {
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, nil):
 			let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+			guard (200 ... 299).contains(httpResponse.statusCode) else {
+				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: httpResponse.statusCode))
+				return
+			}
 			runningDataTask?.fulfillPromise(with: httpResponse)
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, .some(error)):
 			let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
@@ -89,15 +93,6 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
 		let runningDataTask = runningDataTasks[dataTask]
 		runningDataTask?.accumulatedData.append(data)
-	}
-
-	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-		guard let httpResponse = response as? HTTPURLResponse,
-			(200 ... 299).contains(httpResponse.statusCode) else {
-			completionHandler(.cancel)
-			return
-		}
-		completionHandler(.allow)
 	}
 
 	// MARK: - URLSessionDownloadDelegate

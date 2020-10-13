@@ -21,8 +21,6 @@ class MockURLProtocol: URLProtocol {
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 			if let data = data {
 				client?.urlProtocol(self, didLoad: data)
-			} else {
-				print("no data")
 			}
 			client?.urlProtocolDidFinishLoading(self)
 		} catch {

@@ -322,13 +322,22 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, nil)
 		})
 
-		let putData = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let putData = Data()
 		MockURLProtocol.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw MockURLProtocolError.unexpectedRequest
 			}
 			return (putResponse, putData)
+		})
+
+		let propfindResponseAfterUpload = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { metadata in
@@ -362,13 +371,22 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		let putData = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		let putData = Data()
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
 		MockURLProtocol.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw MockURLProtocolError.unexpectedRequest
 			}
 			return (putResponse, putData)
+		})
+
+		let propfindResponseAfterUpload = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		MockURLProtocol.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw MockURLProtocolError.unexpectedRequest
+			}
+			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
 
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).then { metadata in

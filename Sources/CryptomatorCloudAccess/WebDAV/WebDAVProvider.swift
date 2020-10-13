@@ -160,9 +160,7 @@ public class WebDAVProvider: CloudProvider {
 			default:
 				return Promise(error)
 			}
-		}.then { _, _ in
-			return self.fetchItemMetadata(at: cloudPath)
-		}.recover { error -> Promise<CloudItemMetadata> in
+		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
 				return Promise(CloudProviderError.unauthorized)
@@ -179,6 +177,8 @@ public class WebDAVProvider: CloudProvider {
 			default:
 				return Promise(error)
 			}
+		}.then { _, _ in
+			return self.fetchItemMetadata(at: cloudPath)
 		}
 	}
 

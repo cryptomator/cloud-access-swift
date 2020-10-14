@@ -20,11 +20,11 @@ class WebDAVClientMock: WebDAVClient {
 	var deleteRequests: [String] = []
 	var moveRequests: [String: String] = [:]
 
-	init(baseURL: URL) {
+	init(baseURL: URL, urlProtocolMock: AnyClass) {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
 		let delegate = WebDAVClientURLSessionDelegate(credential: credential)
 		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [MockURLProtocol.self]
+		configuration.protocolClasses = [urlProtocolMock]
 		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		super.init(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
 	}

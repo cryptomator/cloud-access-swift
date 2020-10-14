@@ -58,6 +58,16 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		if challenge.previousFailureCount < 1 {
 			completionHandler(.useCredential, URLCredential(user: credential.username, password: credential.password, persistence: .forSession))
 		} else {
+			switch task {
+			case let dataTask as URLSessionDataTask:
+				let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
+			case let downloadTask as URLSessionDownloadTask:
+				let runningDownloadTaskPromise = runningDownloadTasks.removeValue(forKey: downloadTask)
+				runningDownloadTaskPromise?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
+			default:
+				break
+			}
 			completionHandler(.cancelAuthenticationChallenge, nil)
 		}
 	}

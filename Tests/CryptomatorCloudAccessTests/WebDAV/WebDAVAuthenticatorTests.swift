@@ -20,14 +20,14 @@ class WebDAVAuthenticatorTests: XCTestCase {
 
 	override func setUp() {
 		baseURL = URL(string: "/cloud/remote.php/webdav/")
-		client = WebDAVClientMock(baseURL: baseURL)
+		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
 	}
 
 	func testVerifyClient() throws {
 		let expectation = XCTestExpectation(description: "verifyClient")
 
 		let optionsResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])!
-		MockURLProtocol.requestHandler.append({ request in
+		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
 				throw MockURLProtocolError.unexpectedRequest
 			}
@@ -36,7 +36,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 
 		let propfindData = try getTestData(forResource: "authentication-success", withExtension: "xml")
 		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
-		MockURLProtocol.requestHandler.append({ request in
+		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
 				throw MockURLProtocolError.unexpectedRequest
 			}

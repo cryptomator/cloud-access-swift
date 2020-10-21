@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct WebDAVCredential {
+public struct WebDAVCredential: Codable {
 	public let baseURL: URL
 	public let username: String
 	public let password: String

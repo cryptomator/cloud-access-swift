@@ -46,6 +46,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		WebDAVAuthenticator.verifyClient(client: client).then {
 			XCTAssertTrue(self.client.optionsRequests.contains(self.baseURL.relativePath))
 			XCTAssertEqual(.zero, self.client.propfindRequests[self.baseURL.relativePath])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {

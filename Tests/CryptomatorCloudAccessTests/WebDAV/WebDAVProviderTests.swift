@@ -52,6 +52,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -76,6 +77,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Fetching metdata of a non-existing item should fail")
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -99,6 +101,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Fetching metdata with an unauthorized client should fail")
 		}.catch { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -129,6 +132,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Nextcloud intro.mp4" }))
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Nextcloud.png" }))
 			XCTAssertTrue(itemList.items.contains(where: { $0.name == "Photos" }))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -152,6 +156,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Fetching item list for a non-existing folder should fail")
 		}.catch { error in
 			XCTAssertEqual(.one, self.client.propfindRequests["."])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -179,6 +184,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Fetching item list for a folder that is actually a file should fail")
 		}.catch { error in
 			XCTAssertEqual(.one, self.client.propfindRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -201,6 +207,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Fetching item list with an unauthorized client should fail")
 		}.catch { error in
 			XCTAssertEqual(.one, unauthorizedClient.propfindRequests["."])
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -240,6 +247,7 @@ class WebDAVProviderTests: XCTestCase {
 			let expectedData = try self.getTestData(forResource: "item-data", withExtension: "txt")
 			let actualData = try Data(contentsOf: localURL)
 			XCTAssertEqual(expectedData, actualData)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -275,6 +283,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -314,6 +323,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -343,6 +353,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.getRequests.count)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -368,6 +379,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, unauthorizedClient.getRequests.count)
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -418,6 +430,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -467,6 +480,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTAssertEqual(.file, metadata.itemType)
 			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
 			XCTAssertEqual(1074, metadata.size)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -483,6 +497,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(0, self.client.propfindRequests.count)
 			XCTAssertEqual(0, self.client.putRequests.count)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -513,6 +528,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.putRequests.count)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -547,6 +563,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -577,6 +594,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.putRequests.count)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -613,6 +631,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -649,6 +668,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -675,6 +695,7 @@ class WebDAVProviderTests: XCTestCase {
 		}.catch { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, unauthorizedClient.putRequests.count)
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -721,6 +742,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Creating folder at an existing item should fail")
 		}.catch { error in
 			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -746,6 +768,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Creating folder at a non-existing parent folder should fail")
 		}.catch { error in
 			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -769,6 +792,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Creating folder with an unauthorized client should fail")
 		}.catch { error in
 			XCTAssertTrue(unauthorizedClient.mkcolRequests.contains("foo"))
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -792,6 +816,7 @@ class WebDAVProviderTests: XCTestCase {
 		})
 		provider.deleteFile(at: CloudPath("/Documents/About.txt")).then {
 			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -816,6 +841,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Deleting non-existing item should fail")
 		}.catch { error in
 			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -839,6 +865,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Deleting an item with an unauthorized client should fail")
 		}.catch { error in
 			XCTAssertTrue(unauthorizedClient.deleteRequests.contains("Documents/About.txt"))
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -863,6 +890,7 @@ class WebDAVProviderTests: XCTestCase {
 
 		provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).then {
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
 		}.always {
@@ -887,6 +915,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Moving non-existing item should fail")
 		}.catch { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemNotFound = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -914,6 +943,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Moving item to an existing resource should fail")
 		}.catch { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -940,6 +970,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Moving item to a non-existing parent folder should fail")
 		}.catch { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.parentFolderDoesNotExist = error else {
 				XCTFail(error.localizedDescription)
 				return
@@ -963,6 +994,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTFail("Moving an item with an unauthorized client should fail")
 		}.catch { error in
 			XCTAssertEqual("Documents/Foobar.txt", unauthorizedClient.moveRequests["Documents/About.txt"])
+			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return

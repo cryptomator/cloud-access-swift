@@ -65,6 +65,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -103,6 +105,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudProviderError.itemNotFound)
 			} catch CocoaError.fileReadUnknown {
 				promise = Promise(CloudProviderError.itemTypeMismatch)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -139,6 +143,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudProviderError.itemNotFound)
 			} catch CocoaError.fileWriteFileExists {
 				promise = Promise(CloudProviderError.itemAlreadyExists)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -190,6 +196,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
 			} catch CocoaError.fileWriteOutOfSpace {
 				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -223,6 +231,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudProviderError.parentFolderDoesNotExist)
 			} catch CocoaError.fileWriteOutOfSpace {
 				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -260,6 +270,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(())
 			} catch CocoaError.fileNoSuchFile {
 				promise = Promise(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}
@@ -305,6 +317,8 @@ public class LocalFileSystemProvider: CloudProvider {
 				promise = Promise(CloudProviderError.itemAlreadyExists)
 			} catch CocoaError.fileWriteOutOfSpace {
 				promise = Promise(CloudProviderError.quotaInsufficient)
+			} catch CocoaError.fileReadNoPermission {
+				promise = Promise(CloudProviderError.unauthorized)
 			} catch {
 				promise = Promise(error)
 			}

@@ -109,15 +109,17 @@ public class WebDAVProvider: CloudProvider {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
+		let progress = Progress(totalUnitCount: 1)
 		// GET requests on collections are possible so that it doesn't respond with an error as needed
 		// therefore a fetchItemMetadata() is called first to ensure that it's actually a file on remote
 		return fetchItemMetadata(at: cloudPath).then { metadata -> Promise<HTTPURLResponse> in
 			guard metadata.itemType == .file else {
 				throw CloudProviderError.itemTypeMismatch
 			}
+			progress.becomeCurrent(withPendingUnitCount: 1)
 			return self.client.GET(from: url, to: localURL)
 		}.then { _ -> Void in
-			// no-op
+			progress.resignCurrent()
 		}.recover { error -> Promise<Void> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
@@ -142,6 +144,7 @@ public class WebDAVProvider: CloudProvider {
 		guard FileManager.default.fileExists(atPath: localURL.path) else {
 			return Promise(CloudProviderError.itemNotFound)
 		}
+		let progress = Progress(totalUnitCount: 1)
 		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
 		// therefore a fetchItemMetadata() is called first to make that distinction
 		return fetchItemMetadata(at: cloudPath).then { metadata in
@@ -149,6 +152,7 @@ public class WebDAVProvider: CloudProvider {
 				guard metadata.itemType == .file else {
 					throw CloudProviderError.itemTypeMismatch
 				}
+				progress.becomeCurrent(withPendingUnitCount: 1)
 				return self.client.PUT(url: url, fileURL: localURL)
 			} else {
 				return Promise(CloudProviderError.itemAlreadyExists)
@@ -156,11 +160,13 @@ public class WebDAVProvider: CloudProvider {
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
 			switch error {
 			case CloudProviderError.itemNotFound:
+				progress.becomeCurrent(withPendingUnitCount: 1)
 				return self.client.PUT(url: url, fileURL: localURL)
 			default:
 				return Promise(error)
 			}
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
+			progress.resignCurrent()
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
 				return Promise(CloudProviderError.unauthorized)

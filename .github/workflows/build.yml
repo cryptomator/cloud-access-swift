@@ -7,7 +7,6 @@ jobs:
   build:
     name: Build and test
     runs-on: macos-latest
-    #This check is case insensitive
     if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v2

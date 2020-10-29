@@ -10,10 +10,6 @@ import CryptomatorCryptoLib
 import Foundation
 import Promises
 
-public enum VaultFormat7Error: Error {
-	case encounteredUnrelatedFile
-}
-
 private extension CloudPath {
 	func appendingDirFileComponent() -> CloudPath {
 		return appendingPathComponent("dir.c9r")
@@ -34,7 +30,10 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let dirIdCache: DirectoryIdCache
 	let tmpDirURL: URL
 
-	init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
+	public init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
+		guard cryptor.masterkeyVersion == 7 else {
+			throw VaultFormatError.masterkeyVersionMismatch
+		}
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
@@ -207,7 +206,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	private func toCleartextMetadata(_ ciphertextMetadata: CloudItemMetadata, cleartextParentPath: CloudPath, parentDirId: Data) throws -> CloudItemMetadata {
 		guard String(ciphertextMetadata.name.suffix(4)) == ".c9r" else {
-			throw VaultFormat7Error.encounteredUnrelatedFile // not a Cryptomator file
+			throw VaultFormatError.encounteredUnrelatedFile // not a Cryptomator file
 		}
 		let ciphertextBaseName = String(ciphertextMetadata.name.dropLast(4))
 		let cleartextName = try cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId)

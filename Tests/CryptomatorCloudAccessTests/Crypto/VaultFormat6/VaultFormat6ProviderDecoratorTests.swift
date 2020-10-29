@@ -29,6 +29,14 @@ class VaultFormat6ProviderDecoratorTests: XCTestCase {
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
+	func testMasterkeyVersionMismatchError() {
+		let cryptor = VaultFormat6CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 0))
+		let provider = VaultFormat6CloudProviderMock()
+		XCTAssertThrowsError(try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor), "masterkey version mismatch") { error in
+			XCTAssertEqual(.masterkeyVersionMismatch, error as? VaultFormatError)
+		}
+	}
+
 	func testFetchItemMetadata() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata")
 		decorator.fetchItemMetadata(at: CloudPath("/Directory 1/File 3")).then { metadata in

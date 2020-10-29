@@ -48,6 +48,7 @@
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
 		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
+		74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CF2E6B254B6683006266D6 /* VaultFormatError.swift */; };
 		74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DF965D24F3DE6400763713 /* CloudPathTests.swift */; };
 		74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */; };
 		74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5D24BCB6B9003379FA /* item-metadata.xml */; };
@@ -129,6 +130,7 @@
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
+		74CF2E6B254B6683006266D6 /* VaultFormatError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormatError.swift; sourceTree = "<group>"; };
 		74DF965D24F3DE6400763713 /* CloudPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPathTests.swift; sourceTree = "<group>"; };
 		74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-move-412-error.xml"; sourceTree = "<group>"; };
 		74E54F5D24BCB6B9003379FA /* item-metadata.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-metadata.xml"; sourceTree = "<group>"; };
@@ -243,6 +245,7 @@
 			isa = PBXGroup;
 			children = (
 				9ECEC0AE246ED1FB00151299 /* DirectoryIdCache.swift */,
+				74CF2E6B254B6683006266D6 /* VaultFormatError.swift */,
 				7416F22524F6584A0074DA8E /* VaultFormat6 */,
 				9ED0E61B24617C0300FDB438 /* VaultFormat7 */,
 			);
@@ -296,9 +299,9 @@
 			isa = PBXGroup;
 			children = (
 				7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */,
+				4A40749F252F432900D583C3 /* URLProtocolMock.swift */,
 				746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */,
 				74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */,
-				4A40749F252F432900D583C3 /* URLProtocolMock.swift */,
 				746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */,
 				74F57AD524BCB4E80040513A /* AuthenticatorResponses */,
 				74E54F5A24BCB6B9003379FA /* ClientTestResponses */,
@@ -331,9 +334,9 @@
 				4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */,
 				748A42B724AA231D00DEB6D0 /* WebDAVAuthenticator.swift */,
 				748A42BF24AB424500DEB6D0 /* WebDAVClient.swift */,
-				4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */,
 				748A42B924AA34F300DEB6D0 /* WebDAVCredential.swift */,
 				748A42B524AA231000DEB6D0 /* WebDAVProvider.swift */,
+				4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */,
 			);
 			path = WebDAV;
 			sourceTree = "<group>";
@@ -569,6 +572,7 @@
 				9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */,
 				7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */,
 				4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */,
+				74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */,
 				4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */,
 				7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,

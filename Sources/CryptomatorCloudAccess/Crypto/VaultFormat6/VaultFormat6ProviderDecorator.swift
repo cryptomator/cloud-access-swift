@@ -10,12 +10,6 @@ import CryptomatorCryptoLib
 import Foundation
 import Promises
 
-private extension CloudPath {
-	func appendingMasterkeyFileComponent() -> CloudPath {
-		return appendingPathComponent("masterkey.cryptomator")
-	}
-}
-
 /**
  Cloud provider decorator for Cryptomator vaults in vault format 6 (without name shortening).
 
@@ -41,36 +35,6 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 
 	deinit {
 		try? FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	// MARK: - Factory
-
-	/**
-	 Creates crypto decorator from an existing masterkey.
-
-	 This method does the following:
-	 1. Downloads masterkey file from `masterkey.cryptomator` relative to `vaultPath`.
-	 2. Uses `password` to create a masterkey from downloaded masterkey file. This is equivalent to an unlock attempt.
-
-	 - Parameter delegate: The cloud provider that is being decorated.
-	 - Parameter vaultPath: The vault path. Last path component represents the vault name.
-	 - Parameter password: The password to use for decrypting the masterkey file.
-	 - Returns: Promise with the crypto decorator.
-	 */
-	public static func createFromExisting(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat6ProviderDecorator> {
-		do {
-			let masterkeyCloudPath = vaultPath.appendingMasterkeyFileComponent()
-			let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat6ProviderDecorator in
-				let masterkey = try Masterkey.createFromMasterkeyFile(fileURL: localMasterkeyURL, password: password)
-				let cryptor = Cryptor(masterkey: masterkey)
-				return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-			}
-		} catch {
-			return Promise(error)
-		}
 	}
 
 	// MARK: - CloudProvider API

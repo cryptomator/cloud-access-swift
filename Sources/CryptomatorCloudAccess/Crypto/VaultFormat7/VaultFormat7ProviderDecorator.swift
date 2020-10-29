@@ -15,10 +15,6 @@ public enum VaultFormat7Error: Error {
 }
 
 private extension CloudPath {
-	func appendingMasterkeyFileComponent() -> CloudPath {
-		return appendingPathComponent("masterkey.cryptomator")
-	}
-
 	func appendingDirFileComponent() -> CloudPath {
 		return appendingPathComponent("dir.c9r")
 	}
@@ -49,82 +45,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	deinit {
 		try? FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	// MARK: - Factory
-
-	/**
-	 Creates crypto decorator with a new masterkey.
-
-	 This method does the following:
-	 1. Creates a folder at `vaultPath`.
-	 2. Uses `password` to create a new masterkey.
-	 3. Uploads masterkey file to `masterkey.cryptomator` relative to `vaultPath`.
-	 4. Creates a folder at `d/` relative to `vaultPath`.
-	 5. Creates a folder at `d/<two-chars>/` relative to `vaultPath`.
-	 6. Creates a folder at `d/<two-chars>/<thirty-chars>/` relative to `vaultPath`.
-
-	 - Parameter delegate: The cloud provider that is being decorated.
-	 - Parameter vaultPath: The vault path. Last path component represents the vault name.
-	 - Parameter password: The password used to encrypt the key material.
-	 - Returns: Promise with the crypto decorator.
-	 */
-	public static func createNew(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {
-		do {
-			let masterkey = try Masterkey.createNew()
-			let cryptor = Cryptor(masterkey: masterkey)
-			let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-			let rootDirPath = try decorator.getDirPath(Data())
-			return delegate.createFolder(at: vaultPath).then { () -> Promise<CloudItemMetadata> in
-				let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
-				try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-				let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-				let masterkeyData = try masterkey.exportEncrypted(password: password)
-				try masterkeyData.write(to: localMasterkeyURL)
-				let masterkeyCloudPath = vaultPath.appendingMasterkeyFileComponent()
-				return delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
-			}.then { _ -> Promise<Void> in
-				let dPath = vaultPath.appendingPathComponent("d")
-				return delegate.createFolder(at: dPath)
-			}.then { () -> Promise<Void> in
-				let twoCharsPath = rootDirPath.deletingLastPathComponent()
-				return delegate.createFolder(at: twoCharsPath)
-			}.then { () -> Promise<Void> in
-				return delegate.createFolder(at: rootDirPath)
-			}.then { () -> VaultFormat7ProviderDecorator in
-				return decorator
-			}
-		} catch {
-			return Promise(error)
-		}
-	}
-
-	/**
-	 Creates crypto decorator from an existing masterkey.
-
-	 This method does the following:
-	 1. Downloads masterkey file from `masterkey.cryptomator` relative to `vaultPath`.
-	 2. Uses `password` to create a masterkey from downloaded masterkey file. This is equivalent to an unlock attempt.
-
-	 - Parameter delegate: The cloud provider that is being decorated.
-	 - Parameter vaultPath: The vault path. Last path component represents the vault name.
-	 - Parameter password: The password to use for decrypting the masterkey file.
-	 - Returns: Promise with the crypto decorator.
-	 */
-	public static func createFromExisting(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {
-		do {
-			let masterkeyCloudPath = vaultPath.appendingMasterkeyFileComponent()
-			let tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat7ProviderDecorator in
-				let masterkey = try Masterkey.createFromMasterkeyFile(fileURL: localMasterkeyURL, password: password)
-				let cryptor = Cryptor(masterkey: masterkey)
-				return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-			}
-		} catch {
-			return Promise(error)
-		}
 	}
 
 	// MARK: - CloudProvider API

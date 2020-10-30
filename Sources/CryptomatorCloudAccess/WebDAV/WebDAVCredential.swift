@@ -13,11 +13,13 @@ public struct WebDAVCredential: Codable {
 	public let username: String
 	public let password: String
 	public let allowedCertificate: Data?
+	public let identifier: String
 
-	public init(baseURL: URL, username: String, password: String, allowedCertificate: Data?) {
+	public init(baseURL: URL, username: String, password: String, allowedCertificate: Data?, identifier: String = UUID().uuidString) {
 		self.baseURL = baseURL
 		self.username = username
 		self.password = password
 		self.allowedCertificate = allowedCertificate
+		self.identifier = identifier
 	}
 }

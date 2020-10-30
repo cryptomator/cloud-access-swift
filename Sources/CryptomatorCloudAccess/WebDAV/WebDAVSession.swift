@@ -30,7 +30,7 @@ private class WebDAVDataTask {
 }
 
 class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate, URLSessionDownloadDelegate {
-	private let credential: WebDAVCredential
+	fileprivate let credential: WebDAVCredential
 	fileprivate var runningDataTasks = [URLSessionDataTask: WebDAVDataTask]()
 	fileprivate var runningDownloadTasks = [URLSessionDownloadTask: WebDAVDownloadTask]()
 
@@ -148,7 +148,7 @@ class WebDAVSession {
 	}
 
 	convenience init(sharedContainerIdentifier: String, delegate: WebDAVClientURLSessionDelegate) {
-		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(UUID().uuidString)")
+		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)")
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)

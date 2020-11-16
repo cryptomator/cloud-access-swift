@@ -335,7 +335,12 @@ public class LocalFileSystemProvider: CloudProvider {
 	// MARK: - Internal
 
 	private func getItemType(from url: URL) throws -> CloudItemType {
-		let attributes = try fileManager.attributesOfItem(atPath: url.path)
+		let attributes: [FileAttributeKey: Any]
+		do {
+			attributes = try fileManager.attributesOfItem(atPath: url.path)
+		} catch CocoaError.fileReadUnknown {
+			throw CloudProviderError.itemNotFound
+		}
 		return getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 	}
 

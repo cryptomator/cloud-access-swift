@@ -43,8 +43,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cleartextCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		let cleartextParentPath = cleartextCloudPath.deletingLastPathComponent()
-		let parentDirIdPromise = getDirId(cleartextParentPath)
+		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
 		let ciphertextMetadataPromise = parentDirIdPromise.then { parentDirId in
 			return try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
 		}.then { ciphertextPath in
@@ -79,15 +78,32 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return getFileCiphertextPath(cleartextCloudPath).then { ciphertextCloudPath in
+		return getParentDirId(cleartextCloudPath).then { parentDirId in
+			let ciphertextCloudPath = try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
 			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let downloadFilePromise = self.delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL)
+			let downloadFilePromise = self.delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL).recover { error -> Promise<Void> in
+				guard case CloudProviderError.itemNotFound = error else {
+					throw error
+				}
+				let folderCiphertextPath = try self.getFolderCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
+				return self.delegate.checkForItemExistence(at: folderCiphertextPath).then { itemExists in
+					if itemExists {
+						throw CloudProviderError.itemTypeMismatch
+					} else {
+						throw CloudProviderError.itemNotFound
+					}
+				}
+			}
 			overallProgress.resignCurrent()
 			return downloadFilePromise
 		}.then {
+			guard !FileManager.default.fileExists(atPath: cleartextLocalURL.path) else {
+				throw CloudProviderError.itemAlreadyExists
+			}
 			overallProgress.becomeCurrent(withPendingUnitCount: 1)
 			try self.cryptor.decryptContent(from: ciphertextLocalURL, to: cleartextLocalURL)
 			overallProgress.resignCurrent()
+		}.always {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
 	}
@@ -96,8 +112,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let cleartextParentCloudPath = cleartextCloudPath.deletingLastPathComponent()
-		let parentDirIdPromise = getDirId(cleartextParentCloudPath)
+		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
 		let uploadFilePromise = parentDirIdPromise.then { parentDirId in
 			return try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
 		}.then { ciphertextCloudPath -> Promise<CloudItemMetadata> in
@@ -108,6 +123,15 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 			let uploadFilePromise = self.delegate.uploadFile(from: ciphertextLocalURL, to: ciphertextCloudPath, replaceExisting: replaceExisting)
 			overallProgress.resignCurrent()
 			return uploadFilePromise
+		}.recover { error -> CloudItemMetadata in
+			switch error {
+			case CocoaError.fileReadNoSuchFile:
+				throw CloudProviderError.itemNotFound
+			case POSIXError.EISDIR:
+				throw CloudProviderError.itemTypeMismatch
+			default:
+				throw error
+			}
 		}.always {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
@@ -126,7 +150,18 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 		} catch {
 			return Promise(error)
 		}
-		return getFolderCiphertextPath(cleartextCloudPath).then { ciphertextCloudPath in
+		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
+		return parentDirIdPromise.then { parentDirId -> Promise<Bool> in
+			let fileCiphertextPath = try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
+			return self.delegate.checkForItemExistence(at: fileCiphertextPath)
+		}.then { fileExists -> Promise<Data> in
+			if fileExists {
+				throw CloudProviderError.itemAlreadyExists
+			}
+			return parentDirIdPromise
+		}.then { parentDirId in
+			try self.getFolderCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
+		}.then { ciphertextCloudPath in
 			return self.delegate.uploadFile(from: localDirFileURL, to: ciphertextCloudPath, replaceExisting: false)
 		}.then { _ -> Promise<Void> in
 			let parentDirPath = dirPath.deletingLastPathComponent()
@@ -173,8 +208,30 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	private func getDirId(_ cleartextPath: CloudPath) -> Promise<Data> {
 		return dirIdCache.get(cleartextPath, onMiss: { cleartextPath, parentDirId in
 			let ciphertextPath = try self.getFolderCiphertextPath(cleartextPath, parentDirId: parentDirId)
-			return self.downloadFile(at: ciphertextPath)
+			return self.downloadFile(at: ciphertextPath).recover { error -> Promise<Data> in
+				guard case CloudProviderError.itemNotFound = error else {
+					return Promise(error)
+				}
+				let fileCiphertextPath = try self.getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
+				return self.delegate.checkForItemExistence(at: fileCiphertextPath).then { itemExists in
+					if itemExists {
+						throw CloudProviderError.itemTypeMismatch
+					} else {
+						throw CloudProviderError.itemNotFound
+					}
+				}
+			}
 		})
+	}
+
+	private func getParentDirId(_ cleartextPath: CloudPath) -> Promise<Data> {
+		let cleartextParentPath = cleartextPath.deletingLastPathComponent()
+		return getDirId(cleartextParentPath).recover { error -> Data in
+			guard case CloudProviderError.itemNotFound = error else {
+				throw error
+			}
+			throw CloudProviderError.parentFolderDoesNotExist
+		}
 	}
 
 	private func getDirPath(_ dirId: Data) throws -> CloudPath {
@@ -195,8 +252,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	}
 
 	private func getFileCiphertextPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
-		let cleartextParentPath = cleartextPath.deletingLastPathComponent()
-		return getDirId(cleartextParentPath).then { parentDirId in
+		return getParentDirId(cleartextPath).then { parentDirId in
 			return try self.getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
 		}
 	}
@@ -208,8 +264,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	}
 
 	private func getFolderCiphertextPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
-		let cleartextParentPath = cleartextPath.deletingLastPathComponent()
-		return getDirId(cleartextParentPath).then { parentDirId in
+		return getParentDirId(cleartextPath).then { parentDirId in
 			return try self.getFolderCiphertextPath(cleartextPath, parentDirId: parentDirId)
 		}
 	}
@@ -248,7 +303,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 				return ciphertextSize
 			}
 		}()
-		return CloudItemMetadata(name: cleartextName, cloudPath: cleartextPath, itemType: ciphertextMetadata.itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
+		return CloudItemMetadata(name: cleartextName, cloudPath: cleartextPath, itemType: itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
 	}
 
 	private func toCleartextList(_ ciphertextList: CloudItemList, cleartextParentPath: CloudPath, parentDirId: Data) throws -> CloudItemList {

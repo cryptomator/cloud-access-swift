@@ -155,6 +155,10 @@ class WebDAVSession {
 		self.init(urlSession: session, delegate: delegate)
 	}
 
+	deinit {
+		urlSession.invalidateAndCancel()
+	}
+
 	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
 		let task = urlSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()

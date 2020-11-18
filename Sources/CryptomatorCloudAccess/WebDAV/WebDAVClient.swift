@@ -19,7 +19,11 @@ public class WebDAVClient {
 	private let webDAVSession: WebDAVSession
 
 	init(credential: WebDAVCredential, session: WebDAVSession) {
-		self.baseURL = credential.baseURL
+		if credential.baseURL.absoluteString.hasSuffix("/") {
+			self.baseURL = credential.baseURL
+		} else {
+			self.baseURL = credential.baseURL.appendingPathComponent("/")
+		}
 		self.webDAVSession = session
 	}
 

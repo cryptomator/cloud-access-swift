@@ -117,9 +117,11 @@ public class WebDAVProvider: CloudProvider {
 				throw CloudProviderError.itemTypeMismatch
 			}
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			return self.client.GET(from: url, to: localURL)
-		}.then { _ -> Void in
+			let getPromise = self.client.GET(from: url, to: localURL)
 			progress.resignCurrent()
+			return getPromise
+		}.then { _ -> Void in
+			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
@@ -153,7 +155,9 @@ public class WebDAVProvider: CloudProvider {
 					throw CloudProviderError.itemTypeMismatch
 				}
 				progress.becomeCurrent(withPendingUnitCount: 1)
-				return self.client.PUT(url: url, fileURL: localURL)
+				let putPromise = self.client.PUT(url: url, fileURL: localURL)
+				progress.resignCurrent()
+				return putPromise
 			} else {
 				return Promise(CloudProviderError.itemAlreadyExists)
 			}
@@ -161,7 +165,9 @@ public class WebDAVProvider: CloudProvider {
 			switch error {
 			case CloudProviderError.itemNotFound:
 				progress.becomeCurrent(withPendingUnitCount: 1)
-				return self.client.PUT(url: url, fileURL: localURL)
+				let putPromise = self.client.PUT(url: url, fileURL: localURL)
+				progress.resignCurrent()
+				return putPromise
 			default:
 				return Promise(error)
 			}
@@ -183,7 +189,6 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(error)
 			}
 		}.then { _, _ -> Promise<CloudItemMetadata> in
-			progress.resignCurrent()
 			return self.fetchItemMetadata(at: cloudPath)
 		}
 	}

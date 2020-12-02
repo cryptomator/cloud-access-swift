@@ -186,7 +186,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 		}.then {
 			return self.getFolderCiphertextPath(cleartextCloudPath)
 		}.then { folderCiphertextPath in
-			return self.delegate.deleteFolder(at: folderCiphertextPath)
+			return self.delegate.deleteFile(at: folderCiphertextPath)
 		}
 	}
 

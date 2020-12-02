@@ -82,6 +82,9 @@ public class CloudProviderMock: CloudProvider {
 	}
 
 	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		guard !deleted.contains(cloudPath.path), folders.contains(cloudPath.path) || createdFolders.contains(cloudPath.path) else {
+			return Promise(CloudProviderError.itemNotFound)
+		}
 		return deleteItem(at: cloudPath)
 	}
 

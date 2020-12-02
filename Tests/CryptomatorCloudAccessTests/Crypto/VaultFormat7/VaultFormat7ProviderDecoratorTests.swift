@@ -173,6 +173,67 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
+	func testDeleteFolderWithMissingDirFile() throws {
+		let expectation = XCTestExpectation(description: "deleteFolder")
+		/**
+		 ```
+		 pathToVault
+		 └─Directory 1
+		   ├─ Directory 2
+		   └─ File 3
+		 */
+		let folders: Set = [
+			"pathToVault",
+			"pathToVault/d",
+			"pathToVault/d/00",
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r",
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r",
+			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+		]
+		let files = [
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": "dir2-id".data(using: .utf8)!,
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": "ciphertext3".data(using: .utf8)!
+		]
+		let provider = VaultFormat7CloudProviderMock(folders: folders, files: files)
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		decorator.deleteFolder(at: CloudPath("/Directory 1")).then {
+			XCTAssertEqual(1, provider.deleted.count)
+			XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
+	func testDeleteFolderWithBrokenFolder() throws {
+		let expectation = XCTestExpectation(description: "deleteFolder")
+		let folders: Set = [
+			"pathToVault",
+			"pathToVault/d",
+			"pathToVault/d/00",
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"
+		]
+		let files = [
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r": "dir1-id".data(using: .utf8)!
+		]
+		let provider = VaultFormat7CloudProviderMock(folders: folders, files: files)
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		decorator.deleteFolder(at: CloudPath("/Directory 1")).then {
+			XCTAssertEqual(1, provider.deleted.count)
+			XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
 	func testMoveFile() {
 		let expectation = XCTestExpectation(description: "moveFile")
 		decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/Directory 1/File 2")).then {

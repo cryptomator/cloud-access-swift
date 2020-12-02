@@ -155,10 +155,17 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	public func deleteFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
-		// TODO: recover from error if `getDirId()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because it's probably a symlink)
-		// TODO: recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
 		return getDirId(cleartextCloudPath).then { dirId in
 			return self.deleteCiphertextDir(dirId)
+		}.recover { error -> Void in
+			// recover from error if `getDirId()` rejects with `CloudProviderError.itemTypeMismatch` and delete item anyway (because it's probably a symlink)
+			// recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
+			switch error {
+			case CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch:
+				return
+			default:
+				throw error
+			}
 		}.then {
 			return self.getCiphertextPath(cleartextCloudPath)
 		}.then { ciphertextCloudPath in

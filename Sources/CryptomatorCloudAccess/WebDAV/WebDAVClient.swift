@@ -27,9 +27,9 @@ public class WebDAVClient {
 		self.webDAVSession = session
 	}
 
-	public convenience init(credential: WebDAVCredential, sharedContainerIdentifier: String) {
+	public convenience init(credential: WebDAVCredential, sharedContainerIdentifier: String, useBackgroundSession: Bool) {
 		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		self.init(credential: credential, session: WebDAVSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate))
+		self.init(credential: credential, session: WebDAVSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate, useBackgroundSession: useBackgroundSession))
 	}
 
 	// MARK: - HTTP Methods for WebDAV

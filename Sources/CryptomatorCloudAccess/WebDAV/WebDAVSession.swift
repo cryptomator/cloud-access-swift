@@ -147,9 +147,16 @@ class WebDAVSession {
 		self.delegate = delegate
 	}
 
-	convenience init(sharedContainerIdentifier: String, delegate: WebDAVClientURLSessionDelegate) {
-		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)")
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+	convenience init(sharedContainerIdentifier: String, delegate: WebDAVClientURLSessionDelegate, useBackgroundSession: Bool) {
+		let configuration: URLSessionConfiguration
+		if useBackgroundSession {
+			// Additionally use the bundleID to prevent the same background URLSession identifier for multiple targets (for example Main App and Extension).
+			let bundleId = Bundle.main.bundleIdentifier ?? ""
+			configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)_\(bundleId)")
+			configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		} else {
+			configuration = URLSessionConfiguration.default
+		}
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		self.init(urlSession: session, delegate: delegate)

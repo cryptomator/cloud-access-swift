@@ -28,7 +28,7 @@ private struct PropfindResponseElementProperties: Equatable {
 }
 
 private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLParserDelegate {
-	private let parentDelegate: PropfindResponseElementParserDelegate
+	private weak var parentDelegate: PropfindResponseElementParserDelegate?
 
 	private var xmlCharacterBuffer = ""
 	private var insideOfResourceType = false
@@ -70,7 +70,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 		switch elementName {
 		case "propstat":
 			if let statusCode = statusCode, statusCode == "200" {
-				parentDelegate.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
+				parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
 			}
 			parser.delegate = parentDelegate
 		case "getlastmodified":
@@ -101,7 +101,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 }
 
 private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate {
-	private let parentDelegate: PropfindResponseParserDelegate
+	private weak var parentDelegate: PropfindResponseParserDelegate?
 	private let responseURL: URL
 
 	private var elementPropertiesDelegate: PropfindResponseElementPropertiesParserDelegate?
@@ -148,7 +148,7 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		switch elementName {
 		case "response":
 			if let depth = depth, let url = url, let elementProperties = elementProperties {
-				parentDelegate.elements.append(PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength))
+				parentDelegate?.elements.append(PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength))
 			}
 			parser.delegate = parentDelegate
 		case "href":

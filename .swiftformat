@@ -5,6 +5,7 @@
 # format options
 
 --commas inline
+--ifdef no-indent
 --importgrouping testable-bottom
 --indent tab
 --self init-only

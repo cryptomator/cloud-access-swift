@@ -30,12 +30,14 @@ private class WebDAVDataTask {
 }
 
 class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate, URLSessionDownloadDelegate {
+	private let queue: DispatchQueue
 	fileprivate let credential: WebDAVCredential
-	fileprivate var runningDataTasks = [URLSessionDataTask: WebDAVDataTask]()
-	fileprivate var runningDownloadTasks = [URLSessionDownloadTask: WebDAVDownloadTask]()
+	private var runningDataTasks = [URLSessionDataTask: WebDAVDataTask]()
+	private var runningDownloadTasks = [URLSessionDownloadTask: WebDAVDownloadTask]()
 
 	init(credential: WebDAVCredential) {
 		self.credential = credential
+		self.queue = DispatchQueue(label: "WebDAVClientURLSessionDelegate_\(credential.identifier)")
 	}
 
 	// MARK: - URLSessionDelegate
@@ -60,10 +62,10 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		} else {
 			switch task {
 			case let dataTask as URLSessionDataTask:
-				let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+				let runningDataTask = removeRunningDataTask(forKey: dataTask)
 				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
 			case let downloadTask as URLSessionDownloadTask:
-				let runningDownloadTaskPromise = runningDownloadTasks.removeValue(forKey: downloadTask)
+				let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
 				runningDownloadTaskPromise?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
 			default:
 				break
@@ -75,23 +77,23 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
 		switch (task, task.response, error) {
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, nil):
-			let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+			let runningDataTask = removeRunningDataTask(forKey: dataTask)
 			guard (200 ... 299).contains(httpResponse.statusCode) else {
 				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: httpResponse.statusCode))
 				return
 			}
 			runningDataTask?.fulfillPromise(with: httpResponse)
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, .some(error)):
-			let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+			let runningDataTask = removeRunningDataTask(forKey: dataTask)
 			runningDataTask?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 		case let (dataTask as URLSessionDataTask, _, .some(error)):
-			let runningDataTask = runningDataTasks.removeValue(forKey: dataTask)
+			let runningDataTask = removeRunningDataTask(forKey: dataTask)
 			runningDataTask?.promise.reject(error)
 		case let (downloadTask as URLSessionDownloadTask, httpResponse as HTTPURLResponse, .some(error)):
-			let runningDownloadTaskPromise = runningDownloadTasks.removeValue(forKey: downloadTask)
+			let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
 			runningDownloadTaskPromise?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 		case let (downloadTask as URLSessionDownloadTask, _, .some(error)):
-			let runningDownloadTaskPromise = runningDownloadTasks.removeValue(forKey: downloadTask)
+			let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
 			runningDownloadTaskPromise?.promise.reject(error)
 		default:
 			return
@@ -101,14 +103,16 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 	// MARK: - URLSessionDataDelegate
 
 	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-		let runningDataTask = runningDataTasks[dataTask]
-		runningDataTask?.accumulatedData.append(data)
+		queue.sync {
+			let runningDataTask = runningDataTasks[dataTask]
+			runningDataTask?.accumulatedData.append(data)
+		}
 	}
 
 	// MARK: - URLSessionDownloadDelegate
 
 	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		guard let runningDownloadTask = runningDownloadTasks.removeValue(forKey: downloadTask) else {
+		guard let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask) else {
 			return
 		}
 		if let response = downloadTask.response as? HTTPURLResponse {
@@ -134,6 +138,32 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 			return false
 		}
 		return allowedCertificate == SecCertificateCopyData(actualCertificate) as Data
+	}
+
+	// MARK: - Synchronized access to the dictionaries
+
+	fileprivate func addRunningDataTask(key: URLSessionDataTask, value: WebDAVDataTask) {
+		queue.sync {
+			runningDataTasks[key] = value
+		}
+	}
+
+	private func removeRunningDataTask(forKey key: URLSessionDataTask) -> WebDAVDataTask? {
+		return queue.sync {
+			runningDataTasks.removeValue(forKey: key)
+		}
+	}
+
+	fileprivate func addRunningDownloadTask(key: URLSessionDownloadTask, value: WebDAVDownloadTask) {
+		queue.sync {
+			runningDownloadTasks[key] = value
+		}
+	}
+
+	private func removeRunningDownloadTask(forKey key: URLSessionDownloadTask) -> WebDAVDownloadTask? {
+		return queue.sync {
+			runningDownloadTasks.removeValue(forKey: key)
+		}
 	}
 }
 
@@ -170,7 +200,7 @@ class WebDAVSession {
 		let task = urlSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		delegate.runningDataTasks[task] = webDAVDataTask
+		delegate.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
 		return pendingPromise
 	}
@@ -185,7 +215,7 @@ class WebDAVSession {
 
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
-		delegate.runningDownloadTasks[task] = webDAVDownloadTask
+		delegate.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
 		task.resume()
 		return pendingPromise
 	}
@@ -200,7 +230,7 @@ class WebDAVSession {
 
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		delegate.runningDataTasks[task] = webDAVDataTask
+		delegate.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
 		return pendingPromise
 	}

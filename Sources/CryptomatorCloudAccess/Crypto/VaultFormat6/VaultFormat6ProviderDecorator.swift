@@ -201,7 +201,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 
 	public func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
 		return all(getFolderCiphertextPath(cleartextSourceCloudPath), getFolderCiphertextPath(cleartextTargetCloudPath)).then { folderCiphertextSourcePath, folderCiphertextTargetPath in
-			return self.delegate.moveFolder(from: folderCiphertextSourcePath, to: folderCiphertextTargetPath)
+			return self.delegate.moveFile(from: folderCiphertextSourcePath, to: folderCiphertextTargetPath)
 		}
 	}
 

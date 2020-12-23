@@ -300,7 +300,7 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 				return nil
 			}
 			if itemType == .file || itemType == .symlink {
-				return try self.cryptor.calculateCleartextSize(ciphertextSize)
+				return try self.cryptor.calculateCleartextSize(ciphertextSize - Cryptor.fileHeaderSize)
 			} else {
 				return ciphertextSize
 			}

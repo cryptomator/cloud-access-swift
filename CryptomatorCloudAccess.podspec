@@ -9,7 +9,6 @@ Pod::Spec.new do |s|
                          'Sebastian Stenzel' => 'sebastian.stenzel@skymatic.de',
                          'Tobias Hagemann' => 'tobias.hagemann@skymatic.de' }
   s.source           = { :git => 'https://github.com/cryptomator/cloud-access-swift.git', :tag => s.version.to_s }
-  s.social_media_url = 'https://twitter.com/Cryptomator'
 
   s.source_files = 'Sources/CryptomatorCloudAccess/CryptomatorCloudAccess.h'
   s.ios.deployment_target = '9.0'

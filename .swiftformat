@@ -1,3 +1,5 @@
+--minversion 0.47.10
+
 # file options
 
 --exclude Tests/LinuxMain.swift,Tests/**/XCTestManifests.swift

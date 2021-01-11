@@ -13,7 +13,7 @@ import XCTest
 
 class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	let vaultPath = CloudPath("pathToVault")
-	let cryptor = VaultFormat7CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 7))
+	let cryptor = VaultFormat7CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32)))
 	var tmpDirURL: URL!
 	var provider: VaultFormat7CloudProviderMock!
 	var decorator: VaultFormat7ProviderDecorator!
@@ -27,14 +27,6 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	override func tearDownWithError() throws {
 		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	func testMasterkeyVersionMismatchError() {
-		let cryptor = VaultFormat7CryptorMock(masterkey: Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32), version: 0))
-		let provider = VaultFormat7CloudProviderMock()
-		XCTAssertThrowsError(try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor), "masterkey version mismatch") { error in
-			XCTAssertEqual(.masterkeyVersionMismatch, error as? VaultFormatError)
-		}
 	}
 
 	func testFetchItemMetadata() {

@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {
           "branch": null,
-          "revision": "02d28a0d6b666462b9a32a93f11ca357bc2ffb4d",
-          "version": "0.9.5"
+          "revision": "a2008eab54d458039089c95cac77d917601d3beb",
+          "version": "0.10.0"
         }
       },
       {
@@ -42,8 +42,8 @@
         "repositoryURL": "https://github.com/google/promises.git",
         "state": {
           "branch": null,
-          "revision": "d8accebc8fa32f57196df191e733f946e955c549",
-          "version": "1.2.11"
+          "revision": "afa9a1ace74e116848d4f743599ab83e584ff8cb",
+          "version": "1.2.12"
         }
       }
     ]

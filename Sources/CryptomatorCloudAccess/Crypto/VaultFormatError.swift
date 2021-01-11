@@ -9,6 +9,5 @@
 import Foundation
 
 public enum VaultFormatError: Error {
-	case masterkeyVersionMismatch
 	case encounteredUnrelatedFile
 }

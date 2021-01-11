@@ -31,9 +31,6 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let tmpDirURL: URL
 
 	public init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
-		guard cryptor.masterkeyVersion == 7 else {
-			throw VaultFormatError.masterkeyVersionMismatch
-		}
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor

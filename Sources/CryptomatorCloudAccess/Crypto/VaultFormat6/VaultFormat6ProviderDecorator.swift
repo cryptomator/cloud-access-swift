@@ -61,11 +61,14 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let ciphertextListPromise = getDirPath(cleartextCloudPath).then { dirPath in
+		let dirIdPromise = getDirId(cleartextCloudPath)
+		let ciphertextListPromise = dirIdPromise.then { dirId in
+			return try self.getDirPath(dirId)
+		}.then { dirPath in
 			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 		}
-		return all(ciphertextListPromise, getDirId(cleartextCloudPath)).then { ciphertextList, parentDirId in
-			try self.toCleartextList(ciphertextList, cleartextParentPath: cleartextCloudPath, parentDirId: parentDirId)
+		return all(ciphertextListPromise, dirIdPromise).then { ciphertextList, dirId in
+			try self.toCleartextList(ciphertextList, cleartextParentPath: cleartextCloudPath, parentDirId: dirId)
 		}
 	}
 
@@ -212,8 +215,10 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 					return Promise(error)
 				}
 				let fileCiphertextPath = try self.getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
-				return self.delegate.checkForItemExistence(at: fileCiphertextPath).then { itemExists in
-					if itemExists {
+				return self.delegate.checkForItemExistence(at: fileCiphertextPath).then { fileExists in
+					if fileExists {
+						// ciphertext file exists but ciphertext folder (with `0` prefix) does not
+						// symlink existence check has been omitted for simplicity
 						throw CloudProviderError.itemTypeMismatch
 					} else {
 						throw CloudProviderError.itemNotFound
@@ -271,38 +276,44 @@ public class VaultFormat6ProviderDecorator: CloudProvider {
 	// MARK: - Decryption
 
 	private func toCleartextMetadata(_ ciphertextMetadata: CloudItemMetadata, cleartextParentPath: CloudPath, parentDirId: Data) throws -> CloudItemMetadata {
-		let itemType = { () -> CloudItemType in
-			if ciphertextMetadata.name.hasPrefix("0") {
-				return .folder
-			} else if ciphertextMetadata.name.hasPrefix("1S") {
-				return .symlink
-			} else {
-				return .file
-			}
-		}()
-		let ciphertextBaseName = { () -> String in
-			switch itemType {
-			case .folder:
-				return String(ciphertextMetadata.name.dropFirst())
-			case .symlink:
-				return String(ciphertextMetadata.name.dropFirst(2))
-			default:
-				return ciphertextMetadata.name
-			}
-		}()
+		let itemType = guessItemTypeByFileName(ciphertextMetadata.name)
+		let ciphertextBaseName = getCiphertextBaseName(ciphertextMetadata.name, itemType: itemType)
 		let cleartextName = try cryptor.decryptFileName(ciphertextBaseName, dirId: parentDirId, encoding: .base32)
 		let cleartextPath = cleartextParentPath.appendingPathComponent(cleartextName)
-		let cleartextSize = try { () -> Int? in
-			guard let ciphertextSize = ciphertextMetadata.size else {
-				return nil
-			}
-			if itemType == .file || itemType == .symlink {
-				return try self.cryptor.calculateCleartextSize(ciphertextSize - Cryptor.fileHeaderSize)
-			} else {
-				return ciphertextSize
-			}
-		}()
+		let cleartextSize = try toCleartextSize(ciphertextMetadata.size, itemType: itemType)
 		return CloudItemMetadata(name: cleartextName, cloudPath: cleartextPath, itemType: itemType, lastModifiedDate: ciphertextMetadata.lastModifiedDate, size: cleartextSize)
+	}
+
+	private func guessItemTypeByFileName(_ fileName: String) -> CloudItemType {
+		if fileName.hasPrefix("0") {
+			return .folder
+		} else if fileName.hasPrefix("1S") {
+			return .symlink
+		} else {
+			return .file
+		}
+	}
+
+	private func getCiphertextBaseName(_ ciphertextName: String, itemType: CloudItemType) -> String {
+		switch itemType {
+		case .folder:
+			return String(ciphertextName.dropFirst())
+		case .symlink:
+			return String(ciphertextName.dropFirst(2))
+		default:
+			return ciphertextName
+		}
+	}
+
+	private func toCleartextSize(_ ciphertextSize: Int?, itemType: CloudItemType) throws -> Int? {
+		guard let ciphertextSize = ciphertextSize else {
+			return nil
+		}
+		if itemType == .file || itemType == .symlink {
+			return try cryptor.calculateCleartextSize(ciphertextSize - Cryptor.fileHeaderSize)
+		} else {
+			return ciphertextSize
+		}
 	}
 
 	private func toCleartextList(_ ciphertextList: CloudItemList, cleartextParentPath: CloudPath, parentDirId: Data) throws -> CloudItemList {

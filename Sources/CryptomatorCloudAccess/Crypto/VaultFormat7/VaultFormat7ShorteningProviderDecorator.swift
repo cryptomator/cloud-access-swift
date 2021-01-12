@@ -202,16 +202,13 @@ public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	}
 
 	private func fetchC9SItemMetadata(_ c9sDir: C9SDir) -> Promise<CloudItemMetadata> {
-		return delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: nil).then { itemList -> CloudItemMetadata in
-			for item in itemList.items {
-				switch item.name {
-				case "contents.c9r", "dir.c9r", "symlink.c9r":
-					return item
-				default:
-					continue
-				}
+		return delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: nil).then { c9sItemList -> CloudItemMetadata in
+			let wanted = ["contents.c9r", "dir.c9r", "symlink.c9r"]
+			let filter = { (item: CloudItemMetadata) in wanted.contains(item.name) }
+			guard let c9sItemMetadata = c9sItemList.items.first(where: filter) else {
+				throw VaultFormat7ShorteningError.c9sItemNotFound
 			}
-			throw VaultFormat7ShorteningError.c9sItemNotFound
+			return c9sItemMetadata
 		}
 	}
 

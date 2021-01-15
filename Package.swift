@@ -20,7 +20,7 @@ let package = Package(
 		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "0.9.0")),
+		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "0.11.0")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "4.14.0")),
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0"))
 	],

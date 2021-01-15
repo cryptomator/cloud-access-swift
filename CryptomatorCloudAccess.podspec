@@ -28,7 +28,7 @@ Pod::Spec.new do |s|
   s.subspec 'Crypto' do |ss|
     ss.dependency 'CryptomatorCloudAccess/Core'
     ss.source_files = 'Sources/CryptomatorCloudAccess/Crypto/**/*.swift'
-    ss.dependency 'CryptomatorCryptoLib', '~> 0.9.0'
+    ss.dependency 'CryptomatorCryptoLib', '~> 0.11.0'
     ss.dependency 'GRDB.swift', '~> 4.14.0'
   end
 

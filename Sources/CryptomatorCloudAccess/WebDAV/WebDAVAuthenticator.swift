@@ -14,7 +14,7 @@ public enum WebDAVAuthenticatorError: Error {
 	case untrustedCertificate
 }
 
-public class WebDAVAuthenticator {
+public enum WebDAVAuthenticator {
 	public static func verifyClient(client: WebDAVClient) -> Promise<Void> {
 		return checkServerCompatibility(client: client).then {
 			return self.tryAuthenticatedRequest(client: client)

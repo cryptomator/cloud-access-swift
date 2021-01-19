@@ -68,15 +68,14 @@ public class TLSCertificateValidator {
 	private let urlSession: URLSession
 	private let urlSessionDelegate: TLSCertificateValidatorURLSessionDelegate
 
-	public init(baseURL: URL, sharedContainerIdentifier: String) {
+	public init(baseURL: URL) {
 		self.baseURL = baseURL
 		self.urlSessionDelegate = TLSCertificateValidatorURLSessionDelegate()
-		self.urlSession = TLSCertificateValidator.createURLSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate)
+		self.urlSession = TLSCertificateValidator.createURLSession(delegate: urlSessionDelegate)
 	}
 
-	private static func createURLSession(sharedContainerIdentifier: String, delegate: URLSessionDelegate) -> URLSession {
+	private static func createURLSession(delegate: URLSessionDelegate) -> URLSession {
 		let configuration = URLSessionConfiguration.default
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 	}

@@ -94,7 +94,7 @@ let password = ...
 let allowedCertificate = ... // optional: you might want to allowlist a TLS certificate
 let identifier = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
 let credential = WebDAVCredential(baseURL: baseURL, username: username, password: password, allowedCertificate: allowedCertificate, identifier: identifier)
-let sharedContainerIdentifier = ... // this will be set internally for the `URLSessionConfiguration`
+let sharedContainerIdentifier = ... // if `useBackgroundSession` is `true`, this will be set internally for the `URLSessionConfiguration`
 let useBackgroundSession = ... // if `true`, the internal `URLSessionConfiguration` will be based on a background configuration
 let client = WebDAVClient(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier, useBackgroundSession: useBackgroundSession)
 let provider = WebDAVProvider(with: client)
@@ -115,8 +115,7 @@ Furthermore, for allowlisting a certificate, you can use the TLS certificate val
 
 ```swift
 let baseURL = ...
-let sharedContainerIdentifier = ...
-let validator = TLSCertificateValidator(baseURL: baseURL, sharedContainerIdentifier: sharedContainerIdentifier)
+let validator = TLSCertificateValidator(baseURL: baseURL)
 validator.validate().then { certificate in
   // certificate of type `TLSCertificate` contains several properties for further handling
 }.catch { error in

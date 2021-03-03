@@ -95,6 +95,18 @@ public class VaultConfig {
 	}
 
 	/**
+	 Convenience wrapper for decoding and verifying vault configuration.
+
+	 - Parameter token: The token in JWT format.
+	 - Parameter masterkey: The masterkey with the raw key matching the ID in the `token`'s `keyId`.
+	 - Returns: Verified vault configuration instance.
+	 */
+	public static func load(token: String, masterkey: Masterkey) throws -> VaultConfig {
+		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+		return try unverifiedVaultConfig.verify(rawKey: masterkey.rawKey)
+	}
+
+	/**
 	 Serializes vault configuration to a token in JWT format.
 
 	 - Parameter keyId: The key ID as URI string referencing the location of the key material.

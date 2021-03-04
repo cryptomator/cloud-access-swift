@@ -6,7 +6,6 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
-import CryptomatorCryptoLib
 import Foundation
 import SwiftJWT
 
@@ -71,7 +70,7 @@ public class VaultConfig {
 		return VaultConfigClaims(jti: id, format: format, cipherCombo: cipherCombo, maxFilenameLen: maxFilenameLength)
 	}
 
-	private init(id: String, format: Int, cipherCombo: VaultCipherCombo, maxFilenameLength: Int) {
+	init(id: String, format: Int, cipherCombo: VaultCipherCombo, maxFilenameLength: Int) {
 		self.id = id
 		self.format = format
 		self.cipherCombo = cipherCombo
@@ -98,12 +97,12 @@ public class VaultConfig {
 	 Convenience wrapper for decoding and verifying vault configuration.
 
 	 - Parameter token: The token in JWT format.
-	 - Parameter masterkey: The masterkey with the raw key matching the ID in the `token`'s `keyId`.
+	 - Parameter rawKey: The key matching the ID in the `token`'s `keyId`.
 	 - Returns: Verified vault configuration instance.
 	 */
-	public static func load(token: String, masterkey: Masterkey) throws -> VaultConfig {
+	public static func load(token: String, rawKey: [UInt8]) throws -> VaultConfig {
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
-		return try unverifiedVaultConfig.verify(rawKey: masterkey.rawKey)
+		return try unverifiedVaultConfig.verify(rawKey: rawKey)
 	}
 
 	/**

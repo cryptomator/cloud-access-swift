@@ -25,6 +25,8 @@
 		7416F22D24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22C24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift */; };
 		7416F22F24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22E24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift */; };
 		7416F23124F67AD70074DA8E /* CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F23024F67AD70074DA8E /* CloudProviderMock.swift */; };
+		745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */; };
+		745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */; };
 		7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B76B2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift */; };
 		7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */; };
 		7460B77A2519056E004AEB56 /* VaultFormat7CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B7792519056E004AEB56 /* VaultFormat7CryptorMock.swift */; };
@@ -110,6 +112,8 @@
 		7416F22C24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6CloudProviderMockTests.swift; sourceTree = "<group>"; };
 		7416F22E24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		7416F23024F67AD70074DA8E /* CloudProviderMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderMock.swift; sourceTree = "<group>"; };
+		745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8ProviderDecorator.swift; sourceTree = "<group>"; };
+		745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		7460B76B2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ShortenedNameCacheTests.swift; sourceTree = "<group>"; };
 		7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		7460B7792519056E004AEB56 /* VaultFormat7CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7CryptorMock.swift; sourceTree = "<group>"; };
@@ -255,6 +259,7 @@
 				74CF2E6B254B6683006266D6 /* VaultFormatError.swift */,
 				7416F22524F6584A0074DA8E /* VaultFormat6 */,
 				9ED0E61B24617C0300FDB438 /* VaultFormat7 */,
+				745949E025F22EFA00B7B28C /* VaultFormat8 */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -293,6 +298,15 @@
 				7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */,
 			);
 			path = VaultFormat6;
+			sourceTree = "<group>";
+		};
+		745949E025F22EFA00B7B28C /* VaultFormat8 */ = {
+			isa = PBXGroup;
+			children = (
+				745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */,
+				745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */,
+			);
+			path = VaultFormat8;
 			sourceTree = "<group>";
 		};
 		7471BDAC24865B6F000D05FC /* LocalFileSystem */ = {
@@ -589,6 +603,8 @@
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
 				9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */,
 				9ECEC0AF246ED1FB00151299 /* DirectoryIdCache.swift in Sources */,
+				745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */,
+				745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */,
 				4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */,
 				4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */,
 				74FD6C4624F6F39E00C8D3C4 /* VaultFormat6ShortenedNameCache.swift in Sources */,

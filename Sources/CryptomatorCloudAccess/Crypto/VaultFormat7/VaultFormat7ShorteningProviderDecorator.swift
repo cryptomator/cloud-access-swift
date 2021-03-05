@@ -28,18 +28,22 @@ private extension CloudPath {
 
  With this decorator, it is expected that the cloud provider methods are being called with ciphertext paths. It transparently deflates/inflates filenames according to vault format 7, see the name shortening section at the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/#name-shortening).
 
- It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath`.
+ It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds 220 characters.
  */
 public class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 	let delegate: CloudProvider
 	let shortenedNameCache: VaultFormat7ShortenedNameCache
 	let tmpDirURL: URL
 
-	public init(delegate: CloudProvider, vaultPath: CloudPath) throws {
+	init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
 		self.delegate = delegate
-		self.shortenedNameCache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath)
+		self.shortenedNameCache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath, threshold: threshold)
 		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+	}
+
+	public convenience init(delegate: CloudProvider, vaultPath: CloudPath) throws {
+		try self.init(delegate: delegate, vaultPath: vaultPath, threshold: 220)
 	}
 
 	deinit {

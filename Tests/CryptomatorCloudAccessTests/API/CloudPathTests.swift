@@ -9,7 +9,6 @@
 import Foundation
 import XCTest
 @testable import CryptomatorCloudAccess
-
 class CloudPathTests: XCTestCase {
 	func testURLInitWithCloudPathRelativeToBase() {
 		XCTAssertEqual("///foo/bar", URL(cloudPath: CloudPath("/bar/"), relativeTo: URL(string: "/foo/")!)!.absoluteString)

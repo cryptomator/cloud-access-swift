@@ -25,14 +25,6 @@ You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Pa
 .package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.0.0"))
 ```
 
-### CocoaPods
-
-You can use [CocoaPods](https://cocoapods.org/ "CocoaPods").
-
-```ruby
-pod 'CryptomatorCloudAccess', '~> 1.0.0'
-```
-
 ## Usage
 
 ### Core

@@ -18,12 +18,65 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	private let cloudIdentifierCache: GoogleDriveCloudIdentifierCacheManager?
 	private var runningTickets: [GTLRServiceTicket]
 	private var runningFetchers: [GTMSessionFetcher]
+	private var driveService: GTLRDriveService {
+		credentials.driveService
+	}
 
-	public init(with credentials: GoogleDriveCredential) {
+	private let useForegroundSession: Bool
+
+	public init(with credentials: GoogleDriveCredential, useForegroundSession: Bool = false) {
 		self.credentials = credentials
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
 		self.cloudIdentifierCache = GoogleDriveCloudIdentifierCacheManager()
+		self.useForegroundSession = useForegroundSession
+		setupDriveService()
+	}
+
+	private func setupDriveService() {
+		driveService.serviceUploadChunkSize = GoogleDriveCloudProvider.maximumUploadFetcherChunkSize
+		driveService.isRetryEnabled = true
+		driveService.retryBlock = { _, suggestedWillRetry, fetchError in
+			if let fetchError = fetchError as NSError? {
+				if fetchError.domain != kGTMSessionFetcherStatusDomain || fetchError.code != GoogleDriveConstants.googleDriveErrorCodeForbidden {
+					return suggestedWillRetry
+				}
+				guard let data = fetchError.userInfo["data"] as? Data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any], let error = json["error"] as? [String: Any] else {
+					return suggestedWillRetry
+				}
+				let googleDriveError = GTLRErrorObject(json: error)
+				guard let errorItem = googleDriveError.errors?.first else {
+					return suggestedWillRetry
+				}
+				return errorItem.domain == GoogleDriveConstants.googleDriveErrorDomainUsageLimits && (errorItem.reason == GoogleDriveConstants.googleDriveErrorReasonUserRateLimitExceeded || errorItem.reason == GoogleDriveConstants.googleDriveErrorReasonRateLimitExceeded)
+			}
+			return suggestedWillRetry
+		}
+
+		let configuration: URLSessionConfiguration
+		if !useForegroundSession {
+			driveService.fetcherService.configurationBlock = { _, configuration in
+				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
+			}
+			let bundleId = Bundle.main.bundleIdentifier ?? ""
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credentials.tokenUid)-\(bundleId)")
+			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
+		} else {
+			configuration = URLSessionConfiguration.default
+		}
+
+		driveService.fetcherService.configuration = configuration
+		driveService.fetcherService.isRetryEnabled = true
+		driveService.fetcherService.retryBlock = { suggestedWillRetry, error, response in
+			if let error = error as NSError? {
+				if error.domain == kGTMSessionFetcherStatusDomain, error.code == GoogleDriveConstants.googleDriveErrorCodeForbidden {
+					return response(true)
+				}
+			}
+			response(suggestedWillRetry)
+		}
+		driveService.fetcherService.unusedSessionTimeout = 0
+		driveService.fetcherService.reuseSession = true
 	}
 
 	deinit {
@@ -340,8 +393,8 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	private func downloadFile(withIdentifier identifier: String, from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		let query = GTLRDriveQuery_FilesGet.queryForMedia(withFileId: identifier)
 
-		let request = credentials.driveService.request(for: query)
-		let fetcher = credentials.driveService.fetcherService.fetcher(with: request as URLRequest)
+		let request = driveService.request(for: query)
+		let fetcher = driveService.fetcherService.fetcher(with: request as URLRequest)
 		fetcher.destinationFileURL = localURL
 		let progress = Progress(totalUnitCount: -1)
 		fetcher.downloadProgressBlock = { _, totalBytesWritten, totalBytesExpectedToWrite in
@@ -380,7 +433,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 */
 	private func executeQuery(_ query: GTLRDriveQuery, cloudPath: CloudPath? = nil) -> Promise<Any> {
 		return Promise<Any> { fulfill, reject in
-			let ticket = self.credentials.driveService.executeQuery(query) { ticket, result, error in
+			let ticket = self.driveService.executeQuery(query) { ticket, result, error in
 				self.runningTickets.removeAll { $0 == ticket }
 				if let error = error as NSError? {
 					if error.domain == NSURLErrorDomain, error.code == NSURLErrorNotConnectedToInternet || error.code == NSURLErrorCannotConnectToHost || error.code == NSURLErrorNetworkConnectionLost || error.code == NSURLErrorDNSLookupFailed || error.code == NSURLErrorResourceUnavailable || error.code == NSURLErrorInternationalRoamingOff {

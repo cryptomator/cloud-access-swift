@@ -188,6 +188,7 @@ class WebDAVSession {
 			configuration = URLSessionConfiguration.default
 		}
 		configuration.httpCookieStorage = HTTPCookieStorage()
+		configuration.urlCredentialStorage = nil
 		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		self.init(urlSession: session, delegate: delegate)
 	}

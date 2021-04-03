@@ -14,7 +14,7 @@ class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
 	var cachedCloudIdentifierManager: GoogleDriveCloudIdentifierCacheManager!
 	override func setUpWithError() throws {
 		guard let manager = GoogleDriveCloudIdentifierCacheManager() else {
-			throw NSError(domain: "CloudAccessPrivate-CoreTests", code: -1000, userInfo: ["localizedDescription": "could not initialize GoogleDriveCloudIdentifierCacheManager"])
+			throw NSError(domain: "CryptomatorCloudAccess-Tests", code: -1000, userInfo: ["localizedDescription": "could not initialize GoogleDriveCloudIdentifierCacheManager"])
 		}
 		cachedCloudIdentifierManager = manager
 	}

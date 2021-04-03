@@ -32,42 +32,6 @@ public class GoogleDriveCredential {
 		self.keychainItemName = keychainItemPrefix + "-" + tokenUid
 		self.authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: keychainItemName)
 		self.driveService = GTLRDriveService()
-		driveService.serviceUploadChunkSize = GoogleDriveCloudProvider.maximumUploadFetcherChunkSize
-		driveService.isRetryEnabled = true
-		driveService.retryBlock = { _, suggestedWillRetry, fetchError in
-			if let fetchError = fetchError as NSError? {
-				if fetchError.domain != kGTMSessionFetcherStatusDomain || fetchError.code != GoogleDriveConstants.googleDriveErrorCodeForbidden {
-					return suggestedWillRetry
-				}
-				guard let data = fetchError.userInfo["data"] as? Data, let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any], let error = json["error"] as? [String: Any] else {
-					return suggestedWillRetry
-				}
-				let googleDriveError = GTLRErrorObject(json: error)
-				guard let errorItem = googleDriveError.errors?.first else {
-					return suggestedWillRetry
-				}
-				return errorItem.domain == GoogleDriveConstants.googleDriveErrorDomainUsageLimits && (errorItem.reason == GoogleDriveConstants.googleDriveErrorReasonUserRateLimitExceeded || errorItem.reason == GoogleDriveConstants.googleDriveErrorReasonRateLimitExceeded)
-			}
-			return suggestedWillRetry
-		}
-		driveService.fetcherService.configurationBlock = { _, configuration in
-			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
-		}
-		let bundleId = Bundle.main.bundleIdentifier ?? ""
-		let configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(tokenUid)-\(bundleId)")
-		configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
-		driveService.fetcherService.configuration = configuration
-		driveService.fetcherService.isRetryEnabled = true
-		driveService.fetcherService.retryBlock = { suggestedWillRetry, error, response in
-			if let error = error as NSError? {
-				if error.domain == kGTMSessionFetcherStatusDomain, error.code == GoogleDriveConstants.googleDriveErrorCodeForbidden {
-					return response(true)
-				}
-			}
-			response(suggestedWillRetry)
-		}
-		driveService.fetcherService.unusedSessionTimeout = 0
-		driveService.fetcherService.reuseSession = true
 		driveService.authorizer = authorization
 	}
 

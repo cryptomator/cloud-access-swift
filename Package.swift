@@ -21,7 +21,7 @@ let package = Package(
 		.macOS(.v10_12)
 	],
 	products: [
-		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess", "CryptomatorCloudAccessCore"]),
+		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"]),
 		.library(name: "CryptomatorCloudAccessCore", targets: ["CryptomatorCloudAccessCore"])
 	],
 	dependencies: [

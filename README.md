@@ -114,6 +114,23 @@ validator.validate().then { certificate in
 }
 ```
 
+## Integration Testing
+
+If you would like to run integration tests that require authorization, you have to set some secrets for them. Create a `.integration-test-secrets.sh` file in the root directory. Its contents should look something like this:
+
+```sh
+#!/bin/sh
+export DROPBOX_ACCESS_TOKEN=...
+export GOOGLE_DRIVE_REFRESH_TOKEN=...
+export WEBDAV_BASE_URL=...
+export WEBDAV_USERNAME=...
+export WEBDAV_PASSWORD=...
+```
+
+And then run `./create-integration-test-secrets-file.sh` once. Of course, if you change the secrets, you have to run that script again.
+
+If you are building via a CI system, set these secret environment variables accordingly.
+
 ## Contributing to Cloud Access Swift
 
 Please read our [contribution guide](.github/CONTRIBUTING.md), if you would like to report a bug, ask a question or help us with coding.

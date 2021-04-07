@@ -9,6 +9,7 @@
 import Foundation
 import ObjectiveDropboxOfficial
 import Promises
+
 public enum DropboxCredentialErrors: Error {
 	case noUsername
 }

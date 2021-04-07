@@ -9,6 +9,7 @@
 import Foundation
 import ObjectiveDropboxOfficial
 import Promises
+
 public class DropboxCloudProvider: CloudProvider {
 	private let credential: DropboxCredential
 	private var runningTasks: [DBTask]

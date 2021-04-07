@@ -7,6 +7,7 @@
 //
 
 import Foundation
+
 public class GoogleDriveSetup {
 	public static var constants: GoogleDriveSetup!
 	public let clientId: String

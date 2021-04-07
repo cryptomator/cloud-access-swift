@@ -10,6 +10,7 @@ import XCTest
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCryptoLib
 @testable import Promises
+
 class VaultFormat7LocalFileSystemCloudProviderIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat7LocalFileSystem: Error?
 	override class var classSetUpError: Error? {

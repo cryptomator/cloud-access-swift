@@ -9,6 +9,7 @@
 //
 
 import PackageDescription
+
 let appExtensionUnsafeSources = [
 	"Dropbox/DropboxCloudAuthenticator.swift",
 	"GoogleDrive/GoogleDriveCloudAuthenticator.swift"
@@ -35,23 +36,33 @@ let package = Package(
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0"))
 	],
 	targets: [
-		.target(name: "CryptomatorCloudAccess",
-		        dependencies: ["CryptomatorCloudAccessCore", "AppAuth"],
-		        sources: appExtensionUnsafeSources),
-		.testTarget(name: "CryptomatorCloudAccessTests",
-		            dependencies: ["CryptomatorCloudAccess"]),
-		.target(name: "CryptomatorCloudAccessCore",
-		        dependencies: [
-		        	"CryptomatorCryptoLib",
-		        	"GRDB",
-		        	"Promises",
-		        	"GoogleAPIClientForREST_Drive",
-		        	"GTMAppAuth",
-		        	"GTMSessionFetcher",
-		        	"ObjectiveDropboxOfficial"
-		        ],
-		        path: "Sources/CryptomatorCloudAccess",
-		        exclude: appExtensionUnsafeSources)
+		.target(
+			name: "CryptomatorCloudAccessCore",
+			dependencies: [
+				"CryptomatorCryptoLib",
+				"GRDB",
+				"Promises",
+				"GoogleAPIClientForREST_Drive",
+				"GTMAppAuth",
+				"GTMSessionFetcher",
+				"ObjectiveDropboxOfficial"
+			],
+			path: "Sources/CryptomatorCloudAccess",
+			exclude: appExtensionUnsafeSources
+		),
+		.target(
+			name: "CryptomatorCloudAccess",
+			dependencies: ["CryptomatorCloudAccessCore", "AppAuth"],
+			sources: appExtensionUnsafeSources
+		),
+		.testTarget(
+			name: "CryptomatorCloudAccessTests",
+			dependencies: ["CryptomatorCloudAccess"]
+		),
+		.testTarget(
+			name: "CryptomatorCloudAccessIntegrationTests",
+			dependencies: ["CryptomatorCloudAccess"]
+		)
 	],
 	swiftLanguageVersions: [.v5]
 )

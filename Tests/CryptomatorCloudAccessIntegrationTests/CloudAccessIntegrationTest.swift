@@ -9,6 +9,7 @@
 import CryptomatorCloudAccess
 import XCTest
 @testable import Promises
+
 class CloudAccessIntegrationTest: XCTestCase {
 	var provider: CloudProvider!
 	static var testFolderCloudPath: CloudPath!

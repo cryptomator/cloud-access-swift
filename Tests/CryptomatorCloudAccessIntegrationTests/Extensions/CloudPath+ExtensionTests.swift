@@ -8,6 +8,7 @@
 
 import CryptomatorCloudAccess
 import XCTest
+
 class CloudPath_ExtensionTests: XCTestCase {
 	func testGetSubCloudPaths() throws {
 		let testCloudPath = CloudPath("/AAA/BBB/CCC/test.txt")

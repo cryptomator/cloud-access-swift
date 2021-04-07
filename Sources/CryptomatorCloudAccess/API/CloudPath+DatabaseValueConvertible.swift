@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+
 extension CloudPath: DatabaseValueConvertible {
 	public var databaseValue: DatabaseValue {
 		path.databaseValue

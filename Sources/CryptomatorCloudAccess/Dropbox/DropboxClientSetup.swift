@@ -8,6 +8,7 @@
 
 import Foundation
 import ObjectiveDropboxOfficial
+
 public enum DropboxClientSetup {
 	private static var firstTimeInit = true
 

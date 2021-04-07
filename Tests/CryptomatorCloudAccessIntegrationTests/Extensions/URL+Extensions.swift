@@ -7,6 +7,7 @@
 //
 
 import Foundation
+
 extension URL {
 	/**
 	 Append Path Components from an URL to a copy of the current URL.

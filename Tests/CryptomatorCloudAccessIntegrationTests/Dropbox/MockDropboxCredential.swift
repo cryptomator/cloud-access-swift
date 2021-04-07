@@ -10,6 +10,7 @@ import Foundation
 import ObjectiveDropboxOfficial
 import Promises
 @testable import CryptomatorCloudAccess
+
 class MockDropboxCredential: DropboxCredential {
 	init() {
 		DropboxSetup.constants = DropboxSetup(appKey: "", appGroupName: "", mainAppBundleId: "")

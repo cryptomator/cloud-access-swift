@@ -7,6 +7,7 @@
 //
 
 import Foundation
+
 struct GoogleDriveConstants {
 	static let rootFolderId = "root"
 	static let folderMimeType = "application/vnd.google-apps.folder"

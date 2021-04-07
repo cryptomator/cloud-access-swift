@@ -10,6 +10,7 @@ import CryptomatorCloudAccess
 import Foundation
 import XCTest
 @testable import Promises
+
 class VaultFormat6WebDAVIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat6WebDAV: Error?
 

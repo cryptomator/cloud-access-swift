@@ -10,6 +10,7 @@ import Foundation
 import Promises
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCryptoLib
+
 class DecoratorFactory {
 	// MARK: VaultFormat7
 

@@ -17,10 +17,10 @@ class MockGoogleDriveAuthenticator {
 		let authorizationEndpoint = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
 		let tokenEndPoint = URL(string: "https://oauth2.googleapis.com/token")!
 		let configuration = OIDServiceConfiguration(authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndPoint)
-		let authRequest = OIDAuthorizationRequest(configuration: configuration, clientId: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scope: nil, redirectURL: IntegrationTestSecrets.googleDriveRedirectURL, responseType: "code", state: nil, nonce: nil, codeVerifier: nil, codeChallenge: nil, codeChallengeMethod: nil, additionalParameters: nil)
+		let authRequest = OIDAuthorizationRequest(configuration: configuration, clientId: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scope: nil, redirectURL: nil, responseType: "code", state: nil, nonce: nil, codeVerifier: nil, codeChallenge: nil, codeChallengeMethod: nil, additionalParameters: nil)
 		let authResponse = OIDAuthorizationResponse(request: authRequest, parameters: [String: NSCopying & NSObjectProtocol]())
 
-		let tokenRequest = OIDTokenRequest(configuration: configuration, grantType: "authorization_code", authorizationCode: nil, redirectURL: IntegrationTestSecrets.googleDriveRedirectURL, clientID: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scopes: nil, refreshToken: nil, codeVerifier: nil, additionalParameters: nil)
+		let tokenRequest = OIDTokenRequest(configuration: configuration, grantType: "authorization_code", authorizationCode: nil, redirectURL: URL(string: ".")!, clientID: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scopes: nil, refreshToken: nil, codeVerifier: nil, additionalParameters: nil)
 		let tokenParameters = ["refresh_token": refreshToken as NSString]
 		let tokenResponse = OIDTokenResponse(request: tokenRequest, parameters: tokenParameters)
 		let authState = OIDAuthState(authorizationResponse: authResponse, tokenResponse: tokenResponse)

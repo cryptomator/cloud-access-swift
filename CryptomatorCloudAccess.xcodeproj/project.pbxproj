@@ -330,12 +330,12 @@
 			isa = PBXGroup;
 			children = (
 				4A05900124519FFC008831F9 /* Info.plist */,
-				4A3A39772615F9AA00F16B26 /* GoogleDrive */,
 				9EE62A0E247D54CD0089DAF7 /* API */,
-				740A7FDB24C5DFB3000216E7 /* LocalFileSystem */,
 				7416F22624F6585A0074DA8E /* Crypto */,
-				748420C124B8A1F800D84E58 /* WebDAV */,
 				4A3A396C2615F97600F16B26 /* Dropbox */,
+				4A3A39772615F9AA00F16B26 /* GoogleDrive */,
+				740A7FDB24C5DFB3000216E7 /* LocalFileSystem */,
+				748420C124B8A1F800D84E58 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccessTests;
 			sourceTree = "<group>";
@@ -375,12 +375,12 @@
 		4A567AF02615C2DE002C4D82 /* Dropbox */ = {
 			isa = PBXGroup;
 			children = (
-				4A567AEC2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift */,
 				4A567B032615C689002C4D82 /* DropboxClientSetup.swift */,
-				4A567B702615D946002C4D82 /* DropboxSetup.swift */,
+				4A567AEC2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift */,
 				4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */,
 				4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */,
 				4A567B0F2615C6F3002C4D82 /* DropboxError.swift */,
+				4A567B702615D946002C4D82 /* DropboxSetup.swift */,
 			);
 			path = Dropbox;
 			sourceTree = "<group>";
@@ -388,14 +388,14 @@
 		4A567B172615C8BB002C4D82 /* GoogleDrive */ = {
 			isa = PBXGroup;
 			children = (
-				4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */,
-				4A567B132615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift */,
 				4A567B1D2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift */,
+				4A567B132615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift */,
 				4A567B212615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift */,
 				4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */,
 				4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */,
 				4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */,
 				4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */,
+				4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */,
 			);
 			path = GoogleDrive;
 			sourceTree = "<group>";
@@ -405,9 +405,9 @@
 			children = (
 				4ACA63922615FDFF00D19304 /* Info.plist */,
 				4ACA639F2615FE2C00D19304 /* CloudAccessIntegrationTest.swift */,
+				4ACA63B02615FE8000D19304 /* CloudAccessIntegrationTestWithAuthentication.swift */,
 				4ACA63A42615FE5700D19304 /* IntegrationTestError.swift */,
 				4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */,
-				4ACA63B02615FE8000D19304 /* CloudAccessIntegrationTestWithAuthentication.swift */,
 				4ACA63BF2615FEB200D19304 /* CryptoDecorator */,
 				4ACA63F02615FF9700D19304 /* Dropbox */,
 				4ACA63F92615FF9700D19304 /* Extensions */,
@@ -422,8 +422,8 @@
 			isa = PBXGroup;
 			children = (
 				4ACA63BA2615FEA600D19304 /* DecoratorFactory.swift */,
-				4ACA63E12615FF6400D19304 /* VaultFormat7 */,
 				4ACA63DA2615FF3B00D19304 /* VaultFormat6 */,
+				4ACA63E12615FF6400D19304 /* VaultFormat7 */,
 			);
 			path = CryptoDecorator;
 			sourceTree = "<group>";
@@ -431,9 +431,9 @@
 		4ACA63DA2615FF3B00D19304 /* VaultFormat6 */ = {
 			isa = PBXGroup;
 			children = (
-				4ACA63C62615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift */,
 				4ACA63CB2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift */,
 				4ACA63D02615FF1600D19304 /* VaultFormat6GoogleDriveIntegrationTests.swift */,
+				4ACA63C62615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift */,
 				4ACA63D52615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift */,
 			);
 			path = VaultFormat6;
@@ -442,10 +442,10 @@
 		4ACA63E12615FF6400D19304 /* VaultFormat7 */ = {
 			isa = PBXGroup;
 			children = (
-				4ACA63E22615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift */,
-				4ACA63E32615FF6400D19304 /* VaultFormat7WebDAVIntegrationTests.swift */,
 				4ACA63E42615FF6400D19304 /* VaultFormat7DropboxIntegrationTests.swift */,
+				4ACA63E22615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift */,
 				4ACA63E52615FF6400D19304 /* VaultFormat7LocalFileSystemProviderIntegrationTests.swift */,
+				4ACA63E32615FF6400D19304 /* VaultFormat7WebDAVIntegrationTests.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";
@@ -462,9 +462,9 @@
 		4ACA63F32615FF9700D19304 /* Google Drive */ = {
 			isa = PBXGroup;
 			children = (
-				4ACA63F42615FF9700D19304 /* MockGoogleDriveAuthenticator.swift */,
-				4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticationTests.swift */,
 				4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */,
+				4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticationTests.swift */,
+				4ACA63F42615FF9700D19304 /* MockGoogleDriveAuthenticator.swift */,
 			);
 			path = "Google Drive";
 			sourceTree = "<group>";
@@ -480,12 +480,12 @@
 		4ACA63F92615FF9700D19304 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
-				4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */,
-				4ACA63FB2615FF9700D19304 /* CloudPath+ExtensionTests.swift */,
-				4ACA63FC2615FF9700D19304 /* URL+ExtensionsTests.swift */,
-				4ACA63FD2615FF9700D19304 /* URL+Extensions.swift */,
-				4ACA63FE2615FF9700D19304 /* CloudProvider+CreateIntermediateFolders.swift */,
 				4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */,
+				4ACA63FB2615FF9700D19304 /* CloudPath+ExtensionTests.swift */,
+				4ACA63FE2615FF9700D19304 /* CloudProvider+CreateIntermediateFolders.swift */,
+				4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */,
+				4ACA63FD2615FF9700D19304 /* URL+Extensions.swift */,
+				4ACA63FC2615FF9700D19304 /* URL+ExtensionsTests.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -862,7 +862,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "pwd\nif [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n./create-integration-test-secrets-file.sh\n";
+			shellScript = "if [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n./create-integration-test-secrets-file.sh\n";
 		};
 		74862A722469A7AF003D81CB /* Lint With SwiftFormat */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1068,7 +1068,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -1129,7 +1129,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 9.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -1237,20 +1237,15 @@
 		4ACA63962615FDFF00D19304 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = FZ53285T8H;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
 				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CryptomatorCloudAccessIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CloudAccessIntegrationTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1260,16 +1255,15 @@
 		4ACA63972615FDFF00D19304 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = FZ53285T8H;
 				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CryptomatorCloudAccessIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CloudAccessIntegrationTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+
 public class DropboxSetup {
 	public static var constants: DropboxSetup!
 	public let appKey: String

@@ -9,6 +9,7 @@
 import CryptomatorCloudAccess
 import Foundation
 import Promises
+
 extension CloudProvider {
 	func createFolderWithIntermediates(for cloudPath: CloudPath) -> Promise<Void> {
 		guard cloudPath != CloudPath("/") else {
@@ -20,7 +21,7 @@ extension CloudProvider {
 			for component in pathComponents {
 				path = path.appendingPathComponent(component)
 				do {
-					try (await (self.createFolder(at: path)))
+					try await(self.createFolder(at: path))
 				} catch {
 					guard case CloudProviderError.itemAlreadyExists = error else {
 						reject(error)

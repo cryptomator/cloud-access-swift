@@ -10,6 +10,7 @@ import CryptomatorCloudAccess
 import Foundation
 import XCTest
 @testable import Promises
+
 class VaultFormat6DropboxIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat6Dropbox: Error?
 

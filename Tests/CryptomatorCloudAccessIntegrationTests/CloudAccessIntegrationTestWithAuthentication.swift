@@ -9,6 +9,7 @@
 import CryptomatorCloudAccess
 import XCTest
 @testable import Promises
+
 class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 	func deauthenticate() -> Promise<Void> {
 		fatalError("Not implemented")

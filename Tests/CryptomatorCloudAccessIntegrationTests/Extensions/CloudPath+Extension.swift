@@ -8,6 +8,7 @@
 
 import CryptomatorCloudAccess
 import Foundation
+
 extension CloudPath {
 	/**
 	 Get all partialCloudPaths from the current CloudPath.

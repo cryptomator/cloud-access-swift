@@ -7,6 +7,7 @@
 //
 
 import Foundation
+
 public enum DropboxError: Error {
 	case createFolderError
 	case unexpectedError

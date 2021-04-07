@@ -10,6 +10,7 @@ import CryptomatorCloudAccess
 import Foundation
 import XCTest
 @testable import Promises
+
 class VaultFormat7GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat7GoogleDrive: Error?
 

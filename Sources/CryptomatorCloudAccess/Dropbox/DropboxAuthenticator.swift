@@ -1,5 +1,5 @@
 //
-//  DropboxCloudAuthenticator.swift
+//  DropboxAuthenticator.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 29.05.20.
@@ -13,13 +13,13 @@ import Foundation
 import ObjectiveDropboxOfficial
 import Promises
 
-public enum DropboxAuthenticationError: Error {
+public enum DropboxAuthenticatorError: Error {
 	case authenticationFailed
 	case noPendingAuthentication
 	case userCanceled
 }
 
-public class DropboxCloudAuthenticator {
+public class DropboxAuthenticator {
 	public static var pendingAuthentication: Promise<DropboxCredential>?
 
 	public init() {
@@ -30,22 +30,18 @@ public class DropboxCloudAuthenticator {
 	public func authenticate(from viewController: UIViewController) -> Promise<DropboxCredential> {
 		// TODO: Check for existing authentication?
 
-		DropboxCloudAuthenticator.pendingAuthentication?.reject(DropboxAuthenticationError.authenticationFailed)
+		DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.authenticationFailed)
 		let pendingAuthentication = Promise<DropboxCredential>.pending()
-		DropboxCloudAuthenticator.pendingAuthentication = pendingAuthentication
+		DropboxAuthenticator.pendingAuthentication = pendingAuthentication
 		DBClientsManager.authorize(fromController: .shared, controller: viewController) { url in
-			if #available(iOS 10.0, *) {
-				UIApplication.shared.open(url, options: [:], completionHandler: nil)
-			} else {
-				UIApplication.shared.openURL(url)
-			}
+			UIApplication.shared.open(url, options: [:], completionHandler: nil)
 		}
 		return pendingAuthentication
 	}
 
 	public func processAuthentication(with tokenUid: String) throws {
-		guard let pendingAuthentication = DropboxCloudAuthenticator.pendingAuthentication else {
-			throw DropboxAuthenticationError.noPendingAuthentication
+		guard let pendingAuthentication = DropboxAuthenticator.pendingAuthentication else {
+			throw DropboxAuthenticatorError.noPendingAuthentication
 		}
 		pendingAuthentication.fulfill(DropboxCredential(tokenUid: tokenUid))
 	}

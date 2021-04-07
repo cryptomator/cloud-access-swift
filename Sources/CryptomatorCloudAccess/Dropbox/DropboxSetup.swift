@@ -10,9 +10,10 @@ import Foundation
 
 public class DropboxSetup {
 	public static var constants: DropboxSetup!
-	public let appKey: String
-	public let appGroupName: String
-	public let mainAppBundleId: String
+
+	let appKey: String
+	let appGroupName: String
+	let mainAppBundleId: String
 
 	public init(appKey: String, appGroupName: String, mainAppBundleId: String) {
 		self.appKey = appKey

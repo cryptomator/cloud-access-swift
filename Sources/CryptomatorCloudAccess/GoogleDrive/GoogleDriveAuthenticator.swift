@@ -1,5 +1,5 @@
 //
-//  GoogleDriveCloudAuthenticator.swift
+//  GoogleDriveAuthenticator.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 24.04.20.
@@ -14,11 +14,11 @@ import Foundation
 import GoogleAPIClientForREST_Drive
 import Promises
 
-public enum GoogleDriveAuthenticationError: Error {
+public enum GoogleDriveAuthenticatorError: Error {
 	case userCanceled
 }
 
-public enum GoogleDriveCloudAuthenticator {
+public enum GoogleDriveAuthenticator {
 	private static let scopes = [kGTLRAuthScopeDrive]
 	public static var currentAuthorizationFlow: OIDExternalUserAgentSession?
 
@@ -53,12 +53,12 @@ public enum GoogleDriveCloudAuthenticator {
 		let request = OIDAuthorizationRequest(configuration: configuration, clientId: GoogleDriveSetup.constants.clientId, scopes: scopes, redirectURL: GoogleDriveSetup.constants.redirectURL, responseType: OIDResponseTypeCode, additionalParameters: nil)
 
 		return Promise<OIDAuthState> { fulfill, reject in
-			GoogleDriveCloudAuthenticator.currentAuthorizationFlow = OIDAuthState.authState(byPresenting: request, presenting: presentingViewController, callback: { authState, error in
+			GoogleDriveAuthenticator.currentAuthorizationFlow = OIDAuthState.authState(byPresenting: request, presenting: presentingViewController, callback: { authState, error in
 				guard let authState = authState, error == nil else {
 					credential.deauthenticate()
 					if let error = error as NSError? {
 						if error.domain == OIDGeneralErrorDomain, error.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue || error.code == OIDErrorCode.programCanceledAuthorizationFlow.rawValue {
-							return reject(GoogleDriveAuthenticationError.userCanceled)
+							return reject(GoogleDriveAuthenticatorError.userCanceled)
 						}
 						return reject(error)
 					}

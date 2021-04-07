@@ -26,6 +26,16 @@ jobs:
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         continue-on-error: true
+      - name: Run integration tests
+        if: startsWith(github.ref, 'refs/tags/')
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccessIntegrationTests' -destination 'name=iPhone 12 Pro' test | xcpretty
+        env:
+          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+          WEBDAV_BASE_URL: ${{ secrets.WEBDAV_BASE_URL }}
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
 
   release:
     name: Deploy and draft a release

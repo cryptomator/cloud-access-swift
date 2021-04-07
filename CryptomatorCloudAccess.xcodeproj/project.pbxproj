@@ -14,20 +14,19 @@
 		4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590112451A180008831F9 /* CloudItemMetadata.swift */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
-		4A3A396E2615F98B00F16B26 /* GoogleDriveCloudIdentifierCacheManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A396D2615F98B00F16B26 /* GoogleDriveCloudIdentifierCacheManagerTests.swift */; };
+		4A3A396E2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */; };
 		4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */; };
 		4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A40749F252F432900D583C3 /* URLProtocolMock.swift */; };
-		4A567AED2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift */; };
+		4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */; };
 		4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */; };
 		4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */; };
 		4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B032615C689002C4D82 /* DropboxClientSetup.swift */; };
 		4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */; };
 		4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */; };
 		4A567B102615C6F3002C4D82 /* DropboxError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0F2615C6F3002C4D82 /* DropboxError.swift */; };
-		4A567B142615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B132615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift */; };
+		4A567B142615C8B8002C4D82 /* GoogleDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */; };
 		4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B192615C917002C4D82 /* GTMAppAuth */; };
-		4A567B1E2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B1D2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift */; };
-		4A567B222615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B212615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift */; };
+		4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */; };
 		4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */; };
 		4A567B2A2615CA4B002C4D82 /* GoogleDriveConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */; };
 		4A567B2E2615CA5C002C4D82 /* GoogleDriveCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */; };
@@ -153,17 +152,16 @@
 		4A0590112451A180008831F9 /* CloudItemMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemMetadata.swift; sourceTree = "<group>"; };
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
-		4A3A396D2615F98B00F16B26 /* GoogleDriveCloudIdentifierCacheManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudIdentifierCacheManagerTests.swift; sourceTree = "<group>"; };
+		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
 		4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProviderTests.swift; sourceTree = "<group>"; };
 		4A40749F252F432900D583C3 /* URLProtocolMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolMock.swift; sourceTree = "<group>"; };
-		4A567AEC2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudAuthenticator.swift; sourceTree = "<group>"; };
+		4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxAuthenticator.swift; sourceTree = "<group>"; };
 		4A567B032615C689002C4D82 /* DropboxClientSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxClientSetup.swift; sourceTree = "<group>"; };
 		4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProvider.swift; sourceTree = "<group>"; };
 		4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCredential.swift; sourceTree = "<group>"; };
 		4A567B0F2615C6F3002C4D82 /* DropboxError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxError.swift; sourceTree = "<group>"; };
-		4A567B132615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudAuthenticator.swift; sourceTree = "<group>"; };
-		4A567B1D2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCachedIdentifier.swift; sourceTree = "<group>"; };
-		4A567B212615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudIdentifierCacheManager.swift; sourceTree = "<group>"; };
+		4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveAuthenticator.swift; sourceTree = "<group>"; };
+		4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProvider.swift; sourceTree = "<group>"; };
 		4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveConstants.swift; sourceTree = "<group>"; };
 		4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCredential.swift; sourceTree = "<group>"; };
@@ -366,8 +364,8 @@
 		4A3A39772615F9AA00F16B26 /* GoogleDrive */ = {
 			isa = PBXGroup;
 			children = (
-				4A3A396D2615F98B00F16B26 /* GoogleDriveCloudIdentifierCacheManagerTests.swift */,
 				4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */,
+				4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */,
 			);
 			path = GoogleDrive;
 			sourceTree = "<group>";
@@ -375,8 +373,8 @@
 		4A567AF02615C2DE002C4D82 /* Dropbox */ = {
 			isa = PBXGroup;
 			children = (
+				4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */,
 				4A567B032615C689002C4D82 /* DropboxClientSetup.swift */,
-				4A567AEC2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift */,
 				4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */,
 				4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */,
 				4A567B0F2615C6F3002C4D82 /* DropboxError.swift */,
@@ -388,13 +386,12 @@
 		4A567B172615C8BB002C4D82 /* GoogleDrive */ = {
 			isa = PBXGroup;
 			children = (
-				4A567B1D2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift */,
-				4A567B132615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift */,
-				4A567B212615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift */,
+				4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */,
 				4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */,
 				4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */,
 				4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */,
 				4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */,
+				4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */,
 				4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */,
 			);
 			path = GoogleDrive;
@@ -892,9 +889,9 @@
 				748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */,
 				740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */,
 				74FD6C4824F6F3AA00C8D3C4 /* VaultFormat6ShorteningProviderDecorator.swift in Sources */,
-				4A567B222615CA24002C4D82 /* GoogleDriveCloudIdentifierCacheManager.swift in Sources */,
+				4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */,
 				4A567B102615C6F3002C4D82 /* DropboxError.swift in Sources */,
-				4A567AED2615C2D7002C4D82 /* DropboxCloudAuthenticator.swift in Sources */,
+				4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */,
 				748A42B624AA231000DEB6D0 /* WebDAVProvider.swift in Sources */,
 				748A42BA24AA34F300DEB6D0 /* WebDAVCredential.swift in Sources */,
 				9ED0E61D24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift in Sources */,
@@ -920,7 +917,6 @@
 				7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */,
 				4A567B2A2615CA4B002C4D82 /* GoogleDriveConstants.swift in Sources */,
 				4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */,
-				4A567B1E2615C9FB002C4D82 /* GoogleDriveCachedIdentifier.swift in Sources */,
 				748BD4CA24B4B1D50001CA8C /* PropfindResponseParser.swift in Sources */,
 				4A567B322615CA6E002C4D82 /* GoogleDriveError.swift in Sources */,
 				748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */,
@@ -929,7 +925,7 @@
 				4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */,
 				74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */,
 				4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */,
-				4A567B142615C8B8002C4D82 /* GoogleDriveCloudAuthenticator.swift in Sources */,
+				4A567B142615C8B8002C4D82 /* GoogleDriveAuthenticator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -942,7 +938,7 @@
 				9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */,
 				7460B782251906F9004AEB56 /* VaultFormat6CryptorMock.swift in Sources */,
 				9ED0E624246198F600FDB438 /* VaultFormat7CloudProviderMockTests.swift in Sources */,
-				4A3A396E2615F98B00F16B26 /* GoogleDriveCloudIdentifierCacheManagerTests.swift in Sources */,
+				4A3A396E2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift in Sources */,
 				740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */,
 				9E1F2D70246889C90071A6F1 /* CryptorMock.swift in Sources */,
 				7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */,
@@ -1069,7 +1065,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1130,7 +1125,6 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=200 -Xfrontend -warn-long-function-bodies=200";
@@ -1148,7 +1142,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -1176,7 +1170,7 @@
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;

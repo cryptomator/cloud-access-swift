@@ -1,5 +1,5 @@
 //
-//  GoogleDriveCloudIdentifierCacheManagerTests.swift
+//  GoogleDriveIdentifierCacheTests.swift
 //  CryptomatorCloudAccessTests
 //
 //  Created by Philipp Schmid on 11.05.20.
@@ -10,13 +10,13 @@ import Foundation
 import XCTest
 @testable import CryptomatorCloudAccess
 
-class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
-	var cachedCloudIdentifierManager: GoogleDriveCloudIdentifierCacheManager!
+class GoogleDriveIdentifierCacheTests: XCTestCase {
+	var identifierCache: GoogleDriveIdentifierCache!
 	override func setUpWithError() throws {
-		guard let manager = GoogleDriveCloudIdentifierCacheManager() else {
-			throw NSError(domain: "CryptomatorCloudAccess-Tests", code: -1000, userInfo: ["localizedDescription": "could not initialize GoogleDriveCloudIdentifierCacheManager"])
+		guard let cache = GoogleDriveIdentifierCache() else {
+			throw NSError(domain: "CryptomatorCloudAccess-Tests", code: -1000, userInfo: ["localizedDescription": "could not initialize GoogleDriveIdentifierCache"])
 		}
-		cachedCloudIdentifierManager = manager
+		identifierCache = cache
 	}
 
 	override func tearDownWithError() throws {
@@ -25,7 +25,7 @@ class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
 
 	func testRootIdentifierIsCachedAtStart() throws {
 		let rootCloudPath = CloudPath("/")
-		let rootIdentifier = cachedCloudIdentifierManager.getIdentifier(for: rootCloudPath)
+		let rootIdentifier = identifierCache.getCachedIdentifier(for: rootCloudPath)
 		XCTAssertNotNil(rootIdentifier)
 		XCTAssertEqual("root", rootIdentifier)
 	}
@@ -33,8 +33,8 @@ class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
 	func testCacheAndRetrieveIdentifierForFileCloudPath() throws {
 		let identifierToStore = "TestABC--1234@^"
 		let cloudPath = CloudPath("/abc/test.txt")
-		try cachedCloudIdentifierManager.cacheIdentifier(identifierToStore, for: cloudPath)
-		let retrievedIdentifier = cachedCloudIdentifierManager.getIdentifier(for: cloudPath)
+		try identifierCache.addOrUpdateIdentifier(identifierToStore, for: cloudPath)
+		let retrievedIdentifier = identifierCache.getCachedIdentifier(for: cloudPath)
 		XCTAssertNotNil(retrievedIdentifier)
 		XCTAssertEqual(identifierToStore, retrievedIdentifier)
 	}
@@ -42,8 +42,8 @@ class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
 	func testCacheAndRetrieveIdentifierForFolderCloudPath() throws {
 		let identifierToStore = "TestABC--1234@^"
 		let cloudPath = CloudPath("/abc/test--a-/")
-		try cachedCloudIdentifierManager.cacheIdentifier(identifierToStore, for: cloudPath)
-		let retrievedIdentifier = cachedCloudIdentifierManager.getIdentifier(for: cloudPath)
+		try identifierCache.addOrUpdateIdentifier(identifierToStore, for: cloudPath)
+		let retrievedIdentifier = identifierCache.getCachedIdentifier(for: cloudPath)
 		XCTAssertNotNil(retrievedIdentifier)
 		XCTAssertEqual(identifierToStore, retrievedIdentifier)
 	}
@@ -51,33 +51,33 @@ class GoogleDriveCloudIdentifierCacheManagerTests: XCTestCase {
 	func testUpdateWithDifferentIdentifierForCachedCloudPath() throws {
 		let identifierToStore = "TestABC--1234@^"
 		let cloudPath = CloudPath("/abc/test--a-/")
-		try cachedCloudIdentifierManager.cacheIdentifier(identifierToStore, for: cloudPath)
+		try identifierCache.addOrUpdateIdentifier(identifierToStore, for: cloudPath)
 		let newIdentifierToStore = "NewerIdentifer879978123.1-"
-		try cachedCloudIdentifierManager.cacheIdentifier(newIdentifierToStore, for: cloudPath)
-		let retrievedIdentifier = cachedCloudIdentifierManager.getIdentifier(for: cloudPath)
+		try identifierCache.addOrUpdateIdentifier(newIdentifierToStore, for: cloudPath)
+		let retrievedIdentifier = identifierCache.getCachedIdentifier(for: cloudPath)
 		XCTAssertNotNil(retrievedIdentifier)
 		XCTAssertEqual(newIdentifierToStore, retrievedIdentifier)
 	}
 
-	func testUncacheIdentifier() throws {
+	func testUnaddOrUpdateIdentifier() throws {
 		let identifierToStore = "TestABC--1234@^"
 		let cloudPath = CloudPath("/abc/test--a-/")
-		try cachedCloudIdentifierManager.cacheIdentifier(identifierToStore, for: cloudPath)
-		let retrievedIdentifier = cachedCloudIdentifierManager.getIdentifier(for: cloudPath)
+		try identifierCache.addOrUpdateIdentifier(identifierToStore, for: cloudPath)
+		let retrievedIdentifier = identifierCache.getCachedIdentifier(for: cloudPath)
 		XCTAssertNotNil(retrievedIdentifier)
 		let secondCloudPath = CloudPath("/test/AAAAAAAAAAAA/test.txt")
 		let secondIdentifierToStore = "SecondIdentifer@@^1!!´´$"
-		try cachedCloudIdentifierManager.cacheIdentifier(secondIdentifierToStore, for: secondCloudPath)
-		try cachedCloudIdentifierManager.uncacheIdentifier(for: cloudPath)
-		XCTAssertNil(cachedCloudIdentifierManager.getIdentifier(for: cloudPath))
-		let stillCachedIdentifier = cachedCloudIdentifierManager.getIdentifier(for: secondCloudPath)
+		try identifierCache.addOrUpdateIdentifier(secondIdentifierToStore, for: secondCloudPath)
+		try identifierCache.invalidateIdentifier(for: cloudPath)
+		XCTAssertNil(identifierCache.getCachedIdentifier(for: cloudPath))
+		let stillCachedIdentifier = identifierCache.getCachedIdentifier(for: secondCloudPath)
 		XCTAssertNotNil(stillCachedIdentifier)
 		XCTAssertEqual(secondIdentifierToStore, stillCachedIdentifier)
 	}
 
 	func testUncacheCanBeCalledForNonExistentCloudPathsWithoutError() throws {
 		let cloudPath = CloudPath("/abc/test--a-/")
-		XCTAssertNil(cachedCloudIdentifierManager.getIdentifier(for: cloudPath))
-		try cachedCloudIdentifierManager.uncacheIdentifier(for: cloudPath)
+		XCTAssertNil(identifierCache.getCachedIdentifier(for: cloudPath))
+		try identifierCache.invalidateIdentifier(for: cloudPath)
 	}
 }

@@ -15,7 +15,7 @@ import Promises
 public class GoogleDriveCloudProvider: CloudProvider {
 	static let maximumUploadFetcherChunkSize: UInt = 3 * 1024 * 1024 // 3MB per chunk as GTMSessionFetcher loads the chunk to the memory and the FileProviderExtension has a total memory limit of 15mb
 	private let credentials: GoogleDriveCredential
-	private let cloudIdentifierCache: GoogleDriveCloudIdentifierCacheManager?
+	private let identifierCache: GoogleDriveIdentifierCache?
 	private var runningTickets: [GTLRServiceTicket]
 	private var runningFetchers: [GTMSessionFetcher]
 	private var driveService: GTLRDriveService {
@@ -28,7 +28,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		self.credentials = credentials
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
-		self.cloudIdentifierCache = GoogleDriveCloudIdentifierCacheManager()
+		self.identifierCache = GoogleDriveIdentifierCache()
 		self.useForegroundSession = useForegroundSession
 		setupDriveService()
 	}
@@ -144,7 +144,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				guard let identifier = uploadedFile.identifier, let name = uploadedFile.name, let lastModifiedDate = uploadedFile.modifiedTime?.date, let mimeType = uploadedFile.mimeType else {
 					throw GoogleDriveError.receivedIncompleteMetadata
 				}
-				try self.cloudIdentifierCache?.cacheIdentifier(identifier, for: cloudPath)
+				try self.identifierCache?.addOrUpdateIdentifier(identifier, for: cloudPath)
 				let itemType = self.getCloudItemType(forMimeType: mimeType)
 				let metadata = CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: uploadedFile.size?.intValue)
 				return metadata
@@ -224,8 +224,8 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				guard let identifier = file.identifier else {
 					throw GoogleDriveError.receivedIncompleteMetadata
 				}
-				try self.cloudIdentifierCache?.uncacheIdentifier(for: sourceCloudPath)
-				try self.cloudIdentifierCache?.cacheIdentifier(identifier, for: targetCloudPath)
+				try self.identifierCache?.invalidateIdentifier(for: sourceCloudPath)
+				try self.identifierCache?.addOrUpdateIdentifier(identifier, for: targetCloudPath)
 				return
 			}
 	}
@@ -246,10 +246,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<String> {
 		var pathToCheckForCache = cloudPath
-		var cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: pathToCheckForCache)
+		var cachedIdentifier = identifierCache?.getCachedIdentifier(for: pathToCheckForCache)
 		while cachedIdentifier == nil, !pathToCheckForCache.pathComponents.isEmpty {
 			pathToCheckForCache = pathToCheckForCache.deletingLastPathComponent()
-			cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: pathToCheckForCache)
+			cachedIdentifier = identifierCache?.getCachedIdentifier(for: pathToCheckForCache)
 		}
 		if pathToCheckForCache != cloudPath {
 			let parentFolderPath = cloudPath.deletingLastPathComponent()
@@ -258,12 +258,12 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				return traverseThroughPathToFolder(from: pathToCheckForCache, to: parentFolderPath, withStartIdentifier: cachedIdentifier!).then { parentIdentifier in
 					self.getFirstIdentifier(forItemWithName: itemName, itemType: nil, inFolderWithId: parentIdentifier)
 				}.then { itemIdentifier in
-					try self.cloudIdentifierCache?.cacheIdentifier(itemIdentifier, for: cloudPath)
+					try self.identifierCache?.addOrUpdateIdentifier(itemIdentifier, for: cloudPath)
 				}
 			}
 			return getFirstIdentifier(forItemWithName: itemName, itemType: nil, inFolderWithId: cachedIdentifier!)
 				.then { itemIdentifier in
-					try self.cloudIdentifierCache?.cacheIdentifier(itemIdentifier, for: cloudPath)
+					try self.identifierCache?.addOrUpdateIdentifier(itemIdentifier, for: cloudPath)
 				}
 		}
 		return Promise(cachedIdentifier!)
@@ -275,10 +275,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 */
 	func resolvePath(forFolderAt cloudPath: CloudPath) -> Promise<String> {
 		var urlToCheckForCache = cloudPath
-		var cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: urlToCheckForCache)
+		var cachedIdentifier = identifierCache?.getCachedIdentifier(for: urlToCheckForCache)
 		while cachedIdentifier == nil, !urlToCheckForCache.pathComponents.isEmpty {
 			urlToCheckForCache = urlToCheckForCache.deletingLastPathComponent()
-			cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: urlToCheckForCache)
+			cachedIdentifier = identifierCache?.getCachedIdentifier(for: urlToCheckForCache)
 		}
 		if urlToCheckForCache != cloudPath {
 			return traverseThroughPathToFolder(from: urlToCheckForCache, to: cloudPath, withStartIdentifier: cachedIdentifier!)
@@ -292,10 +292,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 */
 	func resolvePath(forFileAt cloudPath: CloudPath) -> Promise<String> {
 		var urlToCheckForCache = cloudPath
-		var cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: urlToCheckForCache)
+		var cachedIdentifier = identifierCache?.getCachedIdentifier(for: urlToCheckForCache)
 		while cachedIdentifier == nil, !urlToCheckForCache.pathComponents.isEmpty {
 			urlToCheckForCache = urlToCheckForCache.deletingLastPathComponent()
-			cachedIdentifier = cloudIdentifierCache?.getIdentifier(for: urlToCheckForCache)
+			cachedIdentifier = identifierCache?.getCachedIdentifier(for: urlToCheckForCache)
 		}
 		if urlToCheckForCache != cloudPath {
 			return traverseThroughPathToFile(from: urlToCheckForCache, to: cloudPath, withStartIdentifier: cachedIdentifier!)
@@ -348,7 +348,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			guard result is Void else {
 				throw GoogleDriveError.unexpectedResultType
 			}
-			try self.cloudIdentifierCache?.uncacheIdentifier(for: cloudPath)
+			try self.identifierCache?.invalidateIdentifier(for: cloudPath)
 			return
 		}
 	}
@@ -409,7 +409,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 					if error.domain == kGTMSessionFetcherStatusDomain {
 						if error.code == GoogleDriveConstants.googleDriveErrorCodeFileNotFound {
 							do {
-								try self.cloudIdentifierCache?.uncacheIdentifier(for: cloudPath)
+								try self.identifierCache?.invalidateIdentifier(for: cloudPath)
 								return reject(CloudProviderError.itemNotFound)
 							} catch {
 								return reject(error)
@@ -445,7 +445,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 					if error.domain == kGTLRErrorObjectDomain, error.code == GoogleDriveConstants.googleDriveErrorCodeFileNotFound {
 						if let cloudPath = cloudPath {
 							do {
-								try self.cloudIdentifierCache?.uncacheIdentifier(for: cloudPath)
+								try self.identifierCache?.invalidateIdentifier(for: cloudPath)
 							} catch {
 								reject(error)
 							}
@@ -510,7 +510,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				guard let identifier = folder.identifier else {
 					throw GoogleDriveError.noIdentifierFound
 				}
-				try self.cloudIdentifierCache?.cacheIdentifier(identifier, for: cloudPath)
+				try self.identifierCache?.addOrUpdateIdentifier(identifier, for: cloudPath)
 			} else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -523,7 +523,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 - Precondition: The `startCloudPath` points to a folder
 	 - Precondition: The `startCloudPath` is a real subURL of endCloudPath
 	 - Precondition: The `endCloudPath` points to a file
-	 - Postcondition: If the cloudIdentifierCache exists, the identifier corresponding to the `endCloudPath` is cached in the cloudIdentifierCache.
+	 - Postcondition: If the identifierCache exists, the identifier corresponding to the `endCloudPath` is cached in the identifierCache.
 	 - Parameter startCloudPath: The cloudPath of the folder from which the traversal is started
 	 - Parameter endCloudPath: The cloudPath of the item, which is the actual target and from which the identifier is returned at the end
 	 - Parameter startIdentifier: The identifier of the folder to which the `startCloudPath` points
@@ -537,13 +537,13 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			return traverseThroughPathToFolder(from: startCloudPath, to: endCloudPathParentFolder, withStartIdentifier: startIdentifier).then { parentIdentifier in
 				return self.getFirstIdentifier(forItemWithName: filename, itemType: .file, inFolderWithId: parentIdentifier)
 			}.then { fileIdentifier -> String in
-				try self.cloudIdentifierCache?.cacheIdentifier(fileIdentifier, for: endCloudPath)
+				try self.identifierCache?.addOrUpdateIdentifier(fileIdentifier, for: endCloudPath)
 				return fileIdentifier
 			}
 		}
 		return getFirstIdentifier(forItemWithName: filename, itemType: .file, inFolderWithId: startIdentifier)
 			.then { fileIdentifier -> String in
-				try self.cloudIdentifierCache?.cacheIdentifier(fileIdentifier, for: endCloudPath)
+				try self.identifierCache?.addOrUpdateIdentifier(fileIdentifier, for: endCloudPath)
 				return fileIdentifier
 			}
 	}
@@ -555,7 +555,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 - Precondition: The `startCloudPath` points to a folder
 	 - Precondition: The `startCloudPath` is a real subURL of endCloudPath
 	 - Precondition: The `endCloudPath` points to a folder
-	 - Postcondition: If the cloudIdentifierCache exists, each identifier belonging to the respective intermediate path or `endCloudPath` was cached in the database.
+	 - Postcondition: If the identifierCache exists, each identifier belonging to the respective intermediate path or `endCloudPath` was cached in the database.
 	 - Parameter startCloudPath: The cloudPath of the folder from which the traversal is started
 	 - Parameter endCloudPath: The cloudPath of the item, which is the actual target and from which the identifier is returned at the end
 	 - Parameter startIdentifier: The identifier of the folder to which the `startCloudPath` points
@@ -572,7 +572,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				let itemName = endCloudPath.pathComponents[i]
 				currentURL = currentURL.appendingPathComponent(itemName)
 				parentIdentifier = try await(self.getFirstIdentifier(forItemWithName: itemName, itemType: .folder, inFolderWithId: parentIdentifier))
-				try self.cloudIdentifierCache?.cacheIdentifier(parentIdentifier, for: currentURL)
+				try self.identifierCache?.addOrUpdateIdentifier(parentIdentifier, for: currentURL)
 			}
 			fulfill(parentIdentifier)
 		}

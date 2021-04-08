@@ -83,12 +83,14 @@ public class TLSCertificateValidator {
 	public func validate() -> Promise<TLSCertificate> {
 		var request = URLRequest(url: baseURL)
 		request.httpMethod = "GET"
-		return urlSession.performDownloadTask(with: request).then { _, _ in
+		let pending = Promise<TLSCertificate>.pending()
+		urlSession.performDownloadTask(with: request).always {
 			if let testedCertificate = self.urlSessionDelegate.testedCertificate {
-				return Promise(testedCertificate)
+				pending.fulfill(testedCertificate)
 			} else {
-				return Promise(TLSCertificateValidatorError.validationFailed)
+				pending.reject(TLSCertificateValidatorError.validationFailed)
 			}
 		}
+		return pending
 	}
 }

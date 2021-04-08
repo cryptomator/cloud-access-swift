@@ -7,7 +7,11 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
+import CryptomatorCloudAccess
+#endif
 @testable import CryptomatorCryptoLib
 @testable import Promises
 

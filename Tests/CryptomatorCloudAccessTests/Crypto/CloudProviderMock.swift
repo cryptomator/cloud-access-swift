@@ -8,7 +8,11 @@
 
 import Foundation
 import Promises
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
 @testable import CryptomatorCloudAccess
+#endif
 
 public class CloudProviderMock: CloudProvider {
 	let folders: Set<String>

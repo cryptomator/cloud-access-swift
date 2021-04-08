@@ -8,7 +8,11 @@
 
 import Promises
 import XCTest
-@testable import CryptomatorCloudAccess
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
+import CryptomatorCloudAccess
+#endif
 @testable import ObjectiveDropboxOfficial
 
 class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {

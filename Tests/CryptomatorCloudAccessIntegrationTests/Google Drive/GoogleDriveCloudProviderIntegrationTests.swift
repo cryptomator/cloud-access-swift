@@ -6,7 +6,11 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
 import CryptomatorCloudAccess
+#endif
 import Promises
 import XCTest
 

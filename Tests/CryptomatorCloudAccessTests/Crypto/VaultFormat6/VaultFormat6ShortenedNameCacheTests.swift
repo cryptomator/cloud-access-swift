@@ -6,9 +6,13 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
+@testable import CryptomatorCloudAccess
+#endif
 import Promises
 import XCTest
-@testable import CryptomatorCloudAccess
 
 class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 	let vaultPath = CloudPath("/foo/bar")

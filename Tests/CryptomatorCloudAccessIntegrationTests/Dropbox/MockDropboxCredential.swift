@@ -9,7 +9,11 @@
 import Foundation
 import ObjectiveDropboxOfficial
 import Promises
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
 @testable import CryptomatorCloudAccess
+#endif
 
 class MockDropboxCredential: DropboxCredential {
 	init() {

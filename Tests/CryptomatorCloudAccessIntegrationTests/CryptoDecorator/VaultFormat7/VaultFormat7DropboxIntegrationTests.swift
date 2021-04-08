@@ -5,8 +5,11 @@
 //  Created by Philipp Schmid on 18.11.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
-
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
 import CryptomatorCloudAccess
+#endif
 import Foundation
 import XCTest
 @testable import Promises

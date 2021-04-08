@@ -8,7 +8,11 @@
 
 import Foundation
 import Promises
-@testable import CryptomatorCloudAccess
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
+import CryptomatorCloudAccess
+#endif
 @testable import CryptomatorCryptoLib
 
 class DecoratorFactory {

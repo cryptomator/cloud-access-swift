@@ -5,9 +5,14 @@
 //  Created by Philipp Schmid on 18.11.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
+
 import Foundation
 import XCTest
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
 @testable import CryptomatorCloudAccess
+#endif
 
 class WebDAVClientTests: XCTestCase {
 	func testSanitizeBaseURLWithMissingTrailingSlash() throws {

@@ -10,7 +10,11 @@ import AppAuth
 import Foundation
 import GoogleAPIClientForREST_Drive
 import GTMAppAuth
-@testable import CryptomatorCloudAccess
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
+import CryptomatorCloudAccess
+#endif
 
 class MockGoogleDriveAuthenticator {
 	static func generateAuthorizedCredential(withRefreshToken refreshToken: String, tokenUid: String) -> GoogleDriveCredential {

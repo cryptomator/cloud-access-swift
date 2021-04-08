@@ -1,8 +1,7 @@
 [![Swift Compatibility](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fcryptomator%2Fcloud-access-swift%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/cryptomator/cloud-access-swift)
 [![Platform Compatibility](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fcryptomator%2Fcloud-access-swift%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/cryptomator/cloud-access-swift)
-[![Version](http://img.shields.io/cocoapods/v/CryptomatorCloudAccess.svg)](https://cocoapods.org/pods/CryptomatorCloudAccess)
-[![Codacy Code Quality](https://app.codacy.com/project/badge/Grade/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift)
-[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift)
+[![Codacy Code Quality](https://app.codacy.com/project/badge/Grade/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift/dashboard)
+[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift/dashboard)
 
 # Cloud Access Swift
 
@@ -12,8 +11,8 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 
 ## Requirements
 
-- iOS 9.0 or higher
-- macOS 10.12 or higher
+- iOS 10.0 or higher
+- Swift 5
 
 ## Installation
 
@@ -23,14 +22,6 @@ You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Pa
 
 ```swift
 .package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.0.0"))
-```
-
-### CocoaPods
-
-You can use [CocoaPods](https://cocoapods.org/ "CocoaPods").
-
-```ruby
-pod 'CryptomatorCloudAccess', '~> 1.0.0'
 ```
 
 ## Usage
@@ -122,6 +113,24 @@ validator.validate().then { certificate in
   // error handling
 }
 ```
+
+## Integration Testing
+
+If you would like to run integration tests that require authorization, you have to set some secrets for them. Create a `.integration-test-secrets.sh` file in the root directory. Its contents should look something like this:
+
+```sh
+#!/bin/sh
+export DROPBOX_ACCESS_TOKEN=...
+export GOOGLE_DRIVE_CLIENT_ID=...
+export GOOGLE_DRIVE_REFRESH_TOKEN=...
+export WEBDAV_BASE_URL=...
+export WEBDAV_USERNAME=...
+export WEBDAV_PASSWORD=...
+```
+
+If you aren't using the Xcode project, you may have to run `./create-integration-test-secrets-file.sh` once. If you change the secrets later on, you have to run that script again.
+
+If you are building via a CI system, set these secret environment variables accordingly.
 
 ## Contributing to Cloud Access Swift
 

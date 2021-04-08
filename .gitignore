@@ -1,3 +1,7 @@
+# Secrets
+.integration-test-secrets.sh
+Tests/CryptomatorCloudAccessIntegrationTests/IntegrationTestSecrets.swift
+
 # macOS
 .DS_Store
 
@@ -31,11 +35,3 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
-
-# CocoaPods
-#
-# We recommend against adding the Pods directory to your .gitignore. However
-# you should judge for yourself, the pros and cons are mentioned at:
-# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
-#
-Pods/

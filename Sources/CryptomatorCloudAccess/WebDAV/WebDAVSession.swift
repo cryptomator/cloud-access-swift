@@ -188,6 +188,7 @@ class WebDAVSession {
 			configuration = URLSessionConfiguration.default
 		}
 		configuration.httpCookieStorage = HTTPCookieStorage()
+		configuration.urlCredentialStorage = nil
 		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		self.init(urlSession: session, delegate: delegate)
 	}
@@ -209,7 +210,7 @@ class WebDAVSession {
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
 
-		if #available(iOS 11.0, macOS 10.13, *) {
+		if #available(iOS 11.0, *) {
 			progress.addChild(task.progress, withPendingUnitCount: 1)
 		}
 
@@ -224,7 +225,7 @@ class WebDAVSession {
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
 
-		if #available(iOS 11.0, macOS 10.13, *) {
+		if #available(iOS 11.0, *) {
 			progress.addChild(task.progress, withPendingUnitCount: 1)
 		}
 

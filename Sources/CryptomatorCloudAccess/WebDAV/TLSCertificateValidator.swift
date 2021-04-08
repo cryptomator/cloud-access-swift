@@ -28,7 +28,7 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 	func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
 		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
 			var isTrusted = false
-			if #available(iOS 12.0, macCatalyst 13.0, macOS 10.14, *) {
+			if #available(iOS 12.0, *) {
 				isTrusted = SecTrustEvaluateWithError(trust, nil)
 			} else {
 				var trustResultType: SecTrustResultType = .invalid
@@ -83,12 +83,14 @@ public class TLSCertificateValidator {
 	public func validate() -> Promise<TLSCertificate> {
 		var request = URLRequest(url: baseURL)
 		request.httpMethod = "GET"
-		return urlSession.performDownloadTask(with: request).then { _, _ in
+		let pending = Promise<TLSCertificate>.pending()
+		urlSession.performDownloadTask(with: request).always {
 			if let testedCertificate = self.urlSessionDelegate.testedCertificate {
-				return Promise(testedCertificate)
+				pending.fulfill(testedCertificate)
 			} else {
-				return Promise(TLSCertificateValidatorError.validationFailed)
+				pending.reject(TLSCertificateValidatorError.validationFailed)
 			}
 		}
+		return pending
 	}
 }

@@ -2,6 +2,15 @@
   "object": {
     "pins": [
       {
+        "package": "AppAuth",
+        "repositoryURL": "https://github.com/openid/AppAuth-iOS.git",
+        "state": {
+          "branch": null,
+          "revision": "01131d68346c8ae552961c768d583c715fbe1410",
+          "version": "1.4.0"
+        }
+      },
+      {
         "package": "Base32",
         "repositoryURL": "https://github.com/norio-nomura/Base32.git",
         "state": {
@@ -47,12 +56,48 @@
         }
       },
       {
+        "package": "ObjectiveDropboxOfficial",
+        "repositoryURL": "https://github.com/phil1995/dropbox-sdk-obj-c.git",
+        "state": {
+          "branch": "main",
+          "revision": "375a67dd299548693527f15a3a3df14f44eff47d",
+          "version": null
+        }
+      },
+      {
+        "package": "GoogleAPIClientForREST",
+        "repositoryURL": "https://github.com/google/google-api-objectivec-client-for-rest.git",
+        "state": {
+          "branch": null,
+          "revision": "430236029b2022ad8aab353af77f86049c8bdd3b",
+          "version": "1.4.3"
+        }
+      },
+      {
         "package": "GRDB",
         "repositoryURL": "https://github.com/groue/GRDB.swift.git",
         "state": {
           "branch": null,
           "revision": "5ee47c3c2765bdfde0f44c2ea9a263f6aa252d63",
           "version": "4.14.0"
+        }
+      },
+      {
+        "package": "GTMSessionFetcher",
+        "repositoryURL": "https://github.com/google/gtm-session-fetcher.git",
+        "state": {
+          "branch": null,
+          "revision": "1d4ef59335abfccee6150ca5c9b436c17c801fa9",
+          "version": "1.4.0"
+        }
+      },
+      {
+        "package": "GTMAppAuth",
+        "repositoryURL": "https://github.com/google/GTMAppAuth.git",
+        "state": {
+          "branch": null,
+          "revision": "319b2371c69138665d8cbd7c6700ceccbb49e04f",
+          "version": "1.1.0"
         }
       },
       {

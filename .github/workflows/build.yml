@@ -17,7 +17,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
       - name: Build and test
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccess' -destination 'platform=macOS' -enableCodeCoverage YES clean test | xcpretty
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccess' -destination 'name=iPhone 12 Pro' -enableCodeCoverage YES clean test | xcpretty
       - name: Upload code coverage report
         run: |
           gem install slather
@@ -26,6 +26,16 @@ jobs:
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         continue-on-error: true
+      - name: Run integration tests
+        if: startsWith(github.ref, 'refs/tags/')
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccessIntegrationTests' -destination 'name=iPhone 12 Pro' test | xcpretty
+        env:
+          DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+          WEBDAV_BASE_URL: ${{ secrets.WEBDAV_BASE_URL }}
+          WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
+          WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
 
   release:
     name: Deploy and draft a release
@@ -34,14 +44,6 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v2
-      - name: Deploy to CocoaPods
-        run: |
-          set -eo pipefail
-          export LIB_VERSION=${GITHUB_REF##*/} # use shell parameter expansion to strip of 'refs/tags'
-          pod lib lint
-          pod trunk push
-        env:
-          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
       - name: Draft release
         uses: actions/create-release@v1
         env:

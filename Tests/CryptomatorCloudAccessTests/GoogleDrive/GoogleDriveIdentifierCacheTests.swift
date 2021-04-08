@@ -23,10 +23,6 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 		identifierCache = cache
 	}
 
-	override func tearDownWithError() throws {
-		// Put teardown code here. This method is called after the invocation of each test method in the class.
-	}
-
 	func testRootIdentifierIsCachedAtStart() throws {
 		let rootCloudPath = CloudPath("/")
 		let rootIdentifier = identifierCache.getCachedIdentifier(for: rootCloudPath)

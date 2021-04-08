@@ -1,5 +1,5 @@
 //
-//  MockDropboxCloudAuthentication.swift
+//  MockDropboxCredential.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 04.06.20.

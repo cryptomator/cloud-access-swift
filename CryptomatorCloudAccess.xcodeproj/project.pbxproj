@@ -55,7 +55,7 @@
 		4ACA64022615FF9800D19304 /* DropboxCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F12615FF9700D19304 /* DropboxCloudProviderIntegrationTests.swift */; };
 		4ACA64032615FF9800D19304 /* MockDropboxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F22615FF9700D19304 /* MockDropboxCredential.swift */; };
 		4ACA64042615FF9800D19304 /* MockGoogleDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F42615FF9700D19304 /* MockGoogleDriveAuthenticator.swift */; };
-		4ACA64052615FF9800D19304 /* MockGoogleDriveAuthenticationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticationTests.swift */; };
+		4ACA64052615FF9800D19304 /* MockGoogleDriveAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticatorTests.swift */; };
 		4ACA64062615FF9800D19304 /* GoogleDriveCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */; };
 		4ACA64072615FF9800D19304 /* WebDAVCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F82615FF9700D19304 /* WebDAVCloudProviderIntegrationTests.swift */; };
 		4ACA64082615FF9800D19304 /* CloudProvider+IntermediateFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */; };
@@ -189,7 +189,7 @@
 		4ACA63F12615FF9700D19304 /* DropboxCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DropboxCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA63F22615FF9700D19304 /* MockDropboxCredential.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MockDropboxCredential.swift; sourceTree = "<group>"; };
 		4ACA63F42615FF9700D19304 /* MockGoogleDriveAuthenticator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MockGoogleDriveAuthenticator.swift; sourceTree = "<group>"; };
-		4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MockGoogleDriveAuthenticationTests.swift; sourceTree = "<group>"; };
+		4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticatorTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MockGoogleDriveAuthenticatorTests.swift; sourceTree = "<group>"; };
 		4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA63F82615FF9700D19304 /* WebDAVCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WebDAVCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudProvider+IntermediateFolderTests.swift"; sourceTree = "<group>"; };
@@ -460,8 +460,8 @@
 			isa = PBXGroup;
 			children = (
 				4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */,
-				4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticationTests.swift */,
 				4ACA63F42615FF9700D19304 /* MockGoogleDriveAuthenticator.swift */,
+				4ACA63F52615FF9700D19304 /* MockGoogleDriveAuthenticatorTests.swift */,
 			);
 			path = "Google Drive";
 			sourceTree = "<group>";
@@ -984,7 +984,7 @@
 				4ACA63CC2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift in Sources */,
 				4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */,
 				4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */,
-				4ACA64052615FF9800D19304 /* MockGoogleDriveAuthenticationTests.swift in Sources */,
+				4ACA64052615FF9800D19304 /* MockGoogleDriveAuthenticatorTests.swift in Sources */,
 				4ACA63E82615FF6400D19304 /* VaultFormat7DropboxIntegrationTests.swift in Sources */,
 				4ACA63BB2615FEA600D19304 /* DecoratorFactory.swift in Sources */,
 				4ACA64042615FF9800D19304 /* MockGoogleDriveAuthenticator.swift in Sources */,

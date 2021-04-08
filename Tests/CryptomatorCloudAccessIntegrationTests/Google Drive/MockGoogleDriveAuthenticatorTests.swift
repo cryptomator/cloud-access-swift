@@ -1,5 +1,5 @@
 //
-//  MockGoogleDriveAuthenticationTests.swift
+//  MockGoogleDriveAuthenticatorTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 25.05.20.
@@ -8,9 +8,9 @@
 
 import XCTest
 
-class MockGoogleDriveAuthenticationTests: XCTestCase {
+class MockGoogleDriveAuthenticatorTests: XCTestCase {
 	/**
-	    It is necessary to call another function than canAuthorize, because it returns true as soon as any refreshToken is set and does not check it online for correctness before.
+	 It is necessary to call another function than canAuthorize, because it returns true as soon as any refreshToken is set and does not check it online for correctness before.
 	 */
 	func testAuthenticationWorksWithoutViewController() throws {
 		let expectation = XCTestExpectation(description: "Google Authentication works without ViewController")

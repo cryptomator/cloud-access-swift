@@ -11,9 +11,9 @@ import Foundation
 public class GoogleDriveSetup {
 	public static var constants: GoogleDriveSetup!
 
-	let clientId: String
-	let redirectURL: URL
-	let appGroupName: String
+	public let clientId: String
+	public let redirectURL: URL
+	public let appGroupName: String
 
 	public init(clientId: String, redirectURL: URL, appGroupName: String) {
 		self.clientId = clientId

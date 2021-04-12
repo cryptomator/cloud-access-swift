@@ -368,8 +368,7 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 		return Promise<CloudItemMetadata> { fulfill, reject in
 			var task: DBBatchUploadTask!
-			task = client.filesRoutes.batchUploadFiles([localURL: commitInfo], queue: nil, progressBlock: uploadProgress) {
-				fileUrlsToBatchResultEntries, finishBatchRouteError, finishBatchRequestError, fileUrlsToRequestErrors in
+			task = client.filesRoutes.batchUploadFiles([localURL: commitInfo], queue: nil, progressBlock: uploadProgress) { fileUrlsToBatchResultEntries, finishBatchRouteError, finishBatchRequestError, fileUrlsToRequestErrors in
 				self.runningBatchUploadTasks.removeAll { $0 == task }
 				guard let result = fileUrlsToBatchResultEntries?[localURL] else {
 					if !fileUrlsToRequestErrors.isEmpty {

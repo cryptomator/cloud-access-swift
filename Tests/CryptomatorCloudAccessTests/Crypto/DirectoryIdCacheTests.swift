@@ -73,7 +73,7 @@ class DirectoryIdCacheTests: XCTestCase {
 					XCTAssertEqual(Data("TWO".utf8), parentDirId)
 					return "THREE"
 				default:
-					XCTFail()
+					XCTFail("Unexpected path component: \(cleartextPath.lastPathComponent)")
 					return "UNEXPECTED"
 				}
 			}()

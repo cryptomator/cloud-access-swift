@@ -20,7 +20,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 	}
 
 	func testFetchItemMetadataFailWithUnauthorizedWhenNotAuthorized() throws {
-		let fileCloudPath = type(of: self).rootCloudPathForIntegrationTest.appendingPathComponent("test 0.txt")
+		let fileCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		let expectation = XCTestExpectation(description: "fetchItemMetadataForFile")
 		deauthenticate().then {
 			self.provider.fetchItemMetadata(at: fileCloudPath)
@@ -38,7 +38,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 	}
 
 	func testFetchItemListFailWithUnauthorizedWhenNotAuthorized() throws {
-		let folderCloudPath = type(of: self).rootCloudPathForIntegrationTest.appendingPathComponent("testFolder/")
+		let folderCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/")
 		let expectation = XCTestExpectation(description: "unauthorized fetchItemList fail with CloudProviderError.unauthorized")
 		deauthenticate().then {
 			self.provider.fetchItemList(forFolderAt: folderCloudPath, withPageToken: nil)
@@ -57,7 +57,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 
 	func testDownloadFileFailWithUnauthorizedWhenNotAuthorized() throws {
 		let filename = "test 0.txt"
-		let fileCloudPath = type(of: self).rootCloudPathForIntegrationTest.appendingPathComponent(filename)
+		let fileCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent(filename)
 		let tempDirectory = FileManager.default.temporaryDirectory
 		let uniqueTempFolderURL = tempDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: uniqueTempFolderURL, withIntermediateDirectories: false, attributes: nil)

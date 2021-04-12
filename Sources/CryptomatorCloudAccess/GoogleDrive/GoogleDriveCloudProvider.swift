@@ -316,19 +316,17 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		var hasFoundItemWithWrongType = false
 		return executeQuery(query).then { result -> String in
 			if let fileList = result as? GTLRDrive_FileList {
-				for file in fileList.files ?? [GTLRDrive_File]() {
-					if file.name == itemName {
-						guard let identifier = file.identifier else {
-							throw GoogleDriveError.noIdentifierFound
-						}
-						if let itemType = itemType {
-							if !self.mimeTypeMatchCloudItemType(mimeType: file.mimeType, cloudItemType: itemType) {
-								hasFoundItemWithWrongType = true
-								continue
-							}
-						}
-						return identifier
+				for file in fileList.files ?? [GTLRDrive_File]() where file.name == itemName {
+					guard let identifier = file.identifier else {
+						throw GoogleDriveError.noIdentifierFound
 					}
+					if let itemType = itemType {
+						if !self.mimeTypeMatchCloudItemType(mimeType: file.mimeType, cloudItemType: itemType) {
+							hasFoundItemWithWrongType = true
+							continue
+						}
+					}
+					return identifier
 				}
 				if hasFoundItemWithWrongType {
 					throw CloudProviderError.itemTypeMismatch

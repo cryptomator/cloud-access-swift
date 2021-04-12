@@ -168,8 +168,8 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 }
 
 class WebDAVSession {
-	private let delegate: WebDAVClientURLSessionDelegate
 	private let urlSession: URLSession
+	private weak var delegate: WebDAVClientURLSessionDelegate?
 
 	init(urlSession: URLSession, delegate: WebDAVClientURLSessionDelegate) {
 		precondition(urlSession.delegate as? WebDAVClientURLSessionDelegate == delegate)
@@ -201,7 +201,7 @@ class WebDAVSession {
 		let task = urlSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		delegate.addRunningDataTask(key: task, value: webDAVDataTask)
+		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
 		return pendingPromise
 	}
@@ -216,7 +216,7 @@ class WebDAVSession {
 
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
-		delegate.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
+		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
 		task.resume()
 		return pendingPromise
 	}
@@ -231,7 +231,7 @@ class WebDAVSession {
 
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		delegate.addRunningDataTask(key: task, value: webDAVDataTask)
+		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
 		return pendingPromise
 	}

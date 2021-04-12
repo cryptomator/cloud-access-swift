@@ -32,9 +32,8 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 		return setUpProviderForLocalFileSystem
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtLocalFileSystem = CloudPath("/IntegrationTest/")
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtLocalFileSystem
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/IntegrationTest/")
 	}
 
 	// If you do not need to initialize anything special once or before the IntegrationTest setup, you can ignore this function.

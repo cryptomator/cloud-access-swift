@@ -15,7 +15,7 @@ import CryptomatorCloudAccess
 @testable import CryptomatorCryptoLib
 @testable import Promises
 
-class VaultFormat7LocalFileSystemCloudProviderIntegrationTests: CloudAccessIntegrationTest {
+class VaultFormat7LocalFileSystemIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat7LocalFileSystem: Error?
 	override class var classSetUpError: Error? {
 		get {
@@ -35,17 +35,15 @@ class VaultFormat7LocalFileSystemCloudProviderIntegrationTests: CloudAccessInteg
 		return setUpProviderForVaultFormat7LocalFileSystem
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtVaultFormat7LocalFileSystem = CloudPath("/")
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtVaultFormat7LocalFileSystem
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/")
 	}
 
 	override class func setUp() {
-		// TODO: SetUp Vault
 		let setUpPromise = DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
 			setUpProviderForVaultFormat7LocalFileSystem = decorator
 		}.catch { error in
-			print("VaultFormat7LocalFileSystemCloudProviderIntegrationTests setup error: \(error)")
+			print("VaultFormat7LocalFileSystemIntegrationTests setup error: \(error)")
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
@@ -61,9 +59,9 @@ class VaultFormat7LocalFileSystemCloudProviderIntegrationTests: CloudAccessInteg
 	override func setUpWithError() throws {
 		let expectation = XCTestExpectation()
 		try super.setUpWithError()
-		try FileManager.default.createDirectory(atPath: VaultFormat7LocalFileSystemCloudProviderIntegrationTests.vaultPath.path, withIntermediateDirectories: true, attributes: nil)
+		try FileManager.default.createDirectory(atPath: VaultFormat7LocalFileSystemIntegrationTests.vaultPath.path, withIntermediateDirectories: true, attributes: nil)
 		let cloudProvider = LocalFileSystemProvider(rootURL: URL(fileURLWithPath: "/"))
-		DecoratorFactory.createFromExistingVaultFormat7(delegate: cloudProvider, vaultPath: VaultFormat7LocalFileSystemCloudProviderIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		DecoratorFactory.createFromExistingVaultFormat7(delegate: cloudProvider, vaultPath: VaultFormat7LocalFileSystemIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator
 		}.catch { error in
 			XCTFail("Promise failed with error: \(error)")
@@ -74,6 +72,6 @@ class VaultFormat7LocalFileSystemCloudProviderIntegrationTests: CloudAccessInteg
 	}
 
 	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat7LocalFileSystemCloudProviderIntegrationTests.self)
+		return XCTestSuite(forTestCaseClass: VaultFormat7LocalFileSystemIntegrationTests.self)
 	}
 }

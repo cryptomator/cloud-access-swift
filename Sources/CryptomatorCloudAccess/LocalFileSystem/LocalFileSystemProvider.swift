@@ -53,8 +53,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<CloudItemMetadata>.pending()
+		let promise = Promise<CloudItemMetadata>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
@@ -85,8 +86,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<CloudItemList>.pending()
+		let promise = Promise<CloudItemList>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
@@ -123,8 +125,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<Void>.pending()
+		let promise = Promise<Void>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .withoutChanges)], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
@@ -158,8 +161,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let pendingUploadPromise = Promise<Void>.pending()
+		let pendingUploadPromise = Promise<Void>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])], queue: queue) { error in
 			if let error = error {
 				pendingUploadPromise.reject(error)
@@ -211,8 +215,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<Void>.pending()
+		let promise = Promise<Void>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: [])], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
@@ -251,8 +256,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<Void>.pending()
+		let promise = Promise<Void>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: .forDeleting)], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
@@ -287,8 +293,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		defer { rootURL.stopAccessingSecurityScopedResource() }
-		let promise = Promise<Void>.pending()
+		let promise = Promise<Void>.pending().always {
+			self.rootURL.stopAccessingSecurityScopedResource()
+		}
 		NSFileCoordinator().coordinate(with: [.writingIntent(with: sourceURL, options: .forMoving)], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)

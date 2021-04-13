@@ -16,6 +16,13 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+      - name: Install SwiftFormat
+        run: |
+          brew install swiftformat
+      - name: Run process.sh script
+        run: |
+          ./Scripts/process.sh
+          exit $?
       - name: Build and test
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccess' -destination 'name=iPhone 12 Pro' -enableCodeCoverage YES clean test | xcpretty
       - name: Upload code coverage report

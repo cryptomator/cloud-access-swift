@@ -36,10 +36,8 @@ class VaultFormat7DropboxIntegrationTests: CloudAccessIntegrationTest {
 		return setUpProviderForVaultFormat7Dropbox
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName = CloudPath("/")
-
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/")
 	}
 
 	override class func setUp() {

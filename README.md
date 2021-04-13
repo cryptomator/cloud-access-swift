@@ -132,9 +132,25 @@ If you aren't using the Xcode project, you may have to run `./create-integration
 
 If you are building via a CI system, set these secret environment variables accordingly.
 
-## Contributing to Cloud Access Swift
+## Contributing
 
 Please read our [contribution guide](.github/CONTRIBUTING.md), if you would like to report a bug, ask a question or help us with coding.
+
+This project uses [SwiftFormat](https://github.com/nicklockwood/SwiftFormat) and [SwiftLint](https://github.com/realm/SwiftLint) to enforce code style and conventions. Install these tools if you haven't already.
+
+Please make sure that your code is correctly formatted and passes linter validations. The easiest way to do that is to set up a pre-commit hook. Create a file at `.git/hooks/pre-commit` with this content:
+
+```sh
+./Scripts/process.sh --staged
+exit $?
+```
+
+You may have to make the scripts executable:
+
+```sh
+chmod +x Scripts/process.sh
+chmod +x .git/hooks/pre-commit
+```
 
 ## Code of Conduct
 

@@ -37,10 +37,8 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 		return setUpProviderForVaultFormat7WebDAV
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName = CloudPath("/")
-
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/")
 	}
 
 	override class func setUp() {

@@ -57,16 +57,7 @@ public class WebDAVProvider: CloudProvider {
 			}
 			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
 		}.recover { error -> Promise<CloudItemMetadata> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.itemNotFound)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
-			default:
-				return Promise(error)
-			}
+			return self.standardErrorMapping(error)
 		}
 	}
 
@@ -91,16 +82,7 @@ public class WebDAVProvider: CloudProvider {
 			let items = childElements.map { CloudItemMetadata($0, cloudPath: cloudPath.appendingPathComponent($0.url.lastPathComponent)) }
 			return CloudItemList(items: items)
 		}.recover { error -> Promise<CloudItemList> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.itemNotFound)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
-			default:
-				return Promise(error)
-			}
+			return self.standardErrorMapping(error)
 		}
 	}
 
@@ -172,24 +154,28 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(error)
 			}
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 405):
-				return Promise(CloudProviderError.itemTypeMismatch)
-			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.parentFolderDoesNotExist)
-			case URLSessionError.httpError(_, statusCode: 507):
-				return Promise(CloudProviderError.quotaInsufficient)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
-			case POSIXError.EISDIR:
-				return Promise(CloudProviderError.itemTypeMismatch)
-			default:
-				return Promise(error)
-			}
+			self.uploadFileErrorMapping(error: error)
 		}.then { _, _ -> Promise<CloudItemMetadata> in
 			return self.fetchItemMetadata(at: cloudPath)
+		}
+	}
+
+	func uploadFileErrorMapping(error: Error) -> Promise<(HTTPURLResponse, Data?)> {
+		switch error {
+		case URLSessionError.httpError(_, statusCode: 401):
+			return Promise(CloudProviderError.unauthorized)
+		case URLSessionError.httpError(_, statusCode: 405):
+			return Promise(CloudProviderError.itemTypeMismatch)
+		case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
+			return Promise(CloudProviderError.parentFolderDoesNotExist)
+		case URLSessionError.httpError(_, statusCode: 507):
+			return Promise(CloudProviderError.quotaInsufficient)
+		case URLError.notConnectedToInternet:
+			return Promise(CloudProviderError.noInternetConnection)
+		case POSIXError.EISDIR:
+			return Promise(CloudProviderError.itemTypeMismatch)
+		default:
+			return Promise(error)
 		}
 	}
 
@@ -232,16 +218,7 @@ public class WebDAVProvider: CloudProvider {
 		return client.DELETE(url: url).then { _, _ -> Void in
 			// no-op
 		}.recover { error -> Promise<Void> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.itemNotFound)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
-			default:
-				return Promise(error)
-			}
+			return self.standardErrorMapping(error)
 		}
 	}
 
@@ -276,6 +253,19 @@ public class WebDAVProvider: CloudProvider {
 			default:
 				return Promise(error)
 			}
+		}
+	}
+
+	func standardErrorMapping<T>(_ error: Error) -> Promise<T> {
+		switch error {
+		case URLSessionError.httpError(_, statusCode: 401):
+			return Promise(CloudProviderError.unauthorized)
+		case URLSessionError.httpError(_, statusCode: 404):
+			return Promise(CloudProviderError.itemNotFound)
+		case URLError.notConnectedToInternet:
+			return Promise(CloudProviderError.noInternetConnection)
+		default:
+			return Promise(error)
 		}
 	}
 }

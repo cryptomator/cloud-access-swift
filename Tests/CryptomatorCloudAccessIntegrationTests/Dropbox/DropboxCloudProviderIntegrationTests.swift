@@ -34,13 +34,9 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 	}
 
 	let credential = MockDropboxCredential()
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtDropbox = CloudPath("/iOS-IntegrationTest/plain/")
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtDropbox
-	}
 
-	override class func setUp() {
-		super.setUp()
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/iOS-IntegrationTest/plain/")
 	}
 
 	override func setUpWithError() throws {

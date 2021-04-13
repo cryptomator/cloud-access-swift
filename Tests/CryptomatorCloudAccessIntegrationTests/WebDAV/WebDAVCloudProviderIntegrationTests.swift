@@ -34,10 +34,8 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		return setUpProviderForWebDAV
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtWebDAV = CloudPath("/iOSIntegrationTests/")
-
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtWebDAV
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/iOSIntegrationTests/")
 	}
 
 	override func setUpWithError() throws {

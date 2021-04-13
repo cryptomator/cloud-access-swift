@@ -66,12 +66,13 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 public class TLSCertificateValidator {
 	private let baseURL: URL
 	private let urlSession: URLSession
-	private let urlSessionDelegate: TLSCertificateValidatorURLSessionDelegate
+	private weak var urlSessionDelegate: TLSCertificateValidatorURLSessionDelegate?
 
 	public init(baseURL: URL) {
 		self.baseURL = baseURL
-		self.urlSessionDelegate = TLSCertificateValidatorURLSessionDelegate()
+		let urlSessionDelegate = TLSCertificateValidatorURLSessionDelegate()
 		self.urlSession = TLSCertificateValidator.createURLSession(delegate: urlSessionDelegate)
+		self.urlSessionDelegate = urlSessionDelegate
 	}
 
 	private static func createURLSession(delegate: URLSessionDelegate) -> URLSession {
@@ -85,7 +86,7 @@ public class TLSCertificateValidator {
 		request.httpMethod = "GET"
 		let pending = Promise<TLSCertificate>.pending()
 		urlSession.performDownloadTask(with: request).always {
-			if let testedCertificate = self.urlSessionDelegate.testedCertificate {
+			if let testedCertificate = self.urlSessionDelegate?.testedCertificate {
 				pending.fulfill(testedCertificate)
 			} else {
 				pending.reject(TLSCertificateValidatorError.validationFailed)

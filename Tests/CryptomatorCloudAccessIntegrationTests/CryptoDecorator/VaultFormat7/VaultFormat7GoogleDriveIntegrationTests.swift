@@ -38,10 +38,8 @@ class VaultFormat7GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 		return setUpProviderForVaultFormat7GoogleDrive
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName = CloudPath("/")
-
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtCloudProviderName
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/")
 	}
 
 	private var credential: GoogleDriveCredential!

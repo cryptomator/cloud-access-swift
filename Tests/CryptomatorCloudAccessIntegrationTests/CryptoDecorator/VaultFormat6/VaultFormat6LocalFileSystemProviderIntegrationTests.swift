@@ -1,5 +1,5 @@
 //
-//  VaultFormat6LocalFileSystemProviderIntegrationTests.swift
+//  VaultFormat6LocalFileSystemIntegrationTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 06.11.20.
@@ -15,7 +15,7 @@ import XCTest
 @testable import CryptomatorCryptoLib
 @testable import Promises
 
-class VaultFormat6LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
+class VaultFormat6LocalFileSystemIntegrationTests: CloudAccessIntegrationTest {
 	static var setUpErrorForVaultFormat6LocalFileSystem: Error?
 	override class var classSetUpError: Error? {
 		get {
@@ -35,17 +35,15 @@ class VaultFormat6LocalFileSystemProviderIntegrationTests: CloudAccessIntegratio
 		return setUpProviderForVaultFormat6LocalFileSystem
 	}
 
-	static let folderWhereTheIntegrationTestFolderIsCreatedAtVaultFormat6LocalFileSystem = CloudPath("/")
-	override class var folderWhereTheIntegrationTestFolderIsCreated: CloudPath {
-		return folderWhereTheIntegrationTestFolderIsCreatedAtVaultFormat6LocalFileSystem
+	override class var integrationTestParentCloudPath: CloudPath {
+		return CloudPath("/")
 	}
 
 	override class func setUp() {
-		// TODO: SetUp Vault
 		let setUpPromise = DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
 			setUpProviderForVaultFormat6LocalFileSystem = decorator
 		}.catch { error in
-			print("VaultFormat6LocalFileSystemCloudProviderIntegrationTests setup error: \(error)")
+			print("VaultFormat6LocalFileSystemIntegrationTests setup error: \(error)")
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
@@ -61,9 +59,9 @@ class VaultFormat6LocalFileSystemProviderIntegrationTests: CloudAccessIntegratio
 	override func setUpWithError() throws {
 		let expectation = XCTestExpectation()
 		try super.setUpWithError()
-		try FileManager.default.createDirectory(atPath: VaultFormat6LocalFileSystemProviderIntegrationTests.vaultPath.path, withIntermediateDirectories: true, attributes: nil)
+		try FileManager.default.createDirectory(atPath: VaultFormat6LocalFileSystemIntegrationTests.vaultPath.path, withIntermediateDirectories: true, attributes: nil)
 		let cloudProvider = LocalFileSystemProvider(rootURL: URL(fileURLWithPath: "/"))
-		DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6LocalFileSystemProviderIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6LocalFileSystemIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator
 		}.catch { error in
 			XCTFail("Promise failed with error: \(error)")
@@ -74,6 +72,6 @@ class VaultFormat6LocalFileSystemProviderIntegrationTests: CloudAccessIntegratio
 	}
 
 	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat6LocalFileSystemProviderIntegrationTests.self)
+		return XCTestSuite(forTestCaseClass: VaultFormat6LocalFileSystemIntegrationTests.self)
 	}
 }

@@ -19,7 +19,7 @@ public enum GoogleDriveAuthenticatorError: Error {
 }
 
 public enum GoogleDriveAuthenticator {
-	private static let scopes = [kGTLRAuthScopeDrive]
+	private static let scopes = [kGTLRAuthScopeDrive, OIDScopeEmail]
 	public static var currentAuthorizationFlow: OIDExternalUserAgentSession?
 
 	public static func authenticate(credential: GoogleDriveCredential, from viewController: UIViewController) -> Promise<Void> {

@@ -368,27 +368,10 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 		return Promise<CloudItemMetadata> { fulfill, reject in
 			var task: DBBatchUploadTask!
-			task = client.filesRoutes.batchUploadFiles([localURL: commitInfo], queue: nil, progressBlock: uploadProgress) {
-				fileUrlsToBatchResultEntries, finishBatchRouteError, finishBatchRequestError, fileUrlsToRequestErrors in
+			task = client.filesRoutes.batchUploadFiles([localURL: commitInfo], queue: nil, progressBlock: uploadProgress) { fileUrlsToBatchResultEntries, finishBatchRouteError, finishBatchRequestError, fileUrlsToRequestErrors in
 				self.runningBatchUploadTasks.removeAll { $0 == task }
 				guard let result = fileUrlsToBatchResultEntries?[localURL] else {
-					if !fileUrlsToRequestErrors.isEmpty {
-						guard let requestError = fileUrlsToRequestErrors[localURL] else {
-							reject(DropboxError.unexpectedError)
-							return
-						}
-						reject(self.convertRequestErrorToDropboxError(requestError))
-						return
-					}
-					if finishBatchRouteError != nil {
-						reject(DropboxError.asyncPollError)
-						return
-					}
-					if let finishBatchRequestError = finishBatchRequestError {
-						reject(self.convertRequestErrorToDropboxError(finishBatchRequestError))
-						return
-					}
-					reject(DropboxError.uploadFileError)
+					reject(self.batchUploadNoResultHandling(for: localURL, fileUrlsToRequestErrors, finishBatchRouteError, finishBatchRequestError))
 					return
 				}
 				if result.isSuccess() {
@@ -414,6 +397,22 @@ public class DropboxCloudProvider: CloudProvider {
 			}
 			self.runningBatchUploadTasks.append(task)
 		}
+	}
+
+	func batchUploadNoResultHandling(for localURL: URL, _ fileUrlsToRequestErrors: [URL: DBRequestError], _ finishBatchRouteError: DBASYNCPollError?, _ finishBatchRequestError: DBRequestError?) -> Error {
+		if !fileUrlsToRequestErrors.isEmpty {
+			guard let requestError = fileUrlsToRequestErrors[localURL] else {
+				return DropboxError.unexpectedError
+			}
+			return convertRequestErrorToDropboxError(requestError)
+		}
+		if finishBatchRouteError != nil {
+			return DropboxError.asyncPollError
+		}
+		if let finishBatchRequestError = finishBatchRequestError {
+			return convertRequestErrorToDropboxError(finishBatchRequestError)
+		}
+		return DropboxError.uploadFileError
 	}
 
 	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {

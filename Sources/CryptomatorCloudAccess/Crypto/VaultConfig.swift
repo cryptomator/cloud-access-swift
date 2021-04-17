@@ -7,10 +7,11 @@
 //
 
 import Foundation
-import SwiftJWT
+import JOSESwift
 
 public enum VaultConfigError: Error {
 	case signatureVerificationFailed
+	case tokenSerializationFailed
 }
 
 public enum VaultCipherCombo: String, Codable {
@@ -18,18 +19,28 @@ public enum VaultCipherCombo: String, Codable {
 	case sivGCM = "SIV_GCM"
 }
 
-private struct VaultConfigClaims: Claims {
+struct VaultConfigPayload: Equatable, Codable {
 	let jti: String
 	let format: Int
 	let cipherCombo: VaultCipherCombo
 	let maxFilenameLen: Int
+
+	static func fromJSONData(data: Data) throws -> VaultConfigPayload {
+		let decoder = JSONDecoder()
+		return try decoder.decode(VaultConfigPayload.self, from: data)
+	}
+
+	func toJSONData() throws -> Data {
+		let encoder = JSONEncoder()
+		return try encoder.encode(self)
+	}
 }
 
 public class UnverifiedVaultConfig {
 	private let token: String
-	private let jwt: JWT<VaultConfigClaims>
+	private let jws: JWS
 	public var keyId: String? {
-		return jwt.header.kid
+		return jws.header.kid
 	}
 
 	/**
@@ -40,7 +51,7 @@ public class UnverifiedVaultConfig {
 	 */
 	public init(token: String) throws {
 		self.token = token
-		self.jwt = try JWT<VaultConfigClaims>(jwtString: token)
+		self.jws = try JWS(compactSerialization: token)
 	}
 
 	/**
@@ -50,13 +61,11 @@ public class UnverifiedVaultConfig {
 	 - Returns: Verified vault configuration instance.
 	 */
 	public func verify(rawKey: [UInt8]) throws -> VaultConfig {
-		let verifier = JWTVerifier.hs256(key: Data(rawKey))
-		let verified = JWT<VaultConfigClaims>.verify(token, using: verifier)
-		if verified {
-			return VaultConfig(claims: jwt.claims)
-		} else {
+		guard let verifier = Verifier(verifyingAlgorithm: .HS256, publicKey: Data(rawKey)) else {
 			throw VaultConfigError.signatureVerificationFailed
 		}
+		let verifiedJWS = try jws.validate(using: verifier)
+		return try VaultConfig(jsonData: verifiedJWS.payload.data())
 	}
 }
 
@@ -66,10 +75,6 @@ public class VaultConfig {
 	public let cipherCombo: VaultCipherCombo
 	public let maxFilenameLength: Int
 
-	private var claims: VaultConfigClaims {
-		return VaultConfigClaims(jti: id, format: format, cipherCombo: cipherCombo, maxFilenameLen: maxFilenameLength)
-	}
-
 	init(id: String, format: Int, cipherCombo: VaultCipherCombo, maxFilenameLength: Int) {
 		self.id = id
 		self.format = format
@@ -77,8 +82,9 @@ public class VaultConfig {
 		self.maxFilenameLength = maxFilenameLength
 	}
 
-	fileprivate convenience init(claims: VaultConfigClaims) {
-		self.init(id: claims.jti, format: claims.format, cipherCombo: claims.cipherCombo, maxFilenameLength: claims.maxFilenameLen)
+	fileprivate convenience init(jsonData: Data) throws {
+		let payload = try VaultConfigPayload.fromJSONData(data: jsonData)
+		self.init(id: payload.jti, format: payload.format, cipherCombo: payload.cipherCombo, maxFilenameLength: payload.maxFilenameLen)
 	}
 
 	/**
@@ -113,9 +119,12 @@ public class VaultConfig {
 	 - Returns: Signed token in JWT format.
 	 */
 	public func toToken(keyId: String, rawKey: [UInt8]) throws -> String {
-		let signer = JWTSigner.hs256(key: Data(rawKey))
-		let header = Header(kid: keyId)
-		var jwt = JWT(header: header, claims: claims)
-		return try jwt.sign(using: signer)
+		let header = try JWSHeader(parameters: ["typ": "JWT", "alg": SignatureAlgorithm.HS256.rawValue, "kid": keyId])
+		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo, maxFilenameLen: maxFilenameLength).toJSONData()
+		guard let signer = Signer(signingAlgorithm: .HS256, privateKey: Data(rawKey)) else {
+			throw VaultConfigError.tokenSerializationFailed
+		}
+		let jws = try JWS(header: header, payload: Payload(payload), signer: signer)
+		return jws.compactSerializedString
 	}
 }

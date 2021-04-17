@@ -20,33 +20,6 @@
         }
       },
       {
-        "package": "Cryptor",
-        "repositoryURL": "https://github.com/Kitura/BlueCryptor.git",
-        "state": {
-          "branch": null,
-          "revision": "ee5880e031da4c609f372cf7472476ab51d5dd19",
-          "version": "1.0.200"
-        }
-      },
-      {
-        "package": "CryptorECC",
-        "repositoryURL": "https://github.com/Kitura/BlueECC.git",
-        "state": {
-          "branch": null,
-          "revision": "baf6ed3fc1a622675f0041b4aff7c02dd1a93818",
-          "version": "1.2.200"
-        }
-      },
-      {
-        "package": "CryptorRSA",
-        "repositoryURL": "https://github.com/Kitura/BlueRSA.git",
-        "state": {
-          "branch": null,
-          "revision": "c885fcdbe1b04718cb46d747387137653c030f6c",
-          "version": "1.0.200"
-        }
-      },
-      {
         "package": "CryptomatorCryptoLib",
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {
@@ -101,21 +74,12 @@
         }
       },
       {
-        "package": "KituraContracts",
-        "repositoryURL": "https://github.com/Kitura/KituraContracts.git",
+        "package": "JOSESwift",
+        "repositoryURL": "https://github.com/tobihagemann/JOSESwift.git",
         "state": {
-          "branch": null,
-          "revision": "8418006e39e2efae9b31ae92721cb597ac29c617",
-          "version": "1.2.200"
-        }
-      },
-      {
-        "package": "LoggerAPI",
-        "repositoryURL": "https://github.com/Kitura/LoggerAPI.git",
-        "state": {
-          "branch": null,
-          "revision": "e82d34eab3f0b05391082b11ea07d3b70d2f65bb",
-          "version": "1.9.200"
+          "branch": "master",
+          "revision": "d32bb2263c792952da9f471c85e482fd06cea3d9",
+          "version": null
         }
       },
       {
@@ -125,24 +89,6 @@
           "branch": null,
           "revision": "afa9a1ace74e116848d4f743599ab83e584ff8cb",
           "version": "1.2.12"
-        }
-      },
-      {
-        "package": "SwiftJWT",
-        "repositoryURL": "https://github.com/Kitura/Swift-JWT.git",
-        "state": {
-          "branch": null,
-          "revision": "2f2fc12ae88660e0760b04d9e6c341517b31ad7b",
-          "version": "3.6.200"
-        }
-      },
-      {
-        "package": "swift-log",
-        "repositoryURL": "https://github.com/apple/swift-log.git",
-        "state": {
-          "branch": null,
-          "revision": "12d3a8651d32295794a850307f77407f95b8c881",
-          "version": "1.4.1"
         }
       }
     ]

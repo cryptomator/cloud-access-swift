@@ -66,6 +66,7 @@
 		4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */; };
 		4ACA640E2615FF9800D19304 /* LocalFileSystemProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */; };
 		4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */; };
+		7402BEBD2629D05C0012801E /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7402BEBC2629D05C0012801E /* JOSESwift */; };
 		740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
 		7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22224F594B20074DA8E /* TLSCertificate.swift */; };
@@ -107,7 +108,6 @@
 		74E54F6524BCB6B9003379FA /* item-data.txt in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5F24BCB6B9003379FA /* item-data.txt */; };
 		74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */; };
 		74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F4AA1425ED3D2A00FDF2C6 /* VaultConfig.swift */; };
-		74F4AA1C25ED400D00FDF2C6 /* SwiftJWT in Frameworks */ = {isa = PBXBuildFile; productRef = 74F4AA1B25ED400D00FDF2C6 /* SwiftJWT */; };
 		74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F4AA1F25EF82D200FDF2C6 /* VaultConfigTests.swift */; };
 		74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD324BC9BC00040513A /* partial-404-status.xml */; };
 		74F57AD924BCB5390040513A /* authentication-success.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD824BCB5390040513A /* authentication-success.xml */; };
@@ -271,7 +271,7 @@
 			files = (
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
-				74F4AA1C25ED400D00FDF2C6 /* SwiftJWT in Frameworks */,
+				7402BEBD2629D05C0012801E /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
@@ -727,12 +727,12 @@
 				74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */,
 				74F93561251F6822001F4ADA /* GRDB */,
 				74F93566251F6863001F4ADA /* Promises */,
-				74F4AA1B25ED400D00FDF2C6 /* SwiftJWT */,
 				4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */,
 				4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */,
 				4A567B192615C917002C4D82 /* GTMAppAuth */,
 				4A567B362615CAAC002C4D82 /* GTMSessionFetcher */,
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
+				7402BEBC2629D05C0012801E /* JOSESwift */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -810,12 +810,12 @@
 				74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */,
 				74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */,
-				74F4AA1A25ED400D00FDF2C6 /* XCRemoteSwiftPackageReference "Swift-JWT" */,
 				4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */,
 				4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
 				4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */,
 				4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */,
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
+				7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1351,14 +1351,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		74F4AA1A25ED400D00FDF2C6 /* XCRemoteSwiftPackageReference "Swift-JWT" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Kitura/Swift-JWT.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 3.6.0;
-			};
-		};
 		4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c.git";
@@ -1399,6 +1391,14 @@
 				minimumVersion = 1.4.0;
 			};
 		};
+		7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 		74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/cryptomator/cryptolib-swift.git";
@@ -1426,11 +1426,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		74F4AA1B25ED400D00FDF2C6 /* SwiftJWT */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 74F4AA1A25ED400D00FDF2C6 /* XCRemoteSwiftPackageReference "Swift-JWT" */;
-			productName = SwiftJWT;
-		};
 		4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */;
@@ -1455,6 +1450,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		7402BEBC2629D05C0012801E /* JOSESwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */;
+			productName = JOSESwift;
 		};
 		74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */ = {
 			isa = XCSwiftPackageProductDependency;

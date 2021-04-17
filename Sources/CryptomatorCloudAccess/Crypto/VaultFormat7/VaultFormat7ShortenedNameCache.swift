@@ -95,15 +95,16 @@ private extension CloudPath {
 }
 
 class VaultFormat7ShortenedNameCache {
-	private static let threshold = 220
 	private static let c9sSuffix = ".c9s"
 
 	private let vaultPath: CloudPath
+	private let threshold: Int
 	private let ciphertextNameCompIdx: Int
 	private let inMemoryDB: DatabaseQueue
 
-	init(vaultPath: CloudPath) throws {
+	init(vaultPath: CloudPath, threshold: Int) throws {
 		self.vaultPath = vaultPath
+		self.threshold = threshold
 		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
 		self.inMemoryDB = DatabaseQueue()
 		try inMemoryDB.write { db in
@@ -126,7 +127,7 @@ class VaultFormat7ShortenedNameCache {
 			return VaultFormat7ShorteningResult(cloudPath: originalPath, c9sDir: nil)
 		}
 		let originalName = originalPath.pathComponents[ciphertextNameCompIdx]
-		if originalName.count > VaultFormat7ShortenedNameCache.threshold {
+		if originalName.count > threshold {
 			let shortenedName = deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
 			let shortenedPath = deflatePath(originalPath, with: shortenedName)
 			let c9sDirPath = shortenedPath.trimmingToPathComponent(at: ciphertextNameCompIdx)

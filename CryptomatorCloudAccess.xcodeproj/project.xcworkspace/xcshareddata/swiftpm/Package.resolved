@@ -74,6 +74,15 @@
         }
       },
       {
+        "package": "JOSESwift",
+        "repositoryURL": "https://github.com/tobihagemann/JOSESwift.git",
+        "state": {
+          "branch": "master",
+          "revision": "d32bb2263c792952da9f471c85e482fd06cea3d9",
+          "version": null
+        }
+      },
+      {
         "package": "Promises",
         "repositoryURL": "https://github.com/google/promises.git",
         "state": {

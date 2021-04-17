@@ -59,10 +59,6 @@ let package = Package(
 		.testTarget(
 			name: "CryptomatorCloudAccessTests",
 			dependencies: ["CryptomatorCloudAccess"]
-		),
-		.testTarget(
-			name: "CryptomatorCloudAccessIntegrationTests",
-			dependencies: ["CryptomatorCloudAccess"]
 		)
 	],
 	swiftLanguageVersions: [.v5]

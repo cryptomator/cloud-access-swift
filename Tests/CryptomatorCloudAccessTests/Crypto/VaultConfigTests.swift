@@ -8,7 +8,11 @@
 
 import JOSESwift
 import XCTest
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
 @testable import CryptomatorCloudAccess
+#endif
 
 class VaultConfigTests: XCTestCase {
 	func testCreateNew() {

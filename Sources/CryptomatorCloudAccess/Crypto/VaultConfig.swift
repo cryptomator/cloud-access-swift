@@ -23,7 +23,7 @@ struct VaultConfigPayload: Equatable, Codable {
 	let jti: String
 	let format: Int
 	let cipherCombo: VaultCipherCombo
-	let maxFilenameLen: Int
+	let shorteningThreshold: Int
 
 	static func fromJSONData(data: Data) throws -> VaultConfigPayload {
 		let decoder = JSONDecoder()
@@ -73,18 +73,18 @@ public class VaultConfig {
 	public let id: String
 	public let format: Int
 	public let cipherCombo: VaultCipherCombo
-	public let maxFilenameLength: Int
+	public let shorteningThreshold: Int
 
-	init(id: String, format: Int, cipherCombo: VaultCipherCombo, maxFilenameLength: Int) {
+	init(id: String, format: Int, cipherCombo: VaultCipherCombo, shorteningThreshold: Int) {
 		self.id = id
 		self.format = format
 		self.cipherCombo = cipherCombo
-		self.maxFilenameLength = maxFilenameLength
+		self.shorteningThreshold = shorteningThreshold
 	}
 
 	fileprivate convenience init(jsonData: Data) throws {
 		let payload = try VaultConfigPayload.fromJSONData(data: jsonData)
-		self.init(id: payload.jti, format: payload.format, cipherCombo: payload.cipherCombo, maxFilenameLength: payload.maxFilenameLen)
+		self.init(id: payload.jti, format: payload.format, cipherCombo: payload.cipherCombo, shorteningThreshold: payload.shorteningThreshold)
 	}
 
 	/**
@@ -92,11 +92,11 @@ public class VaultConfig {
 
 	 - Parameter format: Vault format number, formerly known as vault version.
 	 - Parameter cipherCombo: Ciphers to use for name/content encryption.
-	 - Parameter maxFilenameLength: Maximum ciphertext filename length.
+	 - Parameter shorteningThreshold: Maximum ciphertext filename length before it gets shortened.
 	 - Returns: New vault configuration instance with a random ID.
 	 */
-	public static func createNew(format: Int, cipherCombo: VaultCipherCombo, maxFilenameLength: Int) -> VaultConfig {
-		return VaultConfig(id: UUID().uuidString, format: format, cipherCombo: cipherCombo, maxFilenameLength: maxFilenameLength)
+	public static func createNew(format: Int, cipherCombo: VaultCipherCombo, shorteningThreshold: Int) -> VaultConfig {
+		return VaultConfig(id: UUID().uuidString, format: format, cipherCombo: cipherCombo, shorteningThreshold: shorteningThreshold)
 	}
 
 	/**
@@ -120,7 +120,7 @@ public class VaultConfig {
 	 */
 	public func toToken(keyId: String, rawKey: [UInt8]) throws -> String {
 		let header = try JWSHeader(parameters: ["typ": "JWT", "alg": SignatureAlgorithm.HS256.rawValue, "kid": keyId])
-		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo, maxFilenameLen: maxFilenameLength).toJSONData()
+		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo, shorteningThreshold: shorteningThreshold).toJSONData()
 		guard let signer = Signer(signingAlgorithm: .HS256, privateKey: Data(rawKey)) else {
 			throw VaultConfigError.tokenSerializationFailed
 		}

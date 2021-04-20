@@ -66,9 +66,9 @@
 		4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */; };
 		4ACA640E2615FF9800D19304 /* LocalFileSystemProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */; };
 		4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */; };
-		7402BEBD2629D05C0012801E /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7402BEBC2629D05C0012801E /* JOSESwift */; };
 		740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
+		740C5879262F800A00F63423 /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 740C5878262F800A00F63423 /* JOSESwift */; };
 		7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22224F594B20074DA8E /* TLSCertificate.swift */; };
 		7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22824F659550074DA8E /* VaultFormat6ProviderDecorator.swift */; };
 		7416F22B24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22A24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift */; };
@@ -271,7 +271,7 @@
 			files = (
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
-				7402BEBD2629D05C0012801E /* JOSESwift in Frameworks */,
+				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
@@ -732,7 +732,7 @@
 				4A567B192615C917002C4D82 /* GTMAppAuth */,
 				4A567B362615CAAC002C4D82 /* GTMSessionFetcher */,
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
-				7402BEBC2629D05C0012801E /* JOSESwift */,
+				740C5878262F800A00F63423 /* JOSESwift */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -815,7 +815,7 @@
 				4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */,
 				4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */,
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
-				7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */,
+				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1391,12 +1391,12 @@
 				minimumVersion = 1.4.0;
 			};
 		};
-		7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
+		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
+			repositoryURL = "https://github.com/airsidemobile/JOSESwift.git";
 			requirement = {
-				branch = master;
-				kind = branch;
+				kind = upToNextMinorVersion;
+				minimumVersion = 2.4.0;
 			};
 		};
 		74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */ = {
@@ -1451,9 +1451,9 @@
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
 		};
-		7402BEBC2629D05C0012801E /* JOSESwift */ = {
+		740C5878262F800A00F63423 /* JOSESwift */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 7402BEBB2629D05C0012801E /* XCRemoteSwiftPackageReference "JOSESwift" */;
+			package = 740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */;
 			productName = JOSESwift;
 		};
 		74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */ = {

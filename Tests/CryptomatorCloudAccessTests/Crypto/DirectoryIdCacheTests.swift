@@ -60,7 +60,7 @@ class DirectoryIdCacheTests: XCTestCase {
 		let path = CloudPath("/one/two/three")
 
 		var misses: [String] = []
-		let result = cache.get(path, onMiss: { (cleartextPath, parentDirId) -> Promise<Data> in
+		let result = cache.get(path, onMiss: { cleartextPath, parentDirId -> Promise<Data> in
 			let dirId: String = {
 				switch cleartextPath.lastPathComponent {
 				case "one":

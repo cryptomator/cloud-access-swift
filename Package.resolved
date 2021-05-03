@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {
           "branch": null,
-          "revision": "693216c62737b44ff92e06c401db8288849805fc",
-          "version": "0.11.2"
+          "revision": "365ede1f3f0eb20526d521e579b9f2a83227a60e",
+          "version": "0.11.4"
         }
       },
       {
@@ -107,6 +107,15 @@
           "branch": "1.3.0-fixed",
           "revision": "edd261b525df0e5b56f1a3989210244ed5c18cfe",
           "version": null
+        }
+      },
+      {
+        "package": "JOSESwift",
+        "repositoryURL": "https://github.com/airsidemobile/JOSESwift.git",
+        "state": {
+          "branch": null,
+          "revision": "10ed3b6736def7c26eb87135466b1cb46ea7e37f",
+          "version": "2.4.0"
         }
       },
       {

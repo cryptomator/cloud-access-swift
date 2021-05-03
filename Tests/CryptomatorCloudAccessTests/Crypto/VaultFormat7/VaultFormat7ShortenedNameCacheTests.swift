@@ -19,7 +19,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 	var cache: VaultFormat7ShortenedNameCache!
 
 	override func setUpWithError() throws {
-		cache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath)
+		cache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath, threshold: 220)
 	}
 
 	func testGetCached() throws {

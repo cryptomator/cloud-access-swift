@@ -33,10 +33,11 @@ let package = Package(
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "4.14.0")),
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "1.4.0")),
-		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0")),
+		.package(url: "https://github.com/airsidemobile/JOSESwift.git", .upToNextMinor(from: "2.4.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-auth.git", .branch("swift-pm")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models.git", .branch("1.3.0-fixed")),
-		.package(url: "https://github.com/phil1995/msgraph-sdk-objc.git", .branch("swift-pm"))
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc.git", .branch("swift-pm")),
+		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0"))
 	],
 	targets: [
 		.target(
@@ -48,10 +49,11 @@ let package = Package(
 				"GoogleAPIClientForREST_Drive",
 				"GTMAppAuth",
 				"GTMSessionFetcher",
-				"ObjectiveDropboxOfficial",
+				"JOSESwift",
 				"MSGraphClientSDK",
 				"MSGraphClientModels",
-				"MSGraphMSALAuthProvider"
+				"MSGraphMSALAuthProvider",
+				"ObjectiveDropboxOfficial"
 			],
 			path: "Sources/CryptomatorCloudAccess",
 			exclude: appExtensionUnsafeSources
@@ -63,10 +65,6 @@ let package = Package(
 		),
 		.testTarget(
 			name: "CryptomatorCloudAccessTests",
-			dependencies: ["CryptomatorCloudAccess"]
-		),
-		.testTarget(
-			name: "CryptomatorCloudAccessIntegrationTests",
 			dependencies: ["CryptomatorCloudAccess"]
 		)
 	],

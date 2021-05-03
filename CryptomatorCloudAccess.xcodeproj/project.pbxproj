@@ -81,12 +81,15 @@
 		4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */; };
 		740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
+		740C5879262F800A00F63423 /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 740C5878262F800A00F63423 /* JOSESwift */; };
 		7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22224F594B20074DA8E /* TLSCertificate.swift */; };
 		7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22824F659550074DA8E /* VaultFormat6ProviderDecorator.swift */; };
 		7416F22B24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22A24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift */; };
 		7416F22D24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22C24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift */; };
 		7416F22F24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F22E24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift */; };
 		7416F23124F67AD70074DA8E /* CloudProviderMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7416F23024F67AD70074DA8E /* CloudProviderMock.swift */; };
+		745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */; };
+		745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */; };
 		7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B76B2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift */; };
 		7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */; };
 		7460B77A2519056E004AEB56 /* VaultFormat7CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7460B7792519056E004AEB56 /* VaultFormat7CryptorMock.swift */; };
@@ -117,6 +120,8 @@
 		74E54F6424BCB6B9003379FA /* item-list.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5E24BCB6B9003379FA /* item-list.xml */; };
 		74E54F6524BCB6B9003379FA /* item-data.txt in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5F24BCB6B9003379FA /* item-data.txt */; };
 		74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */; };
+		74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F4AA1425ED3D2A00FDF2C6 /* VaultConfig.swift */; };
+		74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F4AA1F25EF82D200FDF2C6 /* VaultConfigTests.swift */; };
 		74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD324BC9BC00040513A /* partial-404-status.xml */; };
 		74F57AD924BCB5390040513A /* authentication-success.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74F57AD824BCB5390040513A /* authentication-success.xml */; };
 		74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */ = {isa = PBXBuildFile; productRef = 74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */; };
@@ -231,6 +236,8 @@
 		7416F22C24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6CloudProviderMockTests.swift; sourceTree = "<group>"; };
 		7416F22E24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		7416F23024F67AD70074DA8E /* CloudProviderMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderMock.swift; sourceTree = "<group>"; };
+		745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8ProviderDecorator.swift; sourceTree = "<group>"; };
+		745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		7460B76B2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ShortenedNameCacheTests.swift; sourceTree = "<group>"; };
 		7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		7460B7792519056E004AEB56 /* VaultFormat7CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7CryptorMock.swift; sourceTree = "<group>"; };
@@ -261,6 +268,8 @@
 		74E54F5E24BCB6B9003379FA /* item-list.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-list.xml"; sourceTree = "<group>"; };
 		74E54F5F24BCB6B9003379FA /* item-data.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "item-data.txt"; sourceTree = "<group>"; };
 		74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientMock.swift; sourceTree = "<group>"; };
+		74F4AA1425ED3D2A00FDF2C6 /* VaultConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultConfig.swift; sourceTree = "<group>"; };
+		74F4AA1F25EF82D200FDF2C6 /* VaultConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultConfigTests.swift; sourceTree = "<group>"; };
 		74F57AD324BC9BC00040513A /* partial-404-status.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "partial-404-status.xml"; sourceTree = "<group>"; };
 		74F57AD824BCB5390040513A /* authentication-success.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "authentication-success.xml"; sourceTree = "<group>"; };
 		74FD6C4524F6F39E00C8D3C4 /* VaultFormat6ShortenedNameCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6ShortenedNameCache.swift; sourceTree = "<group>"; };
@@ -285,6 +294,7 @@
 			files = (
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
+				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
@@ -556,9 +566,11 @@
 			isa = PBXGroup;
 			children = (
 				9ECEC0AE246ED1FB00151299 /* DirectoryIdCache.swift */,
+				74F4AA1425ED3D2A00FDF2C6 /* VaultConfig.swift */,
 				74CF2E6B254B6683006266D6 /* VaultFormatError.swift */,
 				7416F22524F6584A0074DA8E /* VaultFormat6 */,
 				9ED0E61B24617C0300FDB438 /* VaultFormat7 */,
+				745949E025F22EFA00B7B28C /* VaultFormat8 */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -579,6 +591,7 @@
 				7416F23024F67AD70074DA8E /* CloudProviderMock.swift */,
 				9E1F2D6F246889C90071A6F1 /* CryptorMock.swift */,
 				9ECEC0B0246EE6A700151299 /* DirectoryIdCacheTests.swift */,
+				74F4AA1F25EF82D200FDF2C6 /* VaultConfigTests.swift */,
 				7416F22724F658C40074DA8E /* VaultFormat6 */,
 				9ED0E61E2461807800FDB438 /* VaultFormat7 */,
 			);
@@ -596,6 +609,15 @@
 				7460B7712518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift */,
 			);
 			path = VaultFormat6;
+			sourceTree = "<group>";
+		};
+		745949E025F22EFA00B7B28C /* VaultFormat8 */ = {
+			isa = PBXGroup;
+			children = (
+				745949E125F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift */,
+				745949E525F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift */,
+			);
+			path = VaultFormat8;
 			sourceTree = "<group>";
 		};
 		7471BDAC24865B6F000D05FC /* LocalFileSystem */ = {
@@ -762,6 +784,7 @@
 				4A1A11532629A44B00DAF62F /* MSGraphClientModels */,
 				4A1A11592629A4A200DAF62F /* MSGraphClientSDK */,
 				4A1A115F2629A51400DAF62F /* MSGraphMSALAuthProvider */,
+				740C5878262F800A00F63423 /* JOSESwift */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -847,6 +870,7 @@
 				4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */,
 				4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */,
 				4A1A115E2629A51400DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-auth" */,
+				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -989,6 +1013,8 @@
 				4A567B402615CD7D002C4D82 /* CloudPath+DatabaseValueConvertible.swift in Sources */,
 				4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */,
 				9ECEC0AF246ED1FB00151299 /* DirectoryIdCache.swift in Sources */,
+				745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */,
+				745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */,
 				4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */,
 				4A567B692615D64E002C4D82 /* GoogleDriveSetup.swift in Sources */,
 				4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */,
@@ -1002,6 +1028,7 @@
 				748BD4CA24B4B1D50001CA8C /* PropfindResponseParser.swift in Sources */,
 				4A567B322615CA6E002C4D82 /* GoogleDriveError.swift in Sources */,
 				748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */,
+				74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */,
 				4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */,
 				4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */,
 				748A42C024AB424500DEB6D0 /* WebDAVClient.swift in Sources */,
@@ -1031,6 +1058,7 @@
 				7460B77A2519056E004AEB56 /* VaultFormat7CryptorMock.swift in Sources */,
 				7416F22F24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift in Sources */,
 				7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */,
+				74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
 				4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */,
 				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,
@@ -1452,6 +1480,14 @@
 				minimumVersion = 1.4.0;
 			};
 		};
+		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airsidemobile/JOSESwift.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
 		74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/cryptomator/cryptolib-swift.git";
@@ -1518,6 +1554,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		740C5878262F800A00F63423 /* JOSESwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */;
+			productName = JOSESwift;
 		};
 		74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */ = {
 			isa = XCSwiftPackageProductDependency;

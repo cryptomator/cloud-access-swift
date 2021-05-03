@@ -211,7 +211,7 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	func uploadFileChunk(from localURL: URL, offset: Int, totalFileSize: Int, uploadURL: URL, cloudPath: CloudPath) -> Promise<MSGraphDriveItem> {
 		guard let file = FileHandle(forReadingAtPath: localURL.path) else {
-			return Promise(OneDriveError.invalidFilehandle)
+			return Promise(OneDriveError.invalidFileHandle)
 		}
 		file.seek(toFileOffset: UInt64(offset))
 		let data = file.readData(ofLength: OneDriveCloudProvider.uploadFileChunkLength)

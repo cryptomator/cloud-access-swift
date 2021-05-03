@@ -20,14 +20,12 @@ public enum OneDriveAuthenticatorError: Error {
 public enum OneDriveAuthenticator {
 	public static func authenticate(from viewController: UIViewController) -> Promise<OneDriveCredential> {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
-		webviewParameters.webviewType = .safariViewController
 		let interactiveParameters = MSALInteractiveTokenParameters(scopes: OneDriveCredential.scopes, webviewParameters: webviewParameters)
 		return OneDriveSetup.clientApplication.acquireToken(with: interactiveParameters).then { result -> OneDriveCredential in
 			guard let identifier = result.account.identifier else {
 				throw OneDriveAuthenticatorError.missingAccountIdentifier
 			}
-			let credential = try OneDriveCredential(with: identifier)
-			return credential
+			return try OneDriveCredential(with: identifier)
 		}
 	}
 }

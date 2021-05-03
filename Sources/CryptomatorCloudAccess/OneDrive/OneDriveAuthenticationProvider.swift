@@ -14,7 +14,6 @@ import Promises
 enum OneDriveAuthenticationProviderError: Error {
 	case noAccounts
 	case accountNotFound
-	case invalidAuthProviderOptions
 }
 
 class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
@@ -50,8 +49,7 @@ class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
 			default:
 				throw error
 			}
-		}
-		.then { result in
+		}.then { result in
 			completion(result.accessToken, nil)
 		}.catch { error in
 			completion(nil, error)

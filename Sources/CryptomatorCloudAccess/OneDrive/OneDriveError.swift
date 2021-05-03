@@ -14,6 +14,6 @@ public enum OneDriveError: Error {
 	case inconsistentCache
 	case missingItemName
 	case unexpectedHTTPStatusCode(code: Int)
-	case invalidFilehandle
+	case invalidFileHandle
 	case missingFileSize
 }

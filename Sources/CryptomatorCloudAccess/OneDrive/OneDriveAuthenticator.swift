@@ -22,21 +22,27 @@ public enum OneDriveAuthenticator {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
 		webviewParameters.webviewType = .safariViewController
 		let interactiveParameters = MSALInteractiveTokenParameters(scopes: OneDriveCredential.scopes, webviewParameters: webviewParameters)
-		return Promise<OneDriveCredential> { fulfill, reject in
-			OneDriveSetup.clientApplication.acquireToken(with: interactiveParameters) { result, error in
-				if let error = error {
+		return OneDriveSetup.clientApplication.acquireToken(with: interactiveParameters).then { result -> OneDriveCredential in
+			guard let identifier = result.account.identifier else {
+				throw OneDriveAuthenticatorError.missingAccountIdentifier
+			}
+			let credential = try OneDriveCredential(with: identifier)
+			return credential
+		}
+	}
+}
+
+private extension MSALPublicClientApplication {
+	func acquireToken(with interactiveParameters: MSALInteractiveTokenParameters) -> Promise<MSALResult> {
+		return Promise<MSALResult> { fulfill, reject in
+			self.acquireToken(with: interactiveParameters) { result, error in
+				switch (result, error) {
+				case let (.some(result), nil):
+					fulfill(result)
+				case let (_, .some(error)):
 					reject(error)
-					return
-				}
-				guard let result = result, let identifier = result.account.identifier else {
-					reject(OneDriveAuthenticatorError.missingAccountIdentifier)
-					return
-				}
-				do {
-					let credential = try OneDriveCredential(with: identifier)
-					fulfill(credential)
-				} catch {
-					reject(error)
+				default:
+					reject(OneDriveError.unexpectedResult)
 				}
 			}
 		}

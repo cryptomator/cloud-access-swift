@@ -12,13 +12,14 @@ import PackageDescription
 
 let appExtensionUnsafeSources = [
 	"Dropbox/DropboxAuthenticator.swift",
-	"GoogleDrive/GoogleDriveAuthenticator.swift"
+	"GoogleDrive/GoogleDriveAuthenticator.swift",
+	"OneDrive/OneDriveAuthenticator.swift"
 ]
 
 let package = Package(
 	name: "CryptomatorCloudAccess",
 	platforms: [
-		.iOS(.v10)
+		.iOS(.v11)
 	],
 	products: [
 		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"]),
@@ -33,6 +34,9 @@ let package = Package(
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "1.4.0")),
 		.package(url: "https://github.com/airsidemobile/JOSESwift.git", .upToNextMinor(from: "2.4.0")),
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-auth.git", .branch("swift-pm")),
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models.git", .branch("1.3.0-fixed")),
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc.git", .branch("swift-pm")),
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "1.2.0"))
 	],
 	targets: [
@@ -46,6 +50,9 @@ let package = Package(
 				"GTMAppAuth",
 				"GTMSessionFetcher",
 				"JOSESwift",
+				"MSGraphClientSDK",
+				"MSGraphClientModels",
+				"MSGraphMSALAuthProvider",
 				"ObjectiveDropboxOfficial"
 			],
 			path: "Sources/CryptomatorCloudAccess",

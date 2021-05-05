@@ -21,5 +21,9 @@ struct IntegrationTestSecrets {
 	static let googleDriveClientId = "${GOOGLE_DRIVE_CLIENT_ID}"
 	static let googleDriveRefreshToken = "${GOOGLE_DRIVE_REFRESH_TOKEN}"
 	static let webDAVCredential = WebDAVCredential(baseURL: URL(string: "${WEBDAV_BASE_URL}")!, username: "${WEBDAV_USERNAME}", password: "${WEBDAV_PASSWORD}", allowedCertificate: nil)
+	static let oneDriveClientId = "${ONEDRIVE_CLIENT_ID}"
+	static let oneDriveRedirectUri = "${ONEDRIVE_REDIRECT_URI_SCHEME}://auth"
+	static let oneDriveRefreshTokenData = "${ONEDRIVE_REFRESH_TOKEN_DATA}".data(using: .utf8)
+	static let oneDriveAccountData = "${ONEDRIVE_ACCOUNT_DATA}".data(using: .utf8)
 }
 EOM

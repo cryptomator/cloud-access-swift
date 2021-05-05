@@ -1038,7 +1038,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n/usr/libexec/PlistBuddy -c \"Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 ${ONEDRIVE_REDIRECT_URI}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n";
+			shellScript = "if [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n/usr/libexec/PlistBuddy -c \"Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 ${ONEDRIVE_REDIRECT_URI_SCHEME}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n";
 		};
 		4ACA641B2616025B00D19304 /* Create IntegrationTestSecrets */ = {
 			isa = PBXShellScriptBuildPhase;

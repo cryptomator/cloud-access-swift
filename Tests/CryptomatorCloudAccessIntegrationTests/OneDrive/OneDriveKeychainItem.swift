@@ -27,7 +27,7 @@ extension OneDriveKeychainItem {
 	static func fillKeychain() throws {
 		let refreshTokenItem = try getOneDriveRefreshTokenKeychainItem()
 		let accountAttribute = "\(refreshTokenItem.homeAccountId)-\(refreshTokenItem.environment)"
-		let oneDriveKeychainRefreshTokenItem = OneDriveKeychainItem(account: accountAttribute, data: IntegrationTestSecrets.oneDriveRefrehTokenData, service: "refreshtoken-\(refreshTokenItem.clientId)--", secClass: kSecClassGenericPassword as String, generic: "refreshtoken-\(refreshTokenItem.clientId)-".data(using: .utf8), type: 2002 as CFNumber, accessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+		let oneDriveKeychainRefreshTokenItem = OneDriveKeychainItem(account: accountAttribute, data: IntegrationTestSecrets.oneDriveRefreshTokenData, service: "refreshtoken-\(refreshTokenItem.clientId)--", secClass: kSecClassGenericPassword as String, generic: "refreshtoken-\(refreshTokenItem.clientId)-".data(using: .utf8), type: 2002 as CFNumber, accessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
 		try save(oneDriveKeychainRefreshTokenItem)
 
 		let accountItem = try getOneDriveAccountKeychainItem()
@@ -38,7 +38,7 @@ extension OneDriveKeychainItem {
 	static func getOneDriveRefreshTokenKeychainItem() throws -> OneDriveRefreshTokenKeychain {
 		let decoder = JSONDecoder()
 		decoder.keyDecodingStrategy = .convertFromSnakeCase
-		guard let data = IntegrationTestSecrets.oneDriveRefrehTokenData else {
+		guard let data = IntegrationTestSecrets.oneDriveRefreshTokenData else {
 			throw OneDriveKeychainItemError.missingAccountData
 		}
 		return try decoder.decode(OneDriveRefreshTokenKeychain.self, from: data)

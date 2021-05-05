@@ -23,12 +23,20 @@
 		4A1A1183262B078E00DAF62F /* OneDriveError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1182262B078E00DAF62F /* OneDriveError.swift */; };
 		4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A118E262D95E600DAF62F /* OneDriveItem.swift */; };
 		4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */; };
+		4A2C6317264181730078EEC6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4A2C62E02641554F0078EEC6 /* Assets.xcassets */; };
+		4A2C6318264181730078EEC6 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4A2C62E12641554F0078EEC6 /* LaunchScreen.storyboard */; };
+		4A2C6319264181730078EEC6 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4A2C62E32641554F0078EEC6 /* Main.storyboard */; };
+		4A2C631F264181890078EEC6 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2C62DF2641554F0078EEC6 /* ViewController.swift */; };
+		4A2C6320264181890078EEC6 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2C62E52641554F0078EEC6 /* AppDelegate.swift */; };
+		4A2C6321264181890078EEC6 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2C62E72641554F0078EEC6 /* SceneDelegate.swift */; };
 		4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */; };
 		4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
 		4A3A396E2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */; };
 		4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */; };
 		4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A40749F252F432900D583C3 /* URLProtocolMock.swift */; };
+		4A41D2432641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */; };
+		4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */; };
 		4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */; };
 		4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */; };
 		4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */; };
@@ -78,7 +86,9 @@
 		4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */; };
 		4ACA640E2615FF9800D19304 /* LocalFileSystemProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */; };
 		4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */; };
+		4AD5530426393EF800126046 /* OneDriveKeychainItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD5530326393EF800126046 /* OneDriveKeychainItem.swift */; };
 		4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */; };
+		4AFC5F67263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC5F66263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift */; };
 		740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
 		740C5879262F800A00F63423 /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 740C5878262F800A00F63423 /* JOSESwift */; };
@@ -150,6 +160,13 @@
 			remoteGlobalIDString = 4A058FF024519FFC008831F9;
 			remoteInfo = CloudAccess;
 		};
+		4A30DB402636E7EC004B5B4E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A058FE824519FFC008831F9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4A30DB232636E7B6004B5B4E;
+			remoteInfo = CryptomatorCloudAccessIntegrationTestsHost;
+		};
 		4ACA63942615FDFF00D19304 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4A058FE824519FFC008831F9 /* Project object */;
@@ -177,11 +194,21 @@
 		4A1A1182262B078E00DAF62F /* OneDriveError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveError.swift; sourceTree = "<group>"; };
 		4A1A118E262D95E600DAF62F /* OneDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveItem.swift; sourceTree = "<group>"; };
 		4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCache.swift; sourceTree = "<group>"; };
+		4A2C62DF2641554F0078EEC6 /* ViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		4A2C62E02641554F0078EEC6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4A2C62E22641554F0078EEC6 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		4A2C62E42641554F0078EEC6 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		4A2C62E52641554F0078EEC6 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4A2C62E62641554F0078EEC6 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4A2C62E72641554F0078EEC6 /* SceneDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		4A30DB242636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CryptomatorCloudAccessIntegrationTestsHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveAuthenticationProvider.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
 		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
 		4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProviderTests.swift; sourceTree = "<group>"; };
 		4A40749F252F432900D583C3 /* URLProtocolMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLProtocolMock.swift; sourceTree = "<group>"; };
+		4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6OneDriveIntegrationTests.swift; sourceTree = "<group>"; };
+		4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7OneDriveIntegrationTests.swift; sourceTree = "<group>"; };
 		4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxAuthenticator.swift; sourceTree = "<group>"; };
 		4A567B032615C689002C4D82 /* DropboxClientSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxClientSetup.swift; sourceTree = "<group>"; };
 		4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProvider.swift; sourceTree = "<group>"; };
@@ -227,7 +254,9 @@
 		4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudPath+Extension.swift"; sourceTree = "<group>"; };
 		4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IntegrationTestSecrets.swift; sourceTree = "<group>"; };
+		4AD5530326393EF800126046 /* OneDriveKeychainItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveKeychainItem.swift; sourceTree = "<group>"; };
 		4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MSGraphDriveItem+CloudItemType.swift"; sourceTree = "<group>"; };
+		4AFC5F66263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFileSystemTests.swift; sourceTree = "<group>"; };
 		740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		7416F22224F594B20074DA8E /* TLSCertificate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificate.swift; sourceTree = "<group>"; };
@@ -293,12 +322,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
+				4A1A11602629A51400DAF62F /* MSGraphMSALAuthProvider in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
 				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
 				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
+				4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */,
+				4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
 			);
@@ -309,6 +341,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				4A058FFB24519FFC008831F9 /* CryptomatorCloudAccess.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4A30DB212636E7B6004B5B4E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,6 +377,7 @@
 				4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */,
 				4A058FFA24519FFC008831F9 /* CryptomatorCloudAccessTests.xctest */,
 				4ACA638E2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests.xctest */,
+				4A30DB242636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -412,6 +452,20 @@
 			path = OneDrive;
 			sourceTree = "<group>";
 		};
+		4A2C62DE2641554F0078EEC6 /* CryptomatorCloudAccessIntegrationTestsHost */ = {
+			isa = PBXGroup;
+			children = (
+				4A2C62DF2641554F0078EEC6 /* ViewController.swift */,
+				4A2C62E02641554F0078EEC6 /* Assets.xcassets */,
+				4A2C62E12641554F0078EEC6 /* LaunchScreen.storyboard */,
+				4A2C62E32641554F0078EEC6 /* Main.storyboard */,
+				4A2C62E52641554F0078EEC6 /* AppDelegate.swift */,
+				4A2C62E62641554F0078EEC6 /* Info.plist */,
+				4A2C62E72641554F0078EEC6 /* SceneDelegate.swift */,
+			);
+			path = CryptomatorCloudAccessIntegrationTestsHost;
+			sourceTree = "<group>";
+		};
 		4A3A396C2615F97600F16B26 /* Dropbox */ = {
 			isa = PBXGroup;
 			children = (
@@ -470,6 +524,7 @@
 				4ACA63F32615FF9700D19304 /* Google Drive */,
 				4ACA64002615FF9700D19304 /* LocalFileSystem */,
 				4ACA63F72615FF9700D19304 /* WebDAV */,
+				4AFC5F6B263190C000744715 /* OneDrive */,
 			);
 			path = CryptomatorCloudAccessIntegrationTests;
 			sourceTree = "<group>";
@@ -491,6 +546,7 @@
 				4ACA63D02615FF1600D19304 /* VaultFormat6GoogleDriveIntegrationTests.swift */,
 				4ACA63C62615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift */,
 				4ACA63D52615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift */,
+				4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */,
 			);
 			path = VaultFormat6;
 			sourceTree = "<group>";
@@ -502,6 +558,7 @@
 				4ACA63E22615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift */,
 				4ACA63E52615FF6400D19304 /* VaultFormat7LocalFileSystemProviderIntegrationTests.swift */,
 				4ACA63E32615FF6400D19304 /* VaultFormat7WebDAVIntegrationTests.swift */,
+				4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */,
 			);
 			path = VaultFormat7;
 			sourceTree = "<group>";
@@ -552,6 +609,15 @@
 				4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */,
 			);
 			path = LocalFileSystem;
+			sourceTree = "<group>";
+		};
+		4AFC5F6B263190C000744715 /* OneDrive */ = {
+			isa = PBXGroup;
+			children = (
+				4AFC5F66263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift */,
+				4AD5530326393EF800126046 /* OneDriveKeychainItem.swift */,
+			);
+			path = OneDrive;
 			sourceTree = "<group>";
 		};
 		740A7FDB24C5DFB3000216E7 /* LocalFileSystem */ = {
@@ -704,6 +770,7 @@
 		74F9354C251F66F8001F4ADA /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				4A2C62DE2641554F0078EEC6 /* CryptomatorCloudAccessIntegrationTestsHost */,
 				4ACA638F2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */,
 				4A058FFE24519FFC008831F9 /* CryptomatorCloudAccessTests */,
 			);
@@ -808,6 +875,24 @@
 			productReference = 4A058FFA24519FFC008831F9 /* CryptomatorCloudAccessTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4A30DB232636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4A30DB352636E7B7004B5B4E /* Build configuration list for PBXNativeTarget "CryptomatorCloudAccessIntegrationTestsHost" */;
+			buildPhases = (
+				4A30DB202636E7B6004B5B4E /* Sources */,
+				4A30DB212636E7B6004B5B4E /* Frameworks */,
+				4A30DB222636E7B6004B5B4E /* Resources */,
+				4A30DB462636E84E004B5B4E /* Set OneDrive URLScheme */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CryptomatorCloudAccessIntegrationTestsHost;
+			productName = CryptomatorCloudAccessIntegrationTestsHost;
+			productReference = 4A30DB242636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost.app */;
+			productType = "com.apple.product-type.application";
+		};
 		4ACA638D2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4ACA63982615FDFF00D19304 /* Build configuration list for PBXNativeTarget "CryptomatorCloudAccessIntegrationTests" */;
@@ -821,6 +906,7 @@
 			);
 			dependencies = (
 				4ACA63952615FDFF00D19304 /* PBXTargetDependency */,
+				4A30DB412636E7EC004B5B4E /* PBXTargetDependency */,
 			);
 			name = CryptomatorCloudAccessIntegrationTests;
 			productName = CryptomatorCloudAccessIntegrationTests;
@@ -844,8 +930,12 @@
 					4A058FF924519FFC008831F9 = {
 						CreatedOnToolsVersion = 11.4;
 					};
+					4A30DB232636E7B6004B5B4E = {
+						CreatedOnToolsVersion = 12.4;
+					};
 					4ACA638D2615FDFF00D19304 = {
 						CreatedOnToolsVersion = 12.4;
+						TestTargetID = 4A30DB232636E7B6004B5B4E;
 					};
 				};
 			};
@@ -879,6 +969,7 @@
 				4A058FF024519FFC008831F9 /* CryptomatorCloudAccess */,
 				4A058FF924519FFC008831F9 /* CryptomatorCloudAccessTests */,
 				4ACA638D2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */,
+				4A30DB232636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost */,
 			);
 		};
 /* End PBXProject section */
@@ -910,6 +1001,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4A30DB222636E7B6004B5B4E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A2C6317264181730078EEC6 /* Assets.xcassets in Resources */,
+				4A2C6318264181730078EEC6 /* LaunchScreen.storyboard in Resources */,
+				4A2C6319264181730078EEC6 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4ACA638C2615FDFF00D19304 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -920,6 +1021,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		4A30DB462636E84E004B5B4E /* Set OneDrive URLScheme */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Set OneDrive URLScheme";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n/usr/libexec/PlistBuddy -c \"Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 ${ONEDRIVE_REDIRECT_URI}\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n";
+		};
 		4ACA641B2616025B00D19304 /* Create IntegrationTestSecrets */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -939,7 +1059,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -f ./.integration-test-secrets.sh ]; then\n  source ./.integration-test-secrets.sh\nelse\n  echo \"warning: .integration-test-secrets.sh could not be found, please see README for instructions\"\nfi\n./create-integration-test-secrets-file.sh\n";
+			shellScript = "./create-integration-test-secrets-file.sh\n";
 		};
 		74862A722469A7AF003D81CB /* Lint With SwiftFormat */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1074,6 +1194,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4A30DB202636E7B6004B5B4E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A2C631F264181890078EEC6 /* ViewController.swift in Sources */,
+				4A2C6320264181890078EEC6 /* AppDelegate.swift in Sources */,
+				4A2C6321264181890078EEC6 /* SceneDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4ACA638A2615FDFF00D19304 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1090,20 +1220,24 @@
 				4ACA63E92615FF6400D19304 /* VaultFormat7LocalFileSystemProviderIntegrationTests.swift in Sources */,
 				4ACA63E62615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift in Sources */,
 				4ACA63C72615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift in Sources */,
+				4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */,
 				4ACA64032615FF9800D19304 /* MockDropboxCredential.swift in Sources */,
 				4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */,
 				4ACA640A2615FF9800D19304 /* URL+ExtensionsTests.swift in Sources */,
 				4ACA63CC2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift in Sources */,
 				4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */,
 				4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */,
+				4A41D2432641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift in Sources */,
 				4ACA64052615FF9800D19304 /* MockGoogleDriveAuthenticatorTests.swift in Sources */,
 				4ACA63E82615FF6400D19304 /* VaultFormat7DropboxIntegrationTests.swift in Sources */,
 				4ACA63BB2615FEA600D19304 /* DecoratorFactory.swift in Sources */,
+				4AD5530426393EF800126046 /* OneDriveKeychainItem.swift in Sources */,
 				4ACA64042615FF9800D19304 /* MockGoogleDriveAuthenticator.swift in Sources */,
 				4ACA64082615FF9800D19304 /* CloudProvider+IntermediateFolderTests.swift in Sources */,
 				4ACA64092615FF9800D19304 /* CloudPath+ExtensionTests.swift in Sources */,
 				4ACA64022615FF9800D19304 /* DropboxCloudProviderIntegrationTests.swift in Sources */,
 				4ACA63D62615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift in Sources */,
+				4AFC5F67263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1115,12 +1249,36 @@
 			target = 4A058FF024519FFC008831F9 /* CryptomatorCloudAccess */;
 			targetProxy = 4A058FFC24519FFC008831F9 /* PBXContainerItemProxy */;
 		};
+		4A30DB412636E7EC004B5B4E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4A30DB232636E7B6004B5B4E /* CryptomatorCloudAccessIntegrationTestsHost */;
+			targetProxy = 4A30DB402636E7EC004B5B4E /* PBXContainerItemProxy */;
+		};
 		4ACA63952615FDFF00D19304 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 4A058FF024519FFC008831F9 /* CryptomatorCloudAccess */;
 			targetProxy = 4ACA63942615FDFF00D19304 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		4A2C62E12641554F0078EEC6 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4A2C62E22641554F0078EEC6 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		4A2C62E32641554F0078EEC6 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4A2C62E42641554F0078EEC6 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		4A05900324519FFC008831F9 /* Debug */ = {
@@ -1338,27 +1496,54 @@
 			};
 			name = Release;
 		};
-		4ACA63962615FDFF00D19304 /* Debug */ = {
+		4A30DB362636E7B7004B5B4E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTests/Info.plist;
+				DEVELOPMENT_TEAM = "";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTestsHost/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CloudAccessIntegrationTests;
+				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CryptomatorCloudAccessIntegrationTestsHost;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		4ACA63972615FDFF00D19304 /* Release */ = {
+		4A30DB372636E7B7004B5B4E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTestsHost/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CryptomatorCloudAccessIntegrationTestsHost;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		4ACA63962615FDFF00D19304 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTests/Info.plist;
@@ -1371,6 +1556,27 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CryptomatorCloudAccessIntegrationTestsHost.app/CryptomatorCloudAccessIntegrationTestsHost";
+			};
+			name = Debug;
+		};
+		4ACA63972615FDFF00D19304 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Tests/CryptomatorCloudAccessIntegrationTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = org.cryptomator.CloudAccessIntegrationTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CryptomatorCloudAccessIntegrationTestsHost.app/CryptomatorCloudAccessIntegrationTestsHost";
 			};
 			name = Release;
 		};
@@ -1400,6 +1606,15 @@
 			buildConfigurations = (
 				4A05900924519FFC008831F9 /* Debug */,
 				4A05900A24519FFC008831F9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4A30DB352636E7B7004B5B4E /* Build configuration list for PBXNativeTarget "CryptomatorCloudAccessIntegrationTestsHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A30DB362636E7B7004B5B4E /* Debug */,
+				4A30DB372636E7B7004B5B4E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

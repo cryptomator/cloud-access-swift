@@ -87,8 +87,8 @@
         "repositoryURL": "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
         "state": {
           "branch": null,
-          "revision": "53221d4470b95ecfef92fedb3fd9b105d0c12796",
-          "version": "1.1.16"
+          "revision": "06a2a1cd11d72ef19a09d4b66b292f5185337692",
+          "version": "1.1.17"
         }
       },
       {
@@ -114,7 +114,7 @@
         "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-models.git",
         "state": {
           "branch": "1.3.0-fixed",
-          "revision": "edd261b525df0e5b56f1a3989210244ed5c18cfe",
+          "revision": "50596f424c7496687f34666372c71a6fe6270ac2",
           "version": null
         }
       },

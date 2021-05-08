@@ -17,4 +17,4 @@ import Foundation
 
  TODO: This decorator only supports the cipher combo `SIV_AESCTR` for now, which makes the implementation identical to vault format 7. Support for `SIV_GCM` has to be added in CryptomatorCryptoLib first.
  */
-public class VaultFormat8ProviderDecorator: VaultFormat7ProviderDecorator {}
+class VaultFormat8ProviderDecorator: VaultFormat7ProviderDecorator {}

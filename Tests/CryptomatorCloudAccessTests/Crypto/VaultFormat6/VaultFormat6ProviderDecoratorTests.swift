@@ -9,9 +9,9 @@
 import Promises
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 @testable import CryptomatorCryptoLib
 

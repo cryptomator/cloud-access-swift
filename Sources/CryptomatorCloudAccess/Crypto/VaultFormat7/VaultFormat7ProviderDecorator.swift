@@ -23,7 +23,7 @@ private extension CloudPath {
 
  Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 7, pass an instance of `VaultFormat7ShorteningProviderDecorator` (shortening decorator) as the delegate.
  */
-public class VaultFormat7ProviderDecorator: CloudProvider {
+class VaultFormat7ProviderDecorator: CloudProvider {
 	// swiftlint:disable weak_delegate
 	let delegate: CloudProvider
 	// swiftlint:enable weak_delegate
@@ -32,7 +32,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 	let dirIdCache: DirectoryIdCache
 	let tmpDirURL: URL
 
-	public init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
+	init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
@@ -47,7 +47,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - CloudProvider API
 
-	public func fetchItemMetadata(at cleartextCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	func fetchItemMetadata(at cleartextCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
 		let ciphertextMetadataPromise = parentDirIdPromise.then { parentDirId in
 			return try self.getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
@@ -59,7 +59,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		let dirIdPromise = getDirId(cleartextCloudPath)
 		let ciphertextListPromise = dirIdPromise.then { dirId in
 			return try self.getDirPath(dirId)
@@ -71,7 +71,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL) -> Promise<Void> {
+	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL) -> Promise<Void> {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -92,7 +92,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -124,7 +124,7 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func createFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+	func createFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
 		let dirId = UUID().uuidString.data(using: .utf8)!
 		let localDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let dirPath: CloudPath
@@ -150,13 +150,13 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func deleteFile(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+	func deleteFile(at cleartextCloudPath: CloudPath) -> Promise<Void> {
 		return getC9RPath(cleartextCloudPath).then { ciphertextCloudPath in
 			return self.delegate.deleteFile(at: ciphertextCloudPath)
 		}
 	}
 
-	public func deleteFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+	func deleteFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
 		return getDirId(cleartextCloudPath).then { dirId in
 			return self.deleteCiphertextDir(dirId)
 		}.recover { error -> Void in
@@ -175,13 +175,13 @@ public class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
+	func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
 		return all(getC9RPath(cleartextSourceCloudPath), getC9RPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
 			return self.delegate.moveFile(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
 		}
 	}
 
-	public func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
+	func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
 		return all(getC9RPath(cleartextSourceCloudPath), getC9RPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
 			return self.delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
 		}

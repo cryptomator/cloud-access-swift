@@ -16,7 +16,7 @@ import Promises
 
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat6ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath`.
  */
-public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
+class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	// swiftlint:disable weak_delegate
 	let delegate: CloudProvider
 	// swiftlint:enable weak_delegate
@@ -24,7 +24,7 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	let shortenedNameCache: VaultFormat6ShortenedNameCache
 	let tmpDirURL: URL
 
-	public init(delegate: CloudProvider, vaultPath: CloudPath) throws {
+	init(delegate: CloudProvider, vaultPath: CloudPath) throws {
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.shortenedNameCache = try VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
@@ -38,7 +38,7 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 
 	// MARK: - CloudProvider API
 
-	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
 			return delegate.fetchItemMetadata(at: shortened.cloudPath).then { shortenedMetadata in
@@ -49,7 +49,7 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		return delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken).then { itemList -> Promise<CloudItemList> in
 			let originalItemPromises = itemList.items.map { self.getOriginalMetadata($0) }
@@ -60,13 +60,13 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		return delegate.downloadFile(from: shortened.cloudPath, to: localURL)
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
@@ -80,7 +80,7 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
 			return uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent).then {
@@ -91,17 +91,17 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+	func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		return delegate.deleteFile(at: shortened.cloudPath)
 	}
 
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		return delegate.deleteFolder(at: shortened.cloudPath)
 	}
 
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 		if shortenedTarget.pointsToLNG {
@@ -113,7 +113,7 @@ public class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 		if shortenedTarget.pointsToLNG {

@@ -16,7 +16,7 @@ import XCTest
 
 class DropboxExponentialBackOffTests: XCTestCase {
 	func testWaitsExponentially() throws {
-		DropboxSetup.constants = DropboxSetup(appKey: "", appGroupName: "", mainAppBundleId: "")
+		DropboxSetup.constants = DropboxSetup(appKey: "", sharedContainerIdentifier: "", keychainService: "", forceForegroundSession: true)
 		let credential = DropboxCredential(tokenUid: "testToken")
 		let provider = DropboxCloudProvider(with: credential)
 		let expectation = XCTestExpectation(description: "")

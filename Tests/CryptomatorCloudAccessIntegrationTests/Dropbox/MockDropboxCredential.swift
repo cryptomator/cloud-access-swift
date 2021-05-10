@@ -17,7 +17,7 @@ import Promises
 
 class MockDropboxCredential: DropboxCredential {
 	init() {
-		DropboxSetup.constants = DropboxSetup(appKey: "", appGroupName: "", mainAppBundleId: "")
+		DropboxSetup.constants = DropboxSetup(appKey: "", sharedContainerIdentifier: "", keychainService: "", forceForegroundSession: true)
 		super.init(tokenUid: "IntegrationTest")
 	}
 

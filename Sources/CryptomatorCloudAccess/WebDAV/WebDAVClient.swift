@@ -27,9 +27,24 @@ public class WebDAVClient {
 		self.webDAVSession = session
 	}
 
-	public convenience init(credential: WebDAVCredential, sharedContainerIdentifier: String, useBackgroundSession: Bool) {
+	/**
+	 Creates a `WebDAVClient` with a background `URLSession`.
+
+	 If the `WebDAVClient` is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+	 */
+	public static func withBackgroundSession(credential: WebDAVCredential, sharedContainerIdentifier: String? = nil) -> WebDAVClient {
 		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		self.init(credential: credential, session: WebDAVSession(sharedContainerIdentifier: sharedContainerIdentifier, delegate: urlSessionDelegate, useBackgroundSession: useBackgroundSession))
+		let session = WebDAVSession.createBackgroundSession(with: urlSessionDelegate, sharedContainerIdentifier: sharedContainerIdentifier)
+		return WebDAVClient(credential: credential, session: session)
+	}
+
+	/**
+	 Creates a `WebDAVClient` with a foreground `URLSession`.
+	 */
+	public convenience init(credential: WebDAVCredential) {
+		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
+		let webDAVSession = WebDAVSession(delegate: urlSessionDelegate)
+		self.init(credential: credential, session: webDAVSession)
 	}
 
 	// MARK: - HTTP Methods for WebDAV

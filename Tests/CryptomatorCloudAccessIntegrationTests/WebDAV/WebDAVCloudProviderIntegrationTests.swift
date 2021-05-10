@@ -27,7 +27,7 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		}
 	}
 
-	static let setUpClientForWebDAV = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential, sharedContainerIdentifier: "CryptomatorConstants.appGroupName", useBackgroundSession: false)
+	static let setUpClientForWebDAV = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
 	static let setUpProviderForWebDAV = WebDAVProvider(with: setUpClientForWebDAV)
 
 	override class var setUpProvider: CloudProvider {
@@ -47,7 +47,7 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 	override func deauthenticate() -> Promise<Void> {
 		let correctCredential = IntegrationTestSecrets.webDAVCredential
 		let invalidCredential = WebDAVCredential(baseURL: correctCredential.baseURL, username: correctCredential.username, password: correctCredential.password + "Foo", allowedCertificate: correctCredential.allowedCertificate)
-		let client = WebDAVClient(credential: invalidCredential, sharedContainerIdentifier: "CryptomatorConstants.appGroupName", useBackgroundSession: false)
+		let client = WebDAVClient(credential: invalidCredential)
 		super.provider = WebDAVProvider(with: client)
 		return Promise(())
 	}

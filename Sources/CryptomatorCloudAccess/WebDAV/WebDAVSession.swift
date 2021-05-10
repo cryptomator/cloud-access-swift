@@ -177,16 +177,25 @@ class WebDAVSession {
 		self.delegate = delegate
 	}
 
-	convenience init(sharedContainerIdentifier: String, delegate: WebDAVClientURLSessionDelegate, useBackgroundSession: Bool) {
-		let configuration: URLSessionConfiguration
-		if useBackgroundSession {
-			// Additionally use the bundleID to prevent the same background URLSession identifier for multiple targets (for example Main App and Extension).
-			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)_\(bundleId)")
-			configuration.sharedContainerIdentifier = sharedContainerIdentifier
-		} else {
-			configuration = URLSessionConfiguration.default
-		}
+	/**
+	 Use this method to conveniently create a WebDAV session with a background URL session.
+
+	 If the `WebDAVSession` is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+
+	 To avoid collisions in the `URLSession` Identifier between multiple targets (e.g. main app and app extension), the `BundleID` is used in addition to the Credential UID.
+	 */
+	static func createBackgroundSession(with delegate: WebDAVClientURLSessionDelegate, sharedContainerIdentifier: String? = nil) -> WebDAVSession {
+		let bundleId = Bundle.main.bundleIdentifier ?? ""
+		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)_\(bundleId)")
+		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		configuration.httpCookieStorage = HTTPCookieStorage()
+		configuration.urlCredentialStorage = nil
+		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+		return WebDAVSession(urlSession: session, delegate: delegate)
+	}
+
+	convenience init(delegate: WebDAVClientURLSessionDelegate) {
+		let configuration = URLSessionConfiguration.default
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		configuration.urlCredentialStorage = nil
 		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)

@@ -27,7 +27,7 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 		}
 	}
 
-	private static let setUpClientForWebDAV = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential, sharedContainerIdentifier: "CryptomatorConstants.appGroupName", useBackgroundSession: false)
+	private static let setUpClientForWebDAV = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
 	private static let cloudProvider = WebDAVProvider(with: setUpClientForWebDAV)
 	private static let vaultPath = CloudPath("/IntegrationTests-Vault7/")
 

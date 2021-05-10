@@ -27,7 +27,7 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 
 	static let tokenUid = "IntegrationtTest"
 	static let setUpGoogleDriveCredential = MockGoogleDriveAuthenticator.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUid: tokenUid)
-	static var setUpProviderForGoogleDrive = GoogleDriveCloudProvider(with: setUpGoogleDriveCredential, useForegroundSession: true)
+	static var setUpProviderForGoogleDrive = GoogleDriveCloudProvider(with: setUpGoogleDriveCredential, useBackgroundSession: false)
 
 	override class var setUpProvider: CloudProvider {
 		return setUpProviderForGoogleDrive
@@ -42,7 +42,7 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		credential = MockGoogleDriveAuthenticator.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUid: UUID().uuidString)
-		super.provider = GoogleDriveCloudProvider(with: credential, useForegroundSession: true)
+		super.provider = GoogleDriveCloudProvider(with: credential, useBackgroundSession: false)
 	}
 
 	override func tearDown() {

@@ -11,25 +11,33 @@ import GoogleAPIClientForREST_Drive
 import GRDB
 import GTMSessionFetcherCore
 import Promises
-
+/**
+ Cloud Provider for Google Drive
+ */
 public class GoogleDriveCloudProvider: CloudProvider {
-	static let maximumUploadFetcherChunkSize: UInt = 3 * 1024 * 1024 // 3MB per chunk as GTMSessionFetcher loads the chunk to the memory and the FileProviderExtension has a total memory limit of 15mb
-	private let credentials: GoogleDriveCredential
+	static let maximumUploadFetcherChunkSize: UInt = 3 * 1024 * 1024 // 3MiB per chunk as GTMSessionFetcher loads the chunk to the memory and the FileProviderExtension has a total memory limit of 15MB
+	private let credential: GoogleDriveCredential
 	private let identifierCache: GoogleDriveIdentifierCache?
 	private var runningTickets: [GTLRServiceTicket]
 	private var runningFetchers: [GTMSessionFetcher]
 	private var driveService: GTLRDriveService {
-		credentials.driveService
+		credential.driveService
 	}
 
-	private let useForegroundSession: Bool
+	private let useBackgroundSession: Bool
 
-	public init(with credentials: GoogleDriveCredential, useForegroundSession: Bool = false) {
-		self.credentials = credentials
+	/**
+	 Creates a GoogleDrive CloudProvider
+
+	 - Parameter credential: Credentials used to authenticate to Google Drive.
+	 - Parameter useBackgroundSession: Determines whether a background `URLSession` should be used. Defaults to `false`.
+	 */
+	public init(with credential: GoogleDriveCredential, useBackgroundSession: Bool = false) {
+		self.credential = credential
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
 		self.identifierCache = GoogleDriveIdentifierCache()
-		self.useForegroundSession = useForegroundSession
+		self.useBackgroundSession = useBackgroundSession
 		setupDriveService()
 	}
 
@@ -54,12 +62,12 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 
 		let configuration: URLSessionConfiguration
-		if !useForegroundSession {
+		if useBackgroundSession {
 			driveService.fetcherService.configurationBlock = { _, configuration in
 				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
 			}
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credentials.tokenUid)-\(bundleId)")
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credential.tokenUid)-\(bundleId)")
 			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
 		} else {
 			configuration = URLSessionConfiguration.default

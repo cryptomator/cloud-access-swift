@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 
 private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
-	static let databaseTableName = "CachedEntrys"
+	static let databaseTableName = "CachedEntries"
 	static let itemIdentifierKey = "itemIdentifier"
 	static let cloudPathKey = "cloudPath"
 

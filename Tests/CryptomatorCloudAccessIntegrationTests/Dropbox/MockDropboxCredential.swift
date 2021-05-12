@@ -18,7 +18,7 @@ import Promises
 class MockDropboxCredential: DropboxCredential {
 	init() {
 		DropboxSetup.constants = DropboxSetup(appKey: "", sharedContainerIdentifier: "", keychainService: "", forceForegroundSession: true)
-		super.init(tokenUid: "IntegrationTest")
+		super.init(tokenUID: "IntegrationTest")
 	}
 
 	override func setAuthorizedClient() {

@@ -39,16 +39,34 @@ public class DropboxAuthenticator {
 		return pendingAuthentication
 	}
 
-	public func processAuthentication(with tokenUid: String) throws {
+	public func processAuthentication(with tokenUID: String) throws {
 		guard let pendingAuthentication = DropboxAuthenticator.pendingAuthentication else {
 			throw DropboxAuthenticatorError.noPendingAuthentication
 		}
-		pendingAuthentication.fulfill(DropboxCredential(tokenUid: tokenUid))
+		pendingAuthentication.fulfill(DropboxCredential(tokenUID: tokenUID))
 	}
 
 	public func deauthenticate() -> Promise<Void> {
 		DBClientsManager.unlinkAndResetClients()
 		// TODO: set all existing DropboxCredential.authorizedClients to nil
 		return Promise(())
+	}
+
+	func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+		let canHandle = DBClientsManager.handleRedirectURL(url) { authResult in
+			guard let authResult = authResult else {
+				return
+			}
+			if authResult.isSuccess() {
+				let tokenUid = authResult.accessToken.uid
+				let credential = DropboxCredential(tokenUID: tokenUid)
+				DropboxAuthenticator.pendingAuthentication?.fulfill(credential)
+			} else if authResult.isCancel() {
+				DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.userCanceled)
+			} else if authResult.isError() {
+				DropboxAuthenticator.pendingAuthentication?.reject(authResult.nsError)
+			}
+		}
+		return canHandle
 	}
 }

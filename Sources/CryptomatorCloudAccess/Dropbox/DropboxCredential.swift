@@ -16,24 +16,24 @@ public enum DropboxCredentialErrors: Error {
 
 public class DropboxCredential {
 	public internal(set) var authorizedClient: DBUserClient?
-	public let tokenUid: String
+	public let tokenUID: String
 	public var isAuthorized: Bool {
 		authorizedClient?.isAuthorized() ?? false
 	}
 
-	public init(tokenUid: String) {
-		self.tokenUid = tokenUid
+	public init(tokenUID: String) {
+		self.tokenUID = tokenUID
 		DropboxClientSetup.oneTimeSetup()
 		setAuthorizedClient()
 	}
 
 	public func setAuthorizedClient() {
-		authorizedClient = DBClientsManager.authorizedClients()[tokenUid]
+		authorizedClient = DBClientsManager.authorizedClients()[tokenUID]
 	}
 
 	public func deauthenticate() {
 		authorizedClient = nil
-		DBClientsManager.unlinkAndResetClient(tokenUid)
+		DBClientsManager.unlinkAndResetClient(tokenUID)
 	}
 
 	public func getUsername() -> Promise<String> {

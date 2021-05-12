@@ -26,7 +26,7 @@ public class DropboxSetup {
 	 - Parameter keychainService: The service name for the keychain. Leave nil to use default
 	 - Parameter forceForegroundSession: If set to true, all network requests are made on foreground sessions (by default, most upload/download operations are performed with a background session).
 	 */
-	public init(appKey: String, sharedContainerIdentifier: String?, keychainService: String, forceForegroundSession: Bool) {
+	public init(appKey: String, sharedContainerIdentifier: String?, keychainService: String?, forceForegroundSession: Bool) {
 		self.appKey = appKey
 		self.sharedContainerIdentifier = sharedContainerIdentifier
 		self.keychainService = keychainService

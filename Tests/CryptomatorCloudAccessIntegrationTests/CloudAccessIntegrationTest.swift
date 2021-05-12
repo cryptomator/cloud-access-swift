@@ -43,9 +43,8 @@ class CloudAccessIntegrationTest: XCTestCase {
 		get {
 			fatalError("Not implemented")
 		}
-		// swiftlint:disable unused_setter_value
+		// swiftlint:disable:next unused_setter_value
 		set {}
-		// swiftlint:enable unused_setter_value
 	}
 
 	override func setUpWithError() throws {

@@ -104,9 +104,8 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 	private weak var parentDelegate: PropfindResponseParserDelegate?
 	private let responseURL: URL
 
-	// swiftlint:disable weak_delegate
+	// swiftlint:disable:next weak_delegate
 	private var elementPropertiesDelegate: PropfindResponseElementPropertiesParserDelegate?
-	// swiftlint:enable weak_delegate
 	private var xmlCharacterBuffer = ""
 	private var depth: Int?
 	private var url: URL?
@@ -182,9 +181,8 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 	private let responseURL: URL
 
-	// swiftlint:disable weak_delegate
+	// swiftlint:disable:next weak_delegate
 	private var elementDelegate: PropfindResponseElementParserDelegate?
-	// swiftlint:enable weak_delegate
 
 	var elements: [PropfindResponseElement] = []
 

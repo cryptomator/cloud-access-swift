@@ -24,9 +24,8 @@ private extension CloudPath {
  Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 7, pass an instance of `VaultFormat7ShorteningProviderDecorator` (shortening decorator) as the delegate.
  */
 class VaultFormat7ProviderDecorator: CloudProvider {
-	// swiftlint:disable weak_delegate
+	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
-	// swiftlint:enable weak_delegate
 	let vaultPath: CloudPath
 	let cryptor: Cryptor
 	let dirIdCache: DirectoryIdCache

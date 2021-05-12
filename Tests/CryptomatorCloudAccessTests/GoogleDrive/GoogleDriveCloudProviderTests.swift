@@ -16,8 +16,8 @@ import XCTest
 class GoogleDriveCloudProviderTests: XCTestCase {
 	var provider: GoogleDriveCloudProvider!
 	override func setUpWithError() throws {
-		GoogleDriveSetup.constants = GoogleDriveSetup(clientId: "", redirectURL: URL(string: "https://example.com")!, appGroupName: "")
-		let credential = GoogleDriveCredential(with: "TestTokenUid")
+		GoogleDriveSetup.constants = GoogleDriveSetup(clientId: "", redirectURL: URL(string: "https://example.com")!, sharedContainerIdentifier: "")
+		let credential = GoogleDriveCredential()
 		provider = GoogleDriveCloudProvider(with: credential)
 	}
 

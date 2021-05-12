@@ -20,16 +20,16 @@ public enum GoogleDriveCredentialError: Error {
 public class GoogleDriveCredential {
 	let keychainItemPrefix = "GoogleDriveAuth"
 	private let keychainItemName: String
-	public let tokenUid: String
+	public let tokenUID: String
 	public var authorization: GTMAppAuthFetcherAuthorization?
 	public let driveService: GTLRDriveService
 	public var isAuthorized: Bool {
 		authorization?.canAuthorize() ?? false
 	}
 
-	public init(with tokenUid: String) {
-		self.tokenUid = tokenUid
-		self.keychainItemName = keychainItemPrefix + "-" + tokenUid
+	public init(with tokenUID: String = UUID().uuidString) {
+		self.tokenUID = tokenUID
+		self.keychainItemName = keychainItemPrefix + "-" + tokenUID
 		self.authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: keychainItemName)
 		self.driveService = GTLRDriveService()
 		driveService.authorizer = authorization

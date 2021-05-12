@@ -13,11 +13,11 @@ public class GoogleDriveSetup {
 
 	public let clientId: String
 	public let redirectURL: URL
-	public let appGroupName: String
+	public let sharedContainerIdentifier: String?
 
-	public init(clientId: String, redirectURL: URL, appGroupName: String) {
+	public init(clientId: String, redirectURL: URL, sharedContainerIdentifier: String?) {
 		self.clientId = clientId
 		self.redirectURL = redirectURL
-		self.appGroupName = appGroupName
+		self.sharedContainerIdentifier = sharedContainerIdentifier
 	}
 }

@@ -64,11 +64,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let configuration: URLSessionConfiguration
 		if useBackgroundSession {
 			driveService.fetcherService.configurationBlock = { _, configuration in
-				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
+				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 			}
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credential.tokenUid)-\(bundleId)")
-			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.appGroupName
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credential.tokenUID)-\(bundleId)")
+			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 		} else {
 			configuration = URLSessionConfiguration.default
 		}

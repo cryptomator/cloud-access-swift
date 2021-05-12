@@ -17,7 +17,7 @@ import CryptomatorCloudAccess
 #endif
 
 class MockGoogleDriveAuthenticator {
-	static func generateAuthorizedCredential(withRefreshToken refreshToken: String, tokenUid: String) -> GoogleDriveCredential {
+	static func generateAuthorizedCredential(withRefreshToken refreshToken: String, tokenUID: String) -> GoogleDriveCredential {
 		let authorizationEndpoint = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
 		let tokenEndPoint = URL(string: "https://oauth2.googleapis.com/token")!
 		let configuration = OIDServiceConfiguration(authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndPoint)
@@ -28,7 +28,7 @@ class MockGoogleDriveAuthenticator {
 		let tokenParameters = ["refresh_token": refreshToken as NSString]
 		let tokenResponse = OIDTokenResponse(request: tokenRequest, parameters: tokenParameters)
 		let authState = OIDAuthState(authorizationResponse: authResponse, tokenResponse: tokenResponse)
-		let credential = GoogleDriveCredential(with: tokenUid)
+		let credential = GoogleDriveCredential(with: tokenUID)
 		credential.save(authState: authState)
 		return credential
 	}

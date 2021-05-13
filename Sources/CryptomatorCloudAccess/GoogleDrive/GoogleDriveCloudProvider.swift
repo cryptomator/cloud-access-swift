@@ -32,7 +32,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 - Parameter credential: Credentials used to authenticate to Google Drive.
 	 - Parameter useBackgroundSession: Determines whether a background `URLSession` should be used. Defaults to `false`.
 	 */
-	public init(with credential: GoogleDriveCredential, useBackgroundSession: Bool = false) {
+	public init(credential: GoogleDriveCredential, useBackgroundSession: Bool = false) {
 		self.credential = credential
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()

@@ -27,7 +27,7 @@ public class GoogleDriveCredential {
 		authorization?.canAuthorize() ?? false
 	}
 
-	public init(with tokenUID: String = UUID().uuidString) {
+	public init(tokenUID: String = UUID().uuidString) {
 		self.tokenUID = tokenUID
 		self.keychainItemName = keychainItemPrefix + "-" + tokenUID
 		self.authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: keychainItemName)

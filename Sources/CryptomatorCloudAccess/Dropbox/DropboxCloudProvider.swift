@@ -18,7 +18,7 @@ public class DropboxCloudProvider: CloudProvider {
 		return (error as? DropboxError) == .tooManyWriteOperations || (error as? DropboxError) == .internalServerError || (error as? DropboxError) == .rateLimitError
 	}
 
-	public init(with credential: DropboxCredential) {
+	public init(credential: DropboxCredential) {
 		self.credential = credential
 		self.runningTasks = [DBTask]()
 		self.runningBatchUploadTasks = [DBBatchUploadTask]()

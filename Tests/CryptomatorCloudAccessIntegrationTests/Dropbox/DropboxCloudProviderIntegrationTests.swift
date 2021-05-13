@@ -27,7 +27,7 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 	}
 
 	static let setUpDropboxCredential = MockDropboxCredential()
-	static let setUpProviderForDropbox = DropboxCloudProvider(with: setUpDropboxCredential)
+	static let setUpProviderForDropbox = DropboxCloudProvider(credential: setUpDropboxCredential)
 
 	override class var setUpProvider: CloudProvider {
 		return setUpProviderForDropbox
@@ -42,7 +42,7 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		credential.setAuthorizedClient()
-		super.provider = DropboxCloudProvider(with: credential)
+		super.provider = DropboxCloudProvider(credential: credential)
 	}
 
 	override class var defaultTestSuite: XCTestSuite {

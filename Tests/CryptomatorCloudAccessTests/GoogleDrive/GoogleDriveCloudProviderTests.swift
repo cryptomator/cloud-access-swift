@@ -18,7 +18,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 	override func setUpWithError() throws {
 		GoogleDriveSetup.constants = GoogleDriveSetup(clientId: "", redirectURL: URL(string: "https://example.com")!, sharedContainerIdentifier: "")
 		let credential = GoogleDriveCredential()
-		provider = GoogleDriveCloudProvider(with: credential)
+		provider = GoogleDriveCloudProvider(credential: credential)
 	}
 
 	func testOnlyItemNameChangedWorksWithFolders() throws {

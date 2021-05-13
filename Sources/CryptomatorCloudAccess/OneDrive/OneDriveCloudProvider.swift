@@ -29,7 +29,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		if useBackgroundSession {
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
 			configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccess-OneDriveSession-\(credential.identifier)-\(bundleId)")
-			configuration.sharedContainerIdentifier = OneDriveSetup.appGroupName
+			configuration.sharedContainerIdentifier = OneDriveSetup.sharedContainerIdentifier
 		} else {
 			configuration = URLSessionConfiguration.default
 		}

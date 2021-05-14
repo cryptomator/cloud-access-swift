@@ -11,7 +11,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 
 ## Requirements
 
-- iOS 10.0 or higher
+- iOS 11.0 or higher
 - Swift 5
 
 ## Installation
@@ -46,18 +46,115 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
 
 Crypto and shortening decorators allow transparent access to vaults based on Cryptomator's encryption scheme. It depends on [cryptolib-swift](https://github.com/cryptomator/cryptolib-swift) for cryptographic functions and [GRDB](https://github.com/groue/GRDB.swift) for thread-safe caching. For more information on the Cryptomator encryption scheme, visit the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/).
 
-In order to create a crypto decorator provider, you need a `Cryptor` instance from cryptolib-swift. Check out its documentation on how to create a cryptor. And to be fully compatible, you'd have to put a shortening decorator in-between:
+In order to create a crypto decorator provider, you need a `Masterkey` instance from cryptolib-swift. Check out its documentation on how to create a masterkey. And since Vault format 8 you also need a `UnverifiedVaultConfig` instance:
 
 ```swift
 let provider = ... // any other cloud provider
 let vaultPath = ...
-...
-let cryptor = ...
-let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-let cryptoDecorator = try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+let masterkey = ...
+let token = ...
+let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+let cryptoDecorator = try VaultProviderFactory.createVaultProvider(from: unverifiedVaultConfig, masterkey: masterkey, vaultPath: vaultPath, with: provider)
 ```
 
-:warning: You have to check the version of your `MasterkeyFile` instance so that you create the correct decorator. This library supports vault version 6 and higher.
+To create a legacy crypto decorator provider for vault version 6 or 7
+
+```swift
+let provider = ... // any other cloud provider
+let vaultPath = ...
+let masterkey = ...
+let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 6, vaultPath: vaultPath, with: provider)
+```
+
+:warning: This library supports vault version 6 and higher.
+
+### Dropbox
+
+We use the [official Dropbox Objective-C SDK](https://github.com/dropbox/dropbox-sdk-obj-c), therefore it is necessary to set up the `Info.plist` as described there.
+In addition, the following constants must be set once, e.g. in the `AppDelegate`:
+
+```swift
+let appKey = ... // your Dropbox AppKey
+let sharedContainerIdentifier = ... // optional: you only need to set this property if you want to create a DropboxProvider for use by an app extension and forceForegroundSession = false
+let keychainService = ... // The service name for the keychain. Leave nil to use default
+let forceForegroundSession = ... // If set to true, all network requests are made on foreground sessions (by default, most upload/download operations are performed with a background session).
+DropboxSetup.constants = DropboxSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier, keychainService: keychainService, forceForegroundSession: Bool)
+```
+
+Begin the authorization flow:
+
+```swift
+let dropboxAuthenticator = DropboxAuthenticator()
+let viewController = ... // the presenting UIViewController
+dropboxAuthenticator.authenticate(from: viewController).then { credential in
+  // do something with the DropboxCredential
+  // you probably want to save the credential.tokenUID to re-create the credential later
+}.catch { error in
+  // error handling
+}
+```
+
+To handle the redirection back into the CloudAccess Framework once the authentication flow is complete, you should add the following code into your application's delegate:
+
+```swift
+func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+	let canHandle = DBClientsManager.handleRedirectURL(url) { authResult in
+		guard let authResult = authResult else {
+			return
+		}
+		if authResult.isSuccess() {
+			let tokenUID = authResult.accessToken.uid
+			let credential = DropboxCredential(tokenUID: tokenUID)
+			DropboxAuthenticator.pendingAuthentication?.fulfill(credential)
+			} else if authResult.isCancel() {
+				DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.userCanceled)
+			} else if authResult.isError() {
+				DropboxAuthenticator.pendingAuthentication?.reject(authResult.nsError)
+			}
+		}
+	return canHandle
+}
+```
+
+Create a Dropbox Provider with a credential:
+
+```swift
+let tokenUID = ... // The tokenUID you saved after the successful authorization flow.
+let credential = DropboxCredential(tokenUID: tokenUID)
+let provider = DropboxCloudProvider(credential: credential)
+```
+
+### Google Drive
+
+We use [AppAuth](https://github.com/openid/AppAuth-iOS) for authorization, so it is necessary to modify your application's delegate as described there. 
+In addition, the following constants must be set once, e.g. in the `AppDelegate`:
+
+```swift
+let clientId = ... // your Google Drive client identifier
+let redirectURL = ... 
+let sharedContainerIdentifier = ... // optional: you only need to set this property if you want to create a Google Drive provider with a background URLSession for use by an app extension 
+GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: redirectURL, sharedContainerIdentifier: sharedContainerIdentifier)
+```
+
+Begin the authorization flow:
+
+```swift
+let tokenUID = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
+let credential = GoogleDriveCredential(tokenUID: tokenUID)
+let viewController = ... // the presenting UIViewController
+GoogleDriveAuthenticator.authenticate(credential: credential, from: viewController).then { 
+  // the user has successfully logged into his Google account
+}.catch { error in
+  // error handling
+}
+```
+
+You can then use the credential to create a Google Drive provider:
+
+```swift
+let useBackgroundSession = ... // optional: you only need to set this property if you want to create a Google Drive provider with a background URLSession, defaults to false
+let provider = GoogleDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
+```
 
 ### Local File System
 
@@ -74,9 +171,38 @@ When calling the functions of this provider, the cloud paths should be provided 
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
 
+### OneDrive
+
+We use [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-objc), therefore it is necessary to set up the `Info.plist` and `AppDelegate` as described there.
+In addition, the following constants must be set once, e.g. in the `AppDelegate`:
+
+```swift
+OneDriveSetup.sharedContainerIdentifier = ... // optional: you only need to set this property if you want to create a OneDrive provider with a background URLSession for use by an app extension
+OneDriveSetup.clientApplication = ... // your MSALPublicClientApplication
+```
+
+Begin the authorization flow:
+
+```swift
+let viewController = ... // the presenting UIViewController
+OneDriveAuthenticator.authenticate(from: viewController).then { credential in
+  // do something with the OneDriveCredential
+  // you probably want to save the credential.identifier to re-create the credential later
+}.catch { error in
+  // error handling
+}
+```
+
+You can then use the credential to create a OneDrive provider:
+
+```swift
+let useBackgroundSession = ... // optional: you only need to set this property if you want to create a OneDrive provider with a background URLSession, defaults to false
+let provider = OneDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
+```
+
 ### WebDAV
 
-Create a WebDAV provider with a WebDAV client:
+Create a WebDAV Credential:
 
 ```swift
 let baseURL = ...
@@ -85,9 +211,22 @@ let password = ...
 let allowedCertificate = ... // optional: you might want to allowlist a TLS certificate
 let identifier = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
 let credential = WebDAVCredential(baseURL: baseURL, username: username, password: password, allowedCertificate: allowedCertificate, identifier: identifier)
-let sharedContainerIdentifier = ... // if `useBackgroundSession` is `true`, this will be set internally for the `URLSessionConfiguration`
-let useBackgroundSession = ... // if `true`, the internal `URLSessionConfiguration` will be based on a background configuration
-let client = WebDAVClient(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier, useBackgroundSession: useBackgroundSession)
+```
+
+You can then use the credentials to create a WebDAV provider.
+
+Create a WebDAV provider with a WebDAV client:
+
+```swift
+let client = WebDAVClient(credential: credential)
+let provider = WebDAVProvider(with: client)
+```
+
+Create a WebDAV provider with a WebDAV client using a background URLSession:
+
+```swift
+let sharedContainerIdentifier = ... // optional: you only need to set this property if you want to create a WebDAVProvider for use by an app extension 
+let client = WebDAVClient.withBackgroundSession(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier)
 let provider = WebDAVProvider(with: client)
 ```
 
@@ -116,21 +255,8 @@ validator.validate().then { certificate in
 
 ## Integration Testing
 
-If you would like to run integration tests that require authorization, you have to set some secrets for them. Create a `.integration-test-secrets.sh` file in the root directory. Its contents should look something like this:
+You can learn more about cloud provider integration tests [here](/Tests/CryptomatorCloudAccessIntegrationTests/README.md).
 
-```sh
-#!/bin/sh
-export DROPBOX_ACCESS_TOKEN=...
-export GOOGLE_DRIVE_CLIENT_ID=...
-export GOOGLE_DRIVE_REFRESH_TOKEN=...
-export WEBDAV_BASE_URL=...
-export WEBDAV_USERNAME=...
-export WEBDAV_PASSWORD=...
-```
-
-If you aren't using the Xcode project, you may have to run `./create-integration-test-secrets-file.sh` once. If you change the secrets later on, you have to run that script again.
-
-If you are building via a CI system, set these secret environment variables accordingly.
 
 ## Contributing
 

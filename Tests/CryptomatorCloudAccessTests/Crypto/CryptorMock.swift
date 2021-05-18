@@ -15,6 +15,19 @@ class CryptoSupportMock: CryptoSupport {
 	}
 }
 
+class ContentCryptorMock: ContentCryptor {
+	let nonceLen = 0
+	let tagLen = 0
+
+	func encrypt(_ chunk: [UInt8], key: [UInt8], nonce: [UInt8], ad: [UInt8]...) throws -> [UInt8] {
+		return []
+	}
+
+	func decrypt(_ chunk: [UInt8], key: [UInt8], ad: [UInt8]...) throws -> [UInt8] {
+		return []
+	}
+}
+
 extension Dictionary where Value: Equatable {
 	func someKey(for value: Value) -> Key? {
 		return first(where: { $1 == value })?.key
@@ -34,7 +47,7 @@ public class CryptorMock: Cryptor {
 		self.dirIds = dirIds
 		self.fileNames = fileNames
 		self.contents = contents
-		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock())
+		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock(), contentCryptor: ContentCryptorMock())
 	}
 
 	override public func encryptDirId(_ dirId: Data) throws -> String {

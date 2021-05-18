@@ -450,7 +450,7 @@ public class OneDriveCloudProvider: CloudProvider {
 			for i in startIndex ..< endIndex {
 				let itemName = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(itemName)
-				parentItem = try await(self.getOneDriveItem(for: itemName, withParentItem: parentItem))
+				parentItem = try awaitPromise(self.getOneDriveItem(for: itemName, withParentItem: parentItem))
 				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)

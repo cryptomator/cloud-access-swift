@@ -311,7 +311,7 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 			return nil
 		}
 		if itemType == .file || itemType == .symlink {
-			return try cryptor.calculateCleartextSize(ciphertextSize - Cryptor.fileHeaderSize)
+			return try cryptor.calculateCleartextSize(ciphertextSize - cryptor.fileHeaderSize)
 		} else {
 			return ciphertextSize
 		}

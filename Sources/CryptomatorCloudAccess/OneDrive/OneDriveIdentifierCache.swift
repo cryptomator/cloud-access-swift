@@ -40,7 +40,7 @@ class OneDriveIdentifierCache {
 
 	func remove(_ item: OneDriveItem) throws {
 		try inMemoryDB.write { db in
-			try item.delete(db)
+			_ = try item.delete(db)
 		}
 	}
 }

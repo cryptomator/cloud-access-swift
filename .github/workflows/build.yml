@@ -16,9 +16,6 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
-      - name: Install SwiftFormat
-        run: |
-          brew install swiftformat
       - name: Run process.sh script
         run: |
           ./Scripts/process.sh

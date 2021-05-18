@@ -251,7 +251,7 @@ When calling the functions of this provider, the cloud paths should be provided 
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
 
-## Integration Testing
+## Integration Tests
 
 You can learn more about cloud provider integration tests [here](Tests/CryptomatorCloudAccessIntegrationTests/README.md).
 

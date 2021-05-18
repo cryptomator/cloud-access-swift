@@ -8,6 +8,7 @@
 
 import Foundation
 import GRDB
+
 class OneDriveIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 

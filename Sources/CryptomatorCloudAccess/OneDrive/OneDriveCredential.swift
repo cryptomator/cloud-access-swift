@@ -9,6 +9,7 @@
 import Foundation
 import MSGraphMSALAuthProvider
 import Promises
+
 public enum OneDriveCredentialError: Error {
 	case noUsername
 }

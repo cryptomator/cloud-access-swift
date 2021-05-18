@@ -8,6 +8,7 @@
 
 import Foundation
 import MSAL
+
 public enum OneDriveSetup {
 	public static var clientApplication: MSALPublicClientApplication!
 	public static var sharedContainerIdentifier: String?

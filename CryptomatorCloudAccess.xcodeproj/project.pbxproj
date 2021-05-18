@@ -443,6 +443,7 @@
 		4A1A11692629A53300DAF62F /* OneDrive */ = {
 			isa = PBXGroup;
 			children = (
+				4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */,
 				4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */,
 				4A1A11782629ACD500DAF62F /* OneDriveAuthenticator.swift */,
 				4A1A11642629A52F00DAF62F /* OneDriveCloudProvider.swift */,
@@ -451,7 +452,6 @@
 				4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */,
 				4A1A118E262D95E600DAF62F /* OneDriveItem.swift */,
 				4A1A117D2629AD8F00DAF62F /* OneDriveSetup.swift */,
-				4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */,
 			);
 			path = OneDrive;
 			sourceTree = "<group>";
@@ -527,8 +527,8 @@
 				4ACA63F92615FF9700D19304 /* Extensions */,
 				4ACA63F32615FF9700D19304 /* Google Drive */,
 				4ACA64002615FF9700D19304 /* LocalFileSystem */,
-				4ACA63F72615FF9700D19304 /* WebDAV */,
 				4AFC5F6B263190C000744715 /* OneDrive */,
+				4ACA63F72615FF9700D19304 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccessIntegrationTests;
 			sourceTree = "<group>";

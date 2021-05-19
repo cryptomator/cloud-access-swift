@@ -83,6 +83,7 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func setUpWithError() throws {
+		try XCTSkipIf(true, "FIXME: Tests don't work if there is no development team for signing.")
 		let expectation = XCTestExpectation()
 		try super.setUpWithError()
 		DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat7OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in

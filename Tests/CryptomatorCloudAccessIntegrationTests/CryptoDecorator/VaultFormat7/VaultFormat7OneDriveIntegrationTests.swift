@@ -27,27 +27,13 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 		}
 	}
 
-	private static let cloudProvider = createSetUpOneDriveCloudProvider()
+	// swiftlint:disable:next force_try
+	private static let setUpOneDriveCredential = try! OneDriveCredentialMock()
+	// swiftlint:disable:next force_try
+	private static let cloudProvider = try! OneDriveCloudProvider(credential: setUpOneDriveCredential, useBackgroundSession: false)
 	private static let vaultPath = CloudPath("/IntegrationTests-Vault7/")
 
 	static var setUpProviderForVaultFormat7OneDrive: VaultFormat7ProviderDecorator?
-
-	class func createSetUpOneDriveCloudProvider() -> OneDriveCloudProvider {
-		let oneDriveConfiguration = MSALPublicClientApplicationConfig(clientId: IntegrationTestSecrets.oneDriveClientId, redirectUri: IntegrationTestSecrets.oneDriveRedirectUri, authority: nil)
-		oneDriveConfiguration.cacheConfig.keychainSharingGroup = Bundle.main.bundleIdentifier ?? ""
-		let credential: OneDriveCredential
-		let cloudProvider: OneDriveCloudProvider
-		do {
-			OneDriveSetup.clientApplication = try MSALPublicClientApplication(configuration: oneDriveConfiguration)
-			let keychainItem = try OneDriveKeychainItem.getOneDriveAccountKeychainItem()
-			let accountId = keychainItem.homeAccountId
-			credential = try OneDriveCredential(with: accountId)
-			cloudProvider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
-		} catch {
-			fatalError("Creation of setUp OneDriveCloudProvider failed with: \(error)")
-		}
-		return cloudProvider
-	}
 
 	override class var setUpProvider: CloudProvider? {
 		return setUpProviderForVaultFormat7OneDrive
@@ -58,12 +44,6 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override class func setUp() {
-		do {
-			try OneDriveKeychainItem.fillKeychain()
-		} catch {
-			classSetUpError = error
-			return
-		}
 		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
 			DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
 		}.then { decorator in
@@ -83,7 +63,6 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func setUpWithError() throws {
-		try XCTSkipIf(true, "FIXME: Tests don't work if there is no development team for signing.")
 		try super.setUpWithError()
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat7OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator

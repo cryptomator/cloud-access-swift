@@ -6,11 +6,14 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#else
 import CryptomatorCloudAccess
+#endif
 import Foundation
 import Promises
 import XCTest
-@testable import MSAL
 
 class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	static var setUpErrorForOneDrive: Error?
@@ -23,53 +26,22 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 		}
 	}
 
-	static let setUpProviderForOneDrive = createSetUpOneDriveCloudProvider()
+	// swiftlint:disable:next force_try
+	static let setUpOneDriveCredential = try! OneDriveCredentialMock()
+	// swiftlint:disable:next force_try
+	static let setUpProviderForOneDrive = try! OneDriveCloudProvider(credential: setUpOneDriveCredential, useBackgroundSession: false)
 
 	override class var setUpProvider: CloudProvider {
 		return setUpProviderForOneDrive
-	}
-
-	class func createSetUpOneDriveCloudProvider() -> OneDriveCloudProvider {
-		let oneDriveConfiguration = MSALPublicClientApplicationConfig(clientId: IntegrationTestSecrets.oneDriveClientId, redirectUri: IntegrationTestSecrets.oneDriveRedirectUri, authority: nil)
-		oneDriveConfiguration.cacheConfig.keychainSharingGroup = Bundle.main.bundleIdentifier ?? ""
-		let credential: OneDriveCredential
-		let cloudProvider: OneDriveCloudProvider
-		do {
-			OneDriveSetup.clientApplication = try MSALPublicClientApplication(configuration: oneDriveConfiguration)
-			let keychainItem = try OneDriveKeychainItem.getOneDriveAccountKeychainItem()
-			let accountId = keychainItem.homeAccountId
-			credential = try OneDriveCredential(with: accountId)
-			cloudProvider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
-		} catch {
-			fatalError("Creation of setUp OneDriveCloudProvider failed with: \(error)")
-		}
-		return cloudProvider
 	}
 
 	override class var integrationTestParentCloudPath: CloudPath {
 		return CloudPath("/iOS-IntegrationTest/plain/")
 	}
 
-	override class func setUp() {
-		do {
-			try OneDriveKeychainItem.fillKeychain()
-		} catch {
-			classSetUpError = error
-			return
-		}
-		super.setUp()
-	}
-
-	private var credential: OneDriveCredential!
-
 	override func setUpWithError() throws {
-		try XCTSkipIf(true, "FIXME: Tests don't work if there is no development team for signing.")
 		try super.setUpWithError()
-		let keychainItem = try OneDriveKeychainItem.getOneDriveAccountKeychainItem()
-		let accountId = keychainItem.homeAccountId
-		let credential = try OneDriveCredential(with: accountId)
-		self.credential = credential
-		super.provider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		super.provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.setUpOneDriveCredential, useBackgroundSession: false)
 	}
 
 	override class var defaultTestSuite: XCTestSuite {
@@ -77,12 +49,11 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 	}
 
 	override func deauthenticate() -> Promise<Void> {
-		do {
-			credential = try OneDriveCredential(with: "InvalidIdentifier")
-			super.provider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
-		} catch {
-			return Promise(error)
-		}
+		// swiftlint:disable:next force_try
+		let credential = try! OneDriveCredentialMock()
+		try? credential.deauthenticate()
+		// swiftlint:disable:next force_try
+		super.provider = try! OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
 		return Promise(())
 	}
 }

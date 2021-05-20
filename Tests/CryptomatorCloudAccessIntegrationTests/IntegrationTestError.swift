@@ -10,5 +10,6 @@ import Foundation
 
 enum IntegrationTestError: Error {
 	case oneTimeSetUpTimeout
+	case setUpTimeout
 	case cloudProviderInitError
 }

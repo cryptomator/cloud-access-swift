@@ -60,18 +60,18 @@ class VaultFormat7DropboxIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func setUpWithError() throws {
-		let expectation = XCTestExpectation()
 		try super.setUpWithError()
 		let credential = MockDropboxCredential()
 		let cloudProvider = DropboxCloudProvider(credential: credential)
-		DecoratorFactory.createFromExistingVaultFormat7(delegate: cloudProvider, vaultPath: VaultFormat7DropboxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: cloudProvider, vaultPath: VaultFormat7DropboxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator
-		}.catch { error in
-			XCTFail("Promise failed with error: \(error)")
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
 	}
 
 	override class var defaultTestSuite: XCTestSuite {

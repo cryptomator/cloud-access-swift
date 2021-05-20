@@ -84,16 +84,16 @@ class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try XCTSkipIf(true, "FIXME: Tests don't work if there is no development team for signing.")
-		let expectation = XCTestExpectation()
 		try super.setUpWithError()
-		DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator
-		}.catch { error in
-			XCTFail("Promise failed with error: \(error)")
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
 	}
 
 	override class var defaultTestSuite: XCTestSuite {

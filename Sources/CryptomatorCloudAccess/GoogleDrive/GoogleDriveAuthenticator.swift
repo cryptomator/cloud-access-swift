@@ -42,7 +42,7 @@ public enum GoogleDriveAuthenticator {
 					return reject(error!)
 				}
 				guard let configuration = configuration else {
-					return reject(GoogleDriveError.unexpectedError) // MARK: This should never occur
+					return reject(GoogleDriveError.unexpectedError) // This should never occur
 				}
 				fulfill(configuration)
 			}
@@ -51,7 +51,6 @@ public enum GoogleDriveAuthenticator {
 
 	private static func getAuthState(for configuration: OIDServiceConfiguration, with presentingViewController: UIViewController, credential: GoogleDriveCredential) -> Promise<OIDAuthState> {
 		let request = OIDAuthorizationRequest(configuration: configuration, clientId: GoogleDriveSetup.constants.clientId, scopes: scopes, redirectURL: GoogleDriveSetup.constants.redirectURL, responseType: OIDResponseTypeCode, additionalParameters: nil)
-
 		return Promise<OIDAuthState> { fulfill, reject in
 			GoogleDriveAuthenticator.currentAuthorizationFlow = OIDAuthState.authState(byPresenting: request, presenting: presentingViewController, callback: { authState, error in
 				guard let authState = authState, error == nil else {
@@ -62,8 +61,7 @@ public enum GoogleDriveAuthenticator {
 						}
 						return reject(error)
 					}
-
-					return reject(GoogleDriveError.unexpectedError) // MARK: This should never occur
+					return reject(GoogleDriveError.unexpectedError) // This should never occur
 				}
 				fulfill(authState)
 			})

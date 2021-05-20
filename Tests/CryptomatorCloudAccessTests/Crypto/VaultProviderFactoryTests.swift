@@ -18,7 +18,7 @@ class VaultProviderFactoryTests: XCTestCase {
 	let cloudProviderMock = CloudProviderMock(folders: [], files: [String: Data]())
 	let vaultPath = CloudPath("/")
 
-	// MARK: createVaultProvider Tests
+	// MARK: - createVaultProvider Tests
 
 	func testCreateVaultProvider() throws {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
@@ -49,7 +49,7 @@ class VaultProviderFactoryTests: XCTestCase {
 		}
 	}
 
-	// MARK: createLegacyVaultProvider Tests
+	// MARK: - createLegacyVaultProvider Tests
 
 	func testCreateLegacyVaultFormat6Provider() throws {
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
@@ -93,7 +93,7 @@ class VaultProviderFactoryTests: XCTestCase {
 		}
 	}
 
-	// MARK: isSupported Tests
+	// MARK: - isSupported Tests
 
 	func testIsSupported() throws {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)

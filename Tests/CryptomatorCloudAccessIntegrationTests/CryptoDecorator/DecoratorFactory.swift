@@ -16,7 +16,7 @@ import Promises
 @testable import CryptomatorCryptoLib
 
 class DecoratorFactory {
-	// MARK: VaultFormat7
+	// MARK: - Vault Format 7
 
 	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {
 		do {
@@ -59,7 +59,7 @@ class DecoratorFactory {
 		}
 	}
 
-	// MARK: VaultFormat6
+	// MARK: - Vault Format 6
 
 	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat6ProviderDecorator> {
 		do {
@@ -105,7 +105,7 @@ class DecoratorFactory {
 		}
 	}
 
-	// MARK: Helper Functions
+	// MARK: - Helpers
 
 	private static func getRootDirectoryPath(for cryptor: Cryptor, vaultPath: CloudPath) throws -> CloudPath {
 		let digest = try cryptor.encryptDirId(Data())

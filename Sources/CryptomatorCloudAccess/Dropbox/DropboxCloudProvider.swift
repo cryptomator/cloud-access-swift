@@ -594,7 +594,7 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: Helper
+	// MARK: - Helpers
 
 	func createCloudItemMetadata(from metadata: DBFILESMetadata, parentCloudPath: CloudPath) throws -> CloudItemMetadata {
 		if metadata is DBFILESFolderMetadata {

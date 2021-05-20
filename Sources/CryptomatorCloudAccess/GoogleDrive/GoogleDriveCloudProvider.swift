@@ -222,20 +222,19 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let metadata = GTLRDrive_File()
 		metadata.name = targetCloudPath.lastPathComponent
 		let query = GTLRDriveQuery_FilesUpdate.query(withObject: metadata, fileId: itemIdentifier, uploadParameters: nil)
-		return modificateQueryForMoveItem(query, from: sourceCloudPath, to: targetCloudPath)
-			.then { query in
-				self.executeQuery(query, cloudPath: sourceCloudPath)
-			}.then { result -> Void in
-				guard let file = result as? GTLRDrive_File else {
-					throw GoogleDriveError.unexpectedResultType
-				}
-				guard let identifier = file.identifier else {
-					throw GoogleDriveError.receivedIncompleteMetadata
-				}
-				try self.identifierCache?.invalidateIdentifier(for: sourceCloudPath)
-				try self.identifierCache?.addOrUpdateIdentifier(identifier, for: targetCloudPath)
-				return
+		return modificateQueryForMoveItem(query, from: sourceCloudPath, to: targetCloudPath).then { query in
+			self.executeQuery(query, cloudPath: sourceCloudPath)
+		}.then { result -> Void in
+			guard let file = result as? GTLRDrive_File else {
+				throw GoogleDriveError.unexpectedResultType
 			}
+			guard let identifier = file.identifier else {
+				throw GoogleDriveError.receivedIncompleteMetadata
+			}
+			try self.identifierCache?.invalidateIdentifier(for: sourceCloudPath)
+			try self.identifierCache?.addOrUpdateIdentifier(identifier, for: targetCloudPath)
+			return
+		}
 	}
 
 	private func modificateQueryForMoveItem(_ query: GTLRDriveQuery_FilesUpdate, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<GTLRDriveQuery_FilesUpdate> {
@@ -269,10 +268,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 					try self.identifierCache?.addOrUpdateIdentifier(itemIdentifier, for: cloudPath)
 				}
 			}
-			return getFirstIdentifier(forItemWithName: itemName, itemType: nil, inFolderWithId: cachedIdentifier!)
-				.then { itemIdentifier in
-					try self.identifierCache?.addOrUpdateIdentifier(itemIdentifier, for: cloudPath)
-				}
+			return getFirstIdentifier(forItemWithName: itemName, itemType: nil, inFolderWithId: cachedIdentifier!).then { itemIdentifier in
+				try self.identifierCache?.addOrUpdateIdentifier(itemIdentifier, for: cloudPath)
+			}
 		}
 		return Promise(cachedIdentifier!)
 	}
@@ -346,7 +344,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: Operations with Google Drive Item Identifier
+	// MARK: - Operations with Google Drive Item Identifier
 
 	private func deleteItem(withIdentifier identifier: String, at cloudPath: CloudPath) -> Promise<Void> {
 		let query = GTLRDriveQuery_FilesDelete.query(withFileId: identifier)
@@ -432,7 +430,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: Helper
+	// MARK: - Helpers
 
 	/**
 	 A wrapper for the GTLRDriveQuery with Promises.
@@ -547,11 +545,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				return fileIdentifier
 			}
 		}
-		return getFirstIdentifier(forItemWithName: filename, itemType: .file, inFolderWithId: startIdentifier)
-			.then { fileIdentifier -> String in
-				try self.identifierCache?.addOrUpdateIdentifier(fileIdentifier, for: endCloudPath)
-				return fileIdentifier
-			}
+		return getFirstIdentifier(forItemWithName: filename, itemType: .file, inFolderWithId: startIdentifier).then { fileIdentifier -> String in
+			try self.identifierCache?.addOrUpdateIdentifier(fileIdentifier, for: endCloudPath)
+			return fileIdentifier
+		}
 	}
 
 	/**

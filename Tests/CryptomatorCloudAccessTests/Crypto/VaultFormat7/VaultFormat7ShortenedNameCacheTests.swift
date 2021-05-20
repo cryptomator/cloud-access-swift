@@ -31,7 +31,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual(originalName, try cache.getCached(shortenedName))
 	}
 
-	func testgetShortenedPath1() throws {
+	func testGetShortenedPath1() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
 		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r")
 		let shortened = cache.getShortenedPath(originalPath)
@@ -43,7 +43,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertTrue(shortened.pointsToC9S)
 	}
 
-	func testgetShortenedPath2() throws {
+	func testGetShortenedPath2() throws {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
 		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r/dir.c9r")
 		let shortened = cache.getShortenedPath(originalPath)
@@ -55,7 +55,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertFalse(shortened.pointsToC9S)
 	}
 
-	func testgetShortenedPath3() throws {
+	func testGetShortenedPath3() throws {
 		let originalPath = CloudPath("/foo/bar/d/2/30")
 		let shortened = cache.getShortenedPath(originalPath)
 
@@ -64,7 +64,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertFalse(shortened.pointsToC9S)
 	}
 
-	func testgetOriginalPath1() {
+	func testGetOriginalPath1() {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
 		let expectation = XCTestExpectation(description: "callback called")
 
@@ -79,7 +79,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testgetOriginalPath2() {
+	func testGetOriginalPath2() {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s/dir.c9r")
 		let expectation = XCTestExpectation(description: "callback called")
 

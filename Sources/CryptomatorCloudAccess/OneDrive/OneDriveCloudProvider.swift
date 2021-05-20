@@ -342,7 +342,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: MSURLSessionTask execution
+	// MARK: - MSURLSessionTask Execution
 
 	func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data?, URLResponse?)> {
 		return Promise<(Data?, URLResponse?)> { fulfill, reject in
@@ -413,7 +413,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: Resolve Path
+	// MARK: - Resolve Path
 
 	func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<OneDriveItem> {
 		var pathToCheckForCache = cloudPath
@@ -469,7 +469,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	// MARK: Requests
+	// MARK: - Requests
 
 	func requestURLString(for item: OneDriveItem) -> String {
 		if let driveIdentifier = item.driveIdentifier {
@@ -547,7 +547,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		return request
 	}
 
-	// MARK: Helper
+	// MARK: - Helpers
 
 	func convertMSCollectionToCloudItemList(_ collection: MSCollection, folderPath: CloudPath) throws -> CloudItemList {
 		var items = [CloudItemMetadata]()

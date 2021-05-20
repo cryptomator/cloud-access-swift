@@ -140,7 +140,7 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		return allowedCertificate == SecCertificateCopyData(actualCertificate) as Data
 	}
 
-	// MARK: - Synchronized access to the dictionaries
+	// MARK: - Synchronized Access to the Dictionaries
 
 	fileprivate func addRunningDataTask(key: URLSessionDataTask, value: WebDAVDataTask) {
 		queue.sync {

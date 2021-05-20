@@ -15,7 +15,15 @@ public class DropboxCloudProvider: CloudProvider {
 	private var runningTasks: [DBTask]
 	private var runningBatchUploadTasks: [DBBatchUploadTask]
 	let shouldRetryForError: (Error) -> Bool = { error in
-		return (error as? DropboxError) == .tooManyWriteOperations || (error as? DropboxError) == .internalServerError || (error as? DropboxError) == .rateLimitError
+		guard let dropboxError = error as? DropboxError else {
+			return false
+		}
+		switch dropboxError {
+		case .tooManyWriteOperations, .internalServerError, .rateLimitError(retryAfter: _):
+			return true
+		default:
+			return false
+		}
 	}
 
 	public init(credential: DropboxCredential) {
@@ -335,7 +343,7 @@ public class DropboxCloudProvider: CloudProvider {
 					let dropboxError = self.convertRequestErrorToDropboxError(requestError)
 					// Currently we get a 409 (requestError) instead of a 404 (routeError) error when we download a file that does not exist.
 					// Until this is fixed by Dropbox, this workaround is used.
-					if dropboxError == .httpError, requestError.statusCode == 409 {
+					if case .httpError = dropboxError, requestError.statusCode == 409 {
 						reject(CloudProviderError.itemNotFound)
 						return
 					}
@@ -640,7 +648,8 @@ public class DropboxCloudProvider: CloudProvider {
 			return .accessError
 		}
 		if error.isRateLimitError() {
-			return .rateLimitError
+			let rateLimitError = error.asRateLimitError()
+			return .rateLimitError(retryAfter: rateLimitError.backoff.intValue)
 		}
 		if error.isHttpError() {
 			return .httpError
@@ -677,9 +686,14 @@ public class DropboxCloudProvider: CloudProvider {
 			condition: { remainingAttempts, error in
 				let condition = self.shouldRetryForError(error)
 				if condition {
-					let retryCount = attempts - remainingAttempts
-					let sleepTime = pow(Double(exponentialBackoffBase), Double(retryCount)) * exponentialBackoffScale
-					sleep(UInt32(sleepTime))
+					let jitter = Double.random(in: 0 ..< 0.5)
+					if let dropboxError = error as? DropboxError, case let .rateLimitError(retryAfter) = dropboxError {
+						Thread.sleep(forTimeInterval: Double(retryAfter) + jitter)
+					} else {
+						let retryCount = attempts - remainingAttempts
+						let sleepTime = pow(Double(exponentialBackoffBase), Double(retryCount)) * exponentialBackoffScale + jitter
+						Thread.sleep(forTimeInterval: sleepTime)
+					}
 				}
 				return condition
 			},

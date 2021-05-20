@@ -22,7 +22,7 @@ public enum DropboxError: Error {
 	case badInputError
 	case authError
 	case accessError
-	case rateLimitError
+	case rateLimitError(retryAfter: Int)
 	case httpError
 	case clientError
 

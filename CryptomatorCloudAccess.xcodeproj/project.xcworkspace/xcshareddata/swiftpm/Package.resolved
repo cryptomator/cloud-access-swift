@@ -32,9 +32,9 @@
         "package": "ObjectiveDropboxOfficial",
         "repositoryURL": "https://github.com/phil1995/dropbox-sdk-obj-c.git",
         "state": {
-          "branch": "main",
+          "branch": null,
           "revision": "375a67dd299548693527f15a3a3df14f44eff47d",
-          "version": null
+          "version": "5.0.3-fork"
         }
       },
       {
@@ -95,27 +95,18 @@
         "package": "MSGraphClientSDK",
         "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc.git",
         "state": {
-          "branch": "swift-pm",
+          "branch": null,
           "revision": "a4d0a18ab62176762e4efc2f56021c2f386d98bc",
-          "version": null
-        }
-      },
-      {
-        "package": "MSGraphMSALAuthProvider",
-        "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-auth.git",
-        "state": {
-          "branch": "swift-pm",
-          "revision": "2b3c3fd3c3252608b2f8e53a71e1a57a48925690",
-          "version": null
+          "version": "1.0.0-fork"
         }
       },
       {
         "package": "MSGraphClientModels",
         "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-models.git",
         "state": {
-          "branch": "1.3.0-fixed",
+          "branch": null,
           "revision": "50596f424c7496687f34666372c71a6fe6270ac2",
-          "version": null
+          "version": "1.3.0-fork"
         }
       },
       {

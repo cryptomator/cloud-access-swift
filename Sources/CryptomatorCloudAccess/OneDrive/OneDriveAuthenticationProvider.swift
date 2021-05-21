@@ -19,12 +19,12 @@ enum OneDriveAuthenticationProviderError: Error {
 class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
 	private let identifier: String
 	private let clientApplication: MSALPublicClientApplication
-	private let authProviderOptions: MSAuthenticationProviderOptions
+	private let scopes: [String]
 
-	init(identifier: String, clientApplication: MSALPublicClientApplication, authProviderOptions: MSAuthenticationProviderOptions) {
+	init(identifier: String, clientApplication: MSALPublicClientApplication, scopes: [String]) {
 		self.identifier = identifier
 		self.clientApplication = clientApplication
-		self.authProviderOptions = authProviderOptions
+		self.scopes = scopes
 	}
 
 	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: ((String?, Error?) -> Void)!) {
@@ -32,7 +32,7 @@ class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
 		if let authProviderOptions = authProviderOptions {
 			scopes = authProviderOptions.scopesArray
 		} else {
-			scopes = self.authProviderOptions.scopesArray
+			scopes = self.scopes
 		}
 
 		let parameters = MSALAccountEnumerationParameters(identifier: identifier)

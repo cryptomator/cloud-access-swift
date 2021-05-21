@@ -7,7 +7,8 @@
 //
 
 import Foundation
-import MSGraphMSALAuthProvider
+import MSAL
+import MSGraphClientSDK
 import Promises
 
 public enum OneDriveCredentialError: Error {
@@ -16,14 +17,13 @@ public enum OneDriveCredentialError: Error {
 
 public class OneDriveCredential {
 	public static let scopes = ["https://graph.microsoft.com/Files.ReadWrite"]
-	private static let authProviderOptions: MSAuthenticationProviderOptions = MSALAuthenticationProviderOptions(scopes: scopes)
 
 	public let identifier: String
 	let authProvider: MSAuthenticationProvider
 	private let clientApplication: MSALPublicClientApplication
 
 	public convenience init(with identifier: String) throws {
-		let authProvider = OneDriveAuthenticationProvider(identifier: identifier, clientApplication: OneDriveSetup.clientApplication, authProviderOptions: OneDriveCredential.authProviderOptions)
+		let authProvider = OneDriveAuthenticationProvider(identifier: identifier, clientApplication: OneDriveSetup.clientApplication, scopes: OneDriveCredential.scopes)
 		try self.init(with: identifier, authProvider: authProvider, clientApplication: OneDriveSetup.clientApplication)
 	}
 

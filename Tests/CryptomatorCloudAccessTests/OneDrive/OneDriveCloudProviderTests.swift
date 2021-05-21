@@ -8,7 +8,7 @@
 
 import Foundation
 import MSAL
-import MSGraphMSALAuthProvider
+import MSGraphClientSDK
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore

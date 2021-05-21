@@ -1,5 +1,5 @@
 //
-//  MockDropboxCredential.swift
+//  DropboxCredentialMock.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 04.06.20.
@@ -15,21 +15,14 @@ import Promises
 @testable import CryptomatorCloudAccess
 #endif
 
-class MockDropboxCredential: DropboxCredential {
+class DropboxCredentialMock: DropboxCredential {
 	init() {
 		DropboxSetup.constants = DropboxSetup(appKey: "", sharedContainerIdentifier: "", keychainService: "", forceForegroundSession: true)
 		super.init(tokenUID: "IntegrationTest")
 	}
 
 	override func setAuthorizedClient() {
-		let config = DBTransportDefaultConfig(appKey: "",
-		                                      appSecret: nil,
-		                                      userAgent: nil,
-		                                      asMemberId: nil,
-		                                      delegateQueue: nil,
-		                                      forceForegroundSession: true,
-		                                      sharedContainerIdentifier: nil,
-		                                      keychainService: nil)
+		let config = DBTransportDefaultConfig(appKey: "", appSecret: nil, userAgent: nil, asMemberId: nil, delegateQueue: nil, forceForegroundSession: true, sharedContainerIdentifier: nil, keychainService: nil)
 		authorizedClient = DBUserClient(accessToken: IntegrationTestSecrets.dropboxAccessToken, transport: config)
 	}
 

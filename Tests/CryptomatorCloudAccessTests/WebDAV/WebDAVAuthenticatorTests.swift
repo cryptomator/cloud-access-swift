@@ -33,7 +33,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		let optionsResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (optionsResponse, nil)
 		})
@@ -42,7 +42,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})

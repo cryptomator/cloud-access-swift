@@ -27,9 +27,9 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 	}
 
 	// swiftlint:disable:next force_try
-	static let setUpOneDriveCredential = try! OneDriveCredentialMock()
+	static let credential = try! OneDriveCredentialMock()
 	// swiftlint:disable:next force_try
-	static let setUpProviderForOneDrive = try! OneDriveCloudProvider(credential: setUpOneDriveCredential, useBackgroundSession: false)
+	static let setUpProviderForOneDrive = try! OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
 
 	override class var setUpProvider: CloudProvider {
 		return setUpProviderForOneDrive
@@ -41,7 +41,7 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		super.provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.setUpOneDriveCredential, useBackgroundSession: false)
+		super.provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential, useBackgroundSession: false)
 	}
 
 	override class var defaultTestSuite: XCTestSuite {

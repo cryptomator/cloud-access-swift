@@ -26,14 +26,14 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 		}
 	}
 
-	static let setUpDropboxCredential = MockDropboxCredential()
+	static let setUpDropboxCredential = DropboxCredentialMock()
 	static let setUpProviderForDropbox = DropboxCloudProvider(credential: setUpDropboxCredential)
 
 	override class var setUpProvider: CloudProvider {
 		return setUpProviderForDropbox
 	}
 
-	let credential = MockDropboxCredential()
+	let credential = DropboxCredentialMock()
 
 	override class var integrationTestParentCloudPath: CloudPath {
 		return CloudPath("/iOS-IntegrationTest/plain/")

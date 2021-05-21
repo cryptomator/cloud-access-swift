@@ -1,5 +1,5 @@
 //
-//  MockGoogleDriveAuthenticator.swift
+//  GoogleDriveAuthenticatorMock.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 02.10.20.
@@ -16,7 +16,7 @@ import CryptomatorCloudAccessCore
 import CryptomatorCloudAccess
 #endif
 
-class MockGoogleDriveAuthenticator {
+class GoogleDriveAuthenticatorMock {
 	static func generateAuthorizedCredential(withRefreshToken refreshToken: String, tokenUID: String) -> GoogleDriveCredential {
 		let authorizationEndpoint = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
 		let tokenEndPoint = URL(string: "https://oauth2.googleapis.com/token")!

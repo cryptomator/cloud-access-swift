@@ -26,7 +26,7 @@ class VaultFormat7DropboxIntegrationTests: CloudAccessIntegrationTest {
 		}
 	}
 
-	private static let setUpDropboxCredential = MockDropboxCredential()
+	private static let setUpDropboxCredential = DropboxCredentialMock()
 	private static let cloudProvider = DropboxCloudProvider(credential: setUpDropboxCredential)
 	private static let vaultPath = CloudPath("/IntegrationTests-Vault7/")
 
@@ -61,7 +61,7 @@ class VaultFormat7DropboxIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let credential = MockDropboxCredential()
+		let credential = DropboxCredentialMock()
 		let cloudProvider = DropboxCloudProvider(credential: credential)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: cloudProvider, vaultPath: VaultFormat7DropboxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator

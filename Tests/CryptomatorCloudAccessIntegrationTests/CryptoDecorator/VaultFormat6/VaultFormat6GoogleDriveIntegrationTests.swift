@@ -28,7 +28,7 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	static let tokenUID = "IntegrationtTest"
-	private static let setUpGoogleDriveCredential = MockGoogleDriveAuthenticator.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: tokenUID)
+	private static let setUpGoogleDriveCredential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: tokenUID)
 	private static let cloudProvider = GoogleDriveCloudProvider(credential: setUpGoogleDriveCredential, useBackgroundSession: false)
 	private static let vaultPath = CloudPath("/IntegrationTests-Vault6/")
 
@@ -65,7 +65,7 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let credential = MockGoogleDriveAuthenticator.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
+		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
 		let cloudProvider = GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6GoogleDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			super.provider = decorator

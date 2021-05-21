@@ -44,7 +44,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -72,7 +72,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -123,7 +123,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -151,7 +151,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -179,7 +179,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -231,7 +231,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -240,7 +240,7 @@ class WebDAVProviderTests: XCTestCase {
 		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (getResponse, getData)
 		})
@@ -269,7 +269,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -277,7 +277,7 @@ class WebDAVProviderTests: XCTestCase {
 		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (getResponse, nil)
 		})
@@ -308,7 +308,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -317,7 +317,7 @@ class WebDAVProviderTests: XCTestCase {
 		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (getResponse, getData)
 		})
@@ -347,7 +347,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -403,7 +403,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -412,7 +412,7 @@ class WebDAVProviderTests: XCTestCase {
 		let putData = Data()
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (putResponse, putData)
 		})
@@ -421,7 +421,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
@@ -453,7 +453,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -462,7 +462,7 @@ class WebDAVProviderTests: XCTestCase {
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (putResponse, putData)
 		})
@@ -471,7 +471,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
@@ -522,7 +522,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -552,7 +552,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -588,7 +588,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
@@ -618,7 +618,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -626,7 +626,7 @@ class WebDAVProviderTests: XCTestCase {
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (putResponse, nil)
 		})
@@ -655,7 +655,7 @@ class WebDAVProviderTests: XCTestCase {
 		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
@@ -663,7 +663,7 @@ class WebDAVProviderTests: XCTestCase {
 		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (putResponse, nil)
 		})
@@ -717,7 +717,7 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (mkcolResponse, nil)
 		})
@@ -738,7 +738,7 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (mkcolResponse, nil)
 		})
@@ -764,7 +764,7 @@ class WebDAVProviderTests: XCTestCase {
 		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (mkcolResponse, nil)
 		})
@@ -814,7 +814,7 @@ class WebDAVProviderTests: XCTestCase {
 		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (deleteResponse, nil)
 		})
@@ -836,7 +836,7 @@ class WebDAVProviderTests: XCTestCase {
 		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (deleteResponse, nil)
 		})
@@ -887,7 +887,7 @@ class WebDAVProviderTests: XCTestCase {
 		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (moveResponse, nil)
 		})
@@ -910,7 +910,7 @@ class WebDAVProviderTests: XCTestCase {
 		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (moveResponse, nil)
 		})
@@ -938,7 +938,7 @@ class WebDAVProviderTests: XCTestCase {
 		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (moveResponse, moveData)
 		})
@@ -965,7 +965,7 @@ class WebDAVProviderTests: XCTestCase {
 		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
-				throw MockURLProtocolError.unexpectedRequest
+				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (moveResponse, nil)
 		})

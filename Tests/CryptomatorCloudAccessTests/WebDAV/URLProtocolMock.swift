@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum MockURLProtocolError: Error {
+enum URLProtocolMockError: Error {
 	case unexpectedRequest
 }
 

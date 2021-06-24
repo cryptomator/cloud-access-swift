@@ -56,17 +56,20 @@ public class LocalFileSystemProvider: CloudProvider {
 		let promise = Promise<CloudItemMetadata>.pending().always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
-		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)], queue: queue) { error in
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
+		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				let attributes = try self.fileManager.attributesOfItem(atPath: url.path)
-				let name = url.lastPathComponent
-				let size = attributes[FileAttributeKey.size] as? Int
-				let lastModifiedDate = attributes[FileAttributeKey.modificationDate] as? Date
-				let itemType = self.getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
+				let itemURL = readingIntent.url as NSURL
+				let attributes = try itemURL.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+
+				let name = attributes[.localizedNameKey] as? String ?? url.lastPathComponent
+				let size = attributes[.fileSizeKey] as? Int
+				let lastModifiedDate = attributes[.contentModificationDateKey] as? Date
+				let itemType = self.getItemType(from: attributes[.fileResourceTypeKey] as? URLFileResourceType)
 				promise.fulfill(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				promise.reject(CloudProviderError.itemNotFound)
@@ -89,18 +92,21 @@ public class LocalFileSystemProvider: CloudProvider {
 		let promise = Promise<CloudItemList>.pending().always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
-		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)], queue: queue) { error in
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
+		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey], options: .skipsHiddenFiles)
-				let metadatas = contents.map { url -> CloudItemMetadata in
-					let name = url.lastPathComponent
-					let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
-					let lastModifiedDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-					let itemType = self.getItemType(from: (try? url.resourceValues(forKeys: [.fileResourceTypeKey]))?.fileResourceType)
+				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey, .nameKey])
+				let metadatas = try contents.map { url -> CloudItemMetadata in
+					let itemURL = url as NSURL
+					let attributes = try itemURL.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+					let name = attributes[.localizedNameKey] as? String ?? url.lastPathComponent
+					let size = attributes[.fileSizeKey] as? Int
+					let lastModifiedDate = attributes[.contentModificationDateKey] as? Date
+					let itemType = self.getItemType(from: attributes[.fileResourceTypeKey] as? URLFileResourceType)
 					return CloudItemMetadata(name: name, cloudPath: cloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 				}
 				promise.fulfill(CloudItemList(items: metadatas, nextPageToken: nil))
@@ -263,13 +269,14 @@ public class LocalFileSystemProvider: CloudProvider {
 		let promise = Promise<Void>.pending().always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
-		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: .forDeleting)], queue: queue) { error in
+		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
+		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				try self.fileManager.removeItem(at: url)
+				try self.fileManager.removeItem(at: writingIntent.url)
 				promise.fulfill(())
 			} catch CocoaError.fileNoSuchFile {
 				promise.reject(CloudProviderError.itemNotFound)
@@ -300,13 +307,14 @@ public class LocalFileSystemProvider: CloudProvider {
 		let promise = Promise<Void>.pending().always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
-		NSFileCoordinator().coordinate(with: [.writingIntent(with: sourceURL, options: .forMoving)], queue: queue) { error in
+		let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)
+		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				try self.fileManager.moveItem(at: sourceURL, to: targetURL)
+				try self.fileManager.moveItem(at: writingIntent.url, to: targetURL)
 				promise.fulfill(())
 			} catch CocoaError.fileNoSuchFile {
 				if self.fileManager.fileExists(atPath: targetURL.deletingLastPathComponent().path) {

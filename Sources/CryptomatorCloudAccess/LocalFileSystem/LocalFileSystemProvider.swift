@@ -99,7 +99,7 @@ public class LocalFileSystemProvider: CloudProvider {
 				return
 			}
 			do {
-				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .fileResourceTypeKey, .nameKey])
+				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
 				let metadatas = try contents.map { url -> CloudItemMetadata in
 					let itemURL = url as NSURL
 					let attributes = try itemURL.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])

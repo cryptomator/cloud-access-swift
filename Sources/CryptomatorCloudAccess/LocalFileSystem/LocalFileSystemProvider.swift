@@ -63,13 +63,11 @@ public class LocalFileSystemProvider: CloudProvider {
 				return
 			}
 			do {
-				let itemURL = readingIntent.url as NSURL
-				let attributes = try itemURL.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-
-				let name = attributes[.localizedNameKey] as? String ?? url.lastPathComponent
-				let size = attributes[.fileSizeKey] as? Int
-				let lastModifiedDate = attributes[.contentModificationDateKey] as? Date
-				let itemType = self.getItemType(from: attributes[.fileResourceTypeKey] as? URLFileResourceType)
+				let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+				let name = attributes.localizedName ?? url.lastPathComponent
+				let size = attributes.fileSize
+				let lastModifiedDate = attributes.contentModificationDate
+				let itemType = self.getItemType(from: attributes.fileResourceType)
 				promise.fulfill(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				promise.reject(CloudProviderError.itemNotFound)
@@ -101,12 +99,11 @@ public class LocalFileSystemProvider: CloudProvider {
 			do {
 				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
 				let metadatas = try contents.map { url -> CloudItemMetadata in
-					let itemURL = url as NSURL
-					let attributes = try itemURL.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-					let name = attributes[.localizedNameKey] as? String ?? url.lastPathComponent
-					let size = attributes[.fileSizeKey] as? Int
-					let lastModifiedDate = attributes[.contentModificationDateKey] as? Date
-					let itemType = self.getItemType(from: attributes[.fileResourceTypeKey] as? URLFileResourceType)
+					let attributes = try url.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+					let name = attributes.localizedName ?? url.lastPathComponent
+					let size = attributes.fileSize
+					let lastModifiedDate = attributes.contentModificationDate
+					let itemType = self.getItemType(from: attributes.fileResourceType)
 					return CloudItemMetadata(name: name, cloudPath: cloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 				}
 				promise.fulfill(CloudItemList(items: metadatas, nextPageToken: nil))

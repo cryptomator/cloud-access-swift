@@ -53,31 +53,9 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		let promise = Promise<CloudItemMetadata>.pending().always {
+		return getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
-		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
-		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
-			if let error = error {
-				promise.reject(error)
-				return
-			}
-			do {
-				let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-				let name = attributes.localizedName ?? url.lastPathComponent
-				let size = attributes.fileSize
-				let lastModifiedDate = attributes.contentModificationDate
-				let itemType = self.getItemType(from: attributes.fileResourceType)
-				promise.fulfill(CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
-			} catch CocoaError.fileReadNoSuchFile {
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileReadNoPermission {
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				promise.reject(error)
-			}
-		}
-		return promise
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
@@ -97,16 +75,21 @@ public class LocalFileSystemProvider: CloudProvider {
 				return
 			}
 			do {
-				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-				let metadatas = try contents.map { url -> CloudItemMetadata in
-					let attributes = try url.promisedItemResourceValues(forKeys: [.localizedNameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-					let name = attributes.localizedName ?? url.lastPathComponent
-					let size = attributes.fileSize
-					let lastModifiedDate = attributes.contentModificationDate
-					let itemType = self.getItemType(from: attributes.fileResourceType)
-					return CloudItemMetadata(name: name, cloudPath: cloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isHiddenKey])
+				let metadatas = contents.filter { childURL in
+					!childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL)
+				}.map { childURL in
+					return url.appendingPathComponent(self.getItemName(forItemAt: childURL))
+				}.filter { iCloudCompatibleChildURL in
+					iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "."
+				}.map { iCloudCompatibleChildURL -> Promise<CloudItemMetadata> in
+					return self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath)
 				}
-				promise.fulfill(CloudItemList(items: metadatas, nextPageToken: nil))
+				all(metadatas).then { metadatas in
+					promise.fulfill(CloudItemList(items: metadatas, nextPageToken: nil))
+				}.catch { error in
+					promise.reject(error)
+				}
 			} catch CocoaError.fileReadNoSuchFile {
 				promise.reject(CloudProviderError.itemNotFound)
 			} catch CocoaError.fileReadUnknown {
@@ -368,5 +351,49 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	private func validateItemType(at url: URL, with itemType: CloudItemType) throws -> Bool {
 		return try getItemType(from: url) == itemType
+	}
+
+	func getItemName(forItemAt url: URL) -> String {
+		let name = url.lastPathComponent
+		// swiftlint:disable:next force_try
+		let regex = try! NSRegularExpression(pattern: #"^\.(.*)\.icloud$"#, options: [])
+		let range = NSRange(name.startIndex ..< name.endIndex, in: name)
+
+		guard let match = regex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
+			return name
+		}
+		return String(name[matchedRange])
+	}
+
+	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		let promise = Promise<CloudItemMetadata>.pending()
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
+		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
+			if let error = error {
+				promise.reject(error)
+				return
+			}
+			do {
+				let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+				let name = attributes.name ?? url.lastPathComponent
+				let size = attributes.fileSize
+				let lastModifiedDate = attributes.contentModificationDate
+				let itemType = self.getItemType(from: attributes.fileResourceType)
+				promise.fulfill(CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
+			} catch CocoaError.fileReadNoSuchFile {
+				promise.reject(CloudProviderError.itemNotFound)
+			} catch CocoaError.fileReadNoPermission {
+				promise.reject(CloudProviderError.unauthorized)
+			} catch {
+				promise.reject(error)
+			}
+		}
+		return promise
+	}
+}
+
+private extension URL {
+	var isHidden: Bool {
+		return (try? resourceValues(forKeys: [.isHiddenKey]))?.isHidden == true
 	}
 }

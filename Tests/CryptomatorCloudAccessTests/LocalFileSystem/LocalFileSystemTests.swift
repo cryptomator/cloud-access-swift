@@ -7,9 +7,9 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 import Foundation
 import XCTest
@@ -105,6 +105,28 @@ class LocalFileSystemTests: XCTestCase {
 				XCTFail(error.localizedDescription)
 				return
 			}
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
+	func testFetchItemListFiltersHiddenItems() throws {
+		let expectation = XCTestExpectation(description: "fetchItemList")
+		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+		let hiddenDirURL = tmpDirURL.appendingPathComponent(".hiddenDir", isDirectory: true)
+		try FileManager.default.createDirectory(at: hiddenDirURL, withIntermediateDirectories: false, attributes: nil)
+		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+		let hiddenFileURL = tmpDirURL.appendingPathComponent(".hiddenFile", isDirectory: false)
+		FileManager.default.createFile(atPath: hiddenFileURL.path, contents: nil, attributes: nil)
+		provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in
+			XCTAssertEqual(2, itemList.items.count)
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
+			XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
 		}.always {
 			expectation.fulfill()
 		}
@@ -482,5 +504,22 @@ class LocalFileSystemTests: XCTestCase {
 			expectation.fulfill()
 		}
 		wait(for: [expectation], timeout: 1.0)
+	}
+
+	func testGetItemName() {
+		let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
+		XCTAssertEqual("test.txt", provider.getItemName(forItemAt: iCloudPlaceholderFileURL))
+
+		let normalFileURL = tmpDirURL.appendingPathComponent("test.txt")
+		XCTAssertEqual("test.txt", provider.getItemName(forItemAt: normalFileURL))
+
+		let normalFolderURL = tmpDirURL.appendingPathComponent("Foo")
+		XCTAssertEqual("Foo", provider.getItemName(forItemAt: normalFolderURL))
+
+		let otherHiddenFileURL = tmpDirURL.appendingPathComponent(".test.txt")
+		XCTAssertEqual(".test.txt", provider.getItemName(forItemAt: otherHiddenFileURL))
+
+		let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
+		XCTAssertEqual(".Foo", provider.getItemName(forItemAt: otherHiddenFolderURL))
 	}
 }

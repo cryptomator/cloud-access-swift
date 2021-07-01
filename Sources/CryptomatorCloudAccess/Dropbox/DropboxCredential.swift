@@ -47,7 +47,7 @@ public class DropboxCredential {
 					reject(DropboxCredentialErrors.noUsername)
 					return
 				}
-				fulfill(result.name.displayName)
+				fulfill(result.email)
 			}
 		}
 	}

@@ -21,6 +21,7 @@ public enum OneDriveAuthenticator {
 	public static func authenticate(from viewController: UIViewController) -> Promise<OneDriveCredential> {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
 		let interactiveParameters = MSALInteractiveTokenParameters(scopes: OneDriveCredential.scopes, webviewParameters: webviewParameters)
+		interactiveParameters.promptType = .login
 		return OneDriveSetup.clientApplication.acquireToken(with: interactiveParameters).then { result -> OneDriveCredential in
 			guard let identifier = result.account.identifier else {
 				throw OneDriveAuthenticatorError.missingAccountIdentifier

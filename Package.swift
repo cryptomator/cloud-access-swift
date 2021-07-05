@@ -19,7 +19,7 @@ let appExtensionUnsafeSources = [
 let package = Package(
 	name: "CryptomatorCloudAccess",
 	platforms: [
-		.iOS(.v11)
+		.iOS(.v13)
 	],
 	products: [
 		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"]),

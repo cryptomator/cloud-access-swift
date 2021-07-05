@@ -218,11 +218,7 @@ class WebDAVSession {
 	func performDownloadTask(with request: URLRequest, to localURL: URL) -> Promise<HTTPURLResponse> {
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
-
-		if #available(iOS 11.0, *) {
-			progress.addChild(task.progress, withPendingUnitCount: 1)
-		}
-
+		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
@@ -233,11 +229,7 @@ class WebDAVSession {
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
-
-		if #available(iOS 11.0, *) {
-			progress.addChild(task.progress, withPendingUnitCount: 1)
-		}
-
+		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)

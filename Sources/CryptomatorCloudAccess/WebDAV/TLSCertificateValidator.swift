@@ -27,13 +27,7 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 
 	func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
 		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
-			var isTrusted = false
-			if #available(iOS 12.0, *) {
-				isTrusted = SecTrustEvaluateWithError(trust, nil)
-			} else {
-				var trustResultType: SecTrustResultType = .invalid
-				isTrusted = SecTrustEvaluate(trust, &trustResultType) == errSecSuccess
-			}
+			let isTrusted = SecTrustEvaluateWithError(trust, nil)
 			let fingerprint = calculateFingerprint(from: certificate)
 			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
 		}

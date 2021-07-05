@@ -30,7 +30,7 @@ public enum WebDAVAuthenticator {
 
 	private static func checkServerCompatibility(client: WebDAVClient) -> Promise<Void> {
 		return client.OPTIONS(url: client.baseURL).then { httpResponse, _ in
-			if httpResponse.allHeaderFields["DAV"] != nil {
+			if httpResponse.value(forHTTPHeaderField: "DAV") != nil {
 				return Promise(())
 			} else {
 				return Promise(WebDAVAuthenticatorError.unsupportedProcotol)

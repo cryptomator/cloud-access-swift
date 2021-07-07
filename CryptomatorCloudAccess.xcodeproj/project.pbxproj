@@ -1535,7 +1535,7 @@
 			repositoryURL = "https://github.com/cryptomator/cryptolib-swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.12.0;
+				minimumVersion = 0.13.0;
 			};
 		};
 		74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {

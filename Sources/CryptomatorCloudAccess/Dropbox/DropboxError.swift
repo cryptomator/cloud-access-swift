@@ -9,23 +9,19 @@
 import Foundation
 
 public enum DropboxError: Error {
-	case createFolderError
-	case unexpectedError
+	case unexpectedRouteError
+	case missingResult
 	case unexpectedResult
-	case unexpectedMetadataType
-	case getMetadataError
-	case deleteFileError
-	case listFolderError
+	case tooManyWriteOperations
 	case asyncPollError
 
-	case internalServerError
+	case httpError
 	case badInputError
 	case authError
 	case accessError
+	case pathRootError
 	case rateLimitError(retryAfter: Int)
-	case httpError
+	case internalServerError
 	case clientError
-
-	case tooManyWriteOperations
-	case uploadFileError
+	case unexpectedError
 }

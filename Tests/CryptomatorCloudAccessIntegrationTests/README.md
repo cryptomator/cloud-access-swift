@@ -86,31 +86,14 @@ import CryptomatorCloudAccess
 import XCTest
 
 class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTest {
-  static var setUpErrorForCloudProviderName: Error?
-
-  override class var classSetUpError: Error? {
-    get {
-      return setUpErrorForCloudProviderName
-    }
-    set {
-      setUpErrorForCloudProviderName = newValue
-    }
+  override class var defaultTestSuite: XCTestSuite {
+    return XCTestSuite(forTestCaseClass: CloudProviderNameCloudProviderIntegrationTests.self)
   }
 
-  static let setUpProviderForCloudProviderName = CloudProviderNameCloudProvider()
-  
-  override class var setUpProvider: CloudProvider {
-    return setUpProviderForCloudProviderName
-  }
-
-  // This is the folder in which all the files and folders required by the integration test are created and in which the individual tests are executed. This can also be the root folder.
-  
-  override class var integrationTestParentCloudPath: CloudPath {
-    return CloudPath("<YOUR-PATH>")
-  }
-
-  // If you do not need to initialize anything special once or before the IntegrationTest setup, you can ignore this function.
   override class func setUp() {
+    // This is the folder in which all the files and folders required by the integration test are created and in which the individual tests are executed. This can also be the root folder.
+    integrationTestParentCloudPath = CloudPath("<YOUR-PATH>")
+    setUpProvider = CloudProviderNameCloudProvider()
     // It is very important to call super.setUp(), otherwise the IntegrationTest will not be built correctly.
     super.setUp()
   }
@@ -120,12 +103,7 @@ class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTest
     try super.setUpWithError()
     super.provider = CloudProviderNameCloudProvider()
   }
-
-  override class var defaultTestSuite: XCTestSuite {
-    return XCTestSuite(forTestCaseClass: CloudProviderNameCloudProviderIntegrationTests.self)
-  }
 }
-
 ```
 
 ### Authentication
@@ -151,5 +129,9 @@ The respective `CloudProvider` is tested here very generally for the specificati
 - Correct use of `batchUpload` (file size >= 150mb).
 
 ### Google Drive
+
+- Correct use of the cache for `resolvePath`.
+
+### OneDrive
 
 - Correct use of the cache for `resolvePath`.

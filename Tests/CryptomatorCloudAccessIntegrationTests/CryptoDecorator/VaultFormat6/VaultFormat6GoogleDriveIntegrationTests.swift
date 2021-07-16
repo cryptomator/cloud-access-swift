@@ -6,51 +6,30 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Foundation
-import XCTest
 @testable import Promises
 
 class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
-	static var setUpErrorForVaultFormat6GoogleDrive: Error?
-
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForVaultFormat6GoogleDrive
-		}
-		set {
-			setUpErrorForVaultFormat6GoogleDrive = newValue
-		}
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: VaultFormat6GoogleDriveIntegrationTests.self)
 	}
 
-	static let tokenUID = "IntegrationtTest"
-	private static let setUpGoogleDriveCredential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: tokenUID)
-	private static let cloudProvider = GoogleDriveCloudProvider(credential: setUpGoogleDriveCredential, useBackgroundSession: false)
-	private static let vaultPath = CloudPath("/IntegrationTests-Vault6/")
-
-	static var setUpProviderForVaultFormat6GoogleDrive: VaultFormat6ProviderDecorator?
-
-	override class var setUpProvider: CloudProvider? {
-		return setUpProviderForVaultFormat6GoogleDrive
-	}
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/")
-	}
-
-	private var credential: GoogleDriveCredential!
+	private static let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest")
+	// swiftlint:disable:next force_try
+	private static let cloudProvider = try! GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
 
 	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/")
 		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
 			DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
 		}.then { decorator in
-			setUpProviderForVaultFormat6GoogleDrive = decorator
-		}.catch { error in
-			print("VaultFormat6GoogleDriveIntegrationTests setup error: \(error)")
+			setUpProvider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
@@ -66,9 +45,9 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
-		let cloudProvider = GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		let cloudProvider = try GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6GoogleDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			super.provider = decorator
+			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			if let error = setUpPromise.error {
@@ -76,13 +55,5 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 			}
 			throw IntegrationTestError.setUpTimeout
 		}
-	}
-
-	override func tearDown() {
-		credential?.deauthenticate()
-	}
-
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat6GoogleDriveIntegrationTests.self)
 	}
 }

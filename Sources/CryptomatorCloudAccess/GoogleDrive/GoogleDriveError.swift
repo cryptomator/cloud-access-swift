@@ -9,8 +9,9 @@
 import Foundation
 
 public enum GoogleDriveError: Error {
-	case noIdentifierFound
+	case identifierNotFound
+	case missingItemName
 	case unexpectedResultType
-	case receivedIncompleteMetadata
+	case inconsistentCache
 	case unexpectedError
 }

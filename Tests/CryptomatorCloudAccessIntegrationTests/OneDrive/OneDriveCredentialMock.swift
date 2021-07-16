@@ -20,9 +20,15 @@ class OneDriveCredentialMock: OneDriveCredential {
 		try super.init(with: "IntegrationTests", authProvider: authProvider, clientApplication: clientApplication)
 	}
 
+	func resetAccessTokenOverride() {
+		// swiftlint:disable:next force_cast
+		let authProvider = self.authProvider as! MSAuthenticationProviderMock
+		authProvider.overrideAccessToken = nil
+	}
+
 	override func deauthenticate() throws {
 		// swiftlint:disable:next force_cast
 		let authProvider = self.authProvider as! MSAuthenticationProviderMock
-		authProvider.accessToken = "InvalidToken"
+		authProvider.overrideAccessToken = "InvalidToken"
 	}
 }

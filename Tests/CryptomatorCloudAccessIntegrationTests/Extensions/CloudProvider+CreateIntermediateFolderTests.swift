@@ -1,5 +1,5 @@
 //
-//  CloudProvider+IntermediateFolderTests.swift
+//  CloudProvider+CreateIntermediateFolderTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 12.10.20.
@@ -63,7 +63,7 @@ private class CloudProviderFolderMock: CloudProvider {
 	}
 }
 
-class CloudProvider_IntermediateFolderTests: XCTestCase {
+class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
 	private var provider: CloudProviderFolderMock!
 
 	override func setUpWithError() throws {
@@ -93,7 +93,7 @@ class CloudProvider_IntermediateFolderTests: XCTestCase {
 				XCTFail("Provider created not exactly two folders")
 				return
 			}
-			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo/")))
+			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo")))
 			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo/Bar")))
 		}.catch { error in
 			XCTFail("Error in promise: \(error)")
@@ -106,7 +106,7 @@ class CloudProvider_IntermediateFolderTests: XCTestCase {
 	func testCreateFolderWithIntermediatesIfAFolderAlreadyExists() throws {
 		let expectation = XCTestExpectation(description: "Create folder without error for CloudPath if the parent folder already exists")
 		let path = CloudPath("/Foo/Bar")
-		provider.existingFolders.append(CloudPath("/Foo/"))
+		provider.existingFolders.append(CloudPath("/Foo"))
 		provider.createFolderWithIntermediates(for: path).then { _ in
 			guard self.provider.createdFolders.count == 1 else {
 				XCTFail("Provider created not exactly two folders")

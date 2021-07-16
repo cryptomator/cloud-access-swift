@@ -15,32 +15,17 @@ import Promises
 import XCTest
 
 class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
-	static var setUpErrorForLocalFileSystem: Error?
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForLocalFileSystem
-		}
-		set {
-			setUpErrorForLocalFileSystem = newValue
-		}
+	static let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: LocalFileSystemProviderIntegrationTests.self)
 	}
 
-	static let rootURLForIntegrationTestAtLocalFileSystem = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-	static let setUpProviderForLocalFileSystem = LocalFileSystemProvider(rootURL: rootURLForIntegrationTestAtLocalFileSystem)
-
-	override class var setUpProvider: CloudProvider {
-		return setUpProviderForLocalFileSystem
-	}
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/IntegrationTest/")
-	}
-
-	// If you do not need to initialize anything special once or before the IntegrationTest setup, you can ignore this function.
 	override class func setUp() {
-		// It is very important to call super.setUp(), otherwise the IntegrationTest will not be built correctly.
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		setUpProvider = LocalFileSystemProvider(rootURL: rootURL)
 		do {
-			try FileManager.default.createDirectory(at: rootURLForIntegrationTestAtLocalFileSystem, withIntermediateDirectories: true, attributes: nil)
+			try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true, attributes: nil)
 		} catch {
 			classSetUpError = error
 			return
@@ -48,13 +33,13 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		// This call is very important, otherwise errors from the IntegrationTest once setup will not be considered correctly.
-		try super.setUpWithError()
-		super.provider = LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURLForIntegrationTestAtLocalFileSystem)
+	override class func tearDown() {
+		super.tearDown()
+		try? FileManager.default.removeItem(at: rootURL)
 	}
 
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: LocalFileSystemProviderIntegrationTests.self)
+	override func setUpWithError() throws {
+		try super.setUpWithError()
+		provider = LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL)
 	}
 }

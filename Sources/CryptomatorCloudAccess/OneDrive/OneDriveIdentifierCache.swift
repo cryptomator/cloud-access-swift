@@ -16,14 +16,19 @@ class OneDriveIdentifierCache {
 		self.inMemoryDB = DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: OneDriveItem.databaseTableName) { table in
-				table.column(OneDriveItem.pathKey, .text).primaryKey()
+				table.column(OneDriveItem.cloudPathKey, .text).notNull().primaryKey()
 				table.column(OneDriveItem.identifierKey, .text).notNull()
 				table.column(OneDriveItem.driveIdentifierKey, .text)
 				table.column(OneDriveItem.itemTypeKey, .text).notNull()
 			}
+			try OneDriveItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder).save(db)
 		}
-		let rootItem = OneDriveItem(path: CloudPath("/"), itemIdentifier: "root", driveIdentifier: nil, itemType: .folder)
-		try addOrUpdate(rootItem)
+	}
+
+	func get(_ cloudPath: CloudPath) -> OneDriveItem? {
+		try? inMemoryDB.read { db in
+			return try OneDriveItem.fetchOne(db, key: cloudPath)
+		}
 	}
 
 	func addOrUpdate(_ item: OneDriveItem) throws {
@@ -32,14 +37,7 @@ class OneDriveIdentifierCache {
 		}
 	}
 
-	func getCachedItem(for cloudPath: CloudPath) -> OneDriveItem? {
-		try? inMemoryDB.read { db in
-			let cachedItem = try OneDriveItem.fetchOne(db, key: [OneDriveItem.pathKey: cloudPath])
-			return cachedItem
-		}
-	}
-
-	func remove(_ item: OneDriveItem) throws {
+	func invalidate(_ item: OneDriveItem) throws {
 		try inMemoryDB.write { db in
 			_ = try item.delete(db)
 		}

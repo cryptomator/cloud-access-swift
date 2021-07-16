@@ -24,13 +24,15 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	var decorator: VaultFormat7ProviderDecorator!
 
 	override func setUpWithError() throws {
-		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		provider = VaultFormat7CloudProviderMock()
 		decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
 	override func tearDownWithError() throws {
+		decorator = nil
+		provider = nil
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 

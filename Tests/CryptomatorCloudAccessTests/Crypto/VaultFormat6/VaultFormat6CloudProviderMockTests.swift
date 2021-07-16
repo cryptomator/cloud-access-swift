@@ -18,7 +18,7 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 	var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 

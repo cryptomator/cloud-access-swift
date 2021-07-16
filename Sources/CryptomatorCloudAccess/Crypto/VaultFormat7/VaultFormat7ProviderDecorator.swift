@@ -36,7 +36,7 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
 		self.dirIdCache = try DirectoryIdCache()
-		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 

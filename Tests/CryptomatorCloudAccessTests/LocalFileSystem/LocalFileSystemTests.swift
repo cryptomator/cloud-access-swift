@@ -19,7 +19,7 @@ class LocalFileSystemTests: XCTestCase {
 	var provider: LocalFileSystemProvider!
 
 	override func setUpWithError() throws {
-		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		provider = LocalFileSystemProvider(rootURL: tmpDirURL)
 	}
@@ -311,8 +311,8 @@ class LocalFileSystemTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testUploadFileWithReplaceExistingAndTypeMismatchError() throws {
-		let expectation = XCTestExpectation(description: "uploadFile with replaceExisting and itemTypeMismatch error")
+	func testUploadFileWithReplaceExistingAndAlreadyExistsError() throws {
+		let expectation = XCTestExpectation(description: "uploadFile with replaceExisting and itemAlreadyExists error")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
 		let fileURL = tmpDirURL.appendingPathComponent("dir", isDirectory: false)
@@ -320,7 +320,7 @@ class LocalFileSystemTests: XCTestCase {
 		provider.uploadFile(from: localURL, to: CloudPath("/dir"), replaceExisting: true).then { _ in
 			XCTFail("Uploading and replacing file that is actually a folder should fail")
 		}.catch { error in
-			guard case CloudProviderError.itemTypeMismatch = error else {
+			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}

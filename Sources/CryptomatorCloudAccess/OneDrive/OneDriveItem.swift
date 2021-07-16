@@ -10,41 +10,41 @@ import Foundation
 import GRDB
 import MSGraphClientModels
 
-struct OneDriveItem: Decodable, FetchableRecord, TableRecord {
-	let itemIdentifier: String
-	let driveIdentifier: String?
-	let path: CloudPath
-	let itemType: CloudItemType
-
-	static let databaseTableName = "cachedEntries"
-	static let pathKey = "path"
-	static let identifierKey = "itemIdentifier"
+struct OneDriveItem: Decodable, FetchableRecord, TableRecord, Equatable {
+	static let databaseTableName = "CachedEntries"
+	static let cloudPathKey = "cloudPath"
+	static let identifierKey = "identifier"
 	static let driveIdentifierKey = "driveIdentifier"
 	static let itemTypeKey = "itemType"
 
-	init(path: CloudPath, itemIdentifier: String, driveIdentifier: String?, itemType: CloudItemType) {
-		self.path = path
-		self.itemIdentifier = itemIdentifier
+	let cloudPath: CloudPath
+	let identifier: String
+	let driveIdentifier: String?
+	let itemType: CloudItemType
+
+	init(cloudPath: CloudPath, identifier: String, driveIdentifier: String?, itemType: CloudItemType) {
+		self.cloudPath = cloudPath
+		self.identifier = identifier
 		self.driveIdentifier = driveIdentifier
 		self.itemType = itemType
 	}
 
-	init(path: CloudPath, item: MSGraphDriveItem) {
-		self.path = path
-		self.itemIdentifier = item.remoteItem?.remoteItemId ?? item.entityId
-		if let remoteDriveId = item.remoteItem?.parentReference?.driveId {
+	init(cloudPath: CloudPath, driveItem: MSGraphDriveItem) {
+		self.cloudPath = cloudPath
+		self.identifier = driveItem.remoteItem?.remoteItemId ?? driveItem.entityId
+		if let remoteDriveId = driveItem.remoteItem?.parentReference?.driveId {
 			self.driveIdentifier = remoteDriveId
 		} else {
-			self.driveIdentifier = item.parentReference?.driveId
+			self.driveIdentifier = driveItem.parentReference?.driveId
 		}
-		self.itemType = item.getCloudItemType()
+		self.itemType = driveItem.getCloudItemType()
 	}
 }
 
 extension OneDriveItem: PersistableRecord {
 	func encode(to container: inout PersistenceContainer) {
-		container[OneDriveItem.pathKey] = path
-		container[OneDriveItem.identifierKey] = itemIdentifier
+		container[OneDriveItem.cloudPathKey] = cloudPath
+		container[OneDriveItem.identifierKey] = identifier
 		container[OneDriveItem.driveIdentifierKey] = driveIdentifier
 		container[OneDriveItem.itemTypeKey] = itemType
 	}

@@ -30,7 +30,7 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
 		self.dirIdCache = try DirectoryIdCache()
-		self.tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
@@ -85,8 +85,8 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 					return Promise(error)
 				}
 				let folderCiphertextPath = try self.getFolderCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
-				return self.delegate.checkForItemExistence(at: folderCiphertextPath).then { itemExists in
-					if itemExists {
+				return self.delegate.checkForItemExistence(at: folderCiphertextPath).then { folderExists in
+					if folderExists {
 						throw CloudProviderError.itemTypeMismatch
 					} else {
 						throw CloudProviderError.itemNotFound
@@ -113,6 +113,16 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
 		let uploadFilePromise = parentDirIdPromise.then { parentDirId in
+			return try self.getFolderCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
+		}.then { folderCiphertextPath in
+			return self.delegate.checkForItemExistence(at: folderCiphertextPath)
+		}.then { folderExists in
+			if folderExists {
+				return Promise(CloudProviderError.itemAlreadyExists)
+			} else {
+				return parentDirIdPromise
+			}
+		}.then { parentDirId in
 			return try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
 		}.then { fileCiphertextPath -> Promise<CloudItemMetadata> in
 			overallProgress.becomeCurrent(withPendingUnitCount: 1)

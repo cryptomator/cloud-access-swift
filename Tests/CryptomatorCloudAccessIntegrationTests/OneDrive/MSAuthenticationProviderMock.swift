@@ -19,10 +19,14 @@ enum MSAuthenticationProviderMockError: Error {
 }
 
 class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider {
+	var overrideAccessToken: String?
 	var accessToken: String?
 
 	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: ((String?, Error?) -> Void)!) {
-		if let accessToken = accessToken {
+		if let accessToken = overrideAccessToken {
+			completion(accessToken, nil)
+			return
+		} else if let accessToken = accessToken {
 			completion(accessToken, nil)
 			return
 		}
@@ -34,6 +38,7 @@ class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider {
 			let accessTokenResponse = try self.getAccessTokenResponse(from: data)
 			return accessTokenResponse.accessToken
 		}.then { accessToken in
+			self.overrideAccessToken = accessToken
 			self.accessToken = accessToken
 			completion(accessToken, nil)
 		}.catch { error in

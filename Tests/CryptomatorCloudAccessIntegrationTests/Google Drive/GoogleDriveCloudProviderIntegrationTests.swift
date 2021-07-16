@@ -15,42 +15,24 @@ import Promises
 import XCTest
 
 class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-	static var setUpErrorForGoogleDrive: Error?
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForGoogleDrive
-		}
-		set {
-			setUpErrorForGoogleDrive = newValue
-		}
-	}
-
-	static let tokenUid = "IntegrationtTest"
-	static let setUpGoogleDriveCredential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: tokenUid)
-	static var setUpProviderForGoogleDrive = GoogleDriveCloudProvider(credential: setUpGoogleDriveCredential, useBackgroundSession: false)
-
-	override class var setUpProvider: CloudProvider {
-		return setUpProviderForGoogleDrive
-	}
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/iOS-IntegrationTest/plain/")
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: GoogleDriveCloudProviderIntegrationTests.self)
 	}
 
 	private var credential: GoogleDriveCredential!
 
+	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest")
+		// swiftlint:disable:next force_try
+		setUpProvider = try! GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		super.setUp()
+	}
+
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
-		super.provider = GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
-	}
-
-	override func tearDown() {
-		credential?.deauthenticate()
-	}
-
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: GoogleDriveCloudProviderIntegrationTests.self)
+		provider = try GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
 	}
 
 	override func deauthenticate() -> Promise<Void> {

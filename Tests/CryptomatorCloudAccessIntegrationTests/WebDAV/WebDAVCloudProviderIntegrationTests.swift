@@ -11,48 +11,33 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Foundation
 import Promises
 import XCTest
 
 class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-	static var setUpErrorForWebDAV: Error?
+	static let client = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
 
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForWebDAV
-		}
-		set {
-			setUpErrorForWebDAV = newValue
-		}
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: WebDAVCloudProviderIntegrationTests.self)
 	}
 
-	static let setUpClientForWebDAV = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
-	static let setUpProviderForWebDAV = WebDAVProvider(with: setUpClientForWebDAV)
-
-	override class var setUpProvider: CloudProvider {
-		return setUpProviderForWebDAV
-	}
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/iOSIntegrationTests/")
+	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		setUpProvider = WebDAVProvider(with: client)
+		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let client = WebDAVCloudProviderIntegrationTests.setUpClientForWebDAV
-		super.provider = WebDAVProvider(with: client)
+		let client = WebDAVCloudProviderIntegrationTests.client
+		provider = WebDAVProvider(with: client)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
 		let correctCredential = IntegrationTestSecrets.webDAVCredential
 		let invalidCredential = WebDAVCredential(baseURL: correctCredential.baseURL, username: correctCredential.username, password: correctCredential.password + "Foo", allowedCertificate: correctCredential.allowedCertificate)
 		let client = WebDAVClient(credential: invalidCredential)
-		super.provider = WebDAVProvider(with: client)
+		provider = WebDAVProvider(with: client)
 		return Promise(())
-	}
-
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: WebDAVCloudProviderIntegrationTests.self)
 	}
 }

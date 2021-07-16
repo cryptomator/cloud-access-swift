@@ -25,7 +25,7 @@ class WebDAVProviderTests: XCTestCase {
 	var provider: WebDAVProvider!
 
 	override func setUpWithError() throws {
-		tmpDirURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		baseURL = URL(string: "/cloud/remote.php/webdav/")
 		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
@@ -578,8 +578,8 @@ class WebDAVProviderTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testUploadFileWithReplaceExistingAndTypeMismatchError() throws {
-		let expectation = XCTestExpectation(description: "uploadFile with replaceExisting and itemTypeMismatch error")
+	func testUploadFileWithReplaceExistingAndAlreadyExistsError() throws {
+		let expectation = XCTestExpectation(description: "uploadFile with replaceExisting and itemAlreadyExists error")
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -599,7 +599,7 @@ class WebDAVProviderTests: XCTestCase {
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.putRequests.count)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-			guard case CloudProviderError.itemTypeMismatch = error else {
+			guard case CloudProviderError.itemAlreadyExists = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}

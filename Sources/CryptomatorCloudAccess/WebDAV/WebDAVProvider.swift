@@ -57,11 +57,14 @@ public class WebDAVProvider: CloudProvider {
 			}
 			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
 		}.recover { error -> Promise<CloudItemMetadata> in
-			return self.standardErrorMapping(error)
+			return self.convertStandardError(error)
 		}
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken _: String?) -> Promise<CloudItemList> {
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		guard pageToken == nil else {
+			return Promise(CloudProviderError.pageTokenInvalid)
+		}
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
 		}
@@ -82,7 +85,7 @@ public class WebDAVProvider: CloudProvider {
 			let items = childElements.map { CloudItemMetadata($0, cloudPath: cloudPath.appendingPathComponent($0.url.lastPathComponent)) }
 			return CloudItemList(items: items)
 		}.recover { error -> Promise<CloudItemList> in
-			return self.standardErrorMapping(error)
+			return self.convertStandardError(error)
 		}
 	}
 
@@ -120,6 +123,7 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
+	// swiftlint:disable:next cyclomatic_complexity
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
@@ -131,51 +135,38 @@ public class WebDAVProvider: CloudProvider {
 		let progress = Progress(totalUnitCount: 1)
 		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
 		// therefore a fetchItemMetadata() is called first to make that distinction
-		return fetchItemMetadata(at: cloudPath).then { metadata in
-			if replaceExisting {
-				guard metadata.itemType == .file else {
-					throw CloudProviderError.itemTypeMismatch
-				}
-				progress.becomeCurrent(withPendingUnitCount: 1)
-				let putPromise = self.client.PUT(url: url, fileURL: localURL)
-				progress.resignCurrent()
-				return putPromise
-			} else {
-				return Promise(CloudProviderError.itemAlreadyExists)
+		return fetchItemMetadata(at: cloudPath).then { metadata -> Void in
+			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
+				throw CloudProviderError.itemAlreadyExists
 			}
+		}.recover { error -> Void in
+			guard case CloudProviderError.itemNotFound = error else {
+				throw error
+			}
+		}.then { _ -> Promise<(HTTPURLResponse, Data?)> in
+			progress.becomeCurrent(withPendingUnitCount: 1)
+			let putPromise = self.client.PUT(url: url, fileURL: localURL)
+			progress.resignCurrent()
+			return putPromise
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
 			switch error {
-			case CloudProviderError.itemNotFound:
-				progress.becomeCurrent(withPendingUnitCount: 1)
-				let putPromise = self.client.PUT(url: url, fileURL: localURL)
-				progress.resignCurrent()
-				return putPromise
+			case URLSessionError.httpError(_, statusCode: 401):
+				return Promise(CloudProviderError.unauthorized)
+			case URLSessionError.httpError(_, statusCode: 405):
+				return Promise(CloudProviderError.itemTypeMismatch)
+			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
+				return Promise(CloudProviderError.parentFolderDoesNotExist)
+			case URLSessionError.httpError(_, statusCode: 507):
+				return Promise(CloudProviderError.quotaInsufficient)
+			case URLError.notConnectedToInternet:
+				return Promise(CloudProviderError.noInternetConnection)
+			case POSIXError.EISDIR:
+				return Promise(CloudProviderError.itemTypeMismatch)
 			default:
 				return Promise(error)
 			}
-		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
-			self.uploadFileErrorMapping(error: error)
 		}.then { _, _ -> Promise<CloudItemMetadata> in
 			return self.fetchItemMetadata(at: cloudPath)
-		}
-	}
-
-	func uploadFileErrorMapping(error: Error) -> Promise<(HTTPURLResponse, Data?)> {
-		switch error {
-		case URLSessionError.httpError(_, statusCode: 401):
-			return Promise(CloudProviderError.unauthorized)
-		case URLSessionError.httpError(_, statusCode: 405):
-			return Promise(CloudProviderError.itemTypeMismatch)
-		case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
-			return Promise(CloudProviderError.parentFolderDoesNotExist)
-		case URLSessionError.httpError(_, statusCode: 507):
-			return Promise(CloudProviderError.quotaInsufficient)
-		case URLError.notConnectedToInternet:
-			return Promise(CloudProviderError.noInternetConnection)
-		case POSIXError.EISDIR:
-			return Promise(CloudProviderError.itemTypeMismatch)
-		default:
-			return Promise(error)
 		}
 	}
 
@@ -218,7 +209,7 @@ public class WebDAVProvider: CloudProvider {
 		return client.DELETE(url: url).then { _, _ -> Void in
 			// no-op
 		}.recover { error -> Promise<Void> in
-			return self.standardErrorMapping(error)
+			return self.convertStandardError(error)
 		}
 	}
 
@@ -256,7 +247,7 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
-	func standardErrorMapping<T>(_ error: Error) -> Promise<T> {
+	func convertStandardError<T>(_ error: Error) -> Promise<T> {
 		switch error {
 		case URLSessionError.httpError(_, statusCode: 401):
 			return Promise(CloudProviderError.unauthorized)

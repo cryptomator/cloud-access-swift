@@ -24,8 +24,9 @@ class DecoratorFactory {
 			let cryptor = Cryptor(masterkey: masterkey)
 			let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 			return delegate.createFolder(at: vaultPath).then { () -> Promise<CloudItemMetadata> in
-				let tmpDirURL = FileManager.default.temporaryDirectory
+				try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 				let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 				let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 7, passphrase: password, scryptCostParam: 2)
 				try masterkeyData.write(to: localMasterkeyURL)
@@ -41,6 +42,8 @@ class DecoratorFactory {
 				return delegate.createFolder(at: rootDirPath)
 			}.then { () -> VaultFormat7ProviderDecorator in
 				return decorator
+			}.always {
+				try? FileManager.default.removeItem(at: tmpDirURL)
 			}
 		} catch {
 			return Promise(error)
@@ -48,14 +51,21 @@ class DecoratorFactory {
 	}
 
 	static func createFromExistingVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		let tmpDirURL = FileManager.default.temporaryDirectory
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat7ProviderDecorator in
-			let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
-			let masterkey = try masterkeyFile.unlock(passphrase: password)
-			let cryptor = Cryptor(masterkey: masterkey)
-			return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
+		do {
+			let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat7ProviderDecorator in
+				let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
+				let masterkey = try masterkeyFile.unlock(passphrase: password)
+				let cryptor = Cryptor(masterkey: masterkey)
+				return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
+			}.always {
+				try? FileManager.default.removeItem(at: tmpDirURL)
+			}
+		} catch {
+			return Promise(error)
 		}
 	}
 
@@ -67,8 +77,9 @@ class DecoratorFactory {
 			let cryptor = Cryptor(masterkey: masterkey)
 			let decorator = try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 			return delegate.createFolder(at: vaultPath).then { () -> Promise<CloudItemMetadata> in
-				let tmpDirURL = FileManager.default.temporaryDirectory
+				try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 				let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 				let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 6, passphrase: password, scryptCostParam: 2)
 				try masterkeyData.write(to: localMasterkeyURL)
@@ -87,6 +98,8 @@ class DecoratorFactory {
 				return delegate.createFolder(at: rootDirPath)
 			}.then { () -> VaultFormat6ProviderDecorator in
 				return decorator
+			}.always {
+				try? FileManager.default.removeItem(at: tmpDirURL)
 			}
 		} catch {
 			return Promise(error)
@@ -94,14 +107,21 @@ class DecoratorFactory {
 	}
 
 	static func createFromExistingVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat6ProviderDecorator> {
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		let tmpDirURL = FileManager.default.temporaryDirectory
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat6ProviderDecorator in
-			let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
-			let masterkey = try masterkeyFile.unlock(passphrase: password)
-			let cryptor = Cryptor(masterkey: masterkey)
-			return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
+		do {
+			let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat6ProviderDecorator in
+				let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
+				let masterkey = try masterkeyFile.unlock(passphrase: password)
+				let cryptor = Cryptor(masterkey: masterkey)
+				return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
+			}.always {
+				try? FileManager.default.removeItem(at: tmpDirURL)
+			}
+		} catch {
+			return Promise(error)
 		}
 	}
 

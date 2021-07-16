@@ -42,7 +42,6 @@
 		4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B192615C917002C4D82 /* GTMAppAuth */; };
 		4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */; };
 		4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */; };
-		4A567B2A2615CA4B002C4D82 /* GoogleDriveConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */; };
 		4A567B2E2615CA5C002C4D82 /* GoogleDriveCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */; };
 		4A567B322615CA6E002C4D82 /* GoogleDriveError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */; };
 		4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B362615CAAC002C4D82 /* GTMSessionFetcher */; };
@@ -73,12 +72,8 @@
 		4ACA64052615FF9800D19304 /* GoogleDriveAuthenticatorMockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F52615FF9700D19304 /* GoogleDriveAuthenticatorMockTests.swift */; };
 		4ACA64062615FF9800D19304 /* GoogleDriveCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */; };
 		4ACA64072615FF9800D19304 /* WebDAVCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63F82615FF9700D19304 /* WebDAVCloudProviderIntegrationTests.swift */; };
-		4ACA64082615FF9800D19304 /* CloudProvider+IntermediateFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */; };
-		4ACA64092615FF9800D19304 /* CloudPath+ExtensionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FB2615FF9700D19304 /* CloudPath+ExtensionTests.swift */; };
-		4ACA640A2615FF9800D19304 /* URL+ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FC2615FF9700D19304 /* URL+ExtensionsTests.swift */; };
-		4ACA640B2615FF9800D19304 /* URL+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FD2615FF9700D19304 /* URL+Extensions.swift */; };
+		4ACA64082615FF9800D19304 /* CloudProvider+CreateIntermediateFolderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FA2615FF9700D19304 /* CloudProvider+CreateIntermediateFolderTests.swift */; };
 		4ACA640C2615FF9800D19304 /* CloudProvider+CreateIntermediateFolders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FE2615FF9700D19304 /* CloudProvider+CreateIntermediateFolders.swift */; };
-		4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */; };
 		4ACA640E2615FF9800D19304 /* LocalFileSystemProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */; };
 		4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */; };
 		4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */; };
@@ -106,6 +101,9 @@
 		7470C54D2656A44600E361B8 /* MSALPublicClientApplicationStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7470C54C2656A44600E361B8 /* MSALPublicClientApplicationStub.swift */; };
 		7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */; };
 		7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */; };
+		747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */; };
+		747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */; };
+		747A7802269882D0005E5AD4 /* OneDriveIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A7800269882CA005E5AD4 /* OneDriveIdentifierCacheTests.swift */; };
 		748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C424B8A2A600D84E58 /* empty-folder.xml */; };
 		748420CC24B8A2A600D84E58 /* malformatted-xml.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C524B8A2A600D84E58 /* malformatted-xml.xml */; };
 		748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C624B8A2A600D84E58 /* malformatted-date.xml */; };
@@ -201,7 +199,6 @@
 		4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveAuthenticator.swift; sourceTree = "<group>"; };
 		4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProvider.swift; sourceTree = "<group>"; };
-		4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveConstants.swift; sourceTree = "<group>"; };
 		4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCredential.swift; sourceTree = "<group>"; };
 		4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveError.swift; sourceTree = "<group>"; };
 		4A567B3F2615CD7D002C4D82 /* CloudPath+DatabaseValueConvertible.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudPath+DatabaseValueConvertible.swift"; sourceTree = "<group>"; };
@@ -231,12 +228,8 @@
 		4ACA63F52615FF9700D19304 /* GoogleDriveAuthenticatorMockTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GoogleDriveAuthenticatorMockTests.swift; sourceTree = "<group>"; };
 		4ACA63F62615FF9700D19304 /* GoogleDriveCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA63F82615FF9700D19304 /* WebDAVCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WebDAVCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
-		4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudProvider+IntermediateFolderTests.swift"; sourceTree = "<group>"; };
-		4ACA63FB2615FF9700D19304 /* CloudPath+ExtensionTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudPath+ExtensionTests.swift"; sourceTree = "<group>"; };
-		4ACA63FC2615FF9700D19304 /* URL+ExtensionsTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "URL+ExtensionsTests.swift"; sourceTree = "<group>"; };
-		4ACA63FD2615FF9700D19304 /* URL+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "URL+Extensions.swift"; sourceTree = "<group>"; };
+		4ACA63FA2615FF9700D19304 /* CloudProvider+CreateIntermediateFolderTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudProvider+CreateIntermediateFolderTests.swift"; sourceTree = "<group>"; };
 		4ACA63FE2615FF9700D19304 /* CloudProvider+CreateIntermediateFolders.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudProvider+CreateIntermediateFolders.swift"; sourceTree = "<group>"; };
-		4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "CloudPath+Extension.swift"; sourceTree = "<group>"; };
 		4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IntegrationTestSecrets.swift; sourceTree = "<group>"; };
 		4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MSGraphDriveItem+CloudItemType.swift"; sourceTree = "<group>"; };
@@ -262,6 +255,9 @@
 		7470C54C2656A44600E361B8 /* MSALPublicClientApplicationStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MSALPublicClientApplicationStub.swift; sourceTree = "<group>"; };
 		7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProvider.swift; sourceTree = "<group>"; };
 		7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidator.swift; sourceTree = "<group>"; };
+		747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveItem.swift; sourceTree = "<group>"; };
+		747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GTLRDrive_File+CloudItemType.swift"; sourceTree = "<group>"; };
+		747A7800269882CA005E5AD4 /* OneDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
 		748420C424B8A2A600D84E58 /* empty-folder.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "empty-folder.xml"; sourceTree = "<group>"; };
 		748420C524B8A2A600D84E58 /* malformatted-xml.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "malformatted-xml.xml"; sourceTree = "<group>"; };
 		748420C624B8A2A600D84E58 /* malformatted-date.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "malformatted-date.xml"; sourceTree = "<group>"; };
@@ -411,6 +407,7 @@
 			isa = PBXGroup;
 			children = (
 				4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */,
+				747A7800269882CA005E5AD4 /* OneDriveIdentifierCacheTests.swift */,
 			);
 			path = OneDrive;
 			sourceTree = "<group>";
@@ -466,11 +463,12 @@
 			children = (
 				4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */,
 				4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */,
-				4A567B292615CA4B002C4D82 /* GoogleDriveConstants.swift */,
 				4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */,
 				4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */,
 				4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */,
+				747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */,
 				4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */,
+				747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */,
 			);
 			path = GoogleDrive;
 			sourceTree = "<group>";
@@ -558,12 +556,8 @@
 		4ACA63F92615FF9700D19304 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
-				4ACA63FF2615FF9700D19304 /* CloudPath+Extension.swift */,
-				4ACA63FB2615FF9700D19304 /* CloudPath+ExtensionTests.swift */,
 				4ACA63FE2615FF9700D19304 /* CloudProvider+CreateIntermediateFolders.swift */,
-				4ACA63FA2615FF9700D19304 /* CloudProvider+IntermediateFolderTests.swift */,
-				4ACA63FD2615FF9700D19304 /* URL+Extensions.swift */,
-				4ACA63FC2615FF9700D19304 /* URL+ExtensionsTests.swift */,
+				4ACA63FA2615FF9700D19304 /* CloudProvider+CreateIntermediateFolderTests.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -1020,6 +1014,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */,
+				747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */,
 				4A1A1183262B078E00DAF62F /* OneDriveError.swift in Sources */,
 				740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */,
 				74FD6C4824F6F3AA00C8D3C4 /* VaultFormat6ShorteningProviderDecorator.swift in Sources */,
@@ -1058,7 +1053,6 @@
 				74FD6C4624F6F39E00C8D3C4 /* VaultFormat6ShortenedNameCache.swift in Sources */,
 				7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */,
 				4A1A117E2629AD8F00DAF62F /* OneDriveSetup.swift in Sources */,
-				4A567B2A2615CA4B002C4D82 /* GoogleDriveConstants.swift in Sources */,
 				4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */,
 				4A1A11792629ACD500DAF62F /* OneDriveAuthenticator.swift in Sources */,
 				748BD4CA24B4B1D50001CA8C /* PropfindResponseParser.swift in Sources */,
@@ -1067,6 +1061,7 @@
 				74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */,
 				4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */,
 				4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */,
+				747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */,
 				748A42C024AB424500DEB6D0 /* WebDAVClient.swift in Sources */,
 				4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */,
 				74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */,
@@ -1106,6 +1101,7 @@
 				7416F23124F67AD70074DA8E /* CloudProviderMock.swift in Sources */,
 				4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */,
 				7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */,
+				747A7802269882D0005E5AD4 /* OneDriveIdentifierCacheTests.swift in Sources */,
 				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
 				4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */,
 			);
@@ -1121,7 +1117,6 @@
 				4ACA640C2615FF9800D19304 /* CloudProvider+CreateIntermediateFolders.swift in Sources */,
 				4ACA64072615FF9800D19304 /* WebDAVCloudProviderIntegrationTests.swift in Sources */,
 				4ACA63E72615FF6400D19304 /* VaultFormat7WebDAVIntegrationTests.swift in Sources */,
-				4ACA640B2615FF9800D19304 /* URL+Extensions.swift in Sources */,
 				7470C54D2656A44600E361B8 /* MSALPublicClientApplicationStub.swift in Sources */,
 				4ACA63A92615FE5C00D19304 /* IntegrationTestError.swift in Sources */,
 				4ACA63B12615FE8000D19304 /* CloudAccessIntegrationTestWithAuthentication.swift in Sources */,
@@ -1130,8 +1125,6 @@
 				4ACA63C72615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift in Sources */,
 				4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */,
 				4ACA64032615FF9800D19304 /* DropboxCredentialMock.swift in Sources */,
-				4ACA640D2615FF9800D19304 /* CloudPath+Extension.swift in Sources */,
-				4ACA640A2615FF9800D19304 /* URL+ExtensionsTests.swift in Sources */,
 				4ACA63CC2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift in Sources */,
 				4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */,
 				4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */,
@@ -1142,8 +1135,7 @@
 				4ACA63E82615FF6400D19304 /* VaultFormat7DropboxIntegrationTests.swift in Sources */,
 				4ACA63BB2615FEA600D19304 /* DecoratorFactory.swift in Sources */,
 				4ACA64042615FF9800D19304 /* GoogleDriveAuthenticatorMock.swift in Sources */,
-				4ACA64082615FF9800D19304 /* CloudProvider+IntermediateFolderTests.swift in Sources */,
-				4ACA64092615FF9800D19304 /* CloudPath+ExtensionTests.swift in Sources */,
+				4ACA64082615FF9800D19304 /* CloudProvider+CreateIntermediateFolderTests.swift in Sources */,
 				4ACA64022615FF9800D19304 /* DropboxCloudProviderIntegrationTests.swift in Sources */,
 				4ACA63D62615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift in Sources */,
 				4AFC5F67263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift in Sources */,

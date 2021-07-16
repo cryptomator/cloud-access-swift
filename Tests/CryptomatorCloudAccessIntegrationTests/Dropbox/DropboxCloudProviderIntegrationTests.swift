@@ -6,47 +6,32 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
-import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-@testable import ObjectiveDropboxOfficial
+import Promises
+import XCTest
 
 class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-	static var setUpErrorForDropbox: Error?
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForDropbox
-		}
-		set {
-			setUpErrorForDropbox = newValue
-		}
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: DropboxCloudProviderIntegrationTests.self)
 	}
 
-	static let setUpDropboxCredential = DropboxCredentialMock()
-	static let setUpProviderForDropbox = DropboxCloudProvider(credential: setUpDropboxCredential)
+	private let credential = DropboxCredentialMock()
 
-	override class var setUpProvider: CloudProvider {
-		return setUpProviderForDropbox
-	}
-
-	let credential = DropboxCredentialMock()
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/iOS-IntegrationTest/plain/")
+	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		let credential = DropboxCredentialMock()
+		setUpProvider = DropboxCloudProvider(credential: credential)
+		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		credential.setAuthorizedClient()
-		super.provider = DropboxCloudProvider(credential: credential)
-	}
-
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: DropboxCloudProviderIntegrationTests.self)
+		provider = DropboxCloudProvider(credential: credential)
 	}
 
 	override func deauthenticate() -> Promise<Void> {

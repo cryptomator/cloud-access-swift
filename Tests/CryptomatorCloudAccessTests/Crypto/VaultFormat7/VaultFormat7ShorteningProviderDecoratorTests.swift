@@ -24,6 +24,11 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		decorator = try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
+	override func tearDownWithError() throws {
+		shorteningDecorator = nil
+		try super.tearDownWithError()
+	}
+
 	override func testFetchItemListForRootDir() {
 		let expectation = XCTestExpectation(description: "fetchItemList for root dir")
 		decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).then { itemList in

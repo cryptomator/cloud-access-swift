@@ -59,6 +59,9 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		guard pageToken == nil else {
+			return Promise(CloudProviderError.pageTokenInvalid)
+		}
 		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
 			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
 		}
@@ -147,54 +150,53 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard rootURL.startAccessingSecurityScopedResource() else {
 			return Promise(CloudProviderError.unauthorized)
 		}
-		let pendingUploadPromise = Promise<Void>.pending().always {
+		let promise = Promise<CloudItemMetadata>.pending().always {
 			self.rootURL.stopAccessingSecurityScopedResource()
 		}
 		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])], queue: queue) { error in
 			if let error = error {
-				pendingUploadPromise.reject(error)
+				promise.reject(error)
 				return
 			}
 			do {
-				try self.copyFile(from: localURL, to: url, replaceExisting: replaceExisting, pendingPromise: pendingUploadPromise)
+				try self.copyFile(from: localURL, to: url, replaceExisting: replaceExisting)
+				self.getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).then { metadata in
+					promise.fulfill(metadata)
+				}.catch { error in
+					promise.reject(error)
+				}
 			} catch CocoaError.fileReadNoSuchFile {
-				pendingUploadPromise.reject(CloudProviderError.itemNotFound)
+				promise.reject(CloudProviderError.itemNotFound)
 			} catch CocoaError.fileWriteFileExists {
-				pendingUploadPromise.reject(CloudProviderError.itemAlreadyExists)
+				promise.reject(CloudProviderError.itemAlreadyExists)
 			} catch CocoaError.fileNoSuchFile {
-				pendingUploadPromise.reject(CloudProviderError.parentFolderDoesNotExist)
+				promise.reject(CloudProviderError.parentFolderDoesNotExist)
 			} catch CocoaError.fileWriteOutOfSpace {
-				pendingUploadPromise.reject(CloudProviderError.quotaInsufficient)
+				promise.reject(CloudProviderError.quotaInsufficient)
 			} catch CocoaError.fileReadNoPermission {
-				pendingUploadPromise.reject(CloudProviderError.unauthorized)
+				promise.reject(CloudProviderError.unauthorized)
 			} catch {
-				pendingUploadPromise.reject(error)
+				promise.reject(error)
 			}
 		}
-		return pendingUploadPromise.then {
-			self.fetchItemMetadata(at: cloudPath)
-		}
+		return promise
 	}
 
-	private func copyFile(from sourceURL: URL, to targetURL: URL, replaceExisting: Bool, pendingPromise: Promise<Void>) throws {
+	private func copyFile(from sourceURL: URL, to targetURL: URL, replaceExisting: Bool) throws {
 		guard try validateItemType(at: sourceURL, with: .file) else {
-			pendingPromise.reject(CloudProviderError.itemTypeMismatch)
-			return
+			throw CloudProviderError.itemTypeMismatch
 		}
 		if replaceExisting {
 			do {
 				guard try validateItemType(at: targetURL, with: .file) else {
-					pendingPromise.reject(CloudProviderError.itemTypeMismatch)
-					return
+					throw CloudProviderError.itemAlreadyExists
 				}
 			} catch CocoaError.fileReadNoSuchFile {
 				// no-op
 			}
 			try fileManager.copyItemWithOverwrite(at: sourceURL, to: targetURL)
-			pendingPromise.fulfill(())
 		} else {
 			try fileManager.copyItem(at: sourceURL, to: targetURL)
-			pendingPromise.fulfill(())
 		}
 	}
 

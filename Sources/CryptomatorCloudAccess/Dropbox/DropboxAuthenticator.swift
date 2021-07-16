@@ -28,8 +28,6 @@ public class DropboxAuthenticator {
 
 	@available(iOSApplicationExtension, unavailable)
 	public func authenticate(from viewController: UIViewController) -> Promise<DropboxCredential> {
-		// TODO: Check for existing authentication?
-
 		DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.authenticationFailed)
 		let pendingAuthentication = Promise<DropboxCredential>.pending()
 		DropboxAuthenticator.pendingAuthentication = pendingAuthentication
@@ -44,11 +42,5 @@ public class DropboxAuthenticator {
 			throw DropboxAuthenticatorError.noPendingAuthentication
 		}
 		pendingAuthentication.fulfill(DropboxCredential(tokenUID: tokenUID))
-	}
-
-	public func deauthenticate() -> Promise<Void> {
-		DBClientsManager.unlinkAndResetClients()
-		// TODO: set all existing DropboxCredential.authorizedClients to nil
-		return Promise(())
 	}
 }

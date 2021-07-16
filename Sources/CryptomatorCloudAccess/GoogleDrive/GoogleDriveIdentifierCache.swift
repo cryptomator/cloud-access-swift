@@ -9,65 +9,36 @@
 import Foundation
 import GRDB
 
-private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
-	static let databaseTableName = "CachedEntries"
-	static let itemIdentifierKey = "itemIdentifier"
-	static let cloudPathKey = "cloudPath"
-
-	var itemIdentifier: String
-	let cloudPath: CloudPath
-}
-
-extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
-		container[CachedEntry.itemIdentifierKey] = itemIdentifier
-		container[CachedEntry.cloudPathKey] = cloudPath
-	}
-}
-
 class GoogleDriveIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 
-	init?() {
+	init() throws {
 		self.inMemoryDB = DatabaseQueue()
-		do {
-			try inMemoryDB.write { db in
-				try db.create(table: CachedEntry.databaseTableName) { table in
-					table.column("itemIdentifier", .text)
-					table.column("cloudPath", .text).primaryKey()
-				}
-			}
-			try addOrUpdateIdentifier("root", for: CloudPath("/"))
-		} catch {
-			return nil
-		}
-	}
-
-	func addOrUpdateIdentifier(_ identifier: String, for cloudPath: CloudPath) throws {
 		try inMemoryDB.write { db in
-			if let cachedIdentifier = try CachedEntry.fetchOne(db, key: ["cloudPath": cloudPath]) {
-				var updatedCachedIdentifier = cachedIdentifier
-				updatedCachedIdentifier.itemIdentifier = identifier
-				try updatedCachedIdentifier.updateChanges(db, from: cachedIdentifier)
-			} else {
-				let newCachedIdentifier = CachedEntry(itemIdentifier: identifier, cloudPath: cloudPath)
-				try newCachedIdentifier.insert(db)
+			try db.create(table: GoogleDriveItem.databaseTableName) { table in
+				table.column(GoogleDriveItem.cloudPathKey, .text).notNull().primaryKey()
+				table.column(GoogleDriveItem.identifierKey, .text).notNull()
+				table.column(GoogleDriveItem.itemTypeKey, .text).notNull()
 			}
+			try GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder).save(db)
 		}
 	}
 
-	func getCachedIdentifier(for cloudPath: CloudPath) -> String? {
+	func get(_ cloudPath: CloudPath) -> GoogleDriveItem? {
 		try? inMemoryDB.read { db in
-			let cachedIdentifier = try CachedEntry.fetchOne(db, key: ["cloudPath": cloudPath])
-			return cachedIdentifier?.itemIdentifier
+			return try GoogleDriveItem.fetchOne(db, key: cloudPath)
 		}
 	}
 
-	func invalidateIdentifier(for cloudPath: CloudPath) throws {
+	func addOrUpdate(_ item: GoogleDriveItem) throws {
 		try inMemoryDB.write { db in
-			if let cachedIdentifier = try CachedEntry.fetchOne(db, key: ["cloudPath": cloudPath]) {
-				try cachedIdentifier.delete(db)
-			}
+			try item.save(db)
+		}
+	}
+
+	func invalidate(_ item: GoogleDriveItem) throws {
+		try inMemoryDB.write { db in
+			_ = try item.delete(db)
 		}
 	}
 }

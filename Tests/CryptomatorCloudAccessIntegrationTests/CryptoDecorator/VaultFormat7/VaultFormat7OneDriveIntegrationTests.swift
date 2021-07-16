@@ -6,50 +6,31 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
+import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Foundation
-import XCTest
-@testable import MSAL
 @testable import Promises
+
 class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
-	static var setUpErrorForVaultFormat7OneDrive: Error?
-
-	override class var classSetUpError: Error? {
-		get {
-			return setUpErrorForVaultFormat7OneDrive
-		}
-		set {
-			setUpErrorForVaultFormat7OneDrive = newValue
-		}
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: VaultFormat7OneDriveIntegrationTests.self)
 	}
 
 	// swiftlint:disable:next force_try
-	private static let setUpOneDriveCredential = try! OneDriveCredentialMock()
+	private static let credential = try! OneDriveCredentialMock()
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! OneDriveCloudProvider(credential: setUpOneDriveCredential, useBackgroundSession: false)
-	private static let vaultPath = CloudPath("/IntegrationTests-Vault7/")
-
-	static var setUpProviderForVaultFormat7OneDrive: VaultFormat7ProviderDecorator?
-
-	override class var setUpProvider: CloudProvider? {
-		return setUpProviderForVaultFormat7OneDrive
-	}
-
-	override class var integrationTestParentCloudPath: CloudPath {
-		return CloudPath("/")
-	}
+	private static let cloudProvider = try! OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/")
 		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
 			DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
 		}.then { decorator in
-			setUpProviderForVaultFormat7OneDrive = decorator
-		}.catch { error in
-			print("VaultFormat7OneDriveIntegrationTests setup error: \(error)")
+			setUpProvider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
@@ -65,7 +46,7 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat7OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			super.provider = decorator
+			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
 			if let error = setUpPromise.error {
@@ -73,9 +54,5 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 			}
 			throw IntegrationTestError.setUpTimeout
 		}
-	}
-
-	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat7OneDriveIntegrationTests.self)
 	}
 }

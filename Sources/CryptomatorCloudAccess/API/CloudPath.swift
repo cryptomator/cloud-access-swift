@@ -20,6 +20,15 @@ public extension URL {
 			self.init(string: percentEncodedPath, relativeTo: base)
 		}
 	}
+
+	func appendingPathComponent(_ cloudPath: CloudPath) -> URL {
+		let trimmedPath = cloudPath.path.trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/"))
+		if trimmedPath.isEmpty {
+			return self
+		} else {
+			return appendingPathComponent(trimmedPath)
+		}
+	}
 }
 
 extension String {

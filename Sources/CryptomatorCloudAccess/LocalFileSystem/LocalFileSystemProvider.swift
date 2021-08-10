@@ -38,23 +38,29 @@ public class LocalFileSystemProvider: CloudProvider {
 	private let fileManager = FileManager()
 	private let rootURL: URL
 	private let queue = OperationQueue()
+	private let shouldStopAccessingRootURL: Bool
 
 	public init(rootURL: URL) {
 		precondition(rootURL.isFileURL)
 		self.rootURL = rootURL
+		self.shouldStopAccessingRootURL = rootURL.startAccessingSecurityScopedResource()
+	}
+
+	deinit {
+		if shouldStopAccessingRootURL {
+			rootURL.stopAccessingSecurityScopedResource()
+		}
 	}
 
 	// MARK: - CloudProvider API
 
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		return getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
 	}
 
@@ -62,14 +68,12 @@ public class LocalFileSystemProvider: CloudProvider {
 		guard pageToken == nil else {
 			return Promise(CloudProviderError.pageTokenInvalid)
 		}
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		let promise = Promise<CloudItemList>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
 		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
@@ -78,7 +82,7 @@ public class LocalFileSystemProvider: CloudProvider {
 				return
 			}
 			do {
-				let contents = try self.fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isHiddenKey])
+				let contents = try self.fileManager.contentsOfDirectory(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey])
 				let metadatas = contents.filter { childURL in
 					!childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL)
 				}.map { childURL in
@@ -108,26 +112,25 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
 		precondition(localURL.isFileURL)
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		let promise = Promise<Void>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
-		NSFileCoordinator().coordinate(with: [.readingIntent(with: url, options: .withoutChanges)], queue: queue) { error in
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .withoutChanges)
+		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				guard try self.validateItemType(at: url, with: .file) else {
+				guard try self.validateItemType(at: readingIntent.url, with: .file) else {
 					promise.reject(CloudProviderError.itemTypeMismatch)
 					return
 				}
-				try self.fileManager.copyItem(at: url, to: localURL)
+				try self.fileManager.copyItem(at: readingIntent.url, to: localURL)
 				promise.fulfill(())
 			} catch CocoaError.fileReadNoSuchFile {
 				promise.reject(CloudProviderError.itemNotFound)
@@ -144,22 +147,21 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		let promise = Promise<CloudItemMetadata>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
-		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])], queue: queue) { error in
+		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])
+		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				try self.copyFile(from: localURL, to: url, replaceExisting: replaceExisting)
+				try self.copyFile(from: localURL, to: writingIntent.url, replaceExisting: replaceExisting)
 				self.getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).then { metadata in
 					promise.fulfill(metadata)
 				}.catch { error in
@@ -201,22 +203,21 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		let promise = Promise<Void>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
-		NSFileCoordinator().coordinate(with: [.writingIntent(with: url, options: [])], queue: queue) { error in
+		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: [])
+		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				try self.fileManager.createDirectory(at: url, withIntermediateDirectories: false, attributes: nil)
+				try self.fileManager.createDirectory(at: writingIntent.url, withIntermediateDirectories: false, attributes: nil)
 				promise.fulfill(())
 			} catch CocoaError.fileWriteFileExists {
 				promise.reject(CloudProviderError.itemAlreadyExists)
@@ -242,14 +243,12 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = URL(cloudPath: cloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
 		let promise = Promise<Void>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				url.stopAccessingSecurityScopedResource()
+			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
 		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
@@ -280,14 +279,14 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: rootURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: rootURL) else {
-			return Promise(LocalFileSystemProviderError.resolvingURLFailed)
-		}
-		guard rootURL.startAccessingSecurityScopedResource() else {
-			return Promise(CloudProviderError.unauthorized)
-		}
+		let sourceURL = rootURL.appendingPathComponent(sourceCloudPath)
+		let targetURL = rootURL.appendingPathComponent(targetCloudPath)
+		let shouldStopAccessing = sourceURL.startAccessingSecurityScopedResource()
+
 		let promise = Promise<Void>.pending().always {
-			self.rootURL.stopAccessingSecurityScopedResource()
+			if shouldStopAccessing {
+				sourceURL.stopAccessingSecurityScopedResource()
+			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)
 		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in

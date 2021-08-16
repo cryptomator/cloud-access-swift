@@ -238,13 +238,15 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func uploadFileChunk(from localURL: URL, to uploadURL: URL, offset: Int, totalFileSize: Int) -> Promise<MSGraphDriveItem> {
-		guard let file = FileHandle(forReadingAtPath: localURL.path) else {
-			return Promise(OneDriveError.invalidFileHandle)
+		let localFileChunkURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+		let chunkLength: Int
+		do {
+			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset)
+		} catch {
+			return Promise(error)
 		}
-		file.seek(toFileOffset: UInt64(offset))
-		let data = file.readData(ofLength: OneDriveCloudProvider.uploadFileChunkLength)
-		let request = fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: data.count, offset: Int(offset), totalLength: totalFileSize)
-		return executeMSURLSessionUploadTask(with: request, data: data).then { data, response in
+		let request = fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: Int(offset), totalLength: totalFileSize)
+		return executeMSURLSessionUploadTask(with: request, localURL: localFileChunkURL).then { data, response in
 			switch response.statusCode {
 			case MSExpectedResponseCodes.accepted.rawValue:
 				return self.uploadFileChunk(from: localURL, to: uploadURL, offset: offset + OneDriveCloudProvider.uploadFileChunkLength, totalFileSize: totalFileSize)
@@ -254,6 +256,8 @@ public class OneDriveCloudProvider: CloudProvider {
 			default:
 				return Promise(self.mapStatusCodeToError(response.statusCode))
 			}
+		}.always {
+			try? FileManager.default.removeItem(at: localFileChunkURL)
 		}
 	}
 
@@ -462,9 +466,9 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, data: Data) -> Promise<(Data, HTTPURLResponse)> {
+	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, localURL: URL) -> Promise<(Data, HTTPURLResponse)> {
 		return Promise<(Data, HTTPURLResponse)> { fulfill, reject in
-			let task = MSURLSessionUploadTask(request: request, data: data, client: self.client) { data, response, error in
+			let task = MSURLSessionUploadTask(request: request, fromFile: localURL, client: self.client) { data, response, error in
 				switch (data, response, error) {
 				case let (.some(data), httpResponse as HTTPURLResponse, nil):
 					fulfill((data, httpResponse))
@@ -600,5 +604,21 @@ public class OneDriveCloudProvider: CloudProvider {
 		default:
 			return error
 		}
+	}
+
+	private func createFileChunk(at targetURL: URL, from sourceURL: URL, offset: Int) throws -> Int {
+		let maxInMemoryChunkLength = 320 * 1024
+		let inputFile = try FileHandle(forReadingFrom: sourceURL)
+		inputFile.seek(toFileOffset: UInt64(offset))
+		FileManager.default.createFile(atPath: targetURL.path, contents: nil, attributes: nil)
+		let outputFile = try FileHandle(forWritingTo: targetURL)
+		var readDataCount = 0
+		var data: Data
+		repeat {
+			data = inputFile.readData(ofLength: maxInMemoryChunkLength)
+			outputFile.write(data)
+			readDataCount += data.count
+		} while !data.isEmpty && readDataCount + maxInMemoryChunkLength <= OneDriveCloudProvider.uploadFileChunkLength
+		return readDataCount
 	}
 }

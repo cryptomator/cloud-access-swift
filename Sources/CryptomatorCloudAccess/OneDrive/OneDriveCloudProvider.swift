@@ -12,15 +12,22 @@ import MSGraphClientSDK
 import Promises
 
 public class OneDriveCloudProvider: CloudProvider {
-	private static let uploadFileChunkLength = 5 * 1024 * 1024 // 5MiB
+	private static let maxUploadFileChunkLength = 16 * 320 * 1024 // 5MiB
 
 	private let client: MSHTTPClient
 	private let identifierCache: OneDriveIdentifierCache
+	private let tmpDirURL: URL
 
 	public init(credential: OneDriveCredential, useBackgroundSession: Bool = false) throws {
 		let urlSessionConfiguration = OneDriveCloudProvider.createURLSessionConfiguration(credential: credential, useBackgroundSession: useBackgroundSession)
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
 		self.identifierCache = try OneDriveIdentifierCache()
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+	}
+
+	deinit {
+		try? FileManager.default.removeItem(at: tmpDirURL)
 	}
 
 	static func createURLSessionConfiguration(credential: OneDriveCredential, useBackgroundSession: Bool) -> URLSessionConfiguration {
@@ -238,10 +245,10 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func uploadFileChunk(from localURL: URL, to uploadURL: URL, offset: Int, totalFileSize: Int) -> Promise<MSGraphDriveItem> {
-		let localFileChunkURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+		let localFileChunkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let chunkLength: Int
 		do {
-			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset)
+			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: OneDriveCloudProvider.maxUploadFileChunkLength)
 		} catch {
 			return Promise(error)
 		}
@@ -249,7 +256,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		return executeMSURLSessionUploadTask(with: request, localURL: localFileChunkURL).then { data, response in
 			switch response.statusCode {
 			case MSExpectedResponseCodes.accepted.rawValue:
-				return self.uploadFileChunk(from: localURL, to: uploadURL, offset: offset + OneDriveCloudProvider.uploadFileChunkLength, totalFileSize: totalFileSize)
+				return self.uploadFileChunk(from: localURL, to: uploadURL, offset: offset + chunkLength, totalFileSize: totalFileSize)
 			case MSExpectedResponseCodes.OK.rawValue, MSExpectedResponseCodes.created.rawValue:
 				let driveItem = try MSGraphDriveItem(data: data)
 				return Promise(driveItem)
@@ -606,19 +613,21 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func createFileChunk(at targetURL: URL, from sourceURL: URL, offset: Int) throws -> Int {
-		let maxInMemoryChunkLength = 320 * 1024
+	private func createFileChunk(at targetURL: URL, from sourceURL: URL, offset: Int, maxChunkLength: Int) throws -> Int {
+		let bufferLength = 320 * 1024
 		let inputFile = try FileHandle(forReadingFrom: sourceURL)
 		inputFile.seek(toFileOffset: UInt64(offset))
 		FileManager.default.createFile(atPath: targetURL.path, contents: nil, attributes: nil)
 		let outputFile = try FileHandle(forWritingTo: targetURL)
-		var readDataCount = 0
-		var data: Data
+		var readCount = 0
+		var buffer: Data
 		repeat {
-			data = inputFile.readData(ofLength: maxInMemoryChunkLength)
-			outputFile.write(data)
-			readDataCount += data.count
-		} while !data.isEmpty && readDataCount + maxInMemoryChunkLength <= OneDriveCloudProvider.uploadFileChunkLength
-		return readDataCount
+			buffer = inputFile.readData(ofLength: bufferLength)
+			outputFile.write(buffer)
+			readCount += buffer.count
+		} while !buffer.isEmpty && readCount + bufferLength <= maxChunkLength
+		try outputFile.close()
+		try inputFile.close()
+		return readCount
 	}
 }

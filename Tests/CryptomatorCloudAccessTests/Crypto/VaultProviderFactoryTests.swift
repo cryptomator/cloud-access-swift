@@ -28,8 +28,12 @@ class VaultProviderFactoryTests: XCTestCase {
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
 
 		let vaultProvider = try VaultProviderFactory.createVaultProvider(from: unverifiedVaultConfig, masterkey: masterkey, vaultPath: vaultPath, with: cloudProviderMock)
-		guard vaultProvider is VaultFormat8ShorteningProviderDecorator else {
-			XCTFail("Expected a VaultFormat8ShorteningProviderDecorator but received: \(type(of: vaultProvider))")
+		guard let vaultProvider = vaultProvider as? VaultFormat8ProviderDecorator else {
+			XCTFail("Expected a VaultFormat8ProviderDecorator but received: \(type(of: vaultProvider))")
+			return
+		}
+		guard vaultProvider.delegate is VaultFormat8ShorteningProviderDecorator else {
+			XCTFail("Expected a VaultFormat8ShorteningProviderDecorator but received: \(type(of: vaultProvider.delegate))")
 			return
 		}
 	}
@@ -51,22 +55,30 @@ class VaultProviderFactoryTests: XCTestCase {
 
 	// MARK: - createLegacyVaultProvider Tests
 
-	func testCreateLegacyVaultFormat6Provider() throws {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
-
-		let vaultProvider = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 6, vaultPath: vaultPath, with: cloudProviderMock)
-		guard vaultProvider is VaultFormat6ShorteningProviderDecorator else {
-			XCTFail("Expected a VaultFormat6ShorteningProviderDecorator but received: \(type(of: vaultProvider))")
-			return
-		}
-	}
-
 	func testCreateLegacyVaultFormat7Provider() throws {
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
 
 		let vaultProvider = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 7, vaultPath: vaultPath, with: cloudProviderMock)
-		guard vaultProvider is VaultFormat7ShorteningProviderDecorator else {
-			XCTFail("Expected a VaultFormat7ShorteningProviderDecorator but received: \(type(of: vaultProvider))")
+		guard let vaultProvider = vaultProvider as? VaultFormat7ProviderDecorator else {
+			XCTFail("Expected a VaultFormat7ProviderDecorator but received: \(type(of: vaultProvider))")
+			return
+		}
+		guard vaultProvider.delegate is VaultFormat7ShorteningProviderDecorator else {
+			XCTFail("Expected a VaultFormat7ShorteningProviderDecorator but received: \(type(of: vaultProvider.delegate))")
+			return
+		}
+	}
+
+	func testCreateLegacyVaultFormat6Provider() throws {
+		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+
+		let vaultProvider = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 6, vaultPath: vaultPath, with: cloudProviderMock)
+		guard let vaultProvider = vaultProvider as? VaultFormat6ProviderDecorator else {
+			XCTFail("Expected a VaultFormat6ProviderDecorator but received: \(type(of: vaultProvider))")
+			return
+		}
+		guard vaultProvider.delegate is VaultFormat6ShorteningProviderDecorator else {
+			XCTFail("Expected a VaultFormat6ShorteningProviderDecorator but received: \(type(of: vaultProvider.delegate))")
 			return
 		}
 	}

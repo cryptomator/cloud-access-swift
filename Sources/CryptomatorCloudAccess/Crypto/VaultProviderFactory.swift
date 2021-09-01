@@ -26,8 +26,8 @@ public enum VaultProviderFactory {
 		let verifiedVaultConfig = try unverifiedVaultConfig.verify(rawKey: masterkey.rawKey)
 
 		let cryptor = Cryptor(masterkey: masterkey)
-		let vaultFormat8Decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-		return try VaultFormat8ShorteningProviderDecorator(delegate: vaultFormat8Decorator, vaultPath: vaultPath, threshold: verifiedVaultConfig.shorteningThreshold)
+		let shorteningDecorator = try VaultFormat8ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath, threshold: verifiedVaultConfig.shorteningThreshold)
+		return try VaultFormat8ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
 	public static func createLegacyVaultProvider(from masterkey: Masterkey, vaultVersion: Int, vaultPath: CloudPath, with provider: CloudProvider) throws -> CloudProvider {
@@ -35,11 +35,11 @@ public enum VaultProviderFactory {
 
 		switch vaultVersion {
 		case 6:
-			let vaultFormat6Decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-			return try VaultFormat6ShorteningProviderDecorator(delegate: vaultFormat6Decorator, vaultPath: vaultPath)
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			return try VaultFormat6ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		case 7:
-			let vaultFormat7Decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-			return try VaultFormat7ShorteningProviderDecorator(delegate: vaultFormat7Decorator, vaultPath: vaultPath)
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			return try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		default:
 			throw VaultProviderFactoryError.unsupportedVaultVersion
 		}

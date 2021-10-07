@@ -72,22 +72,7 @@ public class DropboxCloudProvider: CloudProvider {
 			let downloadPromise = self.downloadFile(from: cloudPath, to: localURL, with: authorizedClient)
 			progress.resignCurrent()
 			return downloadPromise
-		}, condition: shouldRetryForError).recover { error -> Promise<Void> in
-			// Currently, we get a 409 (requestError) instead of a 404 (routeError) error when we download a file that does not exist.
-			// We also get this when a download was performed on a folder.
-			// Therefore, we currently need to check if there is a folder on the given `cloudPath`.
-			// See: https://github.com/cryptomator/cloud-access-swift/issues/6
-			guard case CloudProviderError.itemNotFound = error else {
-				return Promise(error)
-			}
-			return self.checkForItemExistence(at: cloudPath).then { itemExists in
-				if itemExists {
-					return Promise(CloudProviderError.itemTypeMismatch)
-				} else {
-					return Promise(error)
-				}
-			}
-		}
+		}, condition: shouldRetryForError)
 	}
 
 	/**
@@ -315,6 +300,8 @@ public class DropboxCloudProvider: CloudProvider {
 				if let routeError = routeError {
 					if routeError.isPath(), routeError.path.isNotFound() {
 						reject(CloudProviderError.itemNotFound)
+					} else if routeError.isPath(), routeError.path.isNotFile() {
+						reject(CloudProviderError.itemTypeMismatch)
 					} else {
 						reject(DropboxError.unexpectedRouteError)
 					}
@@ -323,11 +310,6 @@ public class DropboxCloudProvider: CloudProvider {
 				if let requestError = requestError {
 					if requestError.isClientError(), case CocoaError.fileWriteFileExists = requestError.asClientError().nsError {
 						reject(CloudProviderError.itemAlreadyExists)
-					} else if requestError.isHttpError(), requestError.statusCode == 409 {
-						// Currently, we get a 409 (requestError) instead of a 404 (routeError) error when we download a file that does not exist.
-						// Until this is fixed by Dropbox, this workaround is used.
-						// See: https://github.com/cryptomator/cloud-access-swift/issues/6
-						reject(CloudProviderError.itemNotFound)
 					} else {
 						reject(self.convertRequestErrorToDropboxError(requestError))
 					}

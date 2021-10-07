@@ -11,7 +11,7 @@ import MSGraphClientModels
 extension MSGraphDriveItem {
 	func getCloudItemType() -> CloudItemType {
 		let folder: MSGraphFolder?
-		if let remoteItem = self.remoteItem {
+		if let remoteItem = remoteItem {
 			folder = remoteItem.folder
 		} else {
 			folder = self.folder

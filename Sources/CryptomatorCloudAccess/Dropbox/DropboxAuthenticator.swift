@@ -21,7 +21,8 @@ public enum DropboxAuthenticatorError: Error {
 
 public class DropboxAuthenticator {
 	public static var pendingAuthentication: Promise<DropboxCredential>?
-
+	private static let scopes = ["files.metadata.read", "files.metadata.write", "files.content.read", "files.content.write", "account_info.read"]
+	private static let scopeRequest = DBScopeRequest(scopeType: DBScopeType.user, scopes: scopes, includeGrantedScopes: false)
 	public init() {
 		DropboxClientSetup.oneTimeSetup()
 	}
@@ -31,9 +32,9 @@ public class DropboxAuthenticator {
 		DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.authenticationFailed)
 		let pendingAuthentication = Promise<DropboxCredential>.pending()
 		DropboxAuthenticator.pendingAuthentication = pendingAuthentication
-		DBClientsManager.authorize(fromController: .shared, controller: viewController) { url in
+		DBClientsManager.authorize(fromControllerV2: .shared, controller: viewController, loadingStatusDelegate: nil, openURL: { url in
 			UIApplication.shared.open(url, options: [:], completionHandler: nil)
-		}
+		}, scopeRequest: DropboxAuthenticator.scopeRequest)
 		return pendingAuthentication
 	}
 

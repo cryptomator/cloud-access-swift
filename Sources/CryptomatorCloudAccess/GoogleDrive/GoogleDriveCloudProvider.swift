@@ -26,10 +26,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		self.identifierCache = try GoogleDriveIdentifierCache()
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
-		setupDriveService(credential: credential, useBackgroundSession: useBackgroundSession)
+		try setupDriveService(credential: credential, useBackgroundSession: useBackgroundSession)
 	}
 
-	private func setupDriveService(credential: GoogleDriveCredential, useBackgroundSession: Bool) {
+	private func setupDriveService(credential: GoogleDriveCredential, useBackgroundSession: Bool) throws {
 		driveService.serviceUploadChunkSize = GoogleDriveCloudProvider.maximumUploadFetcherChunkSize
 		driveService.isRetryEnabled = true
 		driveService.retryBlock = { _, suggestedWillRetry, fetchError in
@@ -55,7 +55,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 			}
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(credential.tokenUID)-\(bundleId)")
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(try credential.getAccountID())-\(bundleId)")
 			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 		} else {
 			configuration = URLSessionConfiguration.default

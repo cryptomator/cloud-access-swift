@@ -15,22 +15,25 @@ import Promises
 public enum GoogleDriveCredentialError: Error {
 	case notAuthenticated
 	case noUsername
+	case noAccountID
 }
 
 public class GoogleDriveCredential {
-	let keychainItemPrefix = "GoogleDriveAuth"
-	private let keychainItemName: String
-	public let tokenUID: String
-	public var authorization: GTMAppAuthFetcherAuthorization?
 	public let driveService: GTLRDriveService
 	public var isAuthorized: Bool {
 		authorization?.canAuthorize() ?? false
 	}
 
-	public init(tokenUID: String = UUID().uuidString) {
-		self.tokenUID = tokenUID
-		self.keychainItemName = keychainItemPrefix + "-" + tokenUID
-		self.authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: keychainItemName)
+	var authorization: GTMAppAuthFetcherAuthorization?
+	private static let keychainItemPrefix = "GoogleDriveAuth"
+
+	public init(userID: String? = nil) {
+		if let userID = userID {
+			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
+			self.authorization = GTMAppAuthFetcherAuthorization(fromKeychainForName: keychainItemName)
+		} else {
+			self.authorization = nil
+		}
 		self.driveService = GTLRDriveService()
 		driveService.authorizer = authorization
 	}
@@ -38,7 +41,8 @@ public class GoogleDriveCredential {
 	public func save(authState: OIDAuthState) {
 		authorization = GTMAppAuthFetcherAuthorization(authState: authState)
 		driveService.authorizer = authorization
-		if let authorization = authorization {
+		if let authorization = authorization, let userID = authorization.userID {
+			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
 			GTMAppAuthFetcherAuthorization.save(authorization, toKeychainForName: keychainItemName)
 		}
 	}
@@ -53,10 +57,27 @@ public class GoogleDriveCredential {
 		return userEmail
 	}
 
+	public func getAccountID() throws -> String {
+		guard isAuthorized else {
+			throw GoogleDriveCredentialError.notAuthenticated
+		}
+		guard let userID = authorization?.userID else {
+			throw GoogleDriveCredentialError.noAccountID
+		}
+		return userID
+	}
+
 	public func deauthenticate() {
-		GTMAppAuthFetcherAuthorization.removeFromKeychain(forName: keychainItemName)
+		if let authorization = authorization, let userID = authorization.userID {
+			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
+			GTMAppAuthFetcherAuthorization.removeFromKeychain(forName: keychainItemName)
+		}
 		driveService.fetcherService.resetSession()
 		authorization = nil
 		driveService.authorizer = nil
+	}
+
+	private static func getKeychainName(forUserID userID: String) -> String {
+		return keychainItemPrefix + userID
 	}
 }

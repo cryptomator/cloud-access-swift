@@ -28,7 +28,7 @@ class GoogleDriveAuthenticatorMock {
 		let tokenParameters = ["refresh_token": refreshToken as NSString]
 		let tokenResponse = OIDTokenResponse(request: tokenRequest, parameters: tokenParameters)
 		let authState = OIDAuthState(authorizationResponse: authResponse, tokenResponse: tokenResponse)
-		let credential = GoogleDriveCredential(tokenUID: tokenUID)
+		let credential = GoogleDriveCredential(userID: tokenUID)
 		credential.save(authState: authState)
 		return credential
 	}

@@ -7,7 +7,11 @@
 //
 
 import XCTest
-
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
+@testable import CryptomatorCloudAccess
+#endif
 class GoogleDriveAuthenticatorMockTests: XCTestCase {
 	/**
 	 It is necessary to call another function than canAuthorize, because it returns true as soon as any refreshToken is set and does not check it online for correctness before.

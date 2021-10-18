@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {
           "branch": null,
-          "revision": "1055df471814958cfc6c2070e2e4ea432f13c55d",
-          "version": "0.13.0"
+          "revision": "8df25dfb2451125efb9fa6e4b385611ac4360753",
+          "version": "0.13.1"
         }
       },
       {

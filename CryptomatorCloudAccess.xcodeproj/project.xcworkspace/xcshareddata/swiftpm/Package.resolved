@@ -24,8 +24,8 @@
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {
           "branch": null,
-          "revision": "8df25dfb2451125efb9fa6e4b385611ac4360753",
-          "version": "0.13.1"
+          "revision": "9bf1bece50de1a6f45410cf541ef346cc16b9fcc",
+          "version": "1.0.0"
         }
       },
       {
@@ -87,8 +87,8 @@
         "repositoryURL": "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
         "state": {
           "branch": null,
-          "revision": "d8b4503ada5b9cd4b9f3928148cbda3936a97eed",
-          "version": "1.1.18"
+          "revision": "14a1750834d13567de1a4afb0fa148a22bd7ddbf",
+          "version": "1.1.25"
         }
       },
       {

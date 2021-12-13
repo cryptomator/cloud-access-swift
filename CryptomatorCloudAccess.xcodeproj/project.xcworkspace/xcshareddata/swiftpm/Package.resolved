@@ -1,0 +1,124 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "AppAuth",
+        "repositoryURL": "https://github.com/openid/AppAuth-iOS.git",
+        "state": {
+          "branch": null,
+          "revision": "01131d68346c8ae552961c768d583c715fbe1410",
+          "version": "1.4.0"
+        }
+      },
+      {
+        "package": "Base32",
+        "repositoryURL": "https://github.com/norio-nomura/Base32.git",
+        "state": {
+          "branch": null,
+          "revision": "c4bc0a49689999ae2c7c778f3830a6a6e694efb8",
+          "version": "0.9.0"
+        }
+      },
+      {
+        "package": "CryptomatorCryptoLib",
+        "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
+        "state": {
+          "branch": null,
+          "revision": "9bf1bece50de1a6f45410cf541ef346cc16b9fcc",
+          "version": "1.0.0"
+        }
+      },
+      {
+        "package": "ObjectiveDropboxOfficial",
+        "repositoryURL": "https://github.com/phil1995/dropbox-sdk-obj-c.git",
+        "state": {
+          "branch": null,
+          "revision": "f74da6cf58dfe078e1ddafa0673b69fa9d32de1a",
+          "version": "6.2.0-fork"
+        }
+      },
+      {
+        "package": "GoogleAPIClientForREST",
+        "repositoryURL": "https://github.com/google/google-api-objectivec-client-for-rest.git",
+        "state": {
+          "branch": null,
+          "revision": "a0a0826501a4075a5dcb7ad59ecd97a1f2422c32",
+          "version": "1.5.2"
+        }
+      },
+      {
+        "package": "GRDB",
+        "repositoryURL": "https://github.com/groue/GRDB.swift.git",
+        "state": {
+          "branch": null,
+          "revision": "5ee47c3c2765bdfde0f44c2ea9a263f6aa252d63",
+          "version": "4.14.0"
+        }
+      },
+      {
+        "package": "GTMSessionFetcher",
+        "repositoryURL": "https://github.com/google/gtm-session-fetcher.git",
+        "state": {
+          "branch": null,
+          "revision": "91ed3d188eb95705fef3c249453b81f32dc557d1",
+          "version": "1.5.0"
+        }
+      },
+      {
+        "package": "GTMAppAuth",
+        "repositoryURL": "https://github.com/google/GTMAppAuth.git",
+        "state": {
+          "branch": null,
+          "revision": "40f4103fb52109032c05599a0c39ad43edbdf80a",
+          "version": "1.2.2"
+        }
+      },
+      {
+        "package": "JOSESwift",
+        "repositoryURL": "https://github.com/airsidemobile/JOSESwift.git",
+        "state": {
+          "branch": null,
+          "revision": "10ed3b6736def7c26eb87135466b1cb46ea7e37f",
+          "version": "2.4.0"
+        }
+      },
+      {
+        "package": "MSAL",
+        "repositoryURL": "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
+        "state": {
+          "branch": null,
+          "revision": "14a1750834d13567de1a4afb0fa148a22bd7ddbf",
+          "version": "1.1.25"
+        }
+      },
+      {
+        "package": "MSGraphClientSDK",
+        "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc.git",
+        "state": {
+          "branch": null,
+          "revision": "a4d0a18ab62176762e4efc2f56021c2f386d98bc",
+          "version": "1.0.0-fork"
+        }
+      },
+      {
+        "package": "MSGraphClientModels",
+        "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-models.git",
+        "state": {
+          "branch": null,
+          "revision": "50596f424c7496687f34666372c71a6fe6270ac2",
+          "version": "1.3.0-fork"
+        }
+      },
+      {
+        "package": "Promises",
+        "repositoryURL": "https://github.com/google/promises.git",
+        "state": {
+          "branch": null,
+          "revision": "611337c330350c9c1823ad6d671e7f936af5ee13",
+          "version": "2.0.0"
+        }
+      }
+    ]
+  },
+  "version": 1
+}

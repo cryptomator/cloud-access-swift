@@ -16,9 +16,7 @@ private struct WebDAVDownloadTask {
 
 private class WebDAVDataTask {
 	let promise: Promise<(HTTPURLResponse, Data?)>
-	lazy var accumulatedData: Data = {
-		return Data()
-	}()
+	lazy var accumulatedData: Data = .init()
 
 	init(promise: Promise<(HTTPURLResponse, Data?)>) {
 		self.promise = promise

@@ -44,7 +44,7 @@ public class UnverifiedVaultConfig {
 	let allegedFormat: Int
 	let allegedCipherCombo: VaultCipherCombo
 
-	private let token: String
+	private let token: Data
 	private let jws: JWS
 
 	/**
@@ -53,7 +53,7 @@ public class UnverifiedVaultConfig {
 	 - Parameter token: The token in JWT format.
 	 - Returns: New unverified vault configuration instance.
 	 */
-	public init(token: String) throws {
+	public init(token: Data) throws {
 		self.token = token
 		self.jws = try JWS(compactSerialization: token)
 		let unverifiedPayload = try VaultConfigPayload.fromJSONData(data: jws.payload.data())
@@ -113,7 +113,7 @@ public class VaultConfig {
 	 - Parameter rawKey: The key matching the ID in the `token`'s `keyId`.
 	 - Returns: Verified vault configuration instance.
 	 */
-	public static func load(token: String, rawKey: [UInt8]) throws -> VaultConfig {
+	public static func load(token: Data, rawKey: [UInt8]) throws -> VaultConfig {
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
 		return try unverifiedVaultConfig.verify(rawKey: rawKey)
 	}
@@ -125,13 +125,13 @@ public class VaultConfig {
 	 - Parameter rawKey: The key matching the ID in `keyId`.
 	 - Returns: Signed token in JWT format.
 	 */
-	public func toToken(keyId: String, rawKey: [UInt8]) throws -> String {
+	public func toToken(keyId: String, rawKey: [UInt8]) throws -> Data {
 		let header = try JWSHeader(parameters: ["typ": "JWT", "alg": SignatureAlgorithm.HS256.rawValue, "kid": keyId])
 		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo, shorteningThreshold: shorteningThreshold).toJSONData()
 		guard let signer = Signer(signingAlgorithm: .HS256, key: Data(rawKey)) else {
 			throw VaultConfigError.tokenSerializationFailed
 		}
 		let jws = try JWS(header: header, payload: Payload(payload), signer: signer)
-		return jws.compactSerializedString
+		return jws.compactSerializedData
 	}
 }

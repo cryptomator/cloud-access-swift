@@ -23,7 +23,7 @@ class VaultConfigTests: XCTestCase {
 	}
 
 	func testLoad() throws {
-		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg"
+		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg".data(using: .utf8)!
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let vaultConfig = try VaultConfig.load(token: token, rawKey: rawKey)
 		XCTAssertEqual(8, vaultConfig.format)
@@ -32,7 +32,7 @@ class VaultConfigTests: XCTestCase {
 	}
 
 	func testLoadWithMalformedToken() throws {
-		let token = "hello world"
+		let token = "hello world".data(using: .utf8)!
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		XCTAssertThrowsError(try VaultConfig.load(token: token, rawKey: rawKey), "input was not a valid token") { error in
 			guard case JOSESwiftError.invalidCompactSerializationComponentCount(count: 1) = error else {
@@ -43,7 +43,7 @@ class VaultConfigTests: XCTestCase {
 	}
 
 	func testLoadWithInvalidKey() throws {
-		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg"
+		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg".data(using: .utf8)!
 		let rawKey = [UInt8](repeating: 0x77, count: 64)
 		XCTAssertThrowsError(try VaultConfig.load(token: token, rawKey: rawKey), "signature verification failed") { error in
 			guard case JOSESwiftError.verifyingFailed(description: JOSESwiftError.signatureInvalid.localizedDescription) = error else {
@@ -57,7 +57,7 @@ class VaultConfigTests: XCTestCase {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
-		let tokenComponents = token.split(separator: ".")
+		let tokenComponents = String(data: token, encoding: .utf8)!.split(separator: ".")
 		// check header
 		let header: [String: String] = try decodeTokenComponent(String(tokenComponents[0]))
 		XCTAssertEqual(["typ": "JWT", "alg": "HS256", "kid": "masterkeyfile:masterkey.cryptomator"], header)

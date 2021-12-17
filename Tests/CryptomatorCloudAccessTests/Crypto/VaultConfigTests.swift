@@ -15,6 +15,11 @@ import XCTest
 #endif
 
 class VaultConfigTests: XCTestCase {
+	let tokenNone = "eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6Im5vbmUifQ.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.".data(using: .utf8)!
+	let tokenHS256 = "eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMjU2In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.V7pqSXX1tBRgmntL1sXovnhNR4Z1_7z3Jzrq7NMqPO8".data(using: .utf8)!
+	let tokenHS384 = "eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMzg0In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.rx03sCVAyrCmT6halPaFU46lu-DOd03iwDgvdw362hfgJj782q6xPXjAxdKeVKxG".data(using: .utf8)!
+	let tokenHS512 = "eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTNTEyIn0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.fzkVI34Ou3z7RaFarS9VPCaA0NX9z7My14gAISTXJGKGNSID7xEcoaY56SBdWbU7Ta17KhxcHhbXffxk3Mzing".data(using: .utf8)!
+
 	func testCreateNew() {
 		let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
 		XCTAssertEqual(8, vaultConfig.format)
@@ -22,10 +27,35 @@ class VaultConfigTests: XCTestCase {
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
 	}
 
-	func testLoad() throws {
-		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg".data(using: .utf8)!
+	func testUnsupportedSignature() throws {
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let vaultConfig = try VaultConfig.load(token: token, rawKey: rawKey)
+		XCTAssertThrowsError(try VaultConfig.load(token: tokenNone, rawKey: rawKey), "unsupported signature algorithm: none") { error in
+			guard case VaultConfigError.unsupportedAlgorithm = error else {
+				XCTFail("Unexpected error: \(error)")
+				return
+			}
+		}
+	}
+
+	func testSuccessfulLoadHS256() throws {
+		let rawKey = [UInt8](repeating: 0x55, count: 64)
+		let vaultConfig = try VaultConfig.load(token: tokenHS256, rawKey: rawKey)
+		XCTAssertEqual(8, vaultConfig.format)
+		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
+	}
+
+	func testSuccessfulLoadHS384() throws {
+		let rawKey = [UInt8](repeating: 0x55, count: 64)
+		let vaultConfig = try VaultConfig.load(token: tokenHS384, rawKey: rawKey)
+		XCTAssertEqual(8, vaultConfig.format)
+		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
+	}
+
+	func testSuccessfulLoadHS512() throws {
+		let rawKey = [UInt8](repeating: 0x55, count: 64)
+		let vaultConfig = try VaultConfig.load(token: tokenHS512, rawKey: rawKey)
 		XCTAssertEqual(8, vaultConfig.format)
 		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
@@ -43,9 +73,8 @@ class VaultConfigTests: XCTestCase {
 	}
 
 	func testLoadWithInvalidKey() throws {
-		let token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6Im1hc3RlcmtleWZpbGU6bWFzdGVya2V5LmNyeXB0b21hdG9yIn0.eyJqdGkiOiJBQkI5RjY3My1GM0U4LTQxQTctQTQzQi1EMjlGNURBNjUwNjgiLCJzaG9ydGVuaW5nVGhyZXNob2xkIjoyMjAsImNpcGhlckNvbWJvIjoiU0lWX0NUUk1BQyIsImZvcm1hdCI6OH0.A66mLMcdcpAeJ1zCW2fcsSNznqoD7gWqO-OSE8pY2sg".data(using: .utf8)!
 		let rawKey = [UInt8](repeating: 0x77, count: 64)
-		XCTAssertThrowsError(try VaultConfig.load(token: token, rawKey: rawKey), "signature verification failed") { error in
+		XCTAssertThrowsError(try VaultConfig.load(token: tokenHS256, rawKey: rawKey), "signature verification failed") { error in
 			guard case JOSESwiftError.verifyingFailed(description: JOSESwiftError.signatureInvalid.localizedDescription) = error else {
 				XCTFail("Unexpected error: \(error)")
 				return

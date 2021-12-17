@@ -10,6 +10,7 @@ import Foundation
 import JOSESwift
 
 public enum VaultConfigError: Error {
+	case unsupportedAlgorithm
 	case signatureVerificationFailed
 	case tokenSerializationFailed
 }
@@ -68,7 +69,11 @@ public class UnverifiedVaultConfig {
 	 - Returns: Verified vault configuration instance.
 	 */
 	public func verify(rawKey: [UInt8]) throws -> VaultConfig {
-		guard let verifier = Verifier(verifyingAlgorithm: .HS256, key: Data(rawKey)) else {
+		let supportedAlgorithms: [SignatureAlgorithm] = [.HS256, .HS384, .HS512]
+		guard let algorithm = jws.header.algorithm, supportedAlgorithms.contains(where: { $0 == algorithm }) else {
+			throw VaultConfigError.unsupportedAlgorithm
+		}
+		guard let verifier = Verifier(verifyingAlgorithm: algorithm, key: Data(rawKey)) else {
 			throw VaultConfigError.signatureVerificationFailed
 		}
 		let verifiedJWS = try jws.validate(using: verifier)

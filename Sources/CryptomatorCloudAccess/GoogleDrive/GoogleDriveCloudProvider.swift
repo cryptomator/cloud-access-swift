@@ -398,7 +398,6 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				return Promise(CloudProviderError.itemAlreadyExists)
 			}
 			let query = GTLRDriveQuery_FilesUpdate.query(withObject: metadata, fileId: item.identifier, uploadParameters: uploadParameters)
-			query.fields = "id, name, modifiedTime, mimeType"
 			return Promise(query)
 		}.recover { error -> GTLRDriveQuery in
 			guard case CloudProviderError.itemNotFound = error else {
@@ -406,6 +405,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			}
 			metadata.parents = [parentItem.identifier]
 			let query = GTLRDriveQuery_FilesCreate.query(withObject: metadata, uploadParameters: uploadParameters)
+			return query
+		}.then { query -> GTLRDriveQuery in
+			query.fields = "id, name, modifiedTime, mimeType, size"
 			return query
 		}
 	}

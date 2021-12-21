@@ -66,6 +66,7 @@ public protocol CloudProvider {
 	 - Parameter replaceExisting: If true, overwrite the existing file at `cloudPath`.
 	 - Precondition: `localURL` must be a file URL.
 	 - Postcondition: The file is stored at `cloudPath`.
+	 - Postcondition: The `size` property of the returned metadata is set to the size of the uploaded file in the cloud and must not be `nil`.
 	 - Returns: Promise with the metadata of the uploaded file. If the upload fails, promise is rejected with:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `cloudPath` with `!replaceExisting` or the cloud provider finds a folder instead of a file at `cloudPath` with `replaceExisting`.

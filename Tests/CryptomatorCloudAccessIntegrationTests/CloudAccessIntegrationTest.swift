@@ -540,12 +540,14 @@ class CloudAccessIntegrationTest: XCTestCase {
 			print("\(progress.localizedDescription ?? "") (\(progress.localizedAdditionalDescription ?? ""))")
 		}
 		progress.becomeCurrent(withPendingUnitCount: 1)
-		provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: false).then { _ -> Promise<CloudItemMetadata> in
+		provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: false).then { cloudItemMetadata -> Promise<CloudItemMetadata> in
 			XCTAssertTrue(progress.completedUnitCount >= progress.totalUnitCount)
+			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
 			try overwrittenTestContent.write(to: initialLocalURL, atomically: true, encoding: .utf8)
 			return self.provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: true)
-		}.then { _ in
-			self.provider.downloadFile(from: cloudPath, to: overwrittenLocalURL)
+		}.then { cloudItemMetadata -> Promise<Void> in
+			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
+			return self.provider.downloadFile(from: cloudPath, to: overwrittenLocalURL)
 		}.then { _ in
 			self.provider.deleteFile(at: cloudPath)
 		}.then {
@@ -968,6 +970,22 @@ class CloudAccessIntegrationTest: XCTestCase {
 			expectation.fulfill()
 		}
 		wait(for: [expectation], timeout: 30.0)
+	}
+
+	private func assertReceivedCorrectMetadataAfterUploading(file localURL: URL, to cloudPath: CloudPath, metadata: CloudItemMetadata) {
+		let localFileSize: Int?
+		do {
+			let attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
+			localFileSize = attributes[FileAttributeKey.size] as? Int
+		} catch {
+			XCTFail("Get local file size failed with error: \(error)")
+			return
+		}
+		XCTAssertEqual(cloudPath, metadata.cloudPath)
+		XCTAssertEqual(cloudPath.lastPathComponent, metadata.name)
+		XCTAssertEqual(localFileSize, metadata.size)
+		XCTAssertNotNil(metadata.size)
+		XCTAssertEqual(.file, metadata.itemType)
 	}
 }
 

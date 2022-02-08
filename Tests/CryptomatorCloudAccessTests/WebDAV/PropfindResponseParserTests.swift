@@ -44,11 +44,12 @@ class PropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "file-and-folder", withExtension: "xml")
 		let parser = PropfindResponseParser(xmlParser, responseURL: URL(string: "/")!)
 		let elements = try parser.getElements()
-		XCTAssertEqual(3, elements.count)
+		XCTAssertEqual(4, elements.count)
 		let childElements = elements.filter({ $0.depth == 1 })
-		XCTAssertEqual(2, childElements.count)
+		XCTAssertEqual(3, childElements.count)
 		XCTAssertEqual([
 			PropfindResponseElement(depth: 1, url: URL(string: "/0.txt", relativeTo: URL(string: "/")!)!, collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
+			PropfindResponseElement(depth: 1, url: URL(string: "/1.txt", relativeTo: URL(string: "/")!)!, collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
 			PropfindResponseElement(depth: 1, url: URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: URL(string: "/")!)!, collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: 0)
 		], childElements)
 	}

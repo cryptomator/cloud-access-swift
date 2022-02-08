@@ -16,13 +16,13 @@ public enum PropfindResponseParserError: Error {
 struct PropfindResponseElement: Equatable {
 	let depth: Int
 	let url: URL
-	let collection: Bool?
+	let collection: Bool
 	let lastModified: Date?
 	let contentLength: Int?
 }
 
 private struct PropfindResponseElementProperties: Equatable {
-	let collection: Bool?
+	let collection: Bool
 	let lastModified: Date?
 	let contentLength: Int?
 }
@@ -32,7 +32,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 
 	private var xmlCharacterBuffer = ""
 	private var insideOfResourceType = false
-	private var collection: Bool?
+	private var collection = false
 	private var lastModified: Date?
 	private var contentLength: Int?
 	private var statusCode: String?
@@ -79,9 +79,6 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 			contentLength = Int(xmlCharacterBuffer)
 		case "resourcetype":
 			insideOfResourceType = false
-			if collection == nil {
-				collection = false
-			}
 		case "status":
 			statusCode = getStatusCode(xmlCharacterBuffer)
 		default:

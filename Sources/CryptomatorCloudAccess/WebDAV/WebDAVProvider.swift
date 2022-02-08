@@ -18,12 +18,7 @@ private extension CloudItemMetadata {
 	init(_ propfindResponseElement: PropfindResponseElement, cloudPath: CloudPath) {
 		self.name = cloudPath.lastPathComponent
 		self.cloudPath = cloudPath
-		self.itemType = {
-			guard let collection = propfindResponseElement.collection else {
-				return .unknown
-			}
-			return collection ? .folder : .file
-		}()
+		self.itemType = propfindResponseElement.collection ? .folder : .file
 		self.lastModifiedDate = propfindResponseElement.lastModified
 		self.size = propfindResponseElement.contentLength
 	}

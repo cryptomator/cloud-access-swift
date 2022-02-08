@@ -120,6 +120,7 @@
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
 		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
 		74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CF2E6B254B6683006266D6 /* VaultFormatError.swift */; };
+		74D4AFB827B2B9E300F8EF2D /* item-metadata-missing-resourcetype.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */; };
 		74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DF965D24F3DE6400763713 /* CloudPathTests.swift */; };
 		74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */; };
 		74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5D24BCB6B9003379FA /* item-metadata.xml */; };
@@ -274,6 +275,7 @@
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
 		74CF2E6B254B6683006266D6 /* VaultFormatError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormatError.swift; sourceTree = "<group>"; };
+		74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "item-metadata-missing-resourcetype.xml"; sourceTree = "<group>"; };
 		74DF965D24F3DE6400763713 /* CloudPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPathTests.swift; sourceTree = "<group>"; };
 		74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-move-412-error.xml"; sourceTree = "<group>"; };
 		74E54F5D24BCB6B9003379FA /* item-metadata.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-metadata.xml"; sourceTree = "<group>"; };
@@ -708,6 +710,7 @@
 			children = (
 				74E54F5F24BCB6B9003379FA /* item-data.txt */,
 				74E54F5E24BCB6B9003379FA /* item-list.xml */,
+				74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */,
 				74E54F5D24BCB6B9003379FA /* item-metadata.xml */,
 				74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */,
 			);
@@ -931,6 +934,7 @@
 				748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */,
 				74F57AD424BC9BC00040513A /* partial-404-status.xml in Resources */,
 				748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */,
+				74D4AFB827B2B9E300F8EF2D /* item-metadata-missing-resourcetype.xml in Resources */,
 				74E54F6524BCB6B9003379FA /* item-data.txt in Resources */,
 				74F57AD924BCB5390040513A /* authentication-success.xml in Resources */,
 				74E54F6424BCB6B9003379FA /* item-list.xml in Resources */,

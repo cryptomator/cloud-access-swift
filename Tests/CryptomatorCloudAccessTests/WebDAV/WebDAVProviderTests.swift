@@ -116,6 +116,35 @@ class WebDAVProviderTests: XCTestCase {
 		wait(for: [expectation], timeout: 1.0)
 	}
 
+	func testFetchItemMetadataWithMissingResourcetype() throws {
+		let expectation = XCTestExpectation(description: "fetchItemMetadata")
+		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+
+		let propfindData = try getTestData(forResource: "item-metadata-missing-resourcetype", withExtension: "xml")
+		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
+
+		provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { metadata in
+			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
+			XCTAssertEqual("About.txt", metadata.name)
+			XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
+			XCTAssertEqual(.file, metadata.itemType)
+			XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
+			XCTAssertEqual(1074, metadata.size)
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		}.catch { error in
+			XCTFail("Error in promise: \(error)")
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 1.0)
+	}
+
 	func testFetchItemList() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList")
 

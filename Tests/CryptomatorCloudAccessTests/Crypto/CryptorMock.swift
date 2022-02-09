@@ -93,10 +93,12 @@ public class CryptorMock: Cryptor {
 	}
 
 	override public func calculateCiphertextSize(_ cleartextSize: Int) -> Int {
+		precondition(cleartextSize >= 0, "expected cleartextSize to be positive, but was \(cleartextSize)")
 		return 0
 	}
 
 	override public func calculateCleartextSize(_ ciphertextSize: Int) throws -> Int {
+		precondition(ciphertextSize >= 0, "expected ciphertextSize to be positive, but was \(ciphertextSize)")
 		return 0
 	}
 }

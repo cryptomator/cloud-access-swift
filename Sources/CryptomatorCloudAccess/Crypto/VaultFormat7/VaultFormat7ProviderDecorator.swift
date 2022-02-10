@@ -259,7 +259,7 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		guard let ciphertextSize = ciphertextSize else {
 			return nil
 		}
-		if itemType == .file {
+		if itemType == .file, ciphertextSize >= cryptor.fileHeaderSize {
 			return try cryptor.calculateCleartextSize(ciphertextSize - cryptor.fileHeaderSize)
 		} else {
 			return ciphertextSize

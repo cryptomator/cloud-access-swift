@@ -19,8 +19,9 @@ class GoogleDriveIdentifierCache {
 				table.column(GoogleDriveItem.cloudPathKey, .text).notNull().primaryKey()
 				table.column(GoogleDriveItem.identifierKey, .text).notNull()
 				table.column(GoogleDriveItem.itemTypeKey, .text).notNull()
+				table.column(GoogleDriveItem.shortcutKey, .text)
 			}
-			try GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder).save(db)
+			try GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder, shortcut: nil).save(db)
 		}
 	}
 

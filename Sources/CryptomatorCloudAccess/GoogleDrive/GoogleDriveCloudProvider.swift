@@ -205,14 +205,14 @@ public class GoogleDriveCloudProvider: CloudProvider {
 					throw GoogleDriveError.missingItemName
 				}
 				let cloudPath = item.cloudPath.appendingPathComponent(name)
+				let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
+				try self.identifierCache.addOrUpdate(item)
 				let resolvedFile: GTLRDrive_File
-				if let shortcutDetailsTargetId = file.shortcutDetails?.targetId {
-					resolvedFile = try awaitPromise(self.resolveShortcut(for: shortcutDetailsTargetId, at: cloudPath))
+				if let shortcut = item.shortcut {
+					resolvedFile = try awaitPromise(self.resolveShortcut(shortcut, at: cloudPath))
 				} else {
 					resolvedFile = file
 				}
-				let item = try GoogleDriveItem(cloudPath: cloudPath, file: resolvedFile)
-				try self.identifierCache.addOrUpdate(item)
 				let itemMetadata = try self.convertToCloudItemMetadata(resolvedFile, preservingName: name, at: cloudPath)
 				items.append(itemMetadata)
 			}
@@ -364,19 +364,14 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
 	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) -> Promise<GoogleDriveItem> {
+		let resolvedParentItemIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let query = GTLRDriveQuery_FilesList.query()
-		query.q = "'\(parentItem.identifier)' in parents and name contains '\(name)' and trashed = false"
+		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(name)' and trashed = false"
 		query.fields = "files(id,name,mimeType,shortcutDetails)"
-		return executeQuery(query).then { result -> Promise<GoogleDriveItem> in
+		return executeQuery(query).then { result -> GoogleDriveItem in
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
-					let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
-					if let shortcutDetailsTargetId = file.shortcutDetails?.targetId {
-						return self.resolveShortcut(for: shortcutDetailsTargetId, at: cloudPath)
-					} else {
-						let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
-						return Promise(item)
-					}
+					return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
 				}
 				throw CloudProviderError.itemNotFound
 			} else {
@@ -385,15 +380,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func resolveShortcut(for targetIdentifier: String, at cloudPath: CloudPath) -> Promise<GoogleDriveItem> {
-		return resolveShortcut(for: targetIdentifier, at: cloudPath).then { file in
-			return try GoogleDriveItem(cloudPath: cloudPath, file: file)
-		}
-	}
-
-	private func resolveShortcut(for targetIdentifier: String, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
-		let query = GTLRDriveQuery_FilesGet.query(withFileId: targetIdentifier)
-		query.fields = "id,modifiedTime,size,mimeType"
+	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
+		let query = GTLRDriveQuery_FilesGet.query(withFileId: shortcut.targetIdentifier)
+		query.fields = "modifiedTime,size,mimeType"
 		return executeQuery(query).then { result -> GTLRDrive_File in
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType

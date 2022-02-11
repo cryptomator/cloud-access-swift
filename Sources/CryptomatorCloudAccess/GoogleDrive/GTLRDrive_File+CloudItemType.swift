@@ -10,9 +10,21 @@ import GoogleAPIClientForREST_Drive
 
 extension GTLRDrive_File {
 	func getCloudItemType() -> CloudItemType {
-		if mimeType == "application/vnd.google-apps.folder" {
+		guard let mimeType = mimeType else {
+			return .unknown
+		}
+		return mimeType.convertGoogleDriveMimeTypeToCloudItemType()
+	}
+}
+
+extension String {
+	func convertGoogleDriveMimeTypeToCloudItemType() -> CloudItemType {
+		switch self {
+		case "application/vnd.google-apps.folder":
 			return .folder
-		} else {
+		case "application/vnd.google-apps.shortcut":
+			return .symlink
+		default:
 			return .file
 		}
 	}

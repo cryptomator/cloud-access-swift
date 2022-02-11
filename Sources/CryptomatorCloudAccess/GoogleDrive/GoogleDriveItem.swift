@@ -48,7 +48,25 @@ extension GoogleDriveItem: PersistableRecord {
 	}
 }
 
-struct GoogleDriveShortcut: Codable, Equatable, DatabaseValueConvertible {
+struct GoogleDriveShortcut: Codable, Equatable {
 	let targetIdentifier: String
 	let targetItemType: CloudItemType
+}
+
+extension GoogleDriveShortcut: DatabaseValueConvertible {
+	public var databaseValue: DatabaseValue {
+		let jsonEncoder = JSONEncoder()
+		guard let data = try? jsonEncoder.encode(self) else {
+			return .null
+		}
+		let string = String(data: data, encoding: .utf8)
+		return string?.databaseValue ?? .null
+	}
+
+	public static func fromDatabaseValue(_ dbValue: DatabaseValue) -> Self? {
+		guard let string = String.fromDatabaseValue(dbValue) else { return nil }
+		guard let data = string.data(using: .utf8) else { return nil }
+		let jsonDecoder = JSONDecoder()
+		return try? jsonDecoder.decode(GoogleDriveShortcut.self, from: data)
+	}
 }

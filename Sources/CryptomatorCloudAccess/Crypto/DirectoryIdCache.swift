@@ -41,13 +41,13 @@ class DirectoryIdCache {
 
 	func get(_ cleartextPath: CloudPath, onMiss: @escaping (_ cleartextPath: CloudPath, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
 		do {
-			if let cached = try getCached(cleartextPath) {
+			if let cached = try get(cleartextPath) {
 				return Promise(cached)
 			} else {
 				return get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId in
 					return try onMiss(cleartextPath, parentDirId)
 				}.then { dirId -> Data in
-					try self.addToCache(cleartextPath, dirId: dirId)
+					try self.addOrUpdate(cleartextPath, dirId: dirId)
 					return dirId
 				}
 			}
@@ -56,24 +56,22 @@ class DirectoryIdCache {
 		}
 	}
 
-	func invalidate(_ cleartextPath: CloudPath) throws {
-		try inMemoryDB.write { db in
-			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE \(CachedEntry.cleartextPathKey) LIKE ?", arguments: ["\(cleartextPath.path)%"])
+	func get(_ cleartextPath: CloudPath) throws -> Data? {
+		let entry: CachedEntry? = try inMemoryDB.read { db in
+			return try CachedEntry.fetchOne(db, key: cleartextPath.path)
 		}
+		return entry?.dirId
 	}
 
-	// MARK: - Internal
-
-	func addToCache(_ cleartextPath: CloudPath, dirId: Data) throws {
+	func addOrUpdate(_ cleartextPath: CloudPath, dirId: Data) throws {
 		try inMemoryDB.write { db in
 			try CachedEntry(cleartextPath: cleartextPath.path, dirId: dirId).save(db)
 		}
 	}
 
-	func getCached(_ cleartextPath: CloudPath) throws -> Data? {
-		let entry: CachedEntry? = try inMemoryDB.read { db in
-			return try CachedEntry.fetchOne(db, key: cleartextPath.path)
+	func invalidate(_ cleartextPath: CloudPath) throws {
+		try inMemoryDB.write { db in
+			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE \(CachedEntry.cleartextPathKey) LIKE ?", arguments: ["\(cleartextPath.path)%"])
 		}
-		return entry?.dirId
 	}
 }

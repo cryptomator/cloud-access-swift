@@ -144,6 +144,8 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 			return self.delegate.createFolderIfMissing(at: parentDirPath)
 		}.then { () -> Promise<Void> in
 			return self.delegate.createFolder(at: dirPath)
+		}.then {
+			try self.dirIdCache.addOrUpdate(cleartextCloudPath, dirId: dirId)
 		}.always {
 			try? FileManager.default.removeItem(at: localDirFileURL)
 		}
@@ -171,6 +173,8 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 			return self.getC9RPath(cleartextCloudPath)
 		}.then { ciphertextCloudPath in
 			return self.delegate.deleteFolder(at: ciphertextCloudPath)
+		}.then {
+			try self.dirIdCache.invalidate(cleartextCloudPath)
 		}
 	}
 
@@ -183,6 +187,11 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 	func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
 		return all(getC9RPath(cleartextSourceCloudPath), getC9RPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
 			return self.delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
+		}.then {
+			if let dirId = try self.dirIdCache.get(cleartextSourceCloudPath) {
+				try self.dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
+			}
+			try self.dirIdCache.invalidate(cleartextSourceCloudPath)
 		}
 	}
 

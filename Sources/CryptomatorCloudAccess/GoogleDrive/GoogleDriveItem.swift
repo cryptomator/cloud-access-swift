@@ -10,7 +10,7 @@ import Foundation
 import GoogleAPIClientForREST_Drive
 import GRDB
 
-struct GoogleDriveItem: Decodable, FetchableRecord, TableRecord, Equatable {
+struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {
 	static let databaseTableName = "CachedEntries"
 	static let cloudPathKey = "cloudPath"
 	static let identifierKey = "identifier"
@@ -39,34 +39,7 @@ extension GoogleDriveItem {
 	}
 }
 
-extension GoogleDriveItem: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
-		container[GoogleDriveItem.cloudPathKey] = cloudPath
-		container[GoogleDriveItem.identifierKey] = identifier
-		container[GoogleDriveItem.itemTypeKey] = itemType
-		container[GoogleDriveItem.shortcutKey] = shortcut
-	}
-}
-
 struct GoogleDriveShortcut: Codable, Equatable {
 	let targetIdentifier: String
 	let targetItemType: CloudItemType
-}
-
-extension GoogleDriveShortcut: DatabaseValueConvertible {
-	public var databaseValue: DatabaseValue {
-		let jsonEncoder = JSONEncoder()
-		guard let data = try? jsonEncoder.encode(self) else {
-			return .null
-		}
-		let string = String(data: data, encoding: .utf8)
-		return string?.databaseValue ?? .null
-	}
-
-	public static func fromDatabaseValue(_ dbValue: DatabaseValue) -> Self? {
-		guard let string = String.fromDatabaseValue(dbValue) else { return nil }
-		guard let data = string.data(using: .utf8) else { return nil }
-		let jsonDecoder = JSONDecoder()
-		return try? jsonDecoder.decode(GoogleDriveShortcut.self, from: data)
-	}
 }

@@ -28,6 +28,16 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 		XCTAssertEqual(expectedRootItem, rootItem)
 	}
 
+	func testAddAndGetForShortcut() throws {
+		let shortcut = GoogleDriveShortcut(targetIdentifier: "TestABC--1234@^", targetItemType: .file)
+		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/shortcut"), identifier: "ShortcutIdentifier", itemType: .symlink, shortcut: shortcut)
+		try identifierCache.addOrUpdate(itemToStore)
+		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
+		XCTAssertNotNil(retrievedItem)
+		XCTAssertEqual(itemToStore, retrievedItem)
+		XCTAssertEqual(shortcut, retrievedItem?.shortcut)
+	}
+
 	func testAddAndGetForFileCloudPath() throws {
 		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/test.txt"), identifier: "TestABC--1234@^", itemType: .file, shortcut: nil)
 		try identifierCache.addOrUpdate(itemToStore)

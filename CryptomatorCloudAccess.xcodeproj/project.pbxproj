@@ -1475,7 +1475,7 @@
 			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c.git";
 			requirement = {
 				kind = exactVersion;
-				version = "6.2.0-fork";
+				version = "6.2.3-fork";
 			};
 		};
 		4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
@@ -1483,7 +1483,7 @@
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 1.6.0;
 			};
 		};
 		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
@@ -1499,7 +1499,7 @@
 			repositoryURL = "https://github.com/google/gtm-session-fetcher.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 1.7.0;
 			};
 		};
 		4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {

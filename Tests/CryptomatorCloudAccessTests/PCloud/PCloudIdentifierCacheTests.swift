@@ -22,14 +22,14 @@ class PCloudIdentifierCacheTests: XCTestCase {
 	}
 
 	func testRootItemIsCachedAtStart() throws {
-		let expectedRootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder)
+		let expectedRootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: 0, itemType: .folder)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)
 		XCTAssertEqual(expectedRootItem, rootItem)
 	}
 
 	func testAddAndGetForFileCloudPath() throws {
-		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test.txt"), identifier: "TestABC--1234@^", itemType: .file)
+		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test.txt"), identifier: 1234, itemType: .file)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -37,7 +37,7 @@ class PCloudIdentifierCacheTests: XCTestCase {
 	}
 
 	func testAddAndGetForFolderCloudPath() throws {
-		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test--a-"), identifier: "TestABC--1234@^", itemType: .folder)
+		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test--a-"), identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -46,9 +46,9 @@ class PCloudIdentifierCacheTests: XCTestCase {
 
 	func testUpdateWithDifferentIdentifierForCachedCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder)
+		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
-		let newItemToStore = PCloudItem(cloudPath: cloudPath, identifier: "NewerIdentifer879978123.1-", itemType: .folder)
+		let newItemToStore = PCloudItem(cloudPath: cloudPath, identifier: 5678, itemType: .folder)
 		try identifierCache.addOrUpdate(newItemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -57,12 +57,12 @@ class PCloudIdentifierCacheTests: XCTestCase {
 
 	func testGetAfterInvalidatingDifferentIdentifier() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder)
+		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
 		let secondCloudPath = CloudPath("/test/AAAAAAAAAAAA/test.txt")
-		let secondItemToStore = PCloudItem(cloudPath: secondCloudPath, identifier: "SecondIdentifer@@^1!!´´$", itemType: .folder)
+		let secondItemToStore = PCloudItem(cloudPath: secondCloudPath, identifier: 9012, itemType: .folder)
 		try identifierCache.addOrUpdate(secondItemToStore)
 		try identifierCache.invalidate(itemToStore)
 		XCTAssertNil(identifierCache.get(cloudPath))
@@ -74,7 +74,7 @@ class PCloudIdentifierCacheTests: XCTestCase {
 	func testInvalidateForNonExistentCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
 		XCTAssertNil(identifierCache.get(cloudPath))
-		let nonExistentItem = PCloudItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder)
+		let nonExistentItem = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.invalidate(nonExistentItem)
 	}
 }

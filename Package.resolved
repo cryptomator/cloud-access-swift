@@ -110,6 +110,15 @@
         }
       },
       {
+        "package": "PCloudSDKSwift",
+        "repositoryURL": "https://github.com/pCloud/pcloud-sdk-swift.git",
+        "state": {
+          "branch": null,
+          "revision": "6da4ca6bb4e7068145d9325988e29862d26300ba",
+          "version": "3.2.0"
+        }
+      },
+      {
         "package": "Promises",
         "repositoryURL": "https://github.com/google/promises.git",
         "state": {

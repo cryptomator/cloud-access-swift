@@ -42,8 +42,8 @@
         "repositoryURL": "https://github.com/google/google-api-objectivec-client-for-rest.git",
         "state": {
           "branch": null,
-          "revision": "22e0bb02729d60db396e8b90d8189313cd86ba53",
-          "version": "1.6.0"
+          "revision": "3228334d0584cb9174796fecbe628a723be70452",
+          "version": "1.7.0"
         }
       },
       {
@@ -87,8 +87,8 @@
         "repositoryURL": "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
         "state": {
           "branch": null,
-          "revision": "14a1750834d13567de1a4afb0fa148a22bd7ddbf",
-          "version": "1.1.25"
+          "revision": "2825c3f72bf51f8be43df7177fe1c66370be2d0e",
+          "version": "1.2.0"
         }
       },
       {

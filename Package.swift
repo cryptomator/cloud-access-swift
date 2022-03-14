@@ -27,9 +27,9 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/airsidemobile/JOSESwift.git", .upToNextMinor(from: "2.4.0")),
-		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.1.0")),
+		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.2.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.0.0")),
-		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "1.6.0")),
+		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "1.7.0")),
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "1.2.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "1.7.0")),
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "2.0.0")),

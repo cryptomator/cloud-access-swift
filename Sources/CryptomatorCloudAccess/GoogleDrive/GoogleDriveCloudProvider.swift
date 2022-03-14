@@ -164,9 +164,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return resolveParentPath(forItemAt: targetCloudPath).then { _ in
-			return self.checkForItemExistence(at: targetCloudPath)
-		}.then { itemExists -> Void in
+		return checkForItemExistence(at: targetCloudPath).then { itemExists -> Void in
 			if itemExists {
 				throw CloudProviderError.itemAlreadyExists
 			}

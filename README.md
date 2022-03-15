@@ -183,6 +183,26 @@ let useBackgroundSession = ... // optional: only needed if you want to create a 
 let provider = OneDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
 ```
 
+### pCloud
+
+Begin the authentication flow:
+
+```swift
+let viewController = ... // the presenting `UIViewController`
+PCloudAuthenticator.authenticate(from: viewController).then { credential in
+  // do something with `PCloudCredential`
+  // you probably want to save `credential.user` to re-create the credential later
+}.catch { error in
+  // error handling
+}
+```
+
+You can then use the credential to create a pCloud provider:
+
+```swift
+let provider = PCloudCloudProvider(credential: credential)
+```
+
 ### WebDAV
 
 Create a WebDAV credential:

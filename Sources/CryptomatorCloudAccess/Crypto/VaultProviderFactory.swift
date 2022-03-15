@@ -12,7 +12,7 @@ import Promises
 
 public enum VaultProviderFactoryError: Error {
 	case unsupportedVaultConfig
-	case unsupportedVaultVersion
+	case unsupportedVaultVersion(version: Int)
 }
 
 public enum VaultProviderFactory {
@@ -41,7 +41,7 @@ public enum VaultProviderFactory {
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			return try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		default:
-			throw VaultProviderFactoryError.unsupportedVaultVersion
+			throw VaultProviderFactoryError.unsupportedVaultVersion(version: vaultVersion)
 		}
 	}
 

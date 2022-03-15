@@ -64,8 +64,8 @@ public class PCloudCloudProvider: CloudProvider {
 			}
 		}.then { _ -> Promise<PCloudItem> in
 			return self.resolveParentPath(forItemAt: cloudPath)
-		}.then { item in
-			return self.uploadFile(for: item, from: localURL, to: cloudPath)
+		}.then { parentItem in
+			return self.uploadFile(for: parentItem, from: localURL, to: cloudPath)
 		}
 	}
 
@@ -121,35 +121,45 @@ public class PCloudCloudProvider: CloudProvider {
 
 	private func fetchItemMetadata(for item: PCloudItem) -> Promise<CloudItemMetadata> {
 		if item.itemType == .file {
-			return credential.client.getFileMetadata(item.identifier).execute().then { metadata -> CloudItemMetadata in
-				try self.identifierCache.addOrUpdate(item)
-				return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
-			}.recover { error -> CloudItemMetadata in
-				guard let error = error as? CallError<PCloudAPI.Stat.Error> else {
-					throw error
-				}
-				if case CallError.methodError(.fileDoesNotExist) = error {
-					throw CloudProviderError.itemNotFound
-				} else {
-					throw error
-				}
-			}
+			return fetchFileMetadata(for: item)
 		} else if item.itemType == .folder {
-			return credential.client.listFolder(item.identifier, recursively: false).execute().then { metadata -> CloudItemMetadata in
-				try self.identifierCache.addOrUpdate(item)
-				return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
-			}.recover { error -> CloudItemMetadata in
-				guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
-					throw error
-				}
-				if case CallError.methodError(.folderDoesNotExist) = error {
-					throw CloudProviderError.itemNotFound
-				} else {
-					throw error
-				}
-			}
+			return fetchFolderMetadata(for: item)
 		} else {
 			return Promise(CloudProviderError.itemTypeMismatch)
+		}
+	}
+	
+	private func fetchFileMetadata(for item: PCloudItem) -> Promise<CloudItemMetadata> {
+		assert(item.itemType == .file)
+		return credential.client.getFileMetadata(item.identifier).execute().then { metadata -> CloudItemMetadata in
+			try self.identifierCache.addOrUpdate(item)
+			return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
+		}.recover { error -> CloudItemMetadata in
+			guard let error = error as? CallError<PCloudAPI.Stat.Error> else {
+				throw error
+			}
+			if case CallError.methodError(.fileDoesNotExist) = error {
+				throw CloudProviderError.itemNotFound
+			} else {
+				throw error
+			}
+		}
+	}
+	
+	private func fetchFolderMetadata(for item: PCloudItem) -> Promise<CloudItemMetadata> {
+		assert(item.itemType == .folder)
+		return credential.client.listFolder(item.identifier, recursively: false).execute().then { metadata -> CloudItemMetadata in
+			try self.identifierCache.addOrUpdate(item)
+			return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
+		}.recover { error -> CloudItemMetadata in
+			guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
+				throw error
+			}
+			if case CallError.methodError(.folderDoesNotExist) = error {
+				throw CloudProviderError.itemNotFound
+			} else {
+				throw error
+			}
 		}
 	}
 
@@ -230,14 +240,12 @@ public class PCloudCloudProvider: CloudProvider {
 			try self.identifierCache.addOrUpdate(item)
 			return try self.convertToCloudItemMetadata(metadata, at: cloudPath)
 		}.recover { error -> CloudItemMetadata in
-			guard let error = error as? CallError<PCloudAPI.UploadFile.Error> else {
-				throw error
-			}
-			if case CallError.methodError(.parentFolderDoesNotExist) = error {
+			switch error as? CallError<PCloudAPI.UploadFile.Error> {
+			case .methodError(.parentFolderDoesNotExist):
 				throw CloudProviderError.parentFolderDoesNotExist
-			} else if case CallError.permissionError(.userIsOverQuota) = error {
+			case .permissionError(.userIsOverQuota):
 				throw CloudProviderError.quotaInsufficient
-			} else {
+			default:
 				throw error
 			}
 		}
@@ -249,16 +257,14 @@ public class PCloudCloudProvider: CloudProvider {
 			let item = PCloudItem(cloudPath: cloudPath, metadata: metadata)
 			try self.identifierCache.addOrUpdate(item)
 		}.recover { error -> Void in
-			guard let error = error as? CallError<PCloudAPI.CreateFolder.Error> else {
-				throw error
-			}
-			if case CallError.methodError(.componentOfParentDirectoryDoesNotExist) = error {
+			switch error as? CallError<PCloudAPI.CreateFolder.Error> {
+			case .methodError(.componentOfParentDirectoryDoesNotExist):
 				throw CloudProviderError.parentFolderDoesNotExist
-			} else if case CallError.methodError(.folderAlreadyExists) = error {
+			case .methodError(.folderAlreadyExists):
 				throw CloudProviderError.itemAlreadyExists
-			} else if case CallError.permissionError(.userIsOverQuota) = error {
+			case .permissionError(.userIsOverQuota):
 				throw CloudProviderError.quotaInsufficient
-			} else {
+			default:
 				throw error
 			}
 		}
@@ -300,16 +306,14 @@ public class PCloudCloudProvider: CloudProvider {
 			let targetItem = PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			try self.identifierCache.addOrUpdate(targetItem)
 		}.recover { error -> Void in
-			guard let error = error as? CallError<PCloudAPI.MoveFile.Error> else {
-				throw error
-			}
-			if case CallError.methodError(.folderDoesNotExist) = error {
+			switch error as? CallError<PCloudAPI.MoveFile.Error> {
+			case .methodError(.folderDoesNotExist):
 				throw CloudProviderError.parentFolderDoesNotExist
-			} else if case CallError.methodError(.fileDoesNotExist) = error {
+			case .methodError(.fileDoesNotExist):
 				throw CloudProviderError.itemNotFound
-			} else if case CallError.permissionError(.userIsOverQuota) = error {
+			case .permissionError(.userIsOverQuota):
 				throw CloudProviderError.quotaInsufficient
-			} else {
+			default:
 				throw error
 			}
 		}
@@ -321,16 +325,14 @@ public class PCloudCloudProvider: CloudProvider {
 			let targetItem = PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			try self.identifierCache.addOrUpdate(targetItem)
 		}.recover { error -> Void in
-			guard let error = error as? CallError<PCloudAPI.MoveFolder.Error> else {
-				throw error
-			}
-			if case CallError.methodError(.folderAlreadyExists) = error {
+			switch error as? CallError<PCloudAPI.MoveFolder.Error> {
+			case .methodError(.folderAlreadyExists):
 				throw CloudProviderError.itemAlreadyExists
-			} else if case CallError.methodError(.folderDoesNotExist) = error {
+			case .methodError(.folderDoesNotExist):
 				throw CloudProviderError.itemNotFound
-			} else if case CallError.permissionError(.userIsOverQuota) = error {
+			case .permissionError(.userIsOverQuota):
 				throw CloudProviderError.quotaInsufficient
-			} else {
+			default:
 				throw error
 			}
 		}

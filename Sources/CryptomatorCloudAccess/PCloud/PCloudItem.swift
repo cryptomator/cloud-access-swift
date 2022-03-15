@@ -23,13 +23,10 @@ struct PCloudItem: Decodable, FetchableRecord, TableRecord, Equatable {
 
 extension PCloudItem {
 	init(cloudPath: CloudPath, content: Content) throws {
-		self.cloudPath = cloudPath
 		if let fileMetadata = content.fileMetadata {
-			self.identifier = fileMetadata.id
-			self.itemType = .file
+			self.init(cloudPath: cloudPath, metadata: fileMetadata)
 		} else if let folderMetadata = content.folderMetadata {
-			self.identifier = folderMetadata.id
-			self.itemType = .folder
+			self.init(cloudPath: cloudPath, metadata: folderMetadata)
 		} else {
 			throw PCloudError.unexpectedContent
 		}

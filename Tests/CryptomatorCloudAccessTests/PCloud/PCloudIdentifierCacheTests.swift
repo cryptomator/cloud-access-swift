@@ -1,9 +1,9 @@
 //
-//  GoogleDriveIdentifierCacheTests.swift
+//  PCloudIdentifierCacheTests.swift
 //  CryptomatorCloudAccessTests
 //
-//  Created by Philipp Schmid on 11.05.20.
-//  Copyright © 2020 Skymatic GmbH. All rights reserved.
+//  Created by Tobias Hagemann on 04.03.22.
+//  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
 import Foundation
@@ -14,32 +14,22 @@ import XCTest
 @testable import CryptomatorCloudAccess
 #endif
 
-class GoogleDriveIdentifierCacheTests: XCTestCase {
-	var identifierCache: GoogleDriveIdentifierCache!
+class PCloudIdentifierCacheTests: XCTestCase {
+	var identifierCache: PCloudIdentifierCache!
 
 	override func setUpWithError() throws {
-		identifierCache = try GoogleDriveIdentifierCache()
+		identifierCache = try PCloudIdentifierCache()
 	}
 
 	func testRootItemIsCachedAtStart() throws {
-		let expectedRootItem = GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder, shortcut: nil)
+		let expectedRootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: 0, itemType: .folder)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)
 		XCTAssertEqual(expectedRootItem, rootItem)
 	}
 
-	func testAddAndGetForShortcut() throws {
-		let shortcut = GoogleDriveShortcut(targetIdentifier: "TestABC--1234@^", targetItemType: .file)
-		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/shortcut"), identifier: "ShortcutIdentifier", itemType: .symlink, shortcut: shortcut)
-		try identifierCache.addOrUpdate(itemToStore)
-		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
-		XCTAssertNotNil(retrievedItem)
-		XCTAssertEqual(itemToStore, retrievedItem)
-		XCTAssertEqual(shortcut, retrievedItem?.shortcut)
-	}
-
 	func testAddAndGetForFileCloudPath() throws {
-		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/test.txt"), identifier: "TestABC--1234@^", itemType: .file, shortcut: nil)
+		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test.txt"), identifier: 1234, itemType: .file)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -47,7 +37,7 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 	}
 
 	func testAddAndGetForFolderCloudPath() throws {
-		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/test--a-"), identifier: "TestABC--1234@^", itemType: .folder, shortcut: nil)
+		let itemToStore = PCloudItem(cloudPath: CloudPath("/abc/test--a-"), identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -56,9 +46,9 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 
 	func testUpdateWithDifferentIdentifierForCachedCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = GoogleDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder, shortcut: nil)
+		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
-		let newItemToStore = GoogleDriveItem(cloudPath: cloudPath, identifier: "NewerIdentifer879978123.1-", itemType: .folder, shortcut: nil)
+		let newItemToStore = PCloudItem(cloudPath: cloudPath, identifier: 5678, itemType: .folder)
 		try identifierCache.addOrUpdate(newItemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -67,12 +57,12 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 
 	func testGetAfterInvalidatingDifferentIdentifier() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = GoogleDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder, shortcut: nil)
+		let itemToStore = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
 		let secondCloudPath = CloudPath("/test/AAAAAAAAAAAA/test.txt")
-		let secondItemToStore = GoogleDriveItem(cloudPath: secondCloudPath, identifier: "SecondIdentifer@@^1!!´´$", itemType: .folder, shortcut: nil)
+		let secondItemToStore = PCloudItem(cloudPath: secondCloudPath, identifier: 9012, itemType: .folder)
 		try identifierCache.addOrUpdate(secondItemToStore)
 		try identifierCache.invalidate(itemToStore)
 		XCTAssertNil(identifierCache.get(cloudPath))
@@ -84,7 +74,7 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 	func testInvalidateForNonExistentCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
 		XCTAssertNil(identifierCache.get(cloudPath))
-		let nonExistentItem = GoogleDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder, shortcut: nil)
+		let nonExistentItem = PCloudItem(cloudPath: cloudPath, identifier: 1234, itemType: .folder)
 		try identifierCache.invalidate(nonExistentItem)
 	}
 }

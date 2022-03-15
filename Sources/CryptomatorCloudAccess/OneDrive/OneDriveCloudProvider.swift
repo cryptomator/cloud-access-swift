@@ -134,8 +134,8 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: targetCloudPath).then { targetItemAlreadyExists in
-			if targetItemAlreadyExists {
+		return checkForItemExistence(at: targetCloudPath).then { itemExists in
+			if itemExists {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		}.then { _ -> Promise<(OneDriveItem, OneDriveItem)> in

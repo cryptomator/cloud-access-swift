@@ -164,9 +164,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return resolveParentPath(forItemAt: targetCloudPath).then { _ in
-			return self.checkForItemExistence(at: targetCloudPath)
-		}.then { itemExists -> Void in
+		return checkForItemExistence(at: targetCloudPath).then { itemExists -> Void in
 			if itemExists {
 				throw CloudProviderError.itemAlreadyExists
 			}
@@ -191,23 +189,27 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) -> Promise<CloudItemList> {
-		guard item.itemType == .folder else {
+		guard item.itemType == .folder || (item.itemType == .symlink && item.shortcut?.targetItemType == .folder) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
 		let query = fetchItemListQuery(for: item, pageToken: pageToken)
-		return executeQuery(query).then { result -> CloudItemList in
+		return executeQuery(query).then(on: .global()) { result -> CloudItemList in
 			guard let fileList = result as? GTLRDrive_FileList else {
 				throw GoogleDriveError.unexpectedResultType
 			}
+			var items = [CloudItemMetadata]()
 			try fileList.files?.forEach { file in
 				guard let name = file.name else {
-					return
+					throw GoogleDriveError.missingItemName
 				}
-				let childCloudPath = item.cloudPath.appendingPathComponent(name)
-				let childItem = try GoogleDriveItem(cloudPath: childCloudPath, file: file)
-				try self.identifierCache.addOrUpdate(childItem)
+				let cloudPath = item.cloudPath.appendingPathComponent(name)
+				let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
+				try self.identifierCache.addOrUpdate(item)
+				let resolvedFile = try awaitPromise(self.resolveFile(file, with: item))
+				let itemMetadata = try self.convertToCloudItemMetadata(resolvedFile, at: cloudPath)
+				items.append(itemMetadata)
 			}
-			return try self.convertToCloudItemList(fileList, at: item.cloudPath)
+			return CloudItemList(items: items, nextPageToken: fileList.nextPageToken)
 		}.recover { error -> CloudItemList in
 			if let error = error as NSError?, error.domain == kGTLRErrorObjectDomain, error.code == 400 {
 				throw CloudProviderError.pageTokenInvalid
@@ -217,7 +219,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func downloadFile(for item: GoogleDriveItem, to localURL: URL) -> Promise<Void> {
-		guard item.itemType == .file else {
+		guard item.itemType == .file || (item.itemType == .symlink && item.shortcut?.targetItemType == .file) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
 		let query = downloadFileQuery(for: item)
@@ -350,12 +352,15 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	 This is necessary because Google Drive does not use normal paths, but only works with (parent-)identifiers.
 
+	 Shortcuts are supported by resolving them transparently to the target.
+
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
 	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) -> Promise<GoogleDriveItem> {
+		let resolvedParentItemIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let query = GTLRDriveQuery_FilesList.query()
-		query.q = "'\(parentItem.identifier)' in parents and name contains '\(name)' and trashed = false"
-		query.fields = "files(id, name, mimeType)"
+		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(name)' and trashed = false"
+		query.fields = "files(id,name,mimeType,shortcutDetails)"
 		return executeQuery(query).then { result -> GoogleDriveItem in
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
@@ -368,28 +373,53 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
+	// MARK: - Resolve Shortcut
+
+	private func resolveFile(_ file: GTLRDrive_File, with item: GoogleDriveItem) -> Promise<GTLRDrive_File> {
+		if let shortcut = item.shortcut {
+			return resolveShortcut(shortcut, at: item.cloudPath)
+		} else {
+			return Promise(file)
+		}
+	}
+
+	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
+		let query = GTLRDriveQuery_FilesGet.query(withFileId: shortcut.targetIdentifier)
+		query.fields = "modifiedTime,size,mimeType"
+		return executeQuery(query).then { result -> GTLRDrive_File in
+			guard let file = result as? GTLRDrive_File else {
+				throw GoogleDriveError.unexpectedResultType
+			}
+			return file
+		}
+	}
+
 	// MARK: - Queries
 
 	private func fetchItemMetadataQuery(for item: GoogleDriveItem) -> GTLRDriveQuery {
-		let query = GTLRDriveQuery_FilesGet.query(withFileId: item.identifier)
-		query.fields = "name, modifiedTime, size, mimeType"
+		let resolvedIdentifier = item.shortcut?.targetIdentifier ?? item.identifier
+		let query = GTLRDriveQuery_FilesGet.query(withFileId: resolvedIdentifier)
+		query.fields = "name,modifiedTime,size,mimeType"
 		return query
 	}
 
 	private func fetchItemListQuery(for item: GoogleDriveItem, pageToken: String?) -> GTLRDriveQuery {
+		let resolvedIdentifier = item.shortcut?.targetIdentifier ?? item.identifier
 		let query = GTLRDriveQuery_FilesList.query()
-		query.q = "'\(item.identifier)' in parents and trashed = false"
+		query.q = "'\(resolvedIdentifier)' in parents and trashed = false"
 		query.pageSize = 1000
 		query.pageToken = pageToken
-		query.fields = "nextPageToken, files(id,mimeType,modifiedTime,name,size)"
+		query.fields = "nextPageToken,files(id,name,modifiedTime,size,mimeType,shortcutDetails)"
 		return query
 	}
 
 	private func downloadFileQuery(for item: GoogleDriveItem) -> GTLRDriveQuery {
-		return GTLRDriveQuery_FilesGet.queryForMedia(withFileId: item.identifier)
+		let resolvedIdentifier = item.shortcut?.targetIdentifier ?? item.identifier
+		return GTLRDriveQuery_FilesGet.queryForMedia(withFileId: resolvedIdentifier)
 	}
 
 	private func uploadFileQuery(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<GTLRDriveQuery> {
+		let resolvedParentIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let metadata = GTLRDrive_File()
 		metadata.name = cloudPath.lastPathComponent
 		let uploadParameters = GTLRUploadParameters(fileURL: localURL, mimeType: "application/octet-stream")
@@ -403,39 +433,42 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			guard case CloudProviderError.itemNotFound = error else {
 				throw error
 			}
-			metadata.parents = [parentItem.identifier]
+			metadata.parents = [resolvedParentIdentifier]
 			let query = GTLRDriveQuery_FilesCreate.query(withObject: metadata, uploadParameters: uploadParameters)
 			return query
 		}.then { query -> GTLRDriveQuery in
-			query.fields = "id, name, modifiedTime, mimeType, size"
+			query.fields = "id,name,modifiedTime,size,mimeType"
 			return query
 		}
 	}
 
 	private func createFolderQuery(for parentItem: GoogleDriveItem, with name: String) -> GTLRDriveQuery {
+		let resolvedParentIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let metadata = GTLRDrive_File()
 		metadata.name = name
-		metadata.parents = [parentItem.identifier]
+		metadata.parents = [resolvedParentIdentifier]
 		metadata.mimeType = "application/vnd.google-apps.folder"
 		return GTLRDriveQuery_FilesCreate.query(withObject: metadata, uploadParameters: nil)
 	}
 
 	private func deleteItemQuery(for item: GoogleDriveItem) -> GTLRDriveQuery {
+		// do not resolve to the shortcut's target since the shortcut itself should be deleted
 		return GTLRDriveQuery_FilesDelete.query(withFileId: item.identifier)
 	}
 
 	private func moveItemQuery(for item: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<GTLRDriveQuery> {
+		// do not resolve the source to the shortcut's target since the shortcut itself should be moved
 		let metadata = GTLRDrive_File()
 		metadata.name = targetCloudPath.lastPathComponent
 		let query = GTLRDriveQuery_FilesUpdate.query(withObject: metadata, fileId: item.identifier, uploadParameters: nil)
-		query.fields = "id, modifiedTime"
+		query.fields = "id,modifiedTime"
 		if onlyItemNameChangedBetween(sourceCloudPath, and: targetCloudPath) {
 			return Promise(query)
 		} else {
-			let sourceParentCloudPath = sourceCloudPath.deletingLastPathComponent()
-			let targetParentCloudPath = targetCloudPath.deletingLastPathComponent()
-			return all(resolvePath(forItemAt: sourceParentCloudPath), resolvePath(forItemAt: targetParentCloudPath)).then { oldParentItem, newParentItem -> GTLRDriveQuery_FilesUpdate in
-				query.addParents = newParentItem.identifier
+			return all(resolveParentPath(forItemAt: sourceCloudPath), resolveParentPath(forItemAt: targetCloudPath)).then { oldParentItem, newParentItem -> GTLRDriveQuery_FilesUpdate in
+				// but resolve the target's parent if it is a shortcut
+				let resolvedNewParentIdentifier = newParentItem.shortcut?.targetIdentifier ?? newParentItem.identifier
+				query.addParents = resolvedNewParentIdentifier
 				query.removeParents = oldParentItem.identifier
 				return query
 			}
@@ -496,26 +529,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	// MARK: - Helpers
 
 	private func convertToCloudItemMetadata(_ file: GTLRDrive_File, at cloudPath: CloudPath) throws -> CloudItemMetadata {
-		guard let name = file.name else {
-			throw GoogleDriveError.missingItemName
-		}
+		let name = cloudPath.lastPathComponent
 		let itemType = file.getCloudItemType()
 		let lastModifiedDate = file.modifiedTime?.date
 		let size = file.size?.intValue
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-	}
-
-	private func convertToCloudItemList(_ fileList: GTLRDrive_FileList, at cloudPath: CloudPath) throws -> CloudItemList {
-		var items = [CloudItemMetadata]()
-		try fileList.files?.forEach { file in
-			guard let name = file.name else {
-				throw GoogleDriveError.missingItemName
-			}
-			let itemCloudPath = cloudPath.appendingPathComponent(name)
-			let itemMetadata = try convertToCloudItemMetadata(file, at: itemCloudPath)
-			items.append(itemMetadata)
-		}
-		return CloudItemList(items: items, nextPageToken: fileList.nextPageToken)
 	}
 
 	func onlyItemNameChangedBetween(_ lhs: CloudPath, and rhs: CloudPath) -> Bool {

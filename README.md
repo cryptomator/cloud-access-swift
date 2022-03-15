@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.1.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.2.0"))
 ```
 
 ## Usage
@@ -181,6 +181,26 @@ You can then use the credential to create a OneDrive provider:
 ```swift
 let useBackgroundSession = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession`, defaults to `false`
 let provider = OneDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
+```
+
+### pCloud
+
+Begin the authentication flow:
+
+```swift
+let viewController = ... // the presenting `UIViewController`
+PCloudAuthenticator.authenticate(from: viewController).then { credential in
+  // do something with `PCloudCredential`
+  // you probably want to save `credential.user` to re-create the credential later
+}.catch { error in
+  // error handling
+}
+```
+
+You can then use the credential to create a pCloud provider:
+
+```swift
+let provider = PCloudCloudProvider(credential: credential)
 ```
 
 ### WebDAV

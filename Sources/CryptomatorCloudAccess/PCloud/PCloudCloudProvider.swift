@@ -128,12 +128,12 @@ public class PCloudCloudProvider: CloudProvider {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
 	}
-	
+
 	private func fetchFileMetadata(for item: PCloudItem) -> Promise<CloudItemMetadata> {
 		assert(item.itemType == .file)
 		return credential.client.getFileMetadata(item.identifier).execute().then { metadata -> CloudItemMetadata in
 			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
+			return self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
 		}.recover { error -> CloudItemMetadata in
 			guard let error = error as? CallError<PCloudAPI.Stat.Error> else {
 				throw error
@@ -145,12 +145,12 @@ public class PCloudCloudProvider: CloudProvider {
 			}
 		}
 	}
-	
+
 	private func fetchFolderMetadata(for item: PCloudItem) -> Promise<CloudItemMetadata> {
 		assert(item.itemType == .folder)
 		return credential.client.listFolder(item.identifier, recursively: false).execute().then { metadata -> CloudItemMetadata in
 			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
+			return self.convertToCloudItemMetadata(metadata, at: item.cloudPath)
 		}.recover { error -> CloudItemMetadata in
 			guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
 				throw error
@@ -238,7 +238,7 @@ public class PCloudCloudProvider: CloudProvider {
 		return task.execute().then { metadata -> CloudItemMetadata in
 			let item = PCloudItem(cloudPath: cloudPath, metadata: metadata)
 			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(metadata, at: cloudPath)
+			return self.convertToCloudItemMetadata(metadata, at: cloudPath)
 		}.recover { error -> CloudItemMetadata in
 			switch error as? CallError<PCloudAPI.UploadFile.Error> {
 			case .methodError(.parentFolderDoesNotExist):
@@ -406,15 +406,15 @@ public class PCloudCloudProvider: CloudProvider {
 
 	private func convertToCloudItemMetadata(_ content: Content, at cloudPath: CloudPath) throws -> CloudItemMetadata {
 		if let fileMetadata = content.fileMetadata {
-			return try convertToCloudItemMetadata(fileMetadata, at: cloudPath)
+			return convertToCloudItemMetadata(fileMetadata, at: cloudPath)
 		} else if let folderMetadata = content.folderMetadata {
-			return try convertToCloudItemMetadata(folderMetadata, at: cloudPath)
+			return convertToCloudItemMetadata(folderMetadata, at: cloudPath)
 		} else {
 			throw PCloudError.unexpectedContent
 		}
 	}
 
-	private func convertToCloudItemMetadata(_ metadata: File.Metadata, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func convertToCloudItemMetadata(_ metadata: File.Metadata, at cloudPath: CloudPath) -> CloudItemMetadata {
 		let name = metadata.name
 		let itemType = CloudItemType.file
 		let lastModifiedDate = Date(timeIntervalSince1970: TimeInterval(metadata.modifiedTime))
@@ -422,7 +422,7 @@ public class PCloudCloudProvider: CloudProvider {
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 	}
 
-	private func convertToCloudItemMetadata(_ metadata: Folder.Metadata, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func convertToCloudItemMetadata(_ metadata: Folder.Metadata, at cloudPath: CloudPath) -> CloudItemMetadata {
 		let name = metadata.name
 		let itemType = CloudItemType.folder
 		let lastModifiedDate = Date(timeIntervalSince1970: TimeInterval(metadata.modifiedTime))
@@ -435,12 +435,12 @@ public class PCloudCloudProvider: CloudProvider {
 			if let fileMetadata = content.fileMetadata {
 				let name = fileMetadata.name
 				let itemCloudPath = cloudPath.appendingPathComponent(name)
-				let itemMetadata = try convertToCloudItemMetadata(fileMetadata, at: itemCloudPath)
+				let itemMetadata = convertToCloudItemMetadata(fileMetadata, at: itemCloudPath)
 				items.append(itemMetadata)
 			} else if let folderMetadata = content.folderMetadata {
 				let name = folderMetadata.name
 				let itemCloudPath = cloudPath.appendingPathComponent(name)
-				let itemMetadata = try convertToCloudItemMetadata(folderMetadata, at: itemCloudPath)
+				let itemMetadata = convertToCloudItemMetadata(folderMetadata, at: itemCloudPath)
 				items.append(itemMetadata)
 			} else {
 				throw PCloudError.unexpectedContent

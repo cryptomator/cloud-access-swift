@@ -465,9 +465,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		if onlyItemNameChangedBetween(sourceCloudPath, and: targetCloudPath) {
 			return Promise(query)
 		} else {
-			let sourceParentCloudPath = sourceCloudPath.deletingLastPathComponent()
-			let targetParentCloudPath = targetCloudPath.deletingLastPathComponent()
-			return all(resolvePath(forItemAt: sourceParentCloudPath), resolvePath(forItemAt: targetParentCloudPath)).then { oldParentItem, newParentItem -> GTLRDriveQuery_FilesUpdate in
+			return all(resolveParentPath(forItemAt: sourceCloudPath), resolveParentPath(forItemAt: targetCloudPath)).then { oldParentItem, newParentItem -> GTLRDriveQuery_FilesUpdate in
 				// but resolve the target's parent if it is a shortcut
 				let resolvedNewParentIdentifier = newParentItem.shortcut?.targetIdentifier ?? newParentItem.identifier
 				query.addParents = resolvedNewParentIdentifier

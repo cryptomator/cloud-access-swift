@@ -148,7 +148,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	// MARK: - Operations
 
 	private func fetchItemMetadata(for item: OneDriveItem) -> Promise<CloudItemMetadata> {
-		guard let url = URL(string: requestURLString(for: item)) else {
+		guard let url = requestURL(for: item) else {
 			return Promise(OneDriveError.invalidURL)
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -318,16 +318,29 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	// MARK: - Requests
 
-	func requestURLString(for item: OneDriveItem) -> String {
+	func requestURLString(for item: OneDriveItem) -> String? {
+		guard let encodedItemIdentifier = item.identifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+			return nil
+		}
 		if let driveIdentifier = item.driveIdentifier {
-			return "\(MSGraphBaseURL)/drives/\(driveIdentifier)/items/\(item.identifier)"
+			guard let encodedDriveIdentifier = driveIdentifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+				return nil
+			}
+			return "\(MSGraphBaseURL)/drives/\(encodedDriveIdentifier)/items/\(encodedItemIdentifier)"
 		} else {
-			return "\(MSGraphBaseURL)/me/drive/items/\(item.identifier)"
+			return "\(MSGraphBaseURL)/me/drive/items/\(encodedItemIdentifier)"
 		}
 	}
 
+	func requestURL(for item: OneDriveItem) -> URL? {
+		guard let urlString = requestURLString(for: item) else {
+			return nil
+		}
+		return URL(string: urlString)
+	}
+
 	func childrenRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(requestURLString(for: item))/children") else {
+		guard let urlString = requestURLString(for: item), let url = URL(string: "\(urlString)/children") else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -335,7 +348,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func contentRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(requestURLString(for: item))/content") else {
+		guard let urlString = requestURLString(for: item), let url = URL(string: "\(urlString)/content") else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -343,7 +356,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func createUploadSessionRequest(for parentItem: OneDriveItem, with name: String) throws -> NSMutableURLRequest {
-		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName):/createUploadSession") else {
+		guard let urlString = requestURLString(for: parentItem), let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(urlString):/\(encodedName):/createUploadSession") else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -360,7 +373,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func createFolderRequest(for parentItem: OneDriveItem, with name: String) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(requestURLString(for: parentItem))/children") else {
+		guard let urlString = requestURLString(for: parentItem), let url = URL(string: "\(urlString)/children") else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -375,7 +388,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func deleteItemRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
-		guard let url = URL(string: requestURLString(for: item)) else {
+		guard let url = requestURL(for: item) else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -384,7 +397,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func moveItemRequest(for item: OneDriveItem, with newParentItem: OneDriveItem, targetCloudPath: CloudPath) throws -> NSMutableURLRequest {
-		guard let url = URL(string: requestURLString(for: item)) else {
+		guard let url = requestURL(for: item) else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
@@ -538,7 +551,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func getOneDriveItem(for name: String, withParentItem parentItem: OneDriveItem) -> Promise<OneDriveItem> {
-		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName)") else {
+		guard let urlString = requestURLString(for: parentItem), let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(urlString):/\(encodedName)") else {
 			return Promise(OneDriveError.invalidURL)
 		}
 		let request = NSMutableURLRequest(url: url)

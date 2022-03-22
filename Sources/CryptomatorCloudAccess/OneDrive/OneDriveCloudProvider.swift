@@ -538,7 +538,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func getOneDriveItem(for name: String, withParentItem parentItem: OneDriveItem) -> Promise<OneDriveItem> {
-		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName)") else {
+		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName):") else {
 			return Promise(OneDriveError.invalidURL)
 		}
 		let request = NSMutableURLRequest(url: url)

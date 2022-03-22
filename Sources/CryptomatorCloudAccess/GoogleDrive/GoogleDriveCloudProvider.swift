@@ -198,14 +198,22 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				throw GoogleDriveError.unexpectedResultType
 			}
 			var items = [CloudItemMetadata]()
-			try fileList.files?.forEach { file in
+			guard let files = fileList.files else {
+				return CloudItemList(items: items)
+			}
+			for file in files {
 				guard let name = file.name else {
 					throw GoogleDriveError.missingItemName
 				}
 				let cloudPath = item.cloudPath.appendingPathComponent(name)
 				let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
 				try self.identifierCache.addOrUpdate(item)
-				let resolvedFile = try awaitPromise(self.resolveFile(file, with: item))
+				let resolvedFile: GTLRDrive_File
+				do {
+					resolvedFile = try awaitPromise(self.resolveFile(file, with: item))
+				} catch {
+					continue
+				}
 				let itemMetadata = try self.convertToCloudItemMetadata(resolvedFile, at: cloudPath)
 				items.append(itemMetadata)
 			}

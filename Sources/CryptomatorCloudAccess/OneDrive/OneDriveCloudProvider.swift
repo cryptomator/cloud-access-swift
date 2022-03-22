@@ -319,10 +319,10 @@ public class OneDriveCloudProvider: CloudProvider {
 	// MARK: - Requests
 
 	func requestURLString(for item: OneDriveItem) -> String? {
-		guard let encodedItemIdentifier = item.identifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+		guard !item.identifier.isEmpty, let encodedItemIdentifier = item.identifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
 			return nil
 		}
-		if let driveIdentifier = item.driveIdentifier {
+		if let driveIdentifier = item.driveIdentifier, !driveIdentifier.isEmpty {
 			guard let encodedDriveIdentifier = driveIdentifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
 				return nil
 			}

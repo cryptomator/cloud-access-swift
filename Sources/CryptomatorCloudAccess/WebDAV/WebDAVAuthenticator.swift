@@ -10,7 +10,7 @@ import Foundation
 import Promises
 
 public enum WebDAVAuthenticatorError: Error {
-	case unsupportedProcotol
+	case unsupportedProtocol
 	case untrustedCertificate
 }
 
@@ -33,7 +33,7 @@ public enum WebDAVAuthenticator {
 			if httpResponse.value(forHTTPHeaderField: "DAV") != nil {
 				return Promise(())
 			} else {
-				return Promise(WebDAVAuthenticatorError.unsupportedProcotol)
+				return Promise(WebDAVAuthenticatorError.unsupportedProtocol)
 			}
 		}
 	}

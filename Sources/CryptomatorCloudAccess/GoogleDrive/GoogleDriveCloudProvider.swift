@@ -184,7 +184,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				throw GoogleDriveError.unexpectedResultType
 			}
 			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(file, at: item.cloudPath)
+			return self.convertToCloudItemMetadata(file, at: item.cloudPath)
 		}
 	}
 
@@ -208,14 +208,13 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				let cloudPath = item.cloudPath.appendingPathComponent(name)
 				let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
 				try self.identifierCache.addOrUpdate(item)
-				let resolvedFile: GTLRDrive_File
+				let resolvedItemMetadata: CloudItemMetadata
 				do {
-					resolvedFile = try awaitPromise(self.resolveFile(file, with: item))
+					resolvedItemMetadata = try awaitPromise(self.resolveToCloudItemMetadata(file, with: item))
 				} catch {
 					continue
 				}
-				let itemMetadata = try self.convertToCloudItemMetadata(resolvedFile, at: cloudPath)
-				items.append(itemMetadata)
+				items.append(resolvedItemMetadata)
 			}
 			return CloudItemList(items: items, nextPageToken: fileList.nextPageToken)
 		}.recover { error -> CloudItemList in
@@ -256,7 +255,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			}
 			let item = try GoogleDriveItem(cloudPath: cloudPath, file: uploadedFile)
 			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(uploadedFile, at: cloudPath)
+			return self.convertToCloudItemMetadata(uploadedFile, at: cloudPath)
 		}
 	}
 
@@ -383,23 +382,40 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Resolve Shortcut
 
-	private func resolveFile(_ file: GTLRDrive_File, with item: GoogleDriveItem) -> Promise<GTLRDrive_File> {
+	private func resolveToCloudItemMetadata(_ file: GTLRDrive_File, with item: GoogleDriveItem) -> Promise<CloudItemMetadata> {
 		if let shortcut = item.shortcut {
 			return resolveShortcut(shortcut, at: item.cloudPath)
 		} else {
-			return Promise(file)
+			return Promise(convertToCloudItemMetadata(file, at: item.cloudPath))
 		}
 	}
 
-	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
+	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		switch shortcut.targetItemType {
+		case .file:
+			return resolveShortcutFile(shortcut, at: cloudPath)
+		case .folder:
+			return resolveShortcutFolder(shortcut, at: cloudPath)
+		default:
+			return Promise(CloudProviderError.itemTypeMismatch)
+		}
+	}
+
+	private func resolveShortcutFile(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		let query = GTLRDriveQuery_FilesGet.query(withFileId: shortcut.targetIdentifier)
 		query.fields = "modifiedTime,size,mimeType"
-		return executeQuery(query).then { result -> GTLRDrive_File in
+		return executeQuery(query).then { result -> CloudItemMetadata in
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
-			return file
+			return self.convertToCloudItemMetadata(file, at: cloudPath)
 		}
+	}
+
+	private func resolveShortcutFolder(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		// Resolving doesn't work for folders that have been remotely shared. `GTLRDriveQuery_FilesGet` would fail with a 404 error.
+		// Resolving can be safely skipped since all relevant information is already available. Assuming `modifiedTime` and `size` to be `nil`.
+		return Promise(convertToCloudItemMetadata(shortcut, at: cloudPath))
 	}
 
 	// MARK: - Queries
@@ -536,12 +552,18 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
-	private func convertToCloudItemMetadata(_ file: GTLRDrive_File, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func convertToCloudItemMetadata(_ file: GTLRDrive_File, at cloudPath: CloudPath) -> CloudItemMetadata {
 		let name = cloudPath.lastPathComponent
 		let itemType = file.getCloudItemType()
 		let lastModifiedDate = file.modifiedTime?.date
 		let size = file.size?.intValue
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+	}
+
+	private func convertToCloudItemMetadata(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> CloudItemMetadata {
+		let name = cloudPath.lastPathComponent
+		let itemType = shortcut.targetItemType
+		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: nil, size: nil)
 	}
 
 	func onlyItemNameChangedBetween(_ lhs: CloudPath, and rhs: CloudPath) -> Bool {

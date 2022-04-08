@@ -39,7 +39,7 @@ class PCloudIdentifierCache {
 
 	func invalidate(_ item: PCloudItem) throws {
 		try inMemoryDB.write { db in
-			_ = try item.delete(db)
+			try db.execute(sql: "DELETE FROM \(PCloudItem.databaseTableName) WHERE \(PCloudItem.cloudPathKey) LIKE ?", arguments: ["\(item.cloudPath.path)%"])
 		}
 	}
 }

@@ -55,6 +55,30 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 		XCTAssertEqual(newItemToStore, retrievedItem)
 	}
 
+	func testInvalidateIncludingSubPaths() throws {
+		let path = CloudPath("/foo")
+		let itemToStore = OneDriveItem(cloudPath: path, identifier: "foo", driveIdentifier: nil, itemType: .folder)
+		try identifierCache.addOrUpdate(itemToStore)
+
+		let subPath1 = CloudPath("/foo/bar")
+		let subItemToStore1 = OneDriveItem(cloudPath: subPath1, identifier: "sub1", driveIdentifier: nil, itemType: .folder)
+		try identifierCache.addOrUpdate(subItemToStore1)
+
+		let subPath2 = CloudPath("/foo/baz")
+		let subItemToStore2 = OneDriveItem(cloudPath: subPath2, identifier: "sub2", driveIdentifier: nil, itemType: .folder)
+		try identifierCache.addOrUpdate(subItemToStore2)
+
+		let siblingPath = CloudPath("/bar/foo")
+		let siblingItemToStore = OneDriveItem(cloudPath: siblingPath, identifier: "sibling", driveIdentifier: nil, itemType: .folder)
+		try identifierCache.addOrUpdate(siblingItemToStore)
+
+		try identifierCache.invalidate(itemToStore)
+		XCTAssertNil(identifierCache.get(path))
+		XCTAssertNil(identifierCache.get(subPath1))
+		XCTAssertNil(identifierCache.get(subPath2))
+		XCTAssertEqual(siblingItemToStore, identifierCache.get(siblingPath))
+	}
+
 	func testGetAfterInvalidatingDifferentIdentifier() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
 		let itemToStore = OneDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)

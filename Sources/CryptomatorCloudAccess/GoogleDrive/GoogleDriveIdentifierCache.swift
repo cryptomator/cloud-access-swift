@@ -39,7 +39,7 @@ class GoogleDriveIdentifierCache {
 
 	func invalidate(_ item: GoogleDriveItem) throws {
 		try inMemoryDB.write { db in
-			_ = try item.delete(db)
+			try db.execute(sql: "DELETE FROM \(GoogleDriveItem.databaseTableName) WHERE \(GoogleDriveItem.cloudPathKey) LIKE ?", arguments: ["\(item.cloudPath.path)%"])
 		}
 	}
 }

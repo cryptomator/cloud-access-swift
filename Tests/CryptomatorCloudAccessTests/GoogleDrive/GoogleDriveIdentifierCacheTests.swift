@@ -65,6 +65,30 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 		XCTAssertEqual(newItemToStore, retrievedItem)
 	}
 
+	func testInvalidateIncludingSubPaths() throws {
+		let path = CloudPath("/foo")
+		let itemToStore = GoogleDriveItem(cloudPath: path, identifier: "foo", itemType: .folder, shortcut: nil)
+		try identifierCache.addOrUpdate(itemToStore)
+
+		let subPath1 = CloudPath("/foo/bar")
+		let subItemToStore1 = GoogleDriveItem(cloudPath: subPath1, identifier: "sub1", itemType: .folder, shortcut: nil)
+		try identifierCache.addOrUpdate(subItemToStore1)
+
+		let subPath2 = CloudPath("/foo/baz")
+		let subItemToStore2 = GoogleDriveItem(cloudPath: subPath2, identifier: "sub2", itemType: .folder, shortcut: nil)
+		try identifierCache.addOrUpdate(subItemToStore2)
+
+		let siblingPath = CloudPath("/bar/foo")
+		let siblingItemToStore = GoogleDriveItem(cloudPath: siblingPath, identifier: "sibling", itemType: .folder, shortcut: nil)
+		try identifierCache.addOrUpdate(siblingItemToStore)
+
+		try identifierCache.invalidate(itemToStore)
+		XCTAssertNil(identifierCache.get(path))
+		XCTAssertNil(identifierCache.get(subPath1))
+		XCTAssertNil(identifierCache.get(subPath2))
+		XCTAssertEqual(siblingItemToStore, identifierCache.get(siblingPath))
+	}
+
 	func testGetAfterInvalidatingDifferentIdentifier() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
 		let itemToStore = GoogleDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", itemType: .folder, shortcut: nil)

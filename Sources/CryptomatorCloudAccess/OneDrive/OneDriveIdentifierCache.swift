@@ -39,7 +39,7 @@ class OneDriveIdentifierCache {
 
 	func invalidate(_ item: OneDriveItem) throws {
 		try inMemoryDB.write { db in
-			_ = try item.delete(db)
+			try db.execute(sql: "DELETE FROM \(OneDriveItem.databaseTableName) WHERE \(OneDriveItem.cloudPathKey) LIKE ?", arguments: ["\(item.cloudPath.path)%"])
 		}
 	}
 }

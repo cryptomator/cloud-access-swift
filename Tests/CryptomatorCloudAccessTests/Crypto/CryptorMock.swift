@@ -19,11 +19,15 @@ class ContentCryptorMock: ContentCryptor {
 	let nonceLen = 0
 	let tagLen = 0
 
-	func encrypt(_ chunk: [UInt8], key: [UInt8], nonce: [UInt8], ad: [UInt8]...) throws -> [UInt8] {
+	func encrypt(_ chunk: [UInt8], key: [UInt8], nonce: [UInt8], ad: [UInt8]) throws -> [UInt8] {
 		return []
 	}
 
-	func decrypt(_ chunk: [UInt8], key: [UInt8], ad: [UInt8]...) throws -> [UInt8] {
+	func decrypt(_ chunk: [UInt8], key: [UInt8], ad: [UInt8]) throws -> [UInt8] {
+		return []
+	}
+
+	func ad(chunkNumber: UInt64, headerNonce: [UInt8]) -> [UInt8] {
 		return []
 	}
 }

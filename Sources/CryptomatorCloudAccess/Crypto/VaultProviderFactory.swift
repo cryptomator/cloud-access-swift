@@ -24,15 +24,13 @@ public enum VaultProviderFactory {
 			throw VaultProviderFactoryError.unsupportedVaultConfig
 		}
 		let verifiedVaultConfig = try unverifiedVaultConfig.verify(rawKey: masterkey.rawKey)
-
-		let cryptor = Cryptor(masterkey: masterkey)
+		let cryptor = Cryptor(masterkey: masterkey, scheme: verifiedVaultConfig.cipherCombo)
 		let shorteningDecorator = try VaultFormat8ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath, threshold: verifiedVaultConfig.shorteningThreshold)
 		return try VaultFormat8ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
 	public static func createLegacyVaultProvider(from masterkey: Masterkey, vaultVersion: Int, vaultPath: CloudPath, with provider: CloudProvider) throws -> CloudProvider {
-		let cryptor = Cryptor(masterkey: masterkey)
-
+		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 		switch vaultVersion {
 		case 6:
 			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
@@ -46,7 +44,7 @@ public enum VaultProviderFactory {
 	}
 
 	public static func isSupported(unverifiedVaultConfig: UnverifiedVaultConfig) -> Bool {
-		guard unverifiedVaultConfig.allegedCipherCombo == .sivCTRMAC else {
+		guard CryptorScheme(rawValue: unverifiedVaultConfig.allegedCipherCombo) != nil else {
 			return false
 		}
 		guard unverifiedVaultConfig.allegedFormat == 8 else {

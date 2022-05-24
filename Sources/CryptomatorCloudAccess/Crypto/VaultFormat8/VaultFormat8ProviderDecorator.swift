@@ -15,6 +15,6 @@ import Foundation
 
  Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 8, pass an instance of `VaultFormat8ShorteningProviderDecorator` (shortening decorator) as the delegate.
 
- TODO: This decorator only supports the cipher combo `SIV_AESCTR` for now, which makes the implementation identical to vault format 7. Support for `SIV_GCM` has to be added in CryptomatorCryptoLib first.
+ The implementation of this decorator is identical to vault format 7 since the new format "only" introduced a new vault configuration file.
  */
 class VaultFormat8ProviderDecorator: VaultFormat7ProviderDecorator {}

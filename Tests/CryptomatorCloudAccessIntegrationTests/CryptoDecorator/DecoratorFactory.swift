@@ -21,7 +21,7 @@ class DecoratorFactory {
 	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {
 		do {
 			let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
-			let cryptor = Cryptor(masterkey: masterkey)
+			let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 			let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
 			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -59,7 +59,7 @@ class DecoratorFactory {
 			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat7ProviderDecorator in
 				let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
 				let masterkey = try masterkeyFile.unlock(passphrase: password)
-				let cryptor = Cryptor(masterkey: masterkey)
+				let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 				return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			}.always {
 				try? FileManager.default.removeItem(at: tmpDirURL)
@@ -74,7 +74,7 @@ class DecoratorFactory {
 	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat6ProviderDecorator> {
 		do {
 			let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
-			let cryptor = Cryptor(masterkey: masterkey)
+			let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 			let decorator = try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
 			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -115,7 +115,7 @@ class DecoratorFactory {
 			return delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL).then { () -> VaultFormat6ProviderDecorator in
 				let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
 				let masterkey = try masterkeyFile.unlock(passphrase: password)
-				let cryptor = Cryptor(masterkey: masterkey)
+				let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 				return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 			}.always {
 				try? FileManager.default.removeItem(at: tmpDirURL)

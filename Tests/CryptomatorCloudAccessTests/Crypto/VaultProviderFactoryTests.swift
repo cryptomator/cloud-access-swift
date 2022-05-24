@@ -21,7 +21,7 @@ class VaultProviderFactoryTests: XCTestCase {
 	// MARK: - createVaultProvider Tests
 
 	func testCreateVaultProvider() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
 
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: masterkey.rawKey)
@@ -39,7 +39,7 @@ class VaultProviderFactoryTests: XCTestCase {
 	}
 
 	func testCreateVaultProviderFailsForUnsupportedVaultConfig() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 7, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 7, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
 
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: masterkey.rawKey)
@@ -107,8 +107,16 @@ class VaultProviderFactoryTests: XCTestCase {
 
 	// MARK: - isSupported Tests
 
-	func testIsSupported() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+	func testVaultConfigWithSivCtrMacIsSupported() throws {
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
+		let rawKey = [UInt8](repeating: 0x55, count: 64)
+		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
+		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+		XCTAssert(VaultProviderFactory.isSupported(unverifiedVaultConfig: unverifiedVaultConfig))
+	}
+
+	func testVaultConfigWithSivGcmIsSupported() throws {
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivGcm, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
@@ -116,30 +124,22 @@ class VaultProviderFactoryTests: XCTestCase {
 	}
 
 	func testVaultConfigWithFormatNotEqual8IsNotSupported() throws {
-		let vaultConfigWithLowerFormat = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 7, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfigWithLowerFormat = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 7, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let lowerFormatToken = try vaultConfigWithLowerFormat.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
 		let unverifiedVaultConfigWithLowerFormat = try UnverifiedVaultConfig(token: lowerFormatToken)
 		XCTAssertFalse(VaultProviderFactory.isSupported(unverifiedVaultConfig: unverifiedVaultConfigWithLowerFormat))
 
-		let vaultConfigWithHigherFormat = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 9, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfigWithHigherFormat = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 9, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let higherFormatToken = try vaultConfigWithHigherFormat.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
 		let unverifiedVaultConfigWithHigherFormat = try UnverifiedVaultConfig(token: higherFormatToken)
 		XCTAssertFalse(VaultProviderFactory.isSupported(unverifiedVaultConfig: unverifiedVaultConfigWithHigherFormat))
 	}
 
 	func testVaultConfigIsNotSupportedWithDifferentKid() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:foo.bar", rawKey: rawKey)
-		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
-		XCTAssertFalse(VaultProviderFactory.isSupported(unverifiedVaultConfig: unverifiedVaultConfig))
-	}
-
-	func testVaultConfigWithSIVGCMIsNotSupported() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivGCM, shorteningThreshold: 220)
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
 		XCTAssertFalse(VaultProviderFactory.isSupported(unverifiedVaultConfig: unverifiedVaultConfig))
 	}

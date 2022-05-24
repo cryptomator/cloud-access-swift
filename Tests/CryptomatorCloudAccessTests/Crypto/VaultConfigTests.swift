@@ -21,9 +21,9 @@ class VaultConfigTests: XCTestCase {
 	let tokenHS512 = "eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTNTEyIn0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.fzkVI34Ou3z7RaFarS9VPCaA0NX9z7My14gAISTXJGKGNSID7xEcoaY56SBdWbU7Ta17KhxcHhbXffxk3Mzing".data(using: .utf8)!
 
 	func testCreateNew() {
-		let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
 	}
 
@@ -41,7 +41,7 @@ class VaultConfigTests: XCTestCase {
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let vaultConfig = try VaultConfig.load(token: tokenHS256, rawKey: rawKey)
 		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
 	}
 
@@ -49,7 +49,7 @@ class VaultConfigTests: XCTestCase {
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let vaultConfig = try VaultConfig.load(token: tokenHS384, rawKey: rawKey)
 		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
 	}
 
@@ -57,7 +57,7 @@ class VaultConfigTests: XCTestCase {
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let vaultConfig = try VaultConfig.load(token: tokenHS512, rawKey: rawKey)
 		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCTRMAC, vaultConfig.cipherCombo)
+		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
 		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
 	}
 
@@ -83,7 +83,7 @@ class VaultConfigTests: XCTestCase {
 	}
 
 	func testToToken() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220)
+		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
 		let tokenComponents = String(data: token, encoding: .utf8)!.split(separator: ".")
@@ -92,7 +92,7 @@ class VaultConfigTests: XCTestCase {
 		XCTAssertEqual(["typ": "JWT", "alg": "HS256", "kid": "masterkeyfile:masterkey.cryptomator"], header)
 		// check payload
 		let payload: VaultConfigPayload = try decodeTokenComponent(String(tokenComponents[1]))
-		XCTAssertEqual(VaultConfigPayload(jti: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCTRMAC, shorteningThreshold: 220), payload)
+		XCTAssertEqual(VaultConfigPayload(jti: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: "SIV_CTRMAC", shorteningThreshold: 220), payload)
 		// skip signature check
 	}
 

@@ -83,7 +83,7 @@ public class CryptorMock: Cryptor {
 		if let ciphertext = contents.someKey(for: cleartext) {
 			try ciphertext.write(to: ciphertextURL, atomically: true, encoding: .utf8)
 		} else {
-			throw CryptorMockError.notMocked
+			try "some-encrypted-content".write(to: ciphertextURL, atomically: true, encoding: .utf8)
 		}
 	}
 

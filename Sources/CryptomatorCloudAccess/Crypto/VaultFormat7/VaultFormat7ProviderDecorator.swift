@@ -227,7 +227,7 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	private func getDirPath(_ dirId: Data) throws -> CloudPath {
+	func getDirPath(_ dirId: Data) throws -> CloudPath {
 		let digest = try cryptor.encryptDirId(dirId)
 		let i = digest.index(digest.startIndex, offsetBy: 2)
 		return vaultPath.appendingPathComponent("d/\(digest[..<i])/\(digest[i...])")
@@ -245,7 +245,7 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		return try getDirPath(parentDirId).appendingPathComponent(ciphertextName)
 	}
 
-	private func getC9RPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
+	func getC9RPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
 		return getParentDirId(cleartextPath).then { parentDirId in
 			return try self.getC9RPath(cleartextPath, parentDirId: parentDirId)
 		}

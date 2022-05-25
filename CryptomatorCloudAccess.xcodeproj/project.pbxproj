@@ -135,6 +135,8 @@
 		74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CF2E6B254B6683006266D6 /* VaultFormatError.swift */; };
 		74D4AFB827B2B9E300F8EF2D /* item-metadata-missing-resourcetype.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */; };
 		74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74DF965D24F3DE6400763713 /* CloudPathTests.swift */; };
+		74E32BE4283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E32BE3283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift */; };
+		74E32BEA283E575B005D8A54 /* VaultFormat8CryptorMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E32BE9283E575B005D8A54 /* VaultFormat8CryptorMock.swift */; };
 		74E54F6224BCB6B9003379FA /* item-move-412-error.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */; };
 		74E54F6324BCB6B9003379FA /* item-metadata.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5D24BCB6B9003379FA /* item-metadata.xml */; };
 		74E54F6424BCB6B9003379FA /* item-list.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74E54F5E24BCB6B9003379FA /* item-list.xml */; };
@@ -302,6 +304,8 @@
 		74CF2E6B254B6683006266D6 /* VaultFormatError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormatError.swift; sourceTree = "<group>"; };
 		74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "item-metadata-missing-resourcetype.xml"; sourceTree = "<group>"; };
 		74DF965D24F3DE6400763713 /* CloudPathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPathTests.swift; sourceTree = "<group>"; };
+		74E32BE3283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8ProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		74E32BE9283E575B005D8A54 /* VaultFormat8CryptorMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat8CryptorMock.swift; sourceTree = "<group>"; };
 		74E54F5C24BCB6B9003379FA /* item-move-412-error.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-move-412-error.xml"; sourceTree = "<group>"; };
 		74E54F5D24BCB6B9003379FA /* item-metadata.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-metadata.xml"; sourceTree = "<group>"; };
 		74E54F5E24BCB6B9003379FA /* item-list.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "item-list.xml"; sourceTree = "<group>"; };
@@ -673,6 +677,7 @@
 				4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */,
 				7416F22724F658C40074DA8E /* VaultFormat6 */,
 				9ED0E61E2461807800FDB438 /* VaultFormat7 */,
+				74E32BE2283E556D005D8A54 /* VaultFormat8 */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -765,6 +770,15 @@
 				4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */,
 			);
 			path = WebDAV;
+			sourceTree = "<group>";
+		};
+		74E32BE2283E556D005D8A54 /* VaultFormat8 */ = {
+			isa = PBXGroup;
+			children = (
+				74E32BE9283E575B005D8A54 /* VaultFormat8CryptorMock.swift */,
+				74E32BE3283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift */,
+			);
+			path = VaultFormat8;
 			sourceTree = "<group>";
 		};
 		74E54F5A24BCB6B9003379FA /* ClientTestResponses */ = {
@@ -1166,10 +1180,12 @@
 				7416F22F24F678BE0074DA8E /* VaultFormat6ProviderDecoratorTests.swift in Sources */,
 				7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */,
 				74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */,
+				74E32BE4283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
 				4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */,
 				4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */,
 				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,
+				74E32BEA283E575B005D8A54 /* VaultFormat8CryptorMock.swift in Sources */,
 				9ED0E622246180AB00FDB438 /* VaultFormat7CloudProviderMock.swift in Sources */,
 				7416F22D24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift in Sources */,
 				7416F22B24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift in Sources */,

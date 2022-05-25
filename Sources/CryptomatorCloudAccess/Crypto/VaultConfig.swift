@@ -6,6 +6,7 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCryptoLib
 import Foundation
 import JOSESwift
 
@@ -15,15 +16,10 @@ public enum VaultConfigError: Error {
 	case tokenSerializationFailed
 }
 
-public enum VaultCipherCombo: String, Codable {
-	case sivCTRMAC = "SIV_CTRMAC"
-	case sivGCM = "SIV_GCM"
-}
-
 struct VaultConfigPayload: Equatable, Codable {
 	let jti: String
 	let format: Int
-	let cipherCombo: VaultCipherCombo
+	let cipherCombo: String
 	let shorteningThreshold: Int
 
 	static func fromJSONData(data: Data) throws -> VaultConfigPayload {
@@ -43,7 +39,7 @@ public class UnverifiedVaultConfig {
 	}
 
 	let allegedFormat: Int
-	let allegedCipherCombo: VaultCipherCombo
+	let allegedCipherCombo: String
 
 	private let token: Data
 	private let jws: JWS
@@ -84,10 +80,10 @@ public class UnverifiedVaultConfig {
 public class VaultConfig {
 	public let id: String
 	public let format: Int
-	public let cipherCombo: VaultCipherCombo
+	public let cipherCombo: CryptorScheme
 	public let shorteningThreshold: Int
 
-	init(id: String, format: Int, cipherCombo: VaultCipherCombo, shorteningThreshold: Int) {
+	init(id: String, format: Int, cipherCombo: CryptorScheme, shorteningThreshold: Int) {
 		self.id = id
 		self.format = format
 		self.cipherCombo = cipherCombo
@@ -96,7 +92,10 @@ public class VaultConfig {
 
 	fileprivate convenience init(jsonData: Data) throws {
 		let payload = try VaultConfigPayload.fromJSONData(data: jsonData)
-		self.init(id: payload.jti, format: payload.format, cipherCombo: payload.cipherCombo, shorteningThreshold: payload.shorteningThreshold)
+		guard let cipherCombo = CryptorScheme(rawValue: payload.cipherCombo) else {
+			throw VaultConfigError.unsupportedAlgorithm
+		}
+		self.init(id: payload.jti, format: payload.format, cipherCombo: cipherCombo, shorteningThreshold: payload.shorteningThreshold)
 	}
 
 	/**
@@ -107,7 +106,7 @@ public class VaultConfig {
 	 - Parameter shorteningThreshold: Maximum ciphertext filename length before it gets shortened.
 	 - Returns: New vault configuration instance with a random ID.
 	 */
-	public static func createNew(format: Int, cipherCombo: VaultCipherCombo, shorteningThreshold: Int) -> VaultConfig {
+	public static func createNew(format: Int, cipherCombo: CryptorScheme, shorteningThreshold: Int) -> VaultConfig {
 		return VaultConfig(id: UUID().uuidString, format: format, cipherCombo: cipherCombo, shorteningThreshold: shorteningThreshold)
 	}
 
@@ -132,7 +131,7 @@ public class VaultConfig {
 	 */
 	public func toToken(keyId: String, rawKey: [UInt8]) throws -> Data {
 		let header = try JWSHeader(parameters: ["typ": "JWT", "alg": SignatureAlgorithm.HS256.rawValue, "kid": keyId])
-		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo, shorteningThreshold: shorteningThreshold).toJSONData()
+		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo.rawValue, shorteningThreshold: shorteningThreshold).toJSONData()
 		guard let signer = Signer(signingAlgorithm: .HS256, key: Data(rawKey)) else {
 			throw VaultConfigError.tokenSerializationFailed
 		}

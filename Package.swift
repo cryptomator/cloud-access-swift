@@ -46,8 +46,8 @@ let package = Package(
 		.target(
 			name: "CryptomatorCloudAccessCore",
 			dependencies: [
-                "AWSCore",
-                "AWSS3",
+				"AWSCore",
+				"AWSS3",
 				"CryptomatorCryptoLib",
 				"GoogleAPIClientForREST_Drive",
 				"GRDB",

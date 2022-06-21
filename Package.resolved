@@ -11,6 +11,15 @@
         }
       },
       {
+      "package" : "AWSiOSSDKV2",
+      "repositoryURL" : "https://github.com/aws-amplify/aws-sdk-ios-spm",
+      "state" : {
+        "branch": null,
+        "revision" : "34bcb816dfa3cd909f97554b0328178aa5b85153",
+        "version" : "2.27.9"
+      }
+      },
+      {
         "package": "Base32",
         "repositoryURL": "https://github.com/norio-nomura/Base32.git",
         "state": {

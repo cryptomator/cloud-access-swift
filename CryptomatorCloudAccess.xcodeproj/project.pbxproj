@@ -928,6 +928,7 @@
 				4A058FED24519FFC008831F9 /* Sources */,
 				4A058FEE24519FFC008831F9 /* Frameworks */,
 				4A058FEF24519FFC008831F9 /* Resources */,
+				74862A722469A7AF003D81CB /* Lint With SwiftFormat */,
 				74BAB0C82620365500E5F1DA /* Lint With SwiftLint */,
 			);
 			buildRules = (
@@ -1108,6 +1109,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "./create-integration-test-secrets-file.sh\n";
+		};
+		74862A722469A7AF003D81CB /* Lint With SwiftFormat */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Lint With SwiftFormat";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "PATH=$PATH:/opt/homebrew/bin\nif which swiftformat >/dev/null; then\n  swiftformat --lint --lenient .\nelse\n  echo \"warning: SwiftFormat not installed, download from https://github.com/nicklockwood/SwiftFormat\"\nfi\n";
 		};
 		74BAB0C82620365500E5F1DA /* Lint With SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;

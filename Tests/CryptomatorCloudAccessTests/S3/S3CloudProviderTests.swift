@@ -18,7 +18,7 @@ class S3CloudProviderTests: XCTestCase {
 	var provider: S3CloudProvider!
 
 	override func setUpWithError() throws {
-		provider = S3CloudProvider(credential: .stub)
+		provider = try S3CloudProvider(credential: .stub)
 	}
 
 	func testGetPrefix() throws {

@@ -13,6 +13,8 @@ import Promises
 
 enum S3CloudProviderError: Error {
 	case invalidRequest
+	case missingTransferUtility
+	case serviceConfigurationInitFailed
 }
 
 public class S3CloudProvider: CloudProvider {
@@ -23,16 +25,16 @@ public class S3CloudProvider: CloudProvider {
 	private static let delimiter = "/"
 	private static let folderContentType = "application/x-directory"
 
-	init?(credential: S3Credential,
-	      transferUtilityConfiguration: AWSS3TransferUtilityConfiguration,
-	      serviceConfiguration: AWSServiceConfiguration) {
+	init(credential: S3Credential,
+	     transferUtilityConfiguration: AWSS3TransferUtilityConfiguration,
+	     serviceConfiguration: AWSServiceConfiguration) throws {
 		self.credential = credential
 		AWSEndpoint.exchangeRegionNameImplementation
 		CustomAWSEndpointRegionNameStorage.shared.setRegionName(credential.region, for: credential)
 		AWSS3TransferUtility.register(with: serviceConfiguration, transferUtilityConfiguration: transferUtilityConfiguration, forKey: credential.identifier)
 		AWSS3.register(with: serviceConfiguration, forKey: credential.identifier)
 		guard let transferUtility = AWSS3TransferUtility.s3TransferUtility(forKey: credential.identifier) else {
-			return nil
+			throw S3CloudProviderError.missingTransferUtility
 		}
 		self.transferUtility = transferUtility
 		let service = AWSS3.s3(forKey: credential.identifier)
@@ -40,16 +42,16 @@ public class S3CloudProvider: CloudProvider {
 		self.service = service
 	}
 
-	public convenience init?(credential: S3Credential) {
+	public convenience init(credential: S3Credential) throws {
 		let endpoint = AWSEndpoint(url: credential.url)
 		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
 		let region = credential.region.aws_regionTypeValue()
 		guard let serviceConfiguration = AWSServiceConfiguration(region: region, endpoint: endpoint, credentialsProvider: credentialsProvider) else {
-			return nil
+			throw S3CloudProviderError.serviceConfigurationInitFailed
 		}
 		let transferUtilityConfiguration = AWSS3TransferUtilityConfiguration()
 		transferUtilityConfiguration.bucket = credential.bucket
-		self.init(credential: credential, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration)
+		try self.init(credential: credential, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration)
 	}
 
 	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of an headObject request as some providers do not answer with an access denied error

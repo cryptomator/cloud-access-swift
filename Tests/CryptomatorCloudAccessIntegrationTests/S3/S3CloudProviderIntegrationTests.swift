@@ -23,17 +23,22 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 	override class func setUp() {
 		S3CloudProviderIntegrationTests.onetimeAWSIntegrationTestsSetup
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
-		setUpProvider = S3CloudProvider(credential: .mock)
+		// swiftlint:disable:next force_try
+		setUpProvider = try! S3CloudProvider(credential: .mock)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		provider = S3CloudProvider(credential: .mock)
+		provider = try S3CloudProvider(credential: .mock)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
-		provider = S3CloudProvider(credential: .unauthorizedMock)
+		do {
+			provider = try S3CloudProvider(credential: .unauthorizedMock)
+		} catch {
+			return Promise(error)
+		}
 		return Promise(())
 	}
 

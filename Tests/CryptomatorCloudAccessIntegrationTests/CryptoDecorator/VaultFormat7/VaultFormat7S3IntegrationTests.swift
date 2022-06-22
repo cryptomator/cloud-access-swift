@@ -20,7 +20,8 @@ class VaultFormat7S3IntegrationTests: CloudAccessIntegrationTest {
 		return XCTestSuite(forTestCaseClass: VaultFormat7S3IntegrationTests.self)
 	}
 
-	private static let cloudProvider = S3CloudProvider(credential: .mock)!
+	// swiftlint:disable:next force_try
+	private static let cloudProvider = try! S3CloudProvider(credential: .mock)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {

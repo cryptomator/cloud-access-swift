@@ -277,7 +277,7 @@ public class S3CloudProvider: CloudProvider {
 	 Validates the given `CloudItemList`
 
 	 Since S3 realizes the concept of a folder via the prefixes of the files, empty folders can be realized via a 0-byte file with this prefix - for example, when creating a new folder using the AWS S3 Console.
-	 However, S3 also returns an empty list if the folder does not exist at all. Therefore, in case of an empty list, the existence of the 0 byte file must be checked by a f`etchItemMetadata(at:)` call for the given `folderPath`.
+	 However, S3 also returns an empty list if the folder does not exist at all. Therefore, in case of an empty list, the existence of the 0 byte file must be checked by a `fetchItemMetadata(at:)` call for the given `folderPath`.
 	 */
 	func validateItemList(_ itemList: CloudItemList, folderPath: CloudPath) -> Promise<Void> {
 		if !itemList.items.isEmpty || folderPath == .root {
@@ -370,7 +370,7 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	/**
-	 Removes the folder corresponding given `parentFolderPath` from the given `itemList`-
+	 Removes the folder corresponding given `parentFolderPath` from the given `itemList`.
 
 	 Since S3 with a` listObjectsV2` request the folder itself also occurs in the resulting list, it has to be removed again afterwards.
 	 */

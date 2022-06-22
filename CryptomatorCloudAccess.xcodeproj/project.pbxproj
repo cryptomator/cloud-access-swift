@@ -14,6 +14,10 @@
 		4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05900D2451A145008831F9 /* CloudItemList.swift */; };
 		4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590112451A180008831F9 /* CloudItemMetadata.swift */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
+		4A0785302859F4FE0015DAE1 /* S3Credential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A07852F2859F4FE0015DAE1 /* S3Credential.swift */; };
+		4A0785322859F5860015DAE1 /* S3CopyTaskUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */; };
+		4A0785342859F5E30015DAE1 /* AWSS3+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */; };
+		4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */; };
 		4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11532629A44B00DAF62F /* MSGraphClientModels */; };
 		4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11592629A4A200DAF62F /* MSGraphClientSDK */; };
 		4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11642629A52F00DAF62F /* OneDriveCloudProvider.swift */; };
@@ -23,6 +27,7 @@
 		4A1A1183262B078E00DAF62F /* OneDriveError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1182262B078E00DAF62F /* OneDriveError.swift */; };
 		4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A118E262D95E600DAF62F /* OneDriveItem.swift */; };
 		4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */; };
+		4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */; };
 		4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */; };
 		4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
@@ -53,6 +58,9 @@
 		4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */; };
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
+		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
+		4AC75F9A2861A425002731FE /* VaultFormat7S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */; };
+		4AC75F9C2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */; };
 		4ACA63932615FDFF00D19304 /* CryptomatorCloudAccess.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */; };
 		4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA639F2615FE2C00D19304 /* CloudAccessIntegrationTest.swift */; };
 		4ACA63A92615FE5C00D19304 /* IntegrationTestError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA63A42615FE5700D19304 /* IntegrationTestError.swift */; };
@@ -77,6 +85,9 @@
 		4ACA640E2615FF9800D19304 /* LocalFileSystemProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */; };
 		4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */; };
 		4AD55339263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */; };
+		4ADE138028576A0B006CCCFE /* S3CloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ADE137F28576A0B006CCCFE /* S3CloudProviderIntegrationTests.swift */; };
+		4AF0AA7C2844DDD200C20B75 /* AWSS3 in Frameworks */ = {isa = PBXBuildFile; productRef = 4AF0AA7B2844DDD200C20B75 /* AWSS3 */; };
+		4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */; };
 		4AFC5F67263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AFC5F66263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift */; };
 		7402B47E27D24D9C00BE9F8B /* PCloudCredentialMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7402B47C27D24C2700BE9F8B /* PCloudCredentialMock.swift */; };
 		7402B48127D24DF500BE9F8B /* PCloudCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7402B47F27D24DDA00BE9F8B /* PCloudCloudProviderIntegrationTests.swift */; };
@@ -192,6 +203,10 @@
 		4A05900D2451A145008831F9 /* CloudItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemList.swift; sourceTree = "<group>"; };
 		4A0590112451A180008831F9 /* CloudItemMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemMetadata.swift; sourceTree = "<group>"; };
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
+		4A07852F2859F4FE0015DAE1 /* S3Credential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3Credential.swift; sourceTree = "<group>"; };
+		4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CopyTaskUtility.swift; sourceTree = "<group>"; };
+		4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AWSS3+Promises.swift"; sourceTree = "<group>"; };
+		4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AWSEndpoint+CustomRegionName.swift"; sourceTree = "<group>"; };
 		4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveCloudProviderTests.swift; sourceTree = "<group>"; };
 		4A1A11642629A52F00DAF62F /* OneDriveCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveCloudProvider.swift; sourceTree = "<group>"; };
 		4A1A11732629ACCA00DAF62F /* OneDriveCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveCredential.swift; sourceTree = "<group>"; };
@@ -200,6 +215,7 @@
 		4A1A1182262B078E00DAF62F /* OneDriveError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveError.swift; sourceTree = "<group>"; };
 		4A1A118E262D95E600DAF62F /* OneDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveItem.swift; sourceTree = "<group>"; };
 		4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCache.swift; sourceTree = "<group>"; };
+		4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProviderTests.swift; sourceTree = "<group>"; };
 		4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveAuthenticationProvider.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
 		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
@@ -224,6 +240,9 @@
 		4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultProviderFactoryTests.swift; sourceTree = "<group>"; };
 		4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSession.swift; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
+		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
+		4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7S3IntegrationTests.swift; sourceTree = "<group>"; };
+		4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6S3IntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA638E2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CryptomatorCloudAccessIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4ACA63922615FDFF00D19304 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4ACA639F2615FE2C00D19304 /* CloudAccessIntegrationTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAccessIntegrationTest.swift; sourceTree = "<group>"; };
@@ -249,6 +268,8 @@
 		4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		4ACA64252616054F00D19304 /* IntegrationTestSecrets.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IntegrationTestSecrets.swift; sourceTree = "<group>"; };
 		4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MSGraphDriveItem+CloudItemType.swift"; sourceTree = "<group>"; };
+		4ADE137F28576A0B006CCCFE /* S3CloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
+		4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProvider.swift; sourceTree = "<group>"; };
 		4AFC5F66263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		7402B47C27D24C2700BE9F8B /* PCloudCredentialMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudCredentialMock.swift; sourceTree = "<group>"; };
 		7402B47F27D24DDA00BE9F8B /* PCloudCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
@@ -335,6 +356,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4AF0AA7C2844DDD200C20B75 /* AWSS3 in Frameworks */,
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				746BE0AB26579D4A00FB674E /* MSAL in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
@@ -402,6 +424,7 @@
 				4A1A11692629A53300DAF62F /* OneDrive */,
 				746F090F27BC0B61003FCD9F /* PCloud */,
 				748A42B424AA228200DEB6D0 /* WebDAV */,
+				4AF0AA7F2844F38700C20B75 /* S3 */,
 			);
 			path = CryptomatorCloudAccess;
 			sourceTree = "<group>";
@@ -418,6 +441,7 @@
 				4A0C90222636D59800ADB421 /* OneDrive */,
 				7402B48227D2625E00BE9F8B /* PCloud */,
 				748420C124B8A1F800D84E58 /* WebDAV */,
+				4A2745FA2847887F00E70D5F /* S3 */,
 			);
 			path = CryptomatorCloudAccessTests;
 			sourceTree = "<group>";
@@ -460,6 +484,14 @@
 				4A1A117D2629AD8F00DAF62F /* OneDriveSetup.swift */,
 			);
 			path = OneDrive;
+			sourceTree = "<group>";
+		};
+		4A2745FA2847887F00E70D5F /* S3 */ = {
+			isa = PBXGroup;
+			children = (
+				4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */,
+			);
+			path = S3;
 			sourceTree = "<group>";
 		};
 		4A3A396C2615F97600F16B26 /* Dropbox */ = {
@@ -523,6 +555,7 @@
 				4AFC5F6B263190C000744715 /* OneDrive */,
 				7402B47B27D24C0700BE9F8B /* PCloud */,
 				4ACA63F72615FF9700D19304 /* WebDAV */,
+				4ADE138128576A0F006CCCFE /* S3 */,
 			);
 			path = CryptomatorCloudAccessIntegrationTests;
 			sourceTree = "<group>";
@@ -545,6 +578,7 @@
 				4ACA63C62615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift */,
 				4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */,
 				7467A0D527DF9A7F00BCFDF8 /* VaultFormat6PCloudIntegrationTests.swift */,
+				4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */,
 				4ACA63D52615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift */,
 			);
 			path = VaultFormat6;
@@ -558,6 +592,7 @@
 				4ACA63E52615FF6400D19304 /* VaultFormat7LocalFileSystemProviderIntegrationTests.swift */,
 				4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */,
 				7467A0D727DF9CA900BCFDF8 /* VaultFormat7PCloudIntegrationTests.swift */,
+				4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */,
 				4ACA63E32615FF6400D19304 /* VaultFormat7WebDAVIntegrationTests.swift */,
 			);
 			path = VaultFormat7;
@@ -605,6 +640,27 @@
 				4ACA64012615FF9700D19304 /* LocalFileSystemProviderIntegrationTests.swift */,
 			);
 			path = LocalFileSystem;
+			sourceTree = "<group>";
+		};
+		4ADE138128576A0F006CCCFE /* S3 */ = {
+			isa = PBXGroup;
+			children = (
+				4ADE137F28576A0B006CCCFE /* S3CloudProviderIntegrationTests.swift */,
+			);
+			path = S3;
+			sourceTree = "<group>";
+		};
+		4AF0AA7F2844F38700C20B75 /* S3 */ = {
+			isa = PBXGroup;
+			children = (
+				4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */,
+				4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */,
+				4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */,
+				4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */,
+				4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */,
+				4A07852F2859F4FE0015DAE1 /* S3Credential.swift */,
+			);
+			path = S3;
 			sourceTree = "<group>";
 		};
 		4AFC5F6B263190C000744715 /* OneDrive */ = {
@@ -894,6 +950,7 @@
 				740C5878262F800A00F63423 /* JOSESwift */,
 				746BE0AA26579D4A00FB674E /* MSAL */,
 				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
+				4AF0AA7B2844DDD200C20B75 /* AWSS3 */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -981,6 +1038,7 @@
 				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
+				4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1108,6 +1166,7 @@
 				748A42BA24AA34F300DEB6D0 /* WebDAVCredential.swift in Sources */,
 				4A1A11742629ACCA00DAF62F /* OneDriveCredential.swift in Sources */,
 				9ED0E61D24617C2800FDB438 /* VaultFormat7ProviderDecorator.swift in Sources */,
+				4A0785342859F5E30015DAE1 /* AWSS3+Promises.swift in Sources */,
 				7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */,
 				4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */,
 				746F091527BCF7AA003FCD9F /* PCloudCloudProvider.swift in Sources */,
@@ -1119,14 +1178,18 @@
 				746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */,
 				746F091727BD006D003FCD9F /* PCloudItem.swift in Sources */,
 				4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */,
+				4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */,
 				4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */,
+				4A0785322859F5860015DAE1 /* S3CopyTaskUtility.swift in Sources */,
 				74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */,
 				746F091B27BD029C003FCD9F /* PCloudError.swift in Sources */,
 				4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */,
 				7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */,
 				4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
+				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
+				4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
 				9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */,
 				746F091127BC0B98003FCD9F /* PCloudAuthenticator.swift in Sources */,
@@ -1146,6 +1209,7 @@
 				4A1A11792629ACD500DAF62F /* OneDriveAuthenticator.swift in Sources */,
 				748BD4CA24B4B1D50001CA8C /* PropfindResponseParser.swift in Sources */,
 				4A567B322615CA6E002C4D82 /* GoogleDriveError.swift in Sources */,
+				4A0785302859F4FE0015DAE1 /* S3Credential.swift in Sources */,
 				748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */,
 				74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */,
 				4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */,
@@ -1189,6 +1253,7 @@
 				9ED0E622246180AB00FDB438 /* VaultFormat7CloudProviderMock.swift in Sources */,
 				7416F22D24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift in Sources */,
 				7416F22B24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift in Sources */,
+				4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */,
 				4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */,
 				7416F23124F67AD70074DA8E /* CloudProviderMock.swift in Sources */,
 				4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */,
@@ -1218,10 +1283,13 @@
 				4ACA63E62615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift in Sources */,
 				7467A0D827DF9CA900BCFDF8 /* VaultFormat7PCloudIntegrationTests.swift in Sources */,
 				4ACA63C72615FED700D19304 /* VaultFormat6LocalFileSystemProviderIntegrationTests.swift in Sources */,
+				4ADE138028576A0B006CCCFE /* S3CloudProviderIntegrationTests.swift in Sources */,
 				4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */,
 				4ACA64032615FF9800D19304 /* DropboxCredentialMock.swift in Sources */,
+				4AC75F9A2861A425002731FE /* VaultFormat7S3IntegrationTests.swift in Sources */,
 				4ACA63CC2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift in Sources */,
 				7467A0D627DF9A8000BCFDF8 /* VaultFormat6PCloudIntegrationTests.swift in Sources */,
+				4AC75F9C2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift in Sources */,
 				4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */,
 				4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */,
 				4A41D2432641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift in Sources */,
@@ -1602,6 +1670,14 @@
 				minimumVersion = 1.5.0;
 			};
 		};
+		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 2.27.0;
+			};
+		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/airsidemobile/JOSESwift.git";
@@ -1687,6 +1763,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		4AF0AA7B2844DDD200C20B75 /* AWSS3 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */;
+			productName = AWSS3;
 		};
 		740C5878262F800A00F63423 /* JOSESwift */ = {
 			isa = XCSwiftPackageProductDependency;

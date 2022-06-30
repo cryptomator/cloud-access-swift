@@ -26,6 +26,11 @@ struct IntegrationTestSecrets {
 	static let pCloudAppKey = "${PCLOUD_APP_KEY}"
 	static let pCloudAccessToken = "${PCLOUD_ACCESS_TOKEN}"
 	static let pCloudHTTPAPIHostName = "${PCLOUD_HTTP_API_HOST_NAME}"
+	static let s3AccessKey = "${S3_ACCESS_KEY}"
+	static let s3SecretKey = "${S3_SECRET_KEY}"
+	static let s3URL = URL(string: "${S3_URL}")!
+	static let s3Bucket = "${S3_BUCKET}"
+	static let s3RegionName = "${S3_REGION}"
 	static let webDAVCredential = WebDAVCredential(baseURL: URL(string: "${WEBDAV_BASE_URL}")!, username: "${WEBDAV_USERNAME}", password: "${WEBDAV_PASSWORD}", allowedCertificate: nil)
 }
 EOM

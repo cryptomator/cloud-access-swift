@@ -78,34 +78,6 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 	}
 }
 
-extension AWSS3TransferUtility {
-	private static let queue = DispatchQueue(label: "AWSS3TransferUtility-Swizzle")
-	private static var sessions = [ObjectIdentifier: URLSession]()
-
-	static let useForegroundURLSession: Void = {
-		guard let originalMethod = class_getInstanceMethod(AWSS3TransferUtility.self, Selector(("session"))), let swizzledMethod = class_getInstanceMethod(AWSS3TransferUtility.self, #selector(getter: foregroundURLSession)) else {
-			print("failed to swizzle useForegroundURLSession")
-			return
-		}
-		print("swizzled useForegroundURLSession")
-		method_exchangeImplementations(originalMethod, swizzledMethod)
-
-	}()
-
-	@objc var foregroundURLSession: URLSession {
-		print("called foregroundURLSession")
-		return AWSS3TransferUtility.queue.sync {
-			if let session = AWSS3TransferUtility.sessions[ObjectIdentifier(self)] {
-				return session
-			} else {
-				let session = URLSession(configuration: .default, delegate: self as? URLSessionDelegate, delegateQueue: nil)
-				AWSS3TransferUtility.sessions[ObjectIdentifier(self)] = session
-				return session
-			}
-		}
-	}
-}
-
 extension S3Credential {
 	static let mock = S3Credential(accessKey: IntegrationTestSecrets.s3AccessKey,
 	                               secretKey: IntegrationTestSecrets.s3SecretKey,
@@ -124,6 +96,5 @@ extension S3CloudProviderIntegrationTests {
 	static let onetimeAWSIntegrationTestsSetup: Void = {
 		AWSDDLog.sharedInstance.logLevel = .verbose
 		AWSDDLog.add(AWSDDTTYLogger.sharedInstance)
-		AWSS3TransferUtility.useForegroundURLSession
 	}()
 }

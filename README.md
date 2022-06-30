@@ -203,6 +203,46 @@ You can then use the credential to create a pCloud provider:
 let provider = PCloudCloudProvider(credential: credential)
 ```
 
+### S3
+
+Create a S3 credential:
+
+```swift
+let accessKey = ...
+let secretKey = ...
+let url = ... // Note: the URL should not already contain the bucket name
+let bucket = ... // Note: the bucket should already exist
+let region = ...
+let identifier = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
+let credential = S3Credential(accessKey: accessKey, secretKey: secretKey, url: url, bucket: bucket, region: region, identifier: identifier)
+```
+
+You can then use the credential to create a S3 provider.
+
+Create a S3 provider with a S3 credential:
+
+```swift
+let provider = try S3Provider(credential: credential)
+```
+
+Create a S3 provider using a background URLSession:
+
+```swift
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `S3CloudProvider` in an app extension 
+let provider = try S3CloudProvider.withBackgroundSession(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier)
+```
+
+In theory, you could use the provider without further checks. However, you should verify the S3 credential using the S3 authenticator:
+
+```swift
+let credential = ...
+S3Authenticator.verifyCredential(credential).then {
+  // credential validation successful
+}.catch { error in
+  // error handling
+}
+```
+
 ### WebDAV
 
 Create a WebDAV credential:

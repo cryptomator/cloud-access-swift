@@ -26,6 +26,7 @@ public class S3CloudProvider: CloudProvider {
 	private static let folderContentType = "application/x-directory"
 
 	init(credential: S3Credential,
+	     useBackgroundSession: Bool,
 	     transferUtilityConfiguration: AWSS3TransferUtilityConfiguration,
 	     serviceConfiguration: AWSServiceConfiguration) throws {
 		self.credential = credential
@@ -36,22 +37,34 @@ public class S3CloudProvider: CloudProvider {
 		guard let transferUtility = AWSS3TransferUtility.s3TransferUtility(forKey: credential.identifier) else {
 			throw S3CloudProviderError.missingTransferUtility
 		}
+		if !useBackgroundSession {
+			AWSS3TransferUtility.useForegroundURLSession(for: transferUtility)
+		}
 		self.transferUtility = transferUtility
 		let service = AWSS3.s3(forKey: credential.identifier)
 		self.copyUtility = S3CopyTaskUtility(service: service, bucket: credential.bucket)
 		self.service = service
 	}
 
+	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?) throws -> S3CloudProvider {
+		try S3CloudProvider(credential: credential, useBackgroundSession: true, sharedContainerIdentifier: sharedContainerIdentifier)
+	}
+
 	public convenience init(credential: S3Credential) throws {
+		try self.init(credential: credential, useBackgroundSession: false, sharedContainerIdentifier: nil)
+	}
+
+	convenience init(credential: S3Credential, useBackgroundSession: Bool, sharedContainerIdentifier: String?) throws {
 		let endpoint = AWSEndpoint(url: credential.url)
 		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
 		let region = credential.region.aws_regionTypeValue()
 		guard let serviceConfiguration = AWSServiceConfiguration(region: region, endpoint: endpoint, credentialsProvider: credentialsProvider) else {
 			throw S3CloudProviderError.serviceConfigurationInitFailed
 		}
+		serviceConfiguration.sharedContainerIdentifier = sharedContainerIdentifier
 		let transferUtilityConfiguration = AWSS3TransferUtilityConfiguration()
 		transferUtilityConfiguration.bucket = credential.bucket
-		try self.init(credential: credential, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration)
+		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration)
 	}
 
 	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of an headObject request as some providers do not answer with an access denied error

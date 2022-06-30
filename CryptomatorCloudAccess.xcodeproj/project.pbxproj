@@ -57,6 +57,7 @@
 		4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */; };
 		4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */; };
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
+		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
 		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
 		4AC75F9A2861A425002731FE /* VaultFormat7S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */; };
@@ -239,6 +240,7 @@
 		4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "URLSession+Promises.swift"; sourceTree = "<group>"; };
 		4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultProviderFactoryTests.swift; sourceTree = "<group>"; };
 		4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSession.swift; sourceTree = "<group>"; };
+		4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "AWSS3TransferUtility+ForegroundSession.swift"; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
 		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
 		4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7S3IntegrationTests.swift; sourceTree = "<group>"; };
@@ -655,6 +657,7 @@
 			children = (
 				4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */,
 				4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */,
+				4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */,
 				4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */,
 				4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */,
 				4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */,
@@ -1196,6 +1199,7 @@
 				4A567B402615CD7D002C4D82 /* CloudPath+DatabaseValueConvertible.swift in Sources */,
 				4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */,
 				9ECEC0AF246ED1FB00151299 /* DirectoryIdCache.swift in Sources */,
+				4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */,
 				745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */,
 				745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */,
 				4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */,

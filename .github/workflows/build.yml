@@ -48,6 +48,11 @@ jobs:
           PCLOUD_APP_KEY: ${{ secrets.PCLOUD_APP_KEY }}
           PCLOUD_ACCESS_TOKEN: ${{ secrets.PCLOUD_ACCESS_TOKEN }}
           PCLOUD_HTTP_API_HOST_NAME: ${{ secrets.PCLOUD_HTTP_API_HOST_NAME }}
+          S3_ACCESS_KEY: ${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.S3_SECRET_KEY }}
+          S3_URL: ${{ secrets.S3_URL }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_REGION: ${{ secrets.S3_REGION }}
           WEBDAV_BASE_URL: ${{ secrets.WEBDAV_BASE_URL }}
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}

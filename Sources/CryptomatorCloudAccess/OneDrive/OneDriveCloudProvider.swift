@@ -17,12 +17,14 @@ public class OneDriveCloudProvider: CloudProvider {
 	private let client: MSHTTPClient
 	private let identifierCache: OneDriveIdentifierCache
 	private let tmpDirURL: URL
+	private let maxPageSize: Int
 
-	public init(credential: OneDriveCredential, useBackgroundSession: Bool = false) throws {
+	public init(credential: OneDriveCredential, useBackgroundSession: Bool = false, maxPageSize: Int = .max) throws {
 		let urlSessionConfiguration = OneDriveCloudProvider.createURLSessionConfiguration(credential: credential, useBackgroundSession: useBackgroundSession)
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
 		self.identifierCache = try OneDriveIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		self.maxPageSize = min(max(1, maxPageSize), 1000)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
@@ -327,7 +329,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	func childrenRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(requestURLString(for: item))/children") else {
+		guard let url = URL(string: "\(requestURLString(for: item))/children?$top=\(maxPageSize)") else {
 			throw OneDriveError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)

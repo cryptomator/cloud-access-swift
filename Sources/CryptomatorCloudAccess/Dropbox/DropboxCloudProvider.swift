@@ -33,7 +33,7 @@ public class DropboxCloudProvider: CloudProvider {
 		self.credential = credential
 		self.runningTasks = [DBTask]()
 		self.runningBatchUploadTasks = [DBBatchUploadTask]()
-		self.maxPageSize = maxPageSize
+		self.maxPageSize = max(1, min(maxPageSize, 2000))
 	}
 
 	deinit {

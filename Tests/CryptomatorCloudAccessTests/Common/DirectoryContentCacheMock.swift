@@ -13,6 +13,7 @@ import Foundation
 @testable import CryptomatorCloudAccess
 #endif
 
+// swiftlint:disable all
 final class DirectoryContentCacheMock: DirectoryContentCache {
 	// MARK: - save
 
@@ -81,3 +82,5 @@ final class DirectoryContentCacheMock: DirectoryContentCache {
 		return try getResponseForPageTokenClosure.map({ try $0(folderPath, pageToken) }) ?? getResponseForPageTokenReturnValue
 	}
 }
+
+// swiftlint:enable all

@@ -40,4 +40,8 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		provider = try? WebDAVProvider(with: client)
 		return Promise(())
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try WebDAVProvider(with: WebDAVCloudProviderIntegrationTests.client, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

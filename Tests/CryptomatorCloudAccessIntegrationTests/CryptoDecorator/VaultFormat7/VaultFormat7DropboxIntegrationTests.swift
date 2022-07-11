@@ -55,4 +55,19 @@ class VaultFormat7DropboxIntegrationTests: CloudAccessIntegrationTest {
 			throw IntegrationTestError.setUpTimeout
 		}
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		let credential = DropboxCredentialMock()
+		let limitedDelegate = DropboxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedDelegate, vaultPath: VaultFormat7DropboxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+			self.provider = decorator
+		}
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
+		return try XCTUnwrap(setUpPromise.value)
+	}
 }

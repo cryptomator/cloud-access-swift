@@ -42,4 +42,8 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 		try super.setUpWithError()
 		provider = try LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL)
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

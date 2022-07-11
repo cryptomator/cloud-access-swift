@@ -23,7 +23,7 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
-		setUpProvider = LocalFileSystemProvider(rootURL: rootURL)
+		setUpProvider = try? LocalFileSystemProvider(rootURL: rootURL)
 		do {
 			try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true, attributes: nil)
 		} catch {
@@ -40,6 +40,6 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		provider = LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL)
+		provider = try LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL)
 	}
 }

@@ -29,7 +29,7 @@ class WebDAVProviderTests: XCTestCase {
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		baseURL = URL(string: "/cloud/remote.php/webdav/")
 		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
-		provider = WebDAVProvider(with: client)
+		provider = try WebDAVProvider(with: client)
 	}
 
 	override func tearDownWithError() throws {
@@ -95,7 +95,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testFetchItemMetadataWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -231,7 +231,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testFetchItemListWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
 		let failureResponse = HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
@@ -400,7 +400,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testDownloadFileWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "downloadFile with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
@@ -715,7 +715,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testUploadFileWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "uploadFile with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
@@ -815,7 +815,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testCreateFolderWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "createFolder with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
 		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
 		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -888,7 +888,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testDeleteFileWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "deleteFile with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
@@ -1017,7 +1017,7 @@ class WebDAVProviderTests: XCTestCase {
 	func testMoveFileWithUnauthorizedError() throws {
 		let expectation = XCTestExpectation(description: "moveFile with unauthorized error")
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
 		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
 		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!

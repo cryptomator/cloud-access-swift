@@ -28,6 +28,8 @@
 		4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A118E262D95E600DAF62F /* OneDriveItem.swift */; };
 		4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */; };
 		4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */; };
+		4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */; };
+		4A2F18C2287720D200B0E220 /* PropfindResponseCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2F18C1287720D200B0E220 /* PropfindResponseCacheTests.swift */; };
 		4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */; };
 		4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
@@ -220,6 +222,8 @@
 		4A1A118E262D95E600DAF62F /* OneDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveItem.swift; sourceTree = "<group>"; };
 		4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProviderTests.swift; sourceTree = "<group>"; };
+		4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedPropfindResponseParserTests.swift; sourceTree = "<group>"; };
+		4A2F18C1287720D200B0E220 /* PropfindResponseCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseCacheTests.swift; sourceTree = "<group>"; };
 		4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveAuthenticationProvider.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
 		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
@@ -813,6 +817,8 @@
 		748420C124B8A1F800D84E58 /* WebDAV */ = {
 			isa = PBXGroup;
 			children = (
+				4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */,
+				4A2F18C1287720D200B0E220 /* PropfindResponseCacheTests.swift */,
 				7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */,
 				4A40749F252F432900D583C3 /* URLProtocolMock.swift */,
 				746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */,
@@ -1275,6 +1281,7 @@
 				7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */,
 				74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */,
 				74E32BE4283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift in Sources */,
+				4A2F18C2287720D200B0E220 /* PropfindResponseCacheTests.swift in Sources */,
 				4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */,
 				4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
@@ -1292,6 +1299,7 @@
 				7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */,
 				747A7802269882D0005E5AD4 /* OneDriveIdentifierCacheTests.swift in Sources */,
 				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
+				4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */,
 				4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

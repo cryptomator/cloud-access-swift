@@ -48,6 +48,11 @@ class WebDAVClientMock: WebDAVClient {
 		return super.PROPFIND(url: url, depth: depth, propertyNames: propertyNames)
 	}
 
+	override func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) -> Promise<HTTPURLResponse> {
+		propfindRequests[url.relativePath] = depth
+		return super.PROPFIND(url: url, depth: depth, to: localURL, propertyNames: propertyNames)
+	}
+
 	override func GET(from url: URL, to localURL: URL) -> Promise<HTTPURLResponse> {
 		getRequests.append(url.relativePath)
 		return super.GET(from: url, to: localURL)

@@ -61,6 +61,17 @@ public class WebDAVClient {
 		return webDAVSession.performDataTask(with: request)
 	}
 
+	public func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) -> Promise<HTTPURLResponse> {
+		var request = URLRequest(url: url)
+		request.httpMethod = "PROPFIND"
+		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
+		request.setValue("application/xml", forHTTPHeaderField: "Content-Type")
+		request.httpBody = """
+		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
+		""".data(using: .utf8)
+		return webDAVSession.performDownloadTask(with: request, to: localURL)
+	}
+
 	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PROPFIND"

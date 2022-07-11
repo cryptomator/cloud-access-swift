@@ -20,12 +20,15 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	private var runningTickets: [GTLRServiceTicket]
 	private var runningFetchers: [GTMSessionFetcher]
+	private let maxPageSize: Int
 
-	public init(credential: GoogleDriveCredential, useBackgroundSession: Bool = false) throws {
+	public init(credential: GoogleDriveCredential, useBackgroundSession: Bool = false, maxPageSize: Int = 1000) throws {
 		self.driveService = credential.driveService
 		self.identifierCache = try GoogleDriveIdentifierCache()
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
+		let maxAllowedItemLimit = 1000
+		self.maxPageSize = min(max(1, maxPageSize), maxAllowedItemLimit)
 		try setupDriveService(credential: credential, useBackgroundSession: useBackgroundSession)
 	}
 
@@ -421,7 +424,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		query.supportsAllDrives = true
 		query.includeItemsFromAllDrives = true
 		query.q = "'\(resolvedIdentifier)' in parents and trashed = false"
-		query.pageSize = 1000
+		query.pageSize = maxPageSize
 		query.pageToken = pageToken
 		query.fields = "nextPageToken,files(id,name,modifiedTime,size,mimeType,shortcutDetails)"
 		return query

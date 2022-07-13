@@ -63,6 +63,8 @@
 		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
+		4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */; };
+		4A8B8734287D8036002D676E /* CloudAccessDDLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */; };
 		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
 		4AC75F9A2861A425002731FE /* VaultFormat7S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */; };
 		4AC75F9C2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */; };
@@ -250,6 +252,7 @@
 		4A765CA22878596000794440 /* DirectoryContentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCache.swift; sourceTree = "<group>"; };
 		4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "AWSS3TransferUtility+ForegroundSession.swift"; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
+		4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAccessDDLog.swift; sourceTree = "<group>"; };
 		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
 		4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7S3IntegrationTests.swift; sourceTree = "<group>"; };
 		4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6S3IntegrationTests.swift; sourceTree = "<group>"; };
@@ -380,6 +383,7 @@
 				4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
+				4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,6 +436,7 @@
 				4A567AF02615C2DE002C4D82 /* Dropbox */,
 				4A567B172615C8BB002C4D82 /* GoogleDrive */,
 				7471BDAC24865B6F000D05FC /* LocalFileSystem */,
+				4A8B8732287D7EB8002D676E /* Logging */,
 				4A1A11692629A53300DAF62F /* OneDrive */,
 				746F090F27BC0B61003FCD9F /* PCloud */,
 				4AF0AA7F2844F38700C20B75 /* S3 */,
@@ -566,6 +571,14 @@
 				4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */,
 			);
 			path = Common;
+			sourceTree = "<group>";
+		};
+		4A8B8732287D7EB8002D676E /* Logging */ = {
+			isa = PBXGroup;
+			children = (
+				4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */,
+			);
+			path = Logging;
 			sourceTree = "<group>";
 		};
 		4ACA638F2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */ = {
@@ -982,6 +995,7 @@
 				746BE0AA26579D4A00FB674E /* MSAL */,
 				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
 				4AF0AA7B2844DDD200C20B75 /* AWSS3 */,
+				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1070,6 +1084,7 @@
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
 				4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */,
+				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1207,6 +1222,7 @@
 				74073D1927C9406000A86C9A /* Task+Promises.swift in Sources */,
 				4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */,
 				746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */,
+				4A8B8734287D8036002D676E /* CloudAccessDDLog.swift in Sources */,
 				746F091727BD006D003FCD9F /* PCloudItem.swift in Sources */,
 				4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */,
 				4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */,
@@ -1706,6 +1722,14 @@
 				minimumVersion = 1.5.0;
 			};
 		};
+		4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/CocoaLumberjack/CocoaLumberjack.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.7.0;
+			};
+		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm";
@@ -1799,6 +1823,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */;
+			productName = CocoaLumberjackSwift;
 		};
 		4AF0AA7B2844DDD200C20B75 /* AWSS3 */ = {
 			isa = XCSwiftPackageProductDependency;

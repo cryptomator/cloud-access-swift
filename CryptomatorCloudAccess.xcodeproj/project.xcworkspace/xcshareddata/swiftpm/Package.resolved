@@ -20,6 +20,15 @@
         }
       },
       {
+        "package": "CocoaLumberjack",
+        "repositoryURL": "https://github.com/CocoaLumberjack/CocoaLumberjack.git",
+        "state": {
+          "branch": null,
+          "revision": "80ada1f753b0d53d9b57c465936a7c4169375002",
+          "version": "3.7.4"
+        }
+      },
+      {
         "package": "CryptomatorCryptoLib",
         "repositoryURL": "https://github.com/cryptomator/cryptolib-swift.git",
         "state": {

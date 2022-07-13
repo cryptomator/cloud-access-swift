@@ -21,7 +21,7 @@ class LocalFileSystemTests: XCTestCase {
 	override func setUpWithError() throws {
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		provider = LocalFileSystemProvider(rootURL: tmpDirURL)
+		provider = try LocalFileSystemProvider(rootURL: tmpDirURL)
 	}
 
 	override func tearDownWithError() throws {

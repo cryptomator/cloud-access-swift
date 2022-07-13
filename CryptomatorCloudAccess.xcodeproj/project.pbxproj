@@ -28,6 +28,7 @@
 		4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A118E262D95E600DAF62F /* OneDriveItem.swift */; };
 		4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */; };
 		4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */; };
+		4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */; };
 		4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */; };
 		4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
@@ -57,6 +58,9 @@
 		4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */; };
 		4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */; };
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
+		4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */; };
+		4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */; };
+		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
 		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
@@ -217,6 +221,7 @@
 		4A1A118E262D95E600DAF62F /* OneDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveItem.swift; sourceTree = "<group>"; };
 		4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProviderTests.swift; sourceTree = "<group>"; };
+		4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedPropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveAuthenticationProvider.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
 		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
@@ -240,6 +245,9 @@
 		4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "URLSession+Promises.swift"; sourceTree = "<group>"; };
 		4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultProviderFactoryTests.swift; sourceTree = "<group>"; };
 		4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSession.swift; sourceTree = "<group>"; };
+		4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCacheTests.swift; sourceTree = "<group>"; };
+		4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCacheMock.swift; sourceTree = "<group>"; };
+		4A765CA22878596000794440 /* DirectoryContentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCache.swift; sourceTree = "<group>"; };
 		4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "AWSS3TransferUtility+ForegroundSession.swift"; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
 		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
@@ -419,14 +427,15 @@
 				4A058FF424519FFC008831F9 /* CryptomatorCloudAccess.h */,
 				4A058FF524519FFC008831F9 /* Info.plist */,
 				4A0590162451A1BB008831F9 /* API */,
+				4A741FF0287C696F00489C23 /* Common */,
 				7416F22424F658160074DA8E /* Crypto */,
 				4A567AF02615C2DE002C4D82 /* Dropbox */,
 				4A567B172615C8BB002C4D82 /* GoogleDrive */,
 				7471BDAC24865B6F000D05FC /* LocalFileSystem */,
 				4A1A11692629A53300DAF62F /* OneDrive */,
 				746F090F27BC0B61003FCD9F /* PCloud */,
-				748A42B424AA228200DEB6D0 /* WebDAV */,
 				4AF0AA7F2844F38700C20B75 /* S3 */,
+				748A42B424AA228200DEB6D0 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccess;
 			sourceTree = "<group>";
@@ -436,14 +445,15 @@
 			children = (
 				4A05900124519FFC008831F9 /* Info.plist */,
 				9EE62A0E247D54CD0089DAF7 /* API */,
+				4A741FF3287C71A000489C23 /* Common */,
 				7416F22624F6585A0074DA8E /* Crypto */,
 				4A3A396C2615F97600F16B26 /* Dropbox */,
 				4A3A39772615F9AA00F16B26 /* GoogleDrive */,
 				740A7FDB24C5DFB3000216E7 /* LocalFileSystem */,
 				4A0C90222636D59800ADB421 /* OneDrive */,
 				7402B48227D2625E00BE9F8B /* PCloud */,
-				748420C124B8A1F800D84E58 /* WebDAV */,
 				4A2745FA2847887F00E70D5F /* S3 */,
+				748420C124B8A1F800D84E58 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccessTests;
 			sourceTree = "<group>";
@@ -539,6 +549,23 @@
 				747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */,
 			);
 			path = GoogleDrive;
+			sourceTree = "<group>";
+		};
+		4A741FF0287C696F00489C23 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				4A765CA22878596000794440 /* DirectoryContentCache.swift */,
+			);
+			path = Common;
+			sourceTree = "<group>";
+		};
+		4A741FF3287C71A000489C23 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */,
+				4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */,
+			);
+			path = Common;
 			sourceTree = "<group>";
 		};
 		4ACA638F2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */ = {
@@ -788,6 +815,7 @@
 		748420C124B8A1F800D84E58 /* WebDAV */ = {
 			isa = PBXGroup;
 			children = (
+				4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */,
 				7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */,
 				4A40749F252F432900D583C3 /* URLProtocolMock.swift */,
 				746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */,
@@ -1191,6 +1219,7 @@
 				4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
 				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
+				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
 				4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
@@ -1249,6 +1278,8 @@
 				7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */,
 				74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */,
 				74E32BE4283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift in Sources */,
+				4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */,
+				4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
 				4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */,
 				4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */,
@@ -1264,6 +1295,7 @@
 				7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */,
 				747A7802269882D0005E5AD4 /* OneDriveIdentifierCacheTests.swift in Sources */,
 				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
+				4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */,
 				4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -22,13 +22,16 @@ public class S3CloudProvider: CloudProvider {
 	private let service: AWSS3
 	private let credential: S3Credential
 	private let copyUtility: S3CopyTaskUtility
+	private let maxPageSize: Int
 	private static let delimiter = "/"
 	private static let folderContentType = "application/x-directory"
+	private static let s3MaxPageSize = 1000
 
 	init(credential: S3Credential,
 	     useBackgroundSession: Bool,
 	     transferUtilityConfiguration: AWSS3TransferUtilityConfiguration,
-	     serviceConfiguration: AWSServiceConfiguration) throws {
+	     serviceConfiguration: AWSServiceConfiguration,
+	     maxPageSize: Int) throws {
 		self.credential = credential
 		AWSEndpoint.exchangeRegionNameImplementation
 		CustomAWSEndpointRegionNameStorage.shared.setRegionName(credential.region, for: credential)
@@ -44,17 +47,18 @@ public class S3CloudProvider: CloudProvider {
 		let service = AWSS3.s3(forKey: credential.identifier)
 		self.copyUtility = S3CopyTaskUtility(service: service, bucket: credential.bucket)
 		self.service = service
+		self.maxPageSize = min(max(1, maxPageSize), S3CloudProvider.s3MaxPageSize)
 	}
 
-	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?) throws -> S3CloudProvider {
-		try S3CloudProvider(credential: credential, useBackgroundSession: true, sharedContainerIdentifier: sharedContainerIdentifier)
+	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?, maxPageSize: Int = .max) throws -> S3CloudProvider {
+		try S3CloudProvider(credential: credential, useBackgroundSession: true, sharedContainerIdentifier: sharedContainerIdentifier, maxPageSize: maxPageSize)
 	}
 
-	public convenience init(credential: S3Credential) throws {
-		try self.init(credential: credential, useBackgroundSession: false, sharedContainerIdentifier: nil)
+	public convenience init(credential: S3Credential, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, useBackgroundSession: false, sharedContainerIdentifier: nil, maxPageSize: maxPageSize)
 	}
 
-	convenience init(credential: S3Credential, useBackgroundSession: Bool, sharedContainerIdentifier: String?) throws {
+	convenience init(credential: S3Credential, useBackgroundSession: Bool, sharedContainerIdentifier: String?, maxPageSize: Int) throws {
 		let endpoint = AWSEndpoint(url: credential.url)
 		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
 		let region = credential.region.aws_regionTypeValue()
@@ -64,7 +68,7 @@ public class S3CloudProvider: CloudProvider {
 		serviceConfiguration.sharedContainerIdentifier = sharedContainerIdentifier
 		let transferUtilityConfiguration = AWSS3TransferUtilityConfiguration()
 		transferUtilityConfiguration.bucket = credential.bucket
-		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration)
+		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration, maxPageSize: maxPageSize)
 	}
 
 	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of an headObject request as some providers do not answer with an access denied error
@@ -91,6 +95,8 @@ public class S3CloudProvider: CloudProvider {
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
 		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: pageToken)
+		// request includes the folder itself
+		request.maxKeys = NSNumber(value: maxPageSize + 1)
 		return service.listObjectsV2(request)
 			.recover { error -> Promise<AWSS3ListObjectsV2Output> in
 				return self.checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)

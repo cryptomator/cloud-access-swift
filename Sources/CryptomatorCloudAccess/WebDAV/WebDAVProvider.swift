@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import GRDB
 import Promises
 
 public enum WebDAVProviderError: Error {
@@ -14,7 +15,7 @@ public enum WebDAVProviderError: Error {
 	case invalidResponse
 }
 
-private extension CloudItemMetadata {
+extension CloudItemMetadata {
 	init(_ propfindResponseElement: PropfindResponseElement, cloudPath: CloudPath) {
 		self.name = cloudPath.lastPathComponent
 		self.cloudPath = cloudPath
@@ -31,9 +32,19 @@ public class WebDAVProvider: CloudProvider {
 	private static let defaultPropertyNames = ["getlastmodified", "getcontentlength", "resourcetype"]
 
 	private let client: WebDAVClient
+	private let directoryContentCache: DirectoryContentCache
+	private let tmpDirURL: URL
 
-	public init(with client: WebDAVClient) {
+	public init(with client: WebDAVClient, maxPageSize: Int = .max) throws {
 		self.client = client
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
+		self.directoryContentCache = try DirectoryContentDBCache(dbWriter: DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
+	}
+
+	deinit {
+		try? FileManager.default.removeItem(at: tmpDirURL)
 	}
 
 	// MARK: - CloudProvider API
@@ -57,31 +68,43 @@ public class WebDAVProvider: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		guard pageToken == nil else {
-			return Promise(CloudProviderError.pageTokenInvalid)
+		let initialPromise: Promise<Void>
+		if pageToken != nil {
+			initialPromise = Promise(())
+		} else {
+			initialPromise = updatePropfindResponseCache(forFolderAt: cloudPath)
 		}
-		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
-		}
-		return client.PROPFIND(url: url, depth: .one, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemList in
-			guard let data = data else {
-				throw WebDAVProviderError.invalidResponse
-			}
-			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
-			let elements = try parser.getElements()
-			guard let rootElement = elements.filter({ $0.depth == 0 }).first else {
-				throw WebDAVProviderError.invalidResponse
-			}
-			let rootMetadata = CloudItemMetadata(rootElement, cloudPath: cloudPath)
-			guard rootMetadata.itemType == .folder else {
-				throw CloudProviderError.itemTypeMismatch
-			}
-			let childElements = elements.filter({ $0.depth == 1 })
-			let items = childElements.map { CloudItemMetadata($0, cloudPath: cloudPath.appendingPathComponent($0.url.lastPathComponent)) }
-			return CloudItemList(items: items)
+		return initialPromise.then { _ -> CloudItemList in
+			try self.getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
 		}.recover { error -> Promise<CloudItemList> in
 			return self.convertStandardError(error)
 		}
+	}
+
+	private func updatePropfindResponseCache(forFolderAt cloudPath: CloudPath) -> Promise<Void> {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
+			return Promise(WebDAVProviderError.resolvingURLFailed)
+		}
+		do {
+			try directoryContentCache.clearCache(for: cloudPath)
+		} catch {
+			return Promise(error)
+		}
+		let tmpFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		return client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVProvider.defaultPropertyNames).then { response -> Void in
+			let responseURL = response.url ?? url
+			guard let inputStream = InputStream(url: tmpFileURL) else {
+				throw WebDAVProviderError.invalidResponse
+			}
+			let parser = CachePropfindResponseParser(XMLParser(stream: inputStream), responseURL: responseURL, cache: self.directoryContentCache, folderEnumerationPath: cloudPath)
+			try parser.fillCache()
+			inputStream.close()
+		}
+	}
+
+	private func getCachedCloudItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) throws -> CloudItemList {
+		let response = try directoryContentCache.getResponse(for: cloudPath, pageToken: pageToken)
+		return CloudItemList(items: response.elements, nextPageToken: response.nextPageToken)
 	}
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {

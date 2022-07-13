@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import GRDB
 import Promises
 
 public enum PropfindResponseParserError: Error {
@@ -67,22 +68,24 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
-		switch elementName {
-		case "propstat":
-			if let statusCode = statusCode, statusCode == "200" {
-				parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
+		autoreleasepool {
+			switch elementName {
+			case "propstat":
+				if let statusCode = statusCode, statusCode == "200" {
+					parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
+				}
+				parser.delegate = parentDelegate
+			case "getlastmodified":
+				lastModified = Date.date(fromRFC822: xmlCharacterBuffer)
+			case "getcontentlength":
+				contentLength = Int(xmlCharacterBuffer)
+			case "resourcetype":
+				insideOfResourceType = false
+			case "status":
+				statusCode = getStatusCode(xmlCharacterBuffer)
+			default:
+				break
 			}
-			parser.delegate = parentDelegate
-		case "getlastmodified":
-			lastModified = Date.date(fromRFC822: xmlCharacterBuffer)
-		case "getcontentlength":
-			contentLength = Int(xmlCharacterBuffer)
-		case "resourcetype":
-			insideOfResourceType = false
-		case "status":
-			statusCode = getStatusCode(xmlCharacterBuffer)
-		default:
-			break
 		}
 	}
 
@@ -143,17 +146,20 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
-		switch elementName {
-		case "response":
-			if let depth = depth, let url = url, let elementProperties = elementProperties {
-				parentDelegate?.elements.append(PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength))
+		autoreleasepool {
+			switch elementName {
+			case "response":
+				if let depth = depth, let url = url, let elementProperties = elementProperties {
+					let element = PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength)
+					parentDelegate?.receivedElement(element)
+				}
+				parser.delegate = parentDelegate
+			case "href":
+				url = getURL(xmlCharacterBuffer)
+				depth = getDepth(url)
+			default:
+				break
 			}
-			parser.delegate = parentDelegate
-		case "href":
-			url = getURL(xmlCharacterBuffer)
-			depth = getDepth(url)
-		default:
-			break
 		}
 	}
 
@@ -175,13 +181,12 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 	}
 }
 
-private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
+private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate, PropfindParserDelegate {
 	private let responseURL: URL
 
 	// swiftlint:disable:next weak_delegate
 	private var elementDelegate: PropfindResponseElementParserDelegate?
-
-	var elements: [PropfindResponseElement] = []
+	weak var delegate: PropfindParserDelegate?
 
 	init(responseURL: URL) {
 		self.responseURL = responseURL
@@ -198,11 +203,16 @@ private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 			parser.delegate = elementDelegate
 		}
 	}
+
+	fileprivate func receivedElement(_ element: PropfindResponseElement) {
+		delegate?.receivedElement(element)
+	}
 }
 
-class PropfindResponseParser {
+class PropfindResponseParser: PropfindParserDelegate {
 	private let parser: XMLParser
 	private let responseURL: URL
+	private lazy var elements = [PropfindResponseElement]()
 
 	init(_ parser: XMLParser, responseURL: URL) {
 		self.parser = parser
@@ -212,11 +222,57 @@ class PropfindResponseParser {
 
 	func getElements() throws -> [PropfindResponseElement] {
 		let delegate = PropfindResponseParserDelegate(responseURL: responseURL)
+		delegate.delegate = self
 		parser.delegate = delegate
 		if parser.parse() {
-			return delegate.elements
+			return elements
 		} else {
 			throw parser.parserError ?? PropfindResponseParserError.parsingAborted
 		}
 	}
+
+	fileprivate func receivedElement(_ element: PropfindResponseElement) {
+		elements.append(element)
+	}
+}
+
+class CachePropfindResponseParser: PropfindResponseParser {
+	let cache: DirectoryContentCache
+	let folderEnumerationPath: CloudPath
+	private var elementsCached: Int64 = 0
+	private var isDirectory = false
+
+	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, folderEnumerationPath: CloudPath) {
+		self.cache = cache
+		self.folderEnumerationPath = folderEnumerationPath
+		super.init(parser, responseURL: responseURL)
+	}
+
+	func fillCache() throws {
+		print("DEBUG: start fillCache for \(folderEnumerationPath) - \(Date())")
+		_ = try getElements()
+		guard isDirectory else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		print("DEBUG: finished fillCache for \(folderEnumerationPath) - \(Date())")
+	}
+
+	override func receivedElement(_ element: PropfindResponseElement) {
+		if !isDirectory, element.depth == 0 {
+			isDirectory = element.collection
+			return
+		}
+		elementsCached += 1
+		let cloudPath = folderEnumerationPath.appendingPathComponent(element.url.lastPathComponent)
+		let cloudItemMetadata = CloudItemMetadata(element, cloudPath: cloudPath)
+		do {
+			try cache.save(cloudItemMetadata, for: folderEnumerationPath, index: elementsCached)
+		} catch {
+			print("CachePropfindResponseParser caching element \(element) failed with error: \(error)")
+		}
+	}
+}
+
+private protocol PropfindParserDelegate: AnyObject {
+	func receivedElement(_ element: PropfindResponseElement)
 }

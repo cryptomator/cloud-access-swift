@@ -31,8 +31,18 @@ class CloudAccessIntegrationTest: XCTestCase {
 		return XCTestSuite(name: "InterfaceTests Excluded")
 	}
 
+	let maxPageSizeForLimitedCloudProvider = 3
 	var tmpDirURL: URL!
 	var provider: CloudProvider!
+	var expectedRootFolderItems: [CloudItemMetadata] {
+		let cloudPath = type(of: self).integrationTestRootCloudPath
+		return [CloudItemMetadata(name: "test 0.txt", cloudPath: cloudPath.appendingPathComponent("test 0.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
+		        CloudItemMetadata(name: "test 1.txt", cloudPath: cloudPath.appendingPathComponent("test 1.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
+		        CloudItemMetadata(name: "test 2.txt", cloudPath: cloudPath.appendingPathComponent("test 2.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
+		        CloudItemMetadata(name: "test 3.txt", cloudPath: cloudPath.appendingPathComponent("test 3.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
+		        CloudItemMetadata(name: "test 4.txt", cloudPath: cloudPath.appendingPathComponent("test 4.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
+		        CloudItemMetadata(name: "testFolder", cloudPath: cloudPath.appendingPathComponent("testFolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
+	}
 
 	override class func setUp() {
 		precondition(setUpProvider != nil)
@@ -315,18 +325,10 @@ class CloudAccessIntegrationTest: XCTestCase {
 	func testFetchItemListForRootFolder() throws {
 		let expectation = XCTestExpectation(description: "fetchItemList for root folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath
-		let expectedItems = [
-			CloudItemMetadata(name: "test 0.txt", cloudPath: cloudPath.appendingPathComponent("test 0.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "test 1.txt", cloudPath: cloudPath.appendingPathComponent("test 1.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "test 2.txt", cloudPath: cloudPath.appendingPathComponent("test 2.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "test 3.txt", cloudPath: cloudPath.appendingPathComponent("test 3.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "test 4.txt", cloudPath: cloudPath.appendingPathComponent("test 4.txt"), itemType: .file, lastModifiedDate: nil, size: nil),
-			CloudItemMetadata(name: "testFolder", cloudPath: cloudPath.appendingPathComponent("testFolder"), itemType: .folder, lastModifiedDate: nil, size: nil)
-		]
 		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { retrievedItemList in
 			let retrievedSortedItems = retrievedItemList.items.sorted()
 			XCTAssertNil(retrievedItemList.nextPageToken)
-			XCTAssertEqual(expectedItems, retrievedSortedItems)
+			XCTAssertEqual(self.expectedRootFolderItems, retrievedSortedItems)
 		}.catch { error in
 			XCTFail(error.localizedDescription)
 		}.always {
@@ -970,6 +972,38 @@ class CloudAccessIntegrationTest: XCTestCase {
 			expectation.fulfill()
 		}
 		wait(for: [expectation], timeout: 30.0)
+	}
+
+	func testFetchItemListPagination() throws {
+		let expectation = XCTestExpectation()
+		let provider = try createLimitedCloudProvider()
+		let cloudPath = type(of: self).integrationTestRootCloudPath
+		var retrievedItems = [CloudItemMetadata]()
+		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { itemList -> Promise<CloudItemList> in
+			XCTAssertNotNil(itemList.nextPageToken)
+			XCTAssertEqual(3, itemList.items.count)
+			retrievedItems.append(contentsOf: itemList.items)
+			return provider.fetchItemList(forFolderAt: cloudPath, withPageToken: itemList.nextPageToken)
+		}.then { itemList in
+			XCTAssertNil(itemList.nextPageToken)
+			XCTAssertEqual(3, itemList.items.count)
+			retrievedItems.append(contentsOf: itemList.items)
+		}.catch { error in
+			XCTFail(error.localizedDescription)
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 60.0)
+		let sortedRetrievedItems = retrievedItems.sorted()
+		XCTAssertEqual(expectedRootFolderItems, sortedRetrievedItems)
+	}
+
+	/**
+	 Creates a CloudProvider with a `maxPageSize` of `maxPageSizeForLimitedCloudProvider` to test pagination.
+	 This method must be overridden by each subclass.
+	 */
+	func createLimitedCloudProvider() throws -> CloudProvider {
+		fatalError("Provided only abstract implementation of createLimitedCloudProvider()")
 	}
 
 	private func assertReceivedCorrectMetadataAfterUploading(file localURL: URL, to cloudPath: CloudPath, metadata: CloudItemMetadata) {

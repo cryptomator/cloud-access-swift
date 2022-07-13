@@ -76,6 +76,10 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 		}
 		wait(for: [expectation], timeout: 60.0)
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try S3CloudProvider(credential: .mock, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }
 
 extension S3Credential {

@@ -54,4 +54,8 @@ class VaultFormat7PCloudIntegrationTests: CloudAccessIntegrationTest {
 			throw IntegrationTestError.setUpTimeout
 		}
 	}
+
+	override func testFetchItemListPagination() throws {
+		throw XCTSkip("pCloud does not support pagination")
+	}
 }

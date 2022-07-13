@@ -18,17 +18,17 @@ import XCTest
 
 class OneDriveCloudProviderTests: XCTestCase {
 	var provider: OneDriveCloudProvider!
-
+	let maxPageSize = 100
 	override func setUpWithError() throws {
 		let credential = try OneDriveCredential(with: "Test", authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
-		provider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		provider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false, maxPageSize: maxPageSize)
 	}
 
 	func testChildrenRequest() throws {
 		let item = OneDriveItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.childrenRequest(for: item)
 		XCTAssertEqual(HTTPMethodGet, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100")!, request.url)
 		XCTAssertNil(request.httpBody)
 	}
 

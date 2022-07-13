@@ -43,4 +43,10 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 			return Promise(error)
 		}
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential,
+		                                 useBackgroundSession: false,
+		                                 maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

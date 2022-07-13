@@ -38,4 +38,8 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 		credential.deauthenticate()
 		return Promise(())
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return DropboxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

@@ -11,13 +11,13 @@
         }
       },
       {
-      "package" : "AWSiOSSDKV2",
-      "repositoryURL" : "https://github.com/aws-amplify/aws-sdk-ios-spm",
-      "state" : {
-        "branch": null,
-        "revision" : "34bcb816dfa3cd909f97554b0328178aa5b85153",
-        "version" : "2.27.9"
-      }
+        "package": "AWSiOSSDKV2",
+        "repositoryURL": "https://github.com/aws-amplify/aws-sdk-ios-spm.git",
+        "state": {
+          "branch": null,
+          "revision": "34bcb816dfa3cd909f97554b0328178aa5b85153",
+          "version": "2.27.9"
+        }
       },
       {
         "package": "Base32",
@@ -105,7 +105,7 @@
         "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git",
         "state": {
           "branch": null,
-          "revision": "46acc6e44ae3ea0247162bf081ffe0c0485296dc",
+          "revision": "172b07fe8a7da6072149e2fd92051a510b25035e",
           "version": "1.3.0"
         }
       },

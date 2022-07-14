@@ -11,6 +11,15 @@
         }
       },
       {
+        "package": "AWSiOSSDKV2",
+        "repositoryURL": "https://github.com/aws-amplify/aws-sdk-ios-spm.git",
+        "state": {
+          "branch": null,
+          "revision": "34bcb816dfa3cd909f97554b0328178aa5b85153",
+          "version": "2.27.9"
+        }
+      },
+      {
         "package": "Base32",
         "repositoryURL": "https://github.com/norio-nomura/Base32.git",
         "state": {
@@ -51,8 +60,8 @@
         "repositoryURL": "https://github.com/groue/GRDB.swift.git",
         "state": {
           "branch": null,
-          "revision": "5ee47c3c2765bdfde0f44c2ea9a263f6aa252d63",
-          "version": "4.14.0"
+          "revision": "e02f2c8abacff2799ed14926edcbf6e76fb9f805",
+          "version": "5.25.0"
         }
       },
       {
@@ -92,15 +101,6 @@
         }
       },
       {
-        "package": "MSGraphClientSDK",
-        "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-spm.git",
-        "state": {
-          "branch": null,
-          "revision": "0320c6a99207b53288970382afcf5054852f9724",
-          "version": "1.0.0"
-        }
-      },
-      {
         "package": "MSGraphClientModels",
         "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git",
         "state": {
@@ -110,8 +110,17 @@
         }
       },
       {
+        "package": "MSGraphClientSDK",
+        "repositoryURL": "https://github.com/phil1995/msgraph-sdk-objc-spm.git",
+        "state": {
+          "branch": null,
+          "revision": "0320c6a99207b53288970382afcf5054852f9724",
+          "version": "1.0.0"
+        }
+      },
+      {
         "package": "PCloudSDKSwift",
-        "repositoryURL": "https://github.com/pCloud/pcloud-sdk-swift",
+        "repositoryURL": "https://github.com/pCloud/pcloud-sdk-swift.git",
         "state": {
           "branch": null,
           "revision": "6da4ca6bb4e7068145d9325988e29862d26300ba",

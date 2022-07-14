@@ -18,8 +18,6 @@
 		4A0785322859F5860015DAE1 /* S3CopyTaskUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */; };
 		4A0785342859F5E30015DAE1 /* AWSS3+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */; };
 		4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */; };
-		4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11532629A44B00DAF62F /* MSGraphClientModels */; };
-		4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11592629A4A200DAF62F /* MSGraphClientSDK */; };
 		4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11642629A52F00DAF62F /* OneDriveCloudProvider.swift */; };
 		4A1A11742629ACCA00DAF62F /* OneDriveCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11732629ACCA00DAF62F /* OneDriveCredential.swift */; };
 		4A1A11792629ACD500DAF62F /* OneDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11782629ACD500DAF62F /* OneDriveAuthenticator.swift */; };
@@ -38,7 +36,6 @@
 		4A41D2432641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */; };
 		4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */; };
 		4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */; };
-		4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */; };
 		4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */; };
 		4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B032615C689002C4D82 /* DropboxClientSetup.swift */; };
 		4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */; };
@@ -60,6 +57,9 @@
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
 		4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */; };
 		4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */; };
+		4A75E1C428806F5800952FE6 /* MSGraphClientModels in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C328806F5800952FE6 /* MSGraphClientModels */; };
+		4A75E1C728806FA100952FE6 /* MSGraphClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C628806FA100952FE6 /* MSGraphClientSDK */; };
+		4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */; };
 		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
@@ -366,18 +366,18 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4A75E1C428806F5800952FE6 /* MSGraphClientModels in Frameworks */,
+				4A75E1C728806FA100952FE6 /* MSGraphClientSDK in Frameworks */,
 				4AF0AA7C2844DDD200C20B75 /* AWSS3 in Frameworks */,
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				746BE0AB26579D4A00FB674E /* MSAL in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
 				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
-				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
 				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
-				4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */,
+				4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */,
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
-				4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
 			);
@@ -971,17 +971,17 @@
 				74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */,
 				74F93561251F6822001F4ADA /* GRDB */,
 				74F93566251F6863001F4ADA /* Promises */,
-				4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */,
 				4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */,
 				4A567B192615C917002C4D82 /* GTMAppAuth */,
 				4A567B362615CAAC002C4D82 /* GTMSessionFetcher */,
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
-				4A1A11532629A44B00DAF62F /* MSGraphClientModels */,
-				4A1A11592629A4A200DAF62F /* MSGraphClientSDK */,
 				740C5878262F800A00F63423 /* JOSESwift */,
 				746BE0AA26579D4A00FB674E /* MSAL */,
 				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
 				4AF0AA7B2844DDD200C20B75 /* AWSS3 */,
+				4A75E1C328806F5800952FE6 /* MSGraphClientModels */,
+				4A75E1C628806FA100952FE6 /* MSGraphClientSDK */,
+				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1059,17 +1059,17 @@
 				74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */,
 				74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */,
-				4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */,
 				4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
 				4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */,
 				4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */,
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
-				4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */,
-				4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */,
 				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
 				4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */,
+				4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */,
+				4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */,
+				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1650,30 +1650,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-models.git";
-			requirement = {
-				kind = exactVersion;
-				version = "1.3.0-fork";
-			};
-		};
-		4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc.git";
-			requirement = {
-				kind = exactVersion;
-				version = "1.0.0-fork";
-			};
-		};
-		4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c.git";
-			requirement = {
-				kind = exactVersion;
-				version = "6.2.3-fork";
-			};
-		};
 		4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
@@ -1704,6 +1680,30 @@
 			requirement = {
 				kind = upToNextMinorVersion;
 				minimumVersion = 1.5.0;
+			};
+		};
+		4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-models-spm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+		4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-spm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c-spm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 6.3.0;
 			};
 		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
@@ -1765,21 +1765,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4A1A11532629A44B00DAF62F /* MSGraphClientModels */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */;
-			productName = MSGraphClientModels;
-		};
-		4A1A11592629A4A200DAF62F /* MSGraphClientSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */;
-			productName = MSGraphClientSDK;
-		};
-		4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */;
-			productName = ObjectiveDropboxOfficial;
-		};
 		4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
@@ -1799,6 +1784,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		4A75E1C328806F5800952FE6 /* MSGraphClientModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */;
+			productName = MSGraphClientModels;
+		};
+		4A75E1C628806FA100952FE6 /* MSGraphClientSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */;
+			productName = MSGraphClientSDK;
+		};
+		4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */;
+			productName = ObjectiveDropboxOfficial;
 		};
 		4AF0AA7B2844DDD200C20B75 /* AWSS3 */ = {
 			isa = XCSwiftPackageProductDependency;

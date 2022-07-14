@@ -56,4 +56,21 @@ class VaultFormat7GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 			throw IntegrationTestError.setUpTimeout
 		}
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
+		let limitedDelegate = try GoogleDriveCloudProvider(credential: credential,
+		                                                   useBackgroundSession: false,
+		                                                   maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedDelegate, vaultPath: VaultFormat7GoogleDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+			self.provider = decorator
+		}
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
+		return try XCTUnwrap(setUpPromise.value)
+	}
 }

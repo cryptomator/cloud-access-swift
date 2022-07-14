@@ -20,7 +20,8 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	private static let client = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
-	private static let cloudProvider = WebDAVProvider(with: client)
+	// swiftlint:disable:next force_try
+	private static let cloudProvider = try! WebDAVProvider(with: client)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {
@@ -52,5 +53,19 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 			}
 			throw IntegrationTestError.setUpTimeout
 		}
+	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		let limitedWebDAVCloudProvider = try WebDAVProvider(with: VaultFormat7WebDAVIntegrationTests.client, maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedWebDAVCloudProvider, vaultPath: VaultFormat7WebDAVIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+			self.provider = decorator
+		}
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
+		return try XCTUnwrap(setUpPromise.value)
 	}
 }

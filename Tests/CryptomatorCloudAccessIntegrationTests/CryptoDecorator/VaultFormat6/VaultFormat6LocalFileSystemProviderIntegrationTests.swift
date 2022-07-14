@@ -20,7 +20,8 @@ class VaultFormat6LocalFileSystemIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	private static let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-	private static let cloudProvider = LocalFileSystemProvider(rootURL: rootURL)
+	// swiftlint:disable:next force_try
+	private static let cloudProvider = try! LocalFileSystemProvider(rootURL: rootURL)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
 
 	override class func setUp() {
@@ -52,7 +53,7 @@ class VaultFormat6LocalFileSystemIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let cloudProvider = LocalFileSystemProvider(rootURL: VaultFormat6LocalFileSystemIntegrationTests.rootURL)
+		let cloudProvider = try LocalFileSystemProvider(rootURL: VaultFormat6LocalFileSystemIntegrationTests.rootURL)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6LocalFileSystemIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
@@ -62,5 +63,20 @@ class VaultFormat6LocalFileSystemIntegrationTests: CloudAccessIntegrationTest {
 			}
 			throw IntegrationTestError.setUpTimeout
 		}
+	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		let cloudProvider = try LocalFileSystemProvider(rootURL: VaultFormat6LocalFileSystemIntegrationTests.rootURL,
+		                                                maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6LocalFileSystemIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+			self.provider = decorator
+		}
+		guard waitForPromises(timeout: 60.0) else {
+			if let error = setUpPromise.error {
+				throw error
+			}
+			throw IntegrationTestError.setUpTimeout
+		}
+		return try XCTUnwrap(setUpPromise.value)
 	}
 }

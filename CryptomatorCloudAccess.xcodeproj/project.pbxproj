@@ -18,8 +18,6 @@
 		4A0785322859F5860015DAE1 /* S3CopyTaskUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */; };
 		4A0785342859F5E30015DAE1 /* AWSS3+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */; };
 		4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785352859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift */; };
-		4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11532629A44B00DAF62F /* MSGraphClientModels */; };
-		4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4A1A11592629A4A200DAF62F /* MSGraphClientSDK */; };
 		4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11642629A52F00DAF62F /* OneDriveCloudProvider.swift */; };
 		4A1A11742629ACCA00DAF62F /* OneDriveCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11732629ACCA00DAF62F /* OneDriveCredential.swift */; };
 		4A1A11792629ACD500DAF62F /* OneDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A11782629ACD500DAF62F /* OneDriveAuthenticator.swift */; };
@@ -28,6 +26,7 @@
 		4A1A118F262D95E600DAF62F /* OneDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A118E262D95E600DAF62F /* OneDriveItem.swift */; };
 		4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */; };
 		4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */; };
+		4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */; };
 		4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0C90202636D59400ADB421 /* OneDriveCloudProviderTests.swift */; };
 		4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */; };
 		4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */; };
@@ -37,7 +36,6 @@
 		4A41D2432641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2422641938A00B5D787 /* VaultFormat6OneDriveIntegrationTests.swift */; };
 		4A41D2492641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A41D2482641960B00B5D787 /* VaultFormat7OneDriveIntegrationTests.swift */; };
 		4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */; };
-		4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */; };
 		4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */; };
 		4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B032615C689002C4D82 /* DropboxClientSetup.swift */; };
 		4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */; };
@@ -57,6 +55,12 @@
 		4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */; };
 		4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */; };
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
+		4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */; };
+		4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */; };
+		4A75E1C428806F5800952FE6 /* MSGraphClientModels in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C328806F5800952FE6 /* MSGraphClientModels */; };
+		4A75E1C728806FA100952FE6 /* MSGraphClientSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C628806FA100952FE6 /* MSGraphClientSDK */; };
+		4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */; };
+		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
 		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
@@ -217,6 +221,7 @@
 		4A1A118E262D95E600DAF62F /* OneDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveItem.swift; sourceTree = "<group>"; };
 		4A1A1193262EC46E00DAF62F /* OneDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CloudProviderTests.swift; sourceTree = "<group>"; };
+		4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CachedPropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneDriveAuthenticationProvider.swift; sourceTree = "<group>"; };
 		4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxExponentialBackOffTests.swift; sourceTree = "<group>"; };
 		4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCacheTests.swift; sourceTree = "<group>"; };
@@ -240,6 +245,9 @@
 		4A628EB7252F610C0097DE94 /* URLSession+Promises.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "URLSession+Promises.swift"; sourceTree = "<group>"; };
 		4A6D2CD52643EE83006C5574 /* VaultProviderFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultProviderFactoryTests.swift; sourceTree = "<group>"; };
 		4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVSession.swift; sourceTree = "<group>"; };
+		4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCacheTests.swift; sourceTree = "<group>"; };
+		4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCacheMock.swift; sourceTree = "<group>"; };
+		4A765CA22878596000794440 /* DirectoryContentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCache.swift; sourceTree = "<group>"; };
 		4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "AWSS3TransferUtility+ForegroundSession.swift"; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
 		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
@@ -358,18 +366,18 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4A75E1C428806F5800952FE6 /* MSGraphClientModels in Frameworks */,
+				4A75E1C728806FA100952FE6 /* MSGraphClientSDK in Frameworks */,
 				4AF0AA7C2844DDD200C20B75 /* AWSS3 in Frameworks */,
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
 				746BE0AB26579D4A00FB674E /* MSAL in Frameworks */,
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
 				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
-				4A567AF52615C47B002C4D82 /* ObjectiveDropboxOfficial in Frameworks */,
 				74F93567251F6863001F4ADA /* Promises in Frameworks */,
 				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
-				4A1A11542629A44B00DAF62F /* MSGraphClientModels in Frameworks */,
+				4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */,
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
-				4A1A115A2629A4A200DAF62F /* MSGraphClientSDK in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
 			);
@@ -419,14 +427,15 @@
 				4A058FF424519FFC008831F9 /* CryptomatorCloudAccess.h */,
 				4A058FF524519FFC008831F9 /* Info.plist */,
 				4A0590162451A1BB008831F9 /* API */,
+				4A741FF0287C696F00489C23 /* Common */,
 				7416F22424F658160074DA8E /* Crypto */,
 				4A567AF02615C2DE002C4D82 /* Dropbox */,
 				4A567B172615C8BB002C4D82 /* GoogleDrive */,
 				7471BDAC24865B6F000D05FC /* LocalFileSystem */,
 				4A1A11692629A53300DAF62F /* OneDrive */,
 				746F090F27BC0B61003FCD9F /* PCloud */,
-				748A42B424AA228200DEB6D0 /* WebDAV */,
 				4AF0AA7F2844F38700C20B75 /* S3 */,
+				748A42B424AA228200DEB6D0 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccess;
 			sourceTree = "<group>";
@@ -436,14 +445,15 @@
 			children = (
 				4A05900124519FFC008831F9 /* Info.plist */,
 				9EE62A0E247D54CD0089DAF7 /* API */,
+				4A741FF3287C71A000489C23 /* Common */,
 				7416F22624F6585A0074DA8E /* Crypto */,
 				4A3A396C2615F97600F16B26 /* Dropbox */,
 				4A3A39772615F9AA00F16B26 /* GoogleDrive */,
 				740A7FDB24C5DFB3000216E7 /* LocalFileSystem */,
 				4A0C90222636D59800ADB421 /* OneDrive */,
 				7402B48227D2625E00BE9F8B /* PCloud */,
-				748420C124B8A1F800D84E58 /* WebDAV */,
 				4A2745FA2847887F00E70D5F /* S3 */,
+				748420C124B8A1F800D84E58 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccessTests;
 			sourceTree = "<group>";
@@ -539,6 +549,23 @@
 				747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */,
 			);
 			path = GoogleDrive;
+			sourceTree = "<group>";
+		};
+		4A741FF0287C696F00489C23 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				4A765CA22878596000794440 /* DirectoryContentCache.swift */,
+			);
+			path = Common;
+			sourceTree = "<group>";
+		};
+		4A741FF3287C71A000489C23 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */,
+				4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */,
+			);
+			path = Common;
 			sourceTree = "<group>";
 		};
 		4ACA638F2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */ = {
@@ -788,6 +815,7 @@
 		748420C124B8A1F800D84E58 /* WebDAV */ = {
 			isa = PBXGroup;
 			children = (
+				4A2F18BF2877142B00B0E220 /* CachedPropfindResponseParserTests.swift */,
 				7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */,
 				4A40749F252F432900D583C3 /* URLProtocolMock.swift */,
 				746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */,
@@ -943,17 +971,17 @@
 				74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */,
 				74F93561251F6822001F4ADA /* GRDB */,
 				74F93566251F6863001F4ADA /* Promises */,
-				4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */,
 				4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */,
 				4A567B192615C917002C4D82 /* GTMAppAuth */,
 				4A567B362615CAAC002C4D82 /* GTMSessionFetcher */,
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
-				4A1A11532629A44B00DAF62F /* MSGraphClientModels */,
-				4A1A11592629A4A200DAF62F /* MSGraphClientSDK */,
 				740C5878262F800A00F63423 /* JOSESwift */,
 				746BE0AA26579D4A00FB674E /* MSAL */,
 				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
 				4AF0AA7B2844DDD200C20B75 /* AWSS3 */,
+				4A75E1C328806F5800952FE6 /* MSGraphClientModels */,
+				4A75E1C628806FA100952FE6 /* MSGraphClientSDK */,
+				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1031,17 +1059,17 @@
 				74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */,
 				74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 				74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */,
-				4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */,
 				4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
 				4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */,
 				4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */,
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
-				4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */,
-				4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */,
 				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
 				4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */,
+				4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */,
+				4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */,
+				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1191,6 +1219,7 @@
 				4A3896CE2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
 				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
+				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
 				4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
@@ -1249,6 +1278,8 @@
 				7460B7722518F984004AEB56 /* VaultFormat6ShorteningProviderDecoratorTests.swift in Sources */,
 				74F4AA2025EF82D200FDF2C6 /* VaultConfigTests.swift in Sources */,
 				74E32BE4283E559B005D8A54 /* VaultFormat8ProviderDecoratorTests.swift in Sources */,
+				4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */,
+				4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
 				4A6D2CD62643EE83006C5574 /* VaultProviderFactoryTests.swift in Sources */,
 				4A30DAF62636D79C004B5B4E /* OneDriveCloudProviderTests.swift in Sources */,
@@ -1264,6 +1295,7 @@
 				7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */,
 				747A7802269882D0005E5AD4 /* OneDriveIdentifierCacheTests.swift in Sources */,
 				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
+				4A2F18C02877142C00B0E220 /* CachedPropfindResponseParserTests.swift in Sources */,
 				4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1618,30 +1650,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-models.git";
-			requirement = {
-				kind = exactVersion;
-				version = "1.3.0-fork";
-			};
-		};
-		4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc.git";
-			requirement = {
-				kind = exactVersion;
-				version = "1.0.0-fork";
-			};
-		};
-		4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c.git";
-			requirement = {
-				kind = exactVersion;
-				version = "6.2.3-fork";
-			};
-		};
 		4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
@@ -1674,9 +1682,33 @@
 				minimumVersion = 1.5.0;
 			};
 		};
+		4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+		4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/msgraph-sdk-objc-spm.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 6.3.0;
+			};
+		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm";
+			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
 				minimumVersion = 2.27.0;
@@ -1700,7 +1732,7 @@
 		};
 		746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pCloud/pcloud-sdk-swift";
+			repositoryURL = "https://github.com/pCloud/pcloud-sdk-swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
 				minimumVersion = 3.2.0;
@@ -1733,21 +1765,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4A1A11532629A44B00DAF62F /* MSGraphClientModels */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A1A11522629A44B00DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models" */;
-			productName = MSGraphClientModels;
-		};
-		4A1A11592629A4A200DAF62F /* MSGraphClientSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A1A11582629A4A100DAF62F /* XCRemoteSwiftPackageReference "msgraph-sdk-objc" */;
-			productName = MSGraphClientSDK;
-		};
-		4A567AF42615C47B002C4D82 /* ObjectiveDropboxOfficial */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A567AF32615C47B002C4D82 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c" */;
-			productName = ObjectiveDropboxOfficial;
-		};
 		4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
@@ -1767,6 +1784,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
+		};
+		4A75E1C328806F5800952FE6 /* MSGraphClientModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */;
+			productName = MSGraphClientModels;
+		};
+		4A75E1C628806FA100952FE6 /* MSGraphClientSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */;
+			productName = MSGraphClientSDK;
+		};
+		4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */;
+			productName = ObjectiveDropboxOfficial;
 		};
 		4AF0AA7B2844DDD200C20B75 /* AWSS3 */ = {
 			isa = XCSwiftPackageProductDependency;

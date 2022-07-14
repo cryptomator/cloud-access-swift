@@ -15,6 +15,7 @@ public class DropboxCloudProvider: CloudProvider {
 
 	private var runningTasks: [DBTask]
 	private var runningBatchUploadTasks: [DBBatchUploadTask]
+	private let maxPageSize: Int
 
 	let shouldRetryForError: (Error) -> Bool = { error in
 		guard let dropboxError = error as? DropboxError else {
@@ -28,10 +29,11 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 	}
 
-	public init(credential: DropboxCredential) {
+	public init(credential: DropboxCredential, maxPageSize: Int = .max) {
 		self.credential = credential
 		self.runningTasks = [DBTask]()
 		self.runningBatchUploadTasks = [DBBatchUploadTask]()
+		self.maxPageSize = max(1, min(maxPageSize, 2000))
 	}
 
 	deinit {
@@ -216,7 +218,7 @@ public class DropboxCloudProvider: CloudProvider {
 			// Dropbox differs from the filesystem hierarchy standard and accepts instead of "/" only a "".
 			// Therefore, `cloudPath` must be checked for the root path and adjusted if necessary.
 			let cleanedPath = (cloudPath == CloudPath("/")) ? "" : cloudPath.path
-			let task = client.filesRoutes.listFolder(cleanedPath)
+			let task = client.filesRoutes.listFolder(cleanedPath, recursive: nil, includeMediaInfo: nil, includeDeleted: nil, includeHasExplicitSharedMembers: nil, includeMountedFolders: nil, limit: NSNumber(value: self.maxPageSize), sharedLink: nil, includePropertyGroups: nil, includeNonDownloadableFiles: nil)
 			self.runningTasks.append(task)
 			task.setResponseBlock { result, routeError, networkError in
 				self.runningTasks.removeAll { $0 == task }
@@ -384,7 +386,7 @@ public class DropboxCloudProvider: CloudProvider {
 	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
 		let progress = Progress(totalUnitCount: -1)
 		return ensureParentFolderExists(for: cloudPath).then { _ -> Promise<CloudItemMetadata> in
-			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, inputUrl: localURL.path)
+			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, contentHash: nil, inputUrl: localURL.path)
 			self.runningTasks.append(task)
 			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
 				progress.totalUnitCount = totalBytesExpectedToUpload

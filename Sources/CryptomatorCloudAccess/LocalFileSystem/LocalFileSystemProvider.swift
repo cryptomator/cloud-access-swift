@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import GRDB
 import Promises
 
 public enum LocalFileSystemProviderError: Error {
@@ -39,14 +40,24 @@ public class LocalFileSystemProvider: CloudProvider {
 	private let rootURL: URL
 	private let queue = OperationQueue()
 	private let shouldStopAccessingRootURL: Bool
+	private lazy var fileCoordinator = NSFileCoordinator()
+	private let maxPageSize: Int
+	private let cache: DirectoryContentCache
+	private let tmpDirURL: URL
 
-	public init(rootURL: URL) {
+	public init(rootURL: URL, maxPageSize: Int = .max) throws {
 		precondition(rootURL.isFileURL)
 		self.rootURL = rootURL
 		self.shouldStopAccessingRootURL = rootURL.startAccessingSecurityScopedResource()
+		self.maxPageSize = maxPageSize
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
+		self.cache = try DirectoryContentDBCache(dbWriter: try DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
 	}
 
 	deinit {
+		try? FileManager.default.removeItem(at: tmpDirURL)
 		if shouldStopAccessingRootURL {
 			rootURL.stopAccessingSecurityScopedResource()
 		}
@@ -65,49 +76,95 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		guard pageToken == nil else {
-			return Promise(CloudProviderError.pageTokenInvalid)
+		let initialPromise: Promise<Void>
+		if pageToken != nil {
+			initialPromise = Promise(())
+		} else {
+			initialPromise = fillCache(for: cloudPath)
 		}
+		return initialPromise.then {
+			self.getCachedElements(for: cloudPath, pageToken: pageToken)
+		}.then { itemList -> CloudItemList in
+			if itemList.nextPageToken == nil {
+				try self.cache.clearCache(for: cloudPath)
+			}
+			return itemList
+		}
+	}
+
+	private func fillCache(for cloudPath: CloudPath) -> Promise<Void> {
 		let url = rootURL.appendingPathComponent(cloudPath)
 		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-		let promise = Promise<CloudItemList>.pending().always {
+		let promise = Promise<Void>.pending().always {
 			if shouldStopAccessing {
 				url.stopAccessingSecurityScopedResource()
 			}
 		}
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
-		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
 			}
 			do {
-				let contents = try self.fileManager.contentsOfDirectory(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey])
-				let metadatas = contents.filter { childURL in
-					!childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL)
-				}.map { childURL in
-					return url.appendingPathComponent(self.getItemName(forItemAt: childURL))
-				}.filter { iCloudCompatibleChildURL in
-					iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "."
-				}.map { iCloudCompatibleChildURL -> Promise<CloudItemMetadata> in
-					return self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath)
-				}
-				all(metadatas).then { metadatas in
-					promise.fulfill(CloudItemList(items: metadatas, nextPageToken: nil))
-				}.catch { error in
-					promise.reject(error)
-				}
-			} catch CocoaError.fileReadNoSuchFile {
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileReadUnknown {
-				promise.reject(CloudProviderError.itemTypeMismatch)
-			} catch CocoaError.fileReadNoPermission {
-				promise.reject(CloudProviderError.unauthorized)
+				try self.evaluateReadingIntentForFetchItemList(readingIntent)
 			} catch {
 				promise.reject(error)
+				return
+			}
+			guard let directoryEnumerator = FileManager.default.enumerator(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey], options: .skipsSubdirectoryDescendants) else {
+				promise.reject(CloudProviderError.pageTokenInvalid)
+				return
+			}
+			DispatchQueue.global().async {
+				var cachedItemsCount: Int64 = 0
+				for case let childURL as URL in directoryEnumerator {
+					autoreleasepool {
+						guard !childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL) else {
+							return
+						}
+						let iCloudCompatibleChildURL = url.appendingPathComponent(self.getItemName(forItemAt: childURL))
+						guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
+							return
+						}
+						do {
+							let childItemMetadata = try awaitPromise(self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath))
+							cachedItemsCount += 1
+							try self.cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
+						} catch {
+							promise.reject(error)
+							return
+						}
+					}
+				}
+				promise.fulfill(())
 			}
 		}
 		return promise
+	}
+
+	private func evaluateReadingIntentForFetchItemList(_ readingIntent: NSFileAccessIntent) throws {
+		do {
+			let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+			let itemType = getItemType(from: attributes.fileResourceType)
+			guard itemType == .folder else {
+				throw CloudProviderError.itemTypeMismatch
+			}
+		} catch CocoaError.fileReadNoSuchFile {
+			throw CloudProviderError.itemNotFound
+		} catch CocoaError.fileReadNoPermission {
+			throw CloudProviderError.unauthorized
+		}
+	}
+
+	private func getCachedElements(for cloudPath: CloudPath, pageToken: String?) -> Promise<CloudItemList> {
+		let cacheResponse: DirectoryContentCacheResponse
+		do {
+			cacheResponse = try cache.getResponse(for: cloudPath, pageToken: pageToken)
+		} catch {
+			return Promise(error)
+		}
+		return Promise(CloudItemList(items: cacheResponse.elements, nextPageToken: cacheResponse.nextPageToken))
 	}
 
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
@@ -120,7 +177,7 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 		}
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .withoutChanges)
-		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
@@ -155,7 +212,7 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])
-		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
@@ -211,7 +268,7 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: [])
-		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
@@ -251,7 +308,7 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
-		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
@@ -289,7 +346,7 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)
-		NSFileCoordinator().coordinate(with: [writingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return
@@ -369,7 +426,7 @@ public class LocalFileSystemProvider: CloudProvider {
 	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		let promise = Promise<CloudItemMetadata>.pending()
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
-		NSFileCoordinator().coordinate(with: [readingIntent], queue: queue) { error in
+		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				promise.reject(error)
 				return

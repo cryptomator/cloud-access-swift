@@ -291,14 +291,16 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	private func deleteCiphertextDir(_ dirId: Data) -> Promise<Void> {
+	private func deleteCiphertextDir(_ dirId: Data, pageToken: String? = nil) -> Promise<Void> {
 		let dirPath: CloudPath
 		do {
 			dirPath = try getDirPath(dirId)
 		} catch {
 			return Promise(error)
 		}
-		return delegate.fetchItemListExhaustively(forFolderAt: dirPath).then { itemList in
+		let itemListPromise = delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
+		let nextPageTokenPromise = itemListPromise.then { $0.nextPageToken }
+		return itemListPromise.then { itemList in
 			let subDirs = itemList.items.filter { $0.itemType == .folder }
 			let subDirItemListPromises = subDirs.map { self.delegate.fetchItemListExhaustively(forFolderAt: $0.cloudPath) }
 			return all(subDirItemListPromises).then { subDirItemLists -> Promise<[Maybe<Data>]> in
@@ -310,6 +312,14 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 				// delete subdirectories recursively
 				let recursiveDeleteOperations = dirIds.filter { $0.value != nil }.map { self.deleteCiphertextDir($0.value!) }
 				return any(recursiveDeleteOperations)
+			}.then { _ in
+				return nextPageTokenPromise
+			}.then { nextPageToken -> Promise<Void> in
+				if nextPageToken != nil {
+					return self.deleteCiphertextDir(dirId, pageToken: nextPageToken)
+				} else {
+					return Promise(())
+				}
 			}.then { _ in
 				// delete self
 				return self.delegate.deleteFolder(at: dirPath)

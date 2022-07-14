@@ -40,4 +40,8 @@ class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		provider = try! PCloudCloudProvider(credential: invalidCredential)
 		return Promise(())
 	}
+
+	override func testFetchItemListPagination() throws {
+		throw XCTSkip("pCloud does not support pagination")
+	}
 }

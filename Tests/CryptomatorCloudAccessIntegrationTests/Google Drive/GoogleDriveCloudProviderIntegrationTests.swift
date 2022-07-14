@@ -39,4 +39,10 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 		credential.deauthenticate()
 		return Promise(())
 	}
+
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try GoogleDriveCloudProvider(credential: credential,
+		                                    useBackgroundSession: false,
+		                                    maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

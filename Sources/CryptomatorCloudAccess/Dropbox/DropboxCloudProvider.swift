@@ -386,7 +386,7 @@ public class DropboxCloudProvider: CloudProvider {
 	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
 		let progress = Progress(totalUnitCount: -1)
 		return ensureParentFolderExists(for: cloudPath).then { _ -> Promise<CloudItemMetadata> in
-			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, inputUrl: localURL.path)
+			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, contentHash: nil, inputUrl: localURL.path)
 			self.runningTasks.append(task)
 			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
 				progress.totalUnitCount = totalBytesExpectedToUpload

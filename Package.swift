@@ -29,7 +29,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/airsidemobile/JOSESwift.git", .upToNextMinor(from: "2.4.0")),
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.2.0")),
-		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm", .upToNextMinor(from: "2.27.0")),
+		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.27.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.7.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "1.7.0")),
@@ -39,9 +39,9 @@ let package = Package(
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "5.25.0")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "1.5.0")),
 		.package(url: "https://github.com/pCloud/pcloud-sdk-swift.git", .upToNextMinor(from: "3.2.0")),
-		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c.git", .exact("6.2.3-fork")),
-		.package(url: "https://github.com/phil1995/msgraph-sdk-objc.git", .exact("1.0.0-fork")),
-		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models.git", .exact("1.3.0-fork"))
+		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "6.3.0")),
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),
+		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git", .upToNextMinor(from: "1.3.0"))
 	],
 	targets: [
 		.target(

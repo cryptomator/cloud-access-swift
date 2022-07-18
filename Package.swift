@@ -31,6 +31,7 @@ let package = Package(
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.2.0")),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.27.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
+		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.7.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "1.7.0")),
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "1.2.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "1.7.0")),
@@ -48,6 +49,7 @@ let package = Package(
 			dependencies: [
 				"AWSCore",
 				"AWSS3",
+				"CocoaLumberjackSwift",
 				"CryptomatorCryptoLib",
 				"GoogleAPIClientForREST_Drive",
 				"GRDB",

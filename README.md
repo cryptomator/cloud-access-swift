@@ -311,6 +311,42 @@ When calling the functions of this provider, the cloud paths should be provided 
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
 
+## Logging
+
+This SDK utilizes [CocoaLumberjack](https://github.com/CocoaLumberjack/CocoaLumberjack) for logging. CocoaLumberjack is a flexible, fast, open source logging framework. It supports many capabilities including the ability to set logging level per output target, for instance, concise messages logged to the console and verbose messages to a log file.
+
+CocoaLumberjack logging levels are additive such that when the level is set to verbose, all messages from the levels below verbose are logged. It is also possible to set custom logging to meet your needs. For more information, see [CocoaLumberjack](https://github.com/CocoaLumberjack/CocoaLumberjack/blob/master/Documentation/CustomLogLevels.md).
+
+### Changing Log Levels
+
+```swift
+dynamicCloudAccessLogLevel = .verbose
+```
+
+The following logging level options are available:
+
+- `.off`
+- `.error`
+- `.warning`
+- `.info`
+- `.debug`
+- `.verbose`
+- `.all`
+
+### Targeting Log Output
+
+Defining the log output targets works the same as with `CocoaLumberjack`, with the only difference that the loggers are added with `CloudAccessDDLog.add()` instead of `DDLog.add()`.
+For example:
+
+```swift
+CloudAccessDDLog.add(DDOSLogger.sharedInstance) // Uses os_log
+
+let fileLogger: DDFileLogger = DDFileLogger() // File Logger
+fileLogger.rollingFrequency = 60 * 60 * 24 // 24 hours
+fileLogger.logFileManager.maximumNumberOfLogFiles = 7
+CloudAccessDDLog.add(fileLogger)
+```
+
 ## Integration Tests
 
 You can learn more about cloud provider integration tests [here](Tests/CryptomatorCloudAccessIntegrationTests/README.md).

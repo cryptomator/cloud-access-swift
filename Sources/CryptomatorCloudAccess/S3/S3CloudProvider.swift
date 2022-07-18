@@ -8,6 +8,7 @@
 
 import AWSCore
 import AWSS3
+import CocoaLumberjackSwift
 import Foundation
 import Promises
 
@@ -125,7 +126,7 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
-		print("DEBUG: start upload file at: \(cloudPath.path) - \(Date())")
+		CloudAccessDDLogDebug("start upload file at: \(cloudPath.path) - \(Date())")
 		var isDirectory: ObjCBool = false
 		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
 		if !fileExists {
@@ -154,19 +155,19 @@ public class S3CloudProvider: CloudProvider {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		}.recover { error -> Promise<Void> in
-			print("DEBUG: fetchItemMetadata (precondition) failed with error: \(error)")
+			CloudAccessDDLogDebug("fetchItemMetadata (precondition) failed with error: \(error)")
 			guard case CloudProviderError.itemNotFound = error else {
 				return Promise(error)
 			}
 			return self.assertParentFolderExists(for: cloudPath)
 		}.then { _ -> Promise<AWSS3TransferUtilityUploadTask> in
-			print("DEBUG: precondition done - start upload file at: \(cloudPath.path) - \(Date())")
+			CloudAccessDDLogDebug("precondition done - start upload file at: \(cloudPath.path)")
 			return self.transferUtility.uploadFile(localURL, key: key, contentType: contentType, expression: .init())
 		}.then { _ -> Promise<CloudItemMetadata> in
-			print("DEBUG: finished upload file at: \(cloudPath.path) - fetching metadata… - \(Date())")
+			CloudAccessDDLogDebug("finished upload file at: \(cloudPath.path) - fetching metadata…")
 			return self.fetchItemMetadata(at: cloudPath)
 		}.then { metadata -> CloudItemMetadata in
-			print("DEBUG: finished upload file at: \(cloudPath.path) - \(Date())")
+			CloudAccessDDLogDebug("finished upload file at: \(cloudPath.path))")
 			return metadata
 		}.recover { error -> CloudItemMetadata in
 			throw self.convertStandardError(error)
@@ -176,7 +177,7 @@ public class S3CloudProvider: CloudProvider {
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
 		let request = createEmptyFolderPutObjectRequest(for: cloudPath)
 		request.contentType = S3CloudProvider.folderContentType
-		print("DEBUG: start creating folder at: \(cloudPath.path)")
+		CloudAccessDDLogDebug("start creating folder at: \(cloudPath.path)")
 		return checkForItemExistence(at: cloudPath).then { folderExists -> Promise<Void> in
 			if folderExists {
 				return Promise(CloudProviderError.itemAlreadyExists)
@@ -186,7 +187,7 @@ public class S3CloudProvider: CloudProvider {
 			return self.service.putObject(request)
 		}.then { _ -> Void in
 			// no-op
-			print("DEBUG: finished creating folder at: \(cloudPath.path)")
+			CloudAccessDDLogDebug("finished creating folder at: \(cloudPath.path)")
 		}.recover { error -> Void in
 			throw self.convertStandardError(error)
 		}

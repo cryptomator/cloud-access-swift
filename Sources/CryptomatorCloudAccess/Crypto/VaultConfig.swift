@@ -33,6 +33,24 @@ struct VaultConfigPayload: Equatable, Codable {
 	}
 }
 
+public struct HubConfig: Equatable, Codable {
+	public init(clientId: String, authEndpoint: String, tokenEndpoint: String, devicesResourceUrl: String, authSuccessUrl: String, authErrorUrl: String) {
+		self.clientId = clientId
+		self.authEndpoint = authEndpoint
+		self.tokenEndpoint = tokenEndpoint
+		self.devicesResourceUrl = devicesResourceUrl
+		self.authSuccessUrl = authSuccessUrl
+		self.authErrorUrl = authErrorUrl
+	}
+	
+	public let clientId: String
+	public let authEndpoint: String
+	public let tokenEndpoint: String
+	public let devicesResourceUrl: String
+	public let authSuccessUrl: String
+	public let authErrorUrl: String
+}
+
 public class UnverifiedVaultConfig {
 	public var keyId: String? {
 		return jws.header.kid
@@ -40,6 +58,9 @@ public class UnverifiedVaultConfig {
 
 	let allegedFormat: Int
 	let allegedCipherCombo: String
+	public var hub: HubConfig? {
+		return jws.header.hubTyped
+	}
 
 	private let token: Data
 	private let jws: JWS
@@ -137,5 +158,17 @@ public class VaultConfig {
 		}
 		let jws = try JWS(header: header, payload: Payload(payload), signer: signer)
 		return jws.compactSerializedData
+	}
+}
+
+extension JWSHeader {
+	var hubTyped: HubConfig? {
+		guard let hub = hub else {
+			return nil
+		}
+		guard let json = try? JSONEncoder().encode(hub) else {
+			return nil
+		}
+		return try? JSONDecoder().decode(HubConfig.self, from: json)
 	}
 }

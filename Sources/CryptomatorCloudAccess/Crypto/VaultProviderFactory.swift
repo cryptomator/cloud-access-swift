@@ -50,9 +50,13 @@ public enum VaultProviderFactory {
 		guard unverifiedVaultConfig.allegedFormat == 8 else {
 			return false
 		}
-		guard unverifiedVaultConfig.keyId == masterkeyFileId else {
+		switch VaultConfigHelper.getType(for: unverifiedVaultConfig) {
+		case .hub:
+			return true
+		case .masterkeyFile:
+			return true
+		case .unknown:
 			return false
 		}
-		return true
 	}
 }

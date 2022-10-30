@@ -1719,7 +1719,7 @@
 			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 6.3.0;
+				minimumVersion = 7.0.0;
 			};
 		};
 		4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */ = {

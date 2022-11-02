@@ -51,8 +51,8 @@
         "repositoryURL": "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git",
         "state": {
           "branch": null,
-          "revision": "d4796b87b9dfff4a5164544ef1b865bc8a561638",
-          "version": "6.3.2"
+          "revision": "f0eafe25d26c52377c4a1c08f1dbd77320164994",
+          "version": "7.0.0"
         }
       },
       {

@@ -33,7 +33,7 @@ private extension FileManager {
 /**
  Cloud provider for local file system.
 
- Since the local file system is not actually a cloud, the naming might be confusing. Even though this library is dedicated to provide access to many cloud storage services, access to the local file system still might be useful.
+ Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
  */
 public class LocalFileSystemProvider: CloudProvider {
 	private let fileManager = FileManager()

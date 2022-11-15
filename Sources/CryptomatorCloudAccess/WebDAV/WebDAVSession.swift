@@ -205,15 +205,20 @@ class WebDAVSession {
 	}
 
 	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
+		debugLogRequest(request)
 		let task = urlSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
+			self.debugLogResponse(response, with: data, or: nil)
+			return Promise((response, data))
+		}
 	}
 
 	func performDownloadTask(with request: URLRequest, to localURL: URL) -> Promise<HTTPURLResponse> {
+		debugLogRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
@@ -221,10 +226,14 @@ class WebDAVSession {
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response -> Promise<HTTPURLResponse> in
+			self.debugLogResponse(response, with: nil, or: localURL)
+			return Promise(response)
+		}
 	}
 
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+		debugLogRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
@@ -232,6 +241,121 @@ class WebDAVSession {
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
+			self.debugLogResponse(response, with: data, or: nil)
+			return Promise((response, data))
+		}
+	}
+
+	// MARK: - Logging
+
+	private enum RequestBodyType {
+		case none
+		case empty
+		case plaintext
+		case binary
+	}
+
+	private func debugLogRequest(_ request: URLRequest) {
+		CloudAccessDDLogDebug("")
+		CloudAccessDDLogDebug("--> \(String(describing: request.httpMethod)) \(String(describing: request.url)) HTTP/1.1")
+		if let headerFields = request.allHTTPHeaderFields {
+			headerFields.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+				.filter { !isExcludedHeader($0.key) }
+				.forEach { CloudAccessDDLogDebug("\($0.key): \($0.value)") }
+		}
+		let bodyType = debugLogRequestBody(request)
+		switch bodyType {
+		case .none:
+			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod))")
+		case .empty:
+			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (empty body)")
+		case .plaintext:
+			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (\(String(describing: request.httpBody?.count))-byte body)")
+		case .binary:
+			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (binary \(String(describing: request.httpBody?.count))-byte body omitted)")
+		}
+	}
+
+	private func debugLogRequestBody(_ request: URLRequest) -> RequestBodyType {
+		guard let bodyData = request.httpBody else {
+			return .none
+		}
+		if let body = String(data: bodyData, encoding: .utf8) {
+			if body.isEmpty {
+				return .empty
+			} else {
+				CloudAccessDDLogDebug("Body: \(body)")
+				return .plaintext
+			}
+		} else {
+			return .binary
+		}
+	}
+
+	private enum ResponseBodyType {
+		case none
+		case empty
+		case encoded
+		case download
+		case plaintext
+		case binary
+	}
+
+	private func debugLogResponse(_ response: URLResponse, with data: Data?, or localURL: URL?) {
+		CloudAccessDDLogDebug("")
+		guard let httpResponse = response as? HTTPURLResponse else {
+			CloudAccessDDLogDebug("<-- \(String(describing: response.url))")
+			return
+		}
+		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(String(describing: response.url))")
+		httpResponse.allHeaderFields.reduce(into: [String: Any]()) { if let key = $1.key as? String { $0[key] = $1.value } }
+			.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
+			.filter { !isExcludedHeader($0.key) }
+			.forEach { CloudAccessDDLogDebug("\($0.key): \($0.value)") }
+		let bodyType = debugLogResponseBody(httpResponse, with: data, or: localURL)
+		switch bodyType {
+		case .none:
+			CloudAccessDDLogDebug("<-- END HTTP")
+		case .empty:
+			CloudAccessDDLogDebug("<-- END HTTP (empty body)")
+		case .encoded:
+			CloudAccessDDLogDebug("<-- END HTTP (encoded body omitted)")
+		case .download:
+			CloudAccessDDLogDebug("<-- END HTTP (downloaded body omitted)")
+		case .plaintext:
+			CloudAccessDDLogDebug("<-- END HTTP (\(String(describing: data?.count))-byte body)")
+		case .binary:
+			CloudAccessDDLogDebug("<-- END HTTP (binary \(String(describing: data?.count))-byte body omitted)")
+		}
+	}
+
+	private func debugLogResponseBody(_ response: HTTPURLResponse, with data: Data?, or localURL: URL?) -> ResponseBodyType {
+		if localURL != nil {
+			return .download
+		}
+		guard let bodyData = data else {
+			return .none
+		}
+		if let contentEncodingHeaderField = response.value(forHTTPHeaderField: "Content-Encoding"), contentEncodingHeaderField.caseInsensitiveCompare("identity") != .orderedSame {
+			return .encoded
+		}
+		if let body = String(data: bodyData, encoding: .utf8) {
+			if body.isEmpty {
+				return .empty
+			} else {
+				CloudAccessDDLogDebug("Body: \(body)")
+				return .plaintext
+			}
+		} else {
+			return .binary
+		}
+	}
+
+	private func isExcludedHeader(_ name: String) -> Bool {
+		let excludedNames = ["Authorization", "WWW-Authenticate", "Cookie", "Set-Cookie"]
+		return excludedNames
+			.map { $0.caseInsensitiveCompare(name) == .orderedSame }
+			.contains(true)
 	}
 }

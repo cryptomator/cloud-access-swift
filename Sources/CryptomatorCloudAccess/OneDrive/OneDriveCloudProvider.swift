@@ -407,8 +407,12 @@ public class OneDriveCloudProvider: CloudProvider {
 	// MARK: - Execution
 
 	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data?, URLResponse?)> {
+		HTTPDebugLogger.logRequest(request as URLRequest)
 		return Promise<(Data?, URLResponse?)> { fulfill, reject in
 			let task = MSURLSessionDataTask(request: request, client: self.client) { data, response, error in
+				if let response = response {
+					HTTPDebugLogger.logResponse(response, with: data, or: nil)
+				}
 				if let error = error {
 					reject(error)
 				} else {
@@ -449,8 +453,12 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func executeMSURLDownloadTask(with request: NSMutableURLRequest, to localURL: URL) -> Promise<Void> {
+		HTTPDebugLogger.logRequest(request as URLRequest)
 		return Promise<Void> { fulfill, reject in
 			let task = MSURLSessionDownloadTask(request: request, client: self.client) { tempLocalURL, response, error in
+				if let response = response {
+					HTTPDebugLogger.logResponse(response, with: nil, or: tempLocalURL)
+				}
 				switch (tempLocalURL, response, error) {
 				case let (.some(tempLocalURL), httpResponse as HTTPURLResponse, nil):
 					guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
@@ -476,8 +484,12 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, localURL: URL) -> Promise<(Data, HTTPURLResponse)> {
+		HTTPDebugLogger.logRequest(request as URLRequest)
 		return Promise<(Data, HTTPURLResponse)> { fulfill, reject in
 			let task = MSURLSessionUploadTask(request: request, fromFile: localURL, client: self.client) { data, response, error in
+				if let response = response {
+					HTTPDebugLogger.logResponse(response, with: data, or: nil)
+				}
 				switch (data, response, error) {
 				case let (.some(data), httpResponse as HTTPURLResponse, nil):
 					fulfill((data, httpResponse))

@@ -174,13 +174,10 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 
 	func testDeleteFolderWithMissingDirFile() throws {
 		let expectation = XCTestExpectation(description: "deleteFolder")
-		/**
-		 ```
-		 pathToVault
-		 └─Directory 1
-		   ├─ Directory 2
-		   └─ File 3
-		 */
+		// pathToVault
+		// └─Directory 1
+		//   ├─ Directory 2
+		//   └─ File 3
 		let folders: Set = [
 			"pathToVault",
 			"pathToVault/d",

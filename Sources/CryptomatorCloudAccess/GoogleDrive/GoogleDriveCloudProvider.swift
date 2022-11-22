@@ -181,8 +181,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	// MARK: - Operations
 
 	private func fetchItemMetadata(for item: GoogleDriveItem) -> Promise<CloudItemMetadata> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemMetadata(for: \(item.identifier)) called")
 		let query = fetchItemMetadataQuery(for: item)
 		return executeQuery(query).then { result -> CloudItemMetadata in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemMetadata(for: \(item.identifier)) received result: \(result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -192,11 +194,13 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) -> Promise<CloudItemList> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(String(describing: pageToken)) called")
 		guard item.itemType == .folder || (item.itemType == .symlink && item.shortcut?.targetItemType == .folder) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
 		let query = fetchItemListQuery(for: item, pageToken: pageToken)
 		return executeQuery(query).then(on: .global()) { result -> CloudItemList in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(String(describing: pageToken)) received result: \(result)")
 			guard let fileList = result as? GTLRDrive_FileList else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -230,6 +234,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func downloadFile(for item: GoogleDriveItem, to localURL: URL) -> Promise<Void> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
 		guard item.itemType == .file || (item.itemType == .symlink && item.shortcut?.targetItemType == .file) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
@@ -246,6 +251,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) called")
 		let progress = Progress(totalUnitCount: -1)
 		return uploadFileQuery(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting).then { query -> Promise<Any> in
 			query.executionParameters.uploadProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
@@ -254,6 +260,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			}
 			return self.executeQuery(query)
 		}.then { result -> CloudItemMetadata in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) received result: \(result)")
 			guard let uploadedFile = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -264,8 +271,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func createFolder(for parentItem: GoogleDriveItem, with name: String) -> Promise<Void> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) called")
 		let query = createFolderQuery(for: parentItem, with: name)
 		return executeQuery(query).then { result -> Void in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received result: \(result)")
 			guard let folder = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -276,8 +285,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func deleteItem(for item: GoogleDriveItem) -> Promise<Void> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: deleteItem(for: \(item.identifier)) called")
 		let query = deleteItemQuery(for: item)
 		return executeQuery(query).then { result -> Void in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: deleteItem(for: \(item.identifier)) received result: \(result)")
 			guard result is Void else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -286,9 +297,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func moveItem(for sourceItem: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: moveItem(for: \(sourceItem.identifier), from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
 		return moveItemQuery(for: sourceItem, from: sourceCloudPath, to: targetCloudPath).then { query in
 			self.executeQuery(query)
 		}.then { result -> Void in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: moveItem(for: \(sourceItem.identifier), from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) received result: \(result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -301,6 +314,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	// MARK: - Resolve Path
 
 	private func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<GoogleDriveItem> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolvePath(forItemAt: \(cloudPath.path)) called")
 		var pathToCheckForCache = cloudPath
 		var cachedItem = identifierCache.get(pathToCheckForCache)
 		while cachedItem == nil, !pathToCheckForCache.pathComponents.isEmpty {
@@ -313,6 +327,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		if pathToCheckForCache != cloudPath {
 			return traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
 		}
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolvePath(forItemAt: \(cloudPath.path)) finished with item: \(item.identifier)")
 		return Promise(item)
 	}
 
@@ -368,6 +383,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
 	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) -> Promise<GoogleDriveItem> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) called")
 		let resolvedParentItemIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let query = GTLRDriveQuery_FilesList.query()
 		query.supportsAllDrives = true
@@ -375,6 +391,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(name)' and trashed = false"
 		query.fields = "files(id,name,mimeType,shortcutDetails)"
 		return executeQuery(query).then { result -> GoogleDriveItem in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) received result: \(result)")
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
 					return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
@@ -397,10 +414,12 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
+		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolveShortcut(\(shortcut.targetIdentifier), at: \(cloudPath.path)) called")
 		let query = GTLRDriveQuery_FilesGet.query(withFileId: shortcut.targetIdentifier)
 		query.supportsAllDrives = true
 		query.fields = "modifiedTime,size,mimeType"
 		return executeQuery(query).then { result -> GTLRDrive_File in
+			CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolveShortcut(\(shortcut.targetIdentifier), at: \(cloudPath.path)) received result: \(result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
@@ -508,6 +527,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			let ticket = self.driveService.executeQuery(query) { ticket, result, error in
 				self.runningTickets.removeAll { $0 == ticket }
 				if let error = error as NSError? {
+					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeQuery(\(query.requestID)) failed with error: \(error)")
 					if error.domain == NSURLErrorDomain, error.code == NSURLErrorNotConnectedToInternet || error.code == NSURLErrorCannotConnectToHost || error.code == NSURLErrorNetworkConnectionLost || error.code == NSURLErrorDNSLookupFailed || error.code == NSURLErrorResourceUnavailable || error.code == NSURLErrorInternationalRoamingOff {
 						reject(CloudProviderError.noInternetConnection)
 					} else if error.domain == kGTLRErrorObjectDomain, error.code == 401 || error.code == 403 {
@@ -538,6 +558,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			fetcher.beginFetch { _, error in
 				self.runningFetchers.removeAll { $0 == fetcher }
 				if let error = error as NSError? {
+					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeFetcher(\(String(describing: fetcher.request))) failed with error: \(error)")
 					if error.domain == kGTMSessionFetcherStatusDomain, error.code == 401 {
 						reject(CloudProviderError.unauthorized)
 					} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 404 {

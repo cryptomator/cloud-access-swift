@@ -461,13 +461,12 @@ public class LocalFileSystemProvider: CloudProvider {
 			}
 			do {
 				let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) read attributes: \(attributes.allValues.reduce(into: [:]) { $0[$1.key.rawValue] = $1.value })")
 				let name = attributes.name ?? url.lastPathComponent
 				let size = attributes.fileSize
 				let lastModifiedDate = attributes.contentModificationDate
 				let itemType = self.getItemType(from: attributes.fileResourceType)
-				let itemMetadata = CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) finished with itemMetadata: \(itemMetadata)")
-				promise.fulfill(itemMetadata)
+				promise.fulfill(CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
 			} catch CocoaError.fileReadNoSuchFile {
 				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoSuchFile")
 				promise.reject(CloudProviderError.itemNotFound)

@@ -20,7 +20,7 @@ enum HTTPDebugLogger {
 
 	static func logRequest(_ request: URLRequest) {
 		CloudAccessDDLogDebug("")
-		CloudAccessDDLogDebug("--> \(String(describing: request.httpMethod)) \(String(describing: request.url)) HTTP/1.1")
+		CloudAccessDDLogDebug("--> \(request.httpMethod ?? "nil") \(request.url?.absoluteString ?? "nil") HTTP/1.1")
 		if let headerFields = request.allHTTPHeaderFields {
 			headerFields.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
 				.filter { !isExcludedHeader($0.key) }
@@ -29,13 +29,13 @@ enum HTTPDebugLogger {
 		let bodyType = logRequestBody(request)
 		switch bodyType {
 		case .none:
-			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod))")
+			CloudAccessDDLogDebug("--> END \(request.httpMethod ?? "nil")")
 		case .empty:
-			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (empty body)")
+			CloudAccessDDLogDebug("--> END \(request.httpMethod ?? "nil") (empty body)")
 		case .plaintext:
-			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (\(String(describing: request.httpBody?.count))-byte body)")
+			CloudAccessDDLogDebug("--> END \(request.httpMethod ?? "nil") (\(request.httpBody?.count ?? -1)-byte body)")
 		case .binary:
-			CloudAccessDDLogDebug("--> END \(String(describing: request.httpMethod)) (binary \(String(describing: request.httpBody?.count))-byte body omitted)")
+			CloudAccessDDLogDebug("--> END \(request.httpMethod ?? "nil") (binary \(request.httpBody?.count ?? -1)-byte body omitted)")
 		}
 	}
 
@@ -69,11 +69,11 @@ enum HTTPDebugLogger {
 	static func logResponse(_ response: URLResponse, with data: Data?, or localURL: URL?) {
 		CloudAccessDDLogDebug("")
 		guard let httpResponse = response as? HTTPURLResponse else {
-			CloudAccessDDLogDebug("<-- \(String(describing: response.url))")
+			CloudAccessDDLogDebug("<-- \(response.url?.absoluteString ?? "nil")")
 			return
 		}
-		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(String(describing: response.url))")
-		httpResponse.allHeaderFields.reduce(into: [String: Any]()) { if let key = $1.key as? String { $0[key] = $1.value } }
+		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(response.url?.absoluteString ?? "nil")")
+		httpResponse.allHeaderFields.reduce(into: [:]) { if let key = $1.key as? String { $0[key] = $1.value } }
 			.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
 			.filter { !isExcludedHeader($0.key) }
 			.forEach { CloudAccessDDLogDebug("\($0.key): \($0.value)") }
@@ -88,9 +88,9 @@ enum HTTPDebugLogger {
 		case .download:
 			CloudAccessDDLogDebug("<-- END HTTP (downloaded body omitted)")
 		case .plaintext:
-			CloudAccessDDLogDebug("<-- END HTTP (\(String(describing: data?.count))-byte body)")
+			CloudAccessDDLogDebug("<-- END HTTP (\(data?.count ?? -1)-byte body)")
 		case .binary:
-			CloudAccessDDLogDebug("<-- END HTTP (binary \(String(describing: data?.count))-byte body omitted)")
+			CloudAccessDDLogDebug("<-- END HTTP (binary \(data?.count ?? -1)-byte body omitted)")
 		}
 	}
 

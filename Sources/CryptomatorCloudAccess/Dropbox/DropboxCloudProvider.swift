@@ -200,7 +200,7 @@ public class DropboxCloudProvider: CloudProvider {
 					reject(DropboxError.missingResult)
 					return
 				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received result: \(result)")
+				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received result: \(DBFILESMetadata.serialize(result) ?? [:])")
 				do {
 					fulfill(try self.convertDBFILESMetadataToCloudItemMetadata(result, at: cloudPath))
 				} catch {
@@ -249,7 +249,7 @@ public class DropboxCloudProvider: CloudProvider {
 					reject(DropboxError.missingResult)
 					return
 				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) received result: \(result)")
+				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
 				do {
 					fulfill(try self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
 				} catch {
@@ -293,7 +293,7 @@ public class DropboxCloudProvider: CloudProvider {
 					reject(DropboxError.missingResult)
 					return
 				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) received result: \(result)")
+				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
 				do {
 					fulfill(try self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
 				} catch {
@@ -354,7 +354,7 @@ public class DropboxCloudProvider: CloudProvider {
 	private func batchUploadSingleFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
 		let progress = Progress(totalUnitCount: -1)
 		return Promise<CloudItemMetadata> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) called")
+			CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil") called")
 			let commitInfo = DBFILESCommitInfo(path: cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true)
 			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
 				progress.totalUnitCount = totalBytesExpectedToUpload
@@ -367,7 +367,7 @@ public class DropboxCloudProvider: CloudProvider {
 					reject(self.handleBatchUploadMissingResult(for: localURL, fileUrlsToRequestErrors, finishBatchRouteError, finishBatchRequestError))
 					return
 				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) received result: \(result)")
+				CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) received result: \(DBFILESUploadSessionFinishBatchResultEntry.serialize(result) ?? [:])")
 				if result.isFailure() {
 					let failure = result.failure
 					if failure.isPath(), failure.path.isConflict() {
@@ -411,7 +411,7 @@ public class DropboxCloudProvider: CloudProvider {
 	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
 		let progress = Progress(totalUnitCount: -1)
 		return ensureParentFolderExists(for: cloudPath).then { _ -> Promise<CloudItemMetadata> in
-			CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) called")
+			CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) called")
 			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, contentHash: nil, inputUrl: localURL.path)
 			self.runningTasks.append(task)
 			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
@@ -423,7 +423,7 @@ public class DropboxCloudProvider: CloudProvider {
 				task.setResponseBlock { result, routeError, networkError in
 					self.runningTasks.removeAll { $0 == task }
 					if let routeError = routeError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) failed with routeError: \(routeError)")
+						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with routeError: \(routeError)")
 						if routeError.isPath(), routeError.path.reason.isConflict() {
 							reject(CloudProviderError.itemAlreadyExists)
 						} else if routeError.isPath(), routeError.path.reason.isInsufficientSpace() {
@@ -436,16 +436,16 @@ public class DropboxCloudProvider: CloudProvider {
 						return
 					}
 					if let networkError = networkError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) failed with networkError: \(networkError)")
+						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with networkError: \(networkError)")
 						reject(self.convertRequestErrorToDropboxError(networkError))
 						return
 					}
 					guard let result = result else {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) failed with missingResult")
+						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with missingResult")
 						reject(DropboxError.missingResult)
 						return
 					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(String(describing: mode))) received result: \(result)")
+					CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) received result: \(DBFILESFileMetadata.serialize(result) ?? [:])")
 					fulfill(self.convertDBFILESFileMetadataToCloudItemMetadata(result, at: cloudPath))
 				}
 			}
@@ -481,7 +481,7 @@ public class DropboxCloudProvider: CloudProvider {
 						reject(DropboxError.missingResult)
 						return
 					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) received result: \(result)")
+					CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) received result: \(DBFILESCreateFolderResult.serialize(result) ?? [:])")
 					fulfill(())
 				}
 			}
@@ -514,7 +514,7 @@ public class DropboxCloudProvider: CloudProvider {
 					reject(DropboxError.missingResult)
 					return
 				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) received result: \(result)")
+				CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) received result: \(DBFILESDeleteResult.serialize(result) ?? [:])")
 				fulfill(())
 			}
 		}
@@ -553,7 +553,7 @@ public class DropboxCloudProvider: CloudProvider {
 						reject(DropboxError.missingResult)
 						return
 					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) received result: \(result)")
+					CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) received result: \(DBFILESRelocationResult.serialize(result) ?? [:])")
 					fulfill(())
 				}
 			}

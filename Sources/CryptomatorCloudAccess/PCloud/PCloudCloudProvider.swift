@@ -434,12 +434,15 @@ public class PCloudCloudProvider: CloudProvider {
 	}
 
 	private func getPCloudItem(for name: String, withParentItem parentItem: PCloudItem) -> Promise<PCloudItem> {
+		CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
 		return credential.client.listFolder(parentItem.identifier, recursively: false).execute().then { metadata -> PCloudItem in
+			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) received metadata: \(metadata)")
 			guard let content = metadata.contents.first(where: { $0.fileMetadata?.name == name || $0.folderMetadata?.name == name }) else {
 				throw CloudProviderError.itemNotFound
 			}
 			return try PCloudItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), content: content)
 		}.recover { error -> PCloudItem in
+			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error)")
 			guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
 				throw error
 			}

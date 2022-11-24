@@ -79,7 +79,7 @@ public class S3CloudProvider: CloudProvider {
 			prefix.removeLast(1)
 		}
 		request.prefix = prefix
-		return service.listObjectsV2(request).then { output in
+		return service.listObjectsV2(request).then { output -> CloudItemList in
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
 			return CloudItemList(listObjects: output)
 		}.then { itemList -> CloudItemMetadata in

@@ -440,8 +440,10 @@ public class LocalFileSystemProvider: CloudProvider {
 	func getItemName(forItemAt url: URL) -> String {
 		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemName(forItemAt: \(url)) called")
 		let name = url.lastPathComponent
+		// Workaround for files with a `_` prefix. Usually, the pattern for iCloud Drive placeholder files is `.<name>.icloud` but files with a `_` prefix in their original name have two dots in the beginning when they are offloaded.
+		// See: https://github.com/cryptomator/cloud-access-swift/issues/19
 		// swiftlint:disable:next force_try
-		let regex = try! NSRegularExpression(pattern: #"^\.(.*)\.icloud$"#, options: [])
+		let regex = try! NSRegularExpression(pattern: #"^\.+(.*)\.icloud$"#, options: [])
 		let range = NSRange(name.startIndex ..< name.endIndex, in: name)
 		guard let match = regex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
 			return name

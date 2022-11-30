@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.5.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.6.0"))
 ```
 
 ## Usage
@@ -298,7 +298,7 @@ validator.validate().then { certificate in
 
 ### Local File System
 
-Since the local file system is not actually a cloud, the naming might be confusing. Even though this library is dedicated to provide access to many cloud storage services, access to the local file system still might be useful.
+Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
 
 Create a local file system provider with a root URL:
 
@@ -310,6 +310,42 @@ let provider = LocalFileSystemProvider(rootURL: rootURL)
 When calling the functions of this provider, the cloud paths should be provided relative to the root URL.
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
+
+## Logging
+
+This SDK utilizes [CocoaLumberjack](https://github.com/CocoaLumberjack/CocoaLumberjack) for logging. CocoaLumberjack is a flexible, fast, open source logging framework. It supports many capabilities including the ability to set logging level per output target, for instance, concise messages logged to the console and verbose messages to a log file.
+
+CocoaLumberjack logging levels are additive such that when the level is set to verbose, all messages from the levels below verbose are logged. It is also possible to set custom logging to meet your needs. For more information, see [CocoaLumberjack](https://github.com/CocoaLumberjack/CocoaLumberjack/blob/master/Documentation/CustomLogLevels.md).
+
+### Changing Log Levels
+
+```swift
+dynamicCloudAccessLogLevel = .verbose
+```
+
+The following logging level options are available:
+
+- `.off`
+- `.error`
+- `.warning`
+- `.info`
+- `.debug`
+- `.verbose`
+- `.all`
+
+### Targeting Log Output
+
+Defining the log output targets works the same as with `CocoaLumberjack`, with the only difference that the loggers are added with `CloudAccessDDLog.add()` instead of `DDLog.add()`.
+For example:
+
+```swift
+CloudAccessDDLog.add(DDOSLogger.sharedInstance) // Uses os_log
+
+let fileLogger: DDFileLogger = DDFileLogger() // File Logger
+fileLogger.rollingFrequency = 60 * 60 * 24 // 24 hours
+fileLogger.logFileManager.maximumNumberOfLogFiles = 7
+CloudAccessDDLog.add(fileLogger)
+```
 
 ## Integration Tests
 

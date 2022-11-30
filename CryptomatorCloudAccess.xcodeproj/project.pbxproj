@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 52;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -63,6 +63,8 @@
 		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
+		4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */; };
+		4A8B8734287D8036002D676E /* CloudAccessDDLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */; };
 		4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */; };
 		4AC75F9A2861A425002731FE /* VaultFormat7S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */; };
 		4AC75F9C2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */; };
@@ -147,6 +149,7 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		74B321E42923F979008E7C01 /* HTTPDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */; };
 		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
 		74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CF2E6B254B6683006266D6 /* VaultFormatError.swift */; };
 		74D4AFB827B2B9E300F8EF2D /* item-metadata-missing-resourcetype.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */; };
@@ -250,6 +253,7 @@
 		4A765CA22878596000794440 /* DirectoryContentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DirectoryContentCache.swift; sourceTree = "<group>"; };
 		4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "AWSS3TransferUtility+ForegroundSession.swift"; sourceTree = "<group>"; };
 		4A7C214C245305BB00DE81E6 /* CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemType.swift; sourceTree = "<group>"; };
+		4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAccessDDLog.swift; sourceTree = "<group>"; };
 		4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAWSEndpointRegionNameStorage.swift; sourceTree = "<group>"; };
 		4AC75F992861A425002731FE /* VaultFormat7S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7S3IntegrationTests.swift; sourceTree = "<group>"; };
 		4AC75F9B2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6S3IntegrationTests.swift; sourceTree = "<group>"; };
@@ -331,6 +335,7 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDebugLogger.swift; sourceTree = "<group>"; };
 		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
 		74CF2E6B254B6683006266D6 /* VaultFormatError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormatError.swift; sourceTree = "<group>"; };
 		74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "item-metadata-missing-resourcetype.xml"; sourceTree = "<group>"; };
@@ -380,6 +385,7 @@
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
+				4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -432,6 +438,7 @@
 				4A567AF02615C2DE002C4D82 /* Dropbox */,
 				4A567B172615C8BB002C4D82 /* GoogleDrive */,
 				7471BDAC24865B6F000D05FC /* LocalFileSystem */,
+				4A8B8732287D7EB8002D676E /* Logging */,
 				4A1A11692629A53300DAF62F /* OneDrive */,
 				746F090F27BC0B61003FCD9F /* PCloud */,
 				4AF0AA7F2844F38700C20B75 /* S3 */,
@@ -566,6 +573,15 @@
 				4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */,
 			);
 			path = Common;
+			sourceTree = "<group>";
+		};
+		4A8B8732287D7EB8002D676E /* Logging */ = {
+			isa = PBXGroup;
+			children = (
+				4A8B8733287D8036002D676E /* CloudAccessDDLog.swift */,
+				74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */,
+			);
+			path = Logging;
 			sourceTree = "<group>";
 		};
 		4ACA638F2615FDFF00D19304 /* CryptomatorCloudAccessIntegrationTests */ = {
@@ -982,6 +998,7 @@
 				4A75E1C328806F5800952FE6 /* MSGraphClientModels */,
 				4A75E1C628806FA100952FE6 /* MSGraphClientSDK */,
 				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
+				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1070,6 +1087,7 @@
 				4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */,
 				4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */,
 				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
+				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1143,6 +1161,7 @@
 		};
 		74862A722469A7AF003D81CB /* Lint With SwiftFormat */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1161,6 +1180,7 @@
 		};
 		74BAB0C82620365500E5F1DA /* Lint With SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -1207,6 +1227,7 @@
 				74073D1927C9406000A86C9A /* Task+Promises.swift in Sources */,
 				4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */,
 				746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */,
+				4A8B8734287D8036002D676E /* CloudAccessDDLog.swift in Sources */,
 				746F091727BD006D003FCD9F /* PCloudItem.swift in Sources */,
 				4A1A11652629A52F00DAF62F /* OneDriveCloudProvider.swift in Sources */,
 				4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */,
@@ -1236,6 +1257,7 @@
 				4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */,
 				4A567B2E2615CA5C002C4D82 /* GoogleDriveCredential.swift in Sources */,
 				74FD6C4624F6F39E00C8D3C4 /* VaultFormat6ShortenedNameCache.swift in Sources */,
+				74B321E42923F979008E7C01 /* HTTPDebugLogger.swift in Sources */,
 				7416F22324F594B20074DA8E /* TLSCertificate.swift in Sources */,
 				4A1A117E2629AD8F00DAF62F /* OneDriveSetup.swift in Sources */,
 				4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */,
@@ -1655,7 +1677,7 @@
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.7.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
@@ -1663,7 +1685,7 @@
 			repositoryURL = "https://github.com/google/GTMAppAuth.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.2.0;
+				minimumVersion = 2.0.0;
 			};
 		};
 		4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */ = {
@@ -1671,7 +1693,7 @@
 			repositoryURL = "https://github.com/google/gtm-session-fetcher.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.7.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {
@@ -1679,7 +1701,7 @@
 			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 1.6.0;
 			};
 		};
 		4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */ = {
@@ -1703,7 +1725,15 @@
 			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 6.3.0;
+				minimumVersion = 7.0.0;
+			};
+		};
+		4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/CocoaLumberjack/CocoaLumberjack.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 3.8.0;
 			};
 		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
@@ -1711,7 +1741,7 @@
 			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 2.27.0;
+				minimumVersion = 2.28.0;
 			};
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
@@ -1726,8 +1756,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 1.2.0;
+				kind = exactVersion;
+				version = 1.2.5;
 			};
 		};
 		746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */ = {
@@ -1751,7 +1781,7 @@
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 5.25.0;
+				minimumVersion = 5.26.0;
 			};
 		};
 		74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */ = {
@@ -1799,6 +1829,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */;
 			productName = ObjectiveDropboxOfficial;
+		};
+		4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */;
+			productName = CocoaLumberjackSwift;
 		};
 		4AF0AA7B2844DDD200C20B75 /* AWSS3 */ = {
 			isa = XCSwiftPackageProductDependency;

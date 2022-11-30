@@ -85,7 +85,6 @@ extension AWSS3 {
 }
 
 extension AWSS3TransferUtility {
-	typealias DownloadReply = (AWSS3TransferUtilityDownloadTask, URL?, Data?, Error?)
 	func uploadFile(_ fileURL: URL, key: String, contentType: String, expression: AWSS3TransferUtilityUploadExpression?) -> Promise<AWSS3TransferUtilityUploadTask> {
 		return wrap {
 			self.uploadFile(fileURL, key: key, contentType: contentType, expression: expression, completionHandler: $0)

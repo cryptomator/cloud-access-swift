@@ -1677,7 +1677,7 @@
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.7.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
@@ -1685,7 +1685,7 @@
 			repositoryURL = "https://github.com/google/GTMAppAuth.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.2.0;
+				minimumVersion = 2.0.0;
 			};
 		};
 		4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */ = {
@@ -1693,7 +1693,7 @@
 			repositoryURL = "https://github.com/google/gtm-session-fetcher.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.7.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {
@@ -1701,7 +1701,7 @@
 			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 1.6.0;
 			};
 		};
 		4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */ = {
@@ -1733,7 +1733,7 @@
 			repositoryURL = "https://github.com/CocoaLumberjack/CocoaLumberjack.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.7.0;
+				minimumVersion = 3.8.0;
 			};
 		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
@@ -1741,7 +1741,7 @@
 			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 2.27.0;
+				minimumVersion = 2.28.0;
 			};
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
@@ -1756,8 +1756,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 1.2.0;
+				kind = exactVersion;
+				version = 1.2.5;
 			};
 		};
 		746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */ = {
@@ -1781,7 +1781,7 @@
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 5.25.0;
+				minimumVersion = 5.26.0;
 			};
 		};
 		74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */ = {

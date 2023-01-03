@@ -178,7 +178,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		return Promise(CloudItemList(items: cacheResponse.elements, nextPageToken: cacheResponse.nextPageToken))
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		let url = rootURL.appendingPathComponent(cloudPath)
 		let shouldStopAccessing = url.startAccessingSecurityScopedResource()

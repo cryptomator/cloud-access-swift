@@ -99,7 +99,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		if FileManager.default.fileExists(atPath: localURL.path) {
 			return Promise(CloudProviderError.itemAlreadyExists)

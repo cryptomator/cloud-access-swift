@@ -81,4 +81,8 @@ public extension CloudProvider {
 			}
 		}
 	}
+
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+		downloadFile(from: cloudPath, to: localURL, onTaskCreation: nil)
+	}
 }

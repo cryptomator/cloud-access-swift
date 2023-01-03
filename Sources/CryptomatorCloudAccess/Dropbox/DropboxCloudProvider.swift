@@ -63,7 +63,7 @@ public class DropboxCloudProvider: CloudProvider {
 		}, condition: shouldRetryForError)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		guard let authorizedClient = credential.authorizedClient else {
 			return Promise(CloudProviderError.unauthorized)

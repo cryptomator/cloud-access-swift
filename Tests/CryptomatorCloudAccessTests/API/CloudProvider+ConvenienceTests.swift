@@ -204,7 +204,7 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		}
 	}
 
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		return Promise(CloudProviderError.noInternetConnection)
 	}
 

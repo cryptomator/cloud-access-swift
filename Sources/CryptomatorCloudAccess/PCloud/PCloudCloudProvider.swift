@@ -11,12 +11,12 @@ import PCloudSDKSwift
 import Promises
 
 public class PCloudCloudProvider: CloudProvider {
-	private let identifierCache: PCloudIdentifierCache
 	private let client: PCloudClient
+	private let identifierCache: PCloudIdentifierCache
 
 	public init(client: PCloudClient) throws {
-		self.identifierCache = try PCloudIdentifierCache()
 		self.client = client
+		self.identifierCache = try PCloudIdentifierCache()
 	}
 
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {

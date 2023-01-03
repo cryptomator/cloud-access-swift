@@ -69,7 +69,7 @@ public class WebDAVClient {
 		request.httpBody = """
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
 		""".data(using: .utf8)
-		return webDAVSession.performDownloadTask(with: request, to: localURL)
+		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: nil)
 	}
 
 	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
@@ -83,10 +83,10 @@ public class WebDAVClient {
 		return webDAVSession.performDataTask(with: request)
 	}
 
-	public func GET(from url: URL, to localURL: URL) -> Promise<HTTPURLResponse> {
+	public func GET(from url: URL, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
 		var request = URLRequest(url: url)
 		request.httpMethod = "GET"
-		return webDAVSession.performDownloadTask(with: request, to: localURL)
+		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: onTaskCreation)
 	}
 
 	public func PUT(url: URL, fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {

@@ -120,7 +120,7 @@ public class WebDAVProvider: CloudProvider {
 				throw CloudProviderError.itemTypeMismatch
 			}
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			let getPromise = self.client.GET(from: url, to: localURL)
+			let getPromise = self.client.GET(from: url, to: localURL, onTaskCreation: onTaskCreation)
 			progress.resignCurrent()
 			return getPromise
 		}.then { _ -> Void in

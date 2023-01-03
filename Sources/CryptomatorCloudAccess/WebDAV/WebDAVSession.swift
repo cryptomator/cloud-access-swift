@@ -217,10 +217,11 @@ class WebDAVSession {
 		}
 	}
 
-	func performDownloadTask(with request: URLRequest, to localURL: URL) -> Promise<HTTPURLResponse> {
+	func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
+		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)

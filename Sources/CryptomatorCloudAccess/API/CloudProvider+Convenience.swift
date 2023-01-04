@@ -25,6 +25,13 @@ public extension CloudProvider {
 	}
 
 	/**
+	 Convenience wrapper for `downloadFile()` that ignores the underlying task.
+	 */
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+		downloadFile(from: cloudPath, to: localURL, onTaskCreation: nil)
+	}
+
+	/**
 	 Convenience wrapper for `createFolder()` that also satisfies if the item is present.
 	 */
 	func createFolderIfMissing(at cloudPath: CloudPath) -> Promise<Void> {

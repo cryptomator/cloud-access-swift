@@ -45,6 +45,7 @@ public protocol CloudProvider {
 
 	 - Parameter cloudPath: The cloud path of the file to download.
 	 - Parameter localURL: The local URL of the desired download location.
+	 - Parameter onTaskCreation: Gets called once the provider created the underlying `URLSessionDownloadTask`. This can be called with `nil` if the provider does not provide a `URLSessionDownloadTask`.
 	 - Precondition: `localURL` must be a file URL.
 	 - Postcondition: The file is stored at `localURL`.
 	 - Returns: Empty promise. If the download fails, promise is rejected with:
@@ -54,7 +55,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void>
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void>
 
 	/**
 	 Uploads a file.

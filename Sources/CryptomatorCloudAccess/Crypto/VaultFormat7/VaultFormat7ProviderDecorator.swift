@@ -70,13 +70,13 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		}
 	}
 
-	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL) -> Promise<Void> {
+	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return getC9RPath(cleartextCloudPath).then { ciphertextCloudPath in
 			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let downloadFilePromise = self.delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL)
+			let downloadFilePromise = self.delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL, onTaskCreation: onTaskCreation)
 			overallProgress.resignCurrent()
 			return downloadFilePromise
 		}.then {

@@ -73,14 +73,14 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 		}
 	}
 
-	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL) -> Promise<Void> {
+	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		return getParentDirId(cleartextCloudPath).then { parentDirId in
 			let fileCiphertextPath = try self.getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
 			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let downloadFilePromise = self.delegate.downloadFile(from: fileCiphertextPath, to: ciphertextLocalURL).recover { error -> Promise<Void> in
+			let downloadFilePromise = self.delegate.downloadFile(from: fileCiphertextPath, to: ciphertextLocalURL, onTaskCreation: onTaskCreation).recover { error -> Promise<Void> in
 				guard case CloudProviderError.itemNotFound = error else {
 					return Promise(error)
 				}

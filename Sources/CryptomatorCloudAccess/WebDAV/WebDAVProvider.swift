@@ -163,7 +163,7 @@ public class WebDAVProvider: CloudProvider {
 			}
 		}.then { _ -> Promise<(HTTPURLResponse, Data?)> in
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			let putPromise = self.client.PUT(url: url, fileURL: localURL)
+			let putPromise = self.client.PUT(url: url, fileURL: localURL, onTaskCreation: onTaskCreation)
 			progress.resignCurrent()
 			return putPromise
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in

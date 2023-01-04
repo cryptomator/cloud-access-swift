@@ -65,17 +65,17 @@ class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		return delegate.downloadFile(from: shortened.cloudPath, to: localURL, onTaskCreation: onTaskCreation)
 	}
 
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
 			return uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent).then {
-				return self.delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting)
+				return self.delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
 			}.then { shortenedMetadata in
 				return self.getOriginalMetadata(shortenedMetadata)
 			}
 		} else {
-			return delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting)
+			return delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
 		}
 	}
 

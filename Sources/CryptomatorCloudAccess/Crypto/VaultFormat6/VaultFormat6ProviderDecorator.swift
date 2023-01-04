@@ -107,7 +107,7 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 		}
 	}
 
-	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(cleartextLocalURL.isFileURL)
 		let overallProgress = Progress(totalUnitCount: 5)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -129,7 +129,7 @@ class VaultFormat6ProviderDecorator: CloudProvider {
 			try self.cryptor.encryptContent(from: cleartextLocalURL, to: ciphertextLocalURL)
 			overallProgress.resignCurrent()
 			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let uploadFilePromise = self.delegate.uploadFile(from: ciphertextLocalURL, to: fileCiphertextPath, replaceExisting: replaceExisting)
+			let uploadFilePromise = self.delegate.uploadFile(from: ciphertextLocalURL, to: fileCiphertextPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
 			overallProgress.resignCurrent()
 			return uploadFilePromise
 		}.recover { error -> CloudItemMetadata in

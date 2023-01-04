@@ -32,6 +32,13 @@ public extension CloudProvider {
 	}
 
 	/**
+	 Convenience wrapper for `uploadFile()` that ignores the underlying task.
+	 */
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+		uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting, onTaskCreation: nil)
+	}
+
+	/**
 	 Convenience wrapper for `createFolder()` that also satisfies if the item is present.
 	 */
 	func createFolderIfMissing(at cloudPath: CloudPath) -> Promise<Void> {

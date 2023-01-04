@@ -216,7 +216,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		return promise
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		let url = rootURL.appendingPathComponent(cloudPath)
 		let shouldStopAccessing = url.startAccessingSecurityScopedResource()

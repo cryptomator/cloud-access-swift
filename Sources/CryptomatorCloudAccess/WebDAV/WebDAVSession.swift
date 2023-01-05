@@ -237,11 +237,11 @@ class WebDAVSession {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
+		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		onTaskCreation?(task)
 		task.resume()
 		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
 			HTTPDebugLogger.logResponse(response, with: data, or: nil)

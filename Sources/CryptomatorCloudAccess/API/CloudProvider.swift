@@ -65,6 +65,7 @@ public protocol CloudProvider {
 	 - Parameter localURL: The local URL of the file to upload.
 	 - Parameter cloudPath: The cloud path of the desired upload location.
 	 - Parameter replaceExisting: If true, overwrite the existing file at `cloudPath`.
+	 - Parameter onTaskCreation: Gets called once the provider created the underlying `URLSessionUploadTask`. This can be called with `nil` if the provider does not provide a `URLSessionUploadTask`.
 	 - Precondition: `localURL` must be a file URL.
 	 - Postcondition: The file is stored at `cloudPath`.
 	 - Postcondition: The `size` property of the returned metadata is set to the size of the uploaded file in the cloud and must not be `nil`.
@@ -77,7 +78,7 @@ public protocol CloudProvider {
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	 */
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata>
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata>
 
 	/**
 	 Creates a folder.

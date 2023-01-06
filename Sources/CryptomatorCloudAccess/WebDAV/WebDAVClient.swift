@@ -89,10 +89,10 @@ public class WebDAVClient {
 		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: onTaskCreation)
 	}
 
-	public func PUT(url: URL, fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func PUT(url: URL, fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
-		return webDAVSession.performUploadTask(with: request, fromFile: fileURL)
+		return webDAVSession.performUploadTask(with: request, fromFile: fileURL, onTaskCreation: onTaskCreation)
 	}
 
 	public func MKCOL(url: URL) -> Promise<(HTTPURLResponse, Data?)> {

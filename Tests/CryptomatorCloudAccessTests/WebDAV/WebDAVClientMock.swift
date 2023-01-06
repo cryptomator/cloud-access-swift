@@ -58,9 +58,9 @@ class WebDAVClientMock: WebDAVClient {
 		return super.GET(from: url, to: localURL, onTaskCreation: onTaskCreation)
 	}
 
-	override func PUT(url: URL, fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	override func PUT(url: URL, fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
 		putRequests.append(url.relativePath)
-		return super.PUT(url: url, fileURL: fileURL)
+		return super.PUT(url: url, fileURL: fileURL, onTaskCreation: onTaskCreation)
 	}
 
 	override func MKCOL(url: URL) -> Promise<(HTTPURLResponse, Data?)> {

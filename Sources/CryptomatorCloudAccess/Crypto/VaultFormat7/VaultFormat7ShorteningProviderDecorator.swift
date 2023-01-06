@@ -75,31 +75,31 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToC9S {
 			let contentsFilePath = shortened.cloudPath.appendingContentsFileComponent()
-			return delegate.downloadFile(from: contentsFilePath, to: localURL)
+			return delegate.downloadFile(from: contentsFilePath, to: localURL, onTaskCreation: onTaskCreation)
 		} else {
-			return delegate.downloadFile(from: shortened.cloudPath, to: localURL)
+			return delegate.downloadFile(from: shortened.cloudPath, to: localURL, onTaskCreation: onTaskCreation)
 		}
 	}
 
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
 			return createC9SFolderAndUploadNameFile(c9sDir).then { () -> Promise<CloudItemMetadata> in
 				let contentsFilePath = shortened.cloudPath.appendingContentsFileComponent()
-				return self.delegate.uploadFile(from: localURL, to: contentsFilePath, replaceExisting: replaceExisting)
+				return self.delegate.uploadFile(from: localURL, to: contentsFilePath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
 			}.then { _ in
 				return self.delegate.fetchItemMetadata(at: shortened.cloudPath)
 			}.then { shortenedMetadata in
 				return self.getOriginalMetadata(shortenedMetadata)
 			}
 		} else {
-			return delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting)
+			return delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
 		}
 	}
 

@@ -30,6 +30,8 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 			let isTrusted = SecTrustEvaluateWithError(trust, nil)
 			let fingerprint = calculateFingerprint(from: certificate)
 			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
+		} else {
+			CloudAccessDDLogError("TLSCertificateValidator: failed to get certificate from received challenge.protectionSpace: \(challenge.protectionSpace)")
 		}
 		completionHandler(.cancelAuthenticationChallenge, nil)
 	}

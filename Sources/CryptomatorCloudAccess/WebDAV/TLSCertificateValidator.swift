@@ -50,7 +50,7 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return digest.toHexString(separator: " ")
 	}
-	
+
 	private func handleChallenge(_ challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
 		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
 			let isTrusted = SecTrustEvaluateWithError(trust, nil)

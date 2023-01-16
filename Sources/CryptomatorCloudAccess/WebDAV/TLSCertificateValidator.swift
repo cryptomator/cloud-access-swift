@@ -26,18 +26,13 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 	// MARK: - URLSessionDelegate
 
 	func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
-			let isTrusted = SecTrustEvaluateWithError(trust, nil)
-			let fingerprint = calculateFingerprint(from: certificate)
-			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
-		}
-		completionHandler(.cancelAuthenticationChallenge, nil)
+		handleChallenge(challenge, completionHandler: completionHandler)
 	}
 
 	// MARK: - URLSessionTaskDelegate
 
 	func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-		completionHandler(.cancelAuthenticationChallenge, nil)
+		handleChallenge(challenge, completionHandler: completionHandler)
 	}
 
 	// MARK: - Internal
@@ -54,6 +49,17 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
 		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return digest.toHexString(separator: " ")
+	}
+
+	private func handleChallenge(_ challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
+			let isTrusted = SecTrustEvaluateWithError(trust, nil)
+			let fingerprint = calculateFingerprint(from: certificate)
+			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
+		} else {
+			CloudAccessDDLogError("TLSCertificateValidator: failed to get certificate from received challenge.protectionSpace: \(challenge.protectionSpace)")
+		}
+		completionHandler(.cancelAuthenticationChallenge, nil)
 	}
 }
 

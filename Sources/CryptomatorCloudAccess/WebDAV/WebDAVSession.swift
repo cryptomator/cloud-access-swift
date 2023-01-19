@@ -205,33 +205,47 @@ class WebDAVSession {
 	}
 
 	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
+		HTTPDebugLogger.logRequest(request)
 		let task = urlSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
+			HTTPDebugLogger.logResponse(response, with: data, or: nil)
+			return Promise((response, data))
+		}
 	}
 
-	func performDownloadTask(with request: URLRequest, to localURL: URL) -> Promise<HTTPURLResponse> {
+	func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
+		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
+		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response -> Promise<HTTPURLResponse> in
+			HTTPDebugLogger.logResponse(response, with: nil, or: localURL)
+			return Promise(response)
+		}
 	}
 
-	func performUploadTask(with request: URLRequest, fromFile fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
+		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
+		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
-		return pendingPromise
+		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
+			HTTPDebugLogger.logResponse(response, with: data, or: nil)
+			return Promise((response, data))
+		}
 	}
 }

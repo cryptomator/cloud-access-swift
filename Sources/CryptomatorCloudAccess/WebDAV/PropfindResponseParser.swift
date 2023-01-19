@@ -249,12 +249,12 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	}
 
 	func fillCache() throws {
-		print("DEBUG: start fillCache for \(folderEnumerationPath) - \(Date())")
+		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(folderEnumerationPath) called")
 		_ = try getElements()
 		guard isDirectory else {
 			throw CloudProviderError.itemTypeMismatch
 		}
-		print("DEBUG: finished fillCache for \(folderEnumerationPath) - \(Date())")
+		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(folderEnumerationPath) finished")
 	}
 
 	override func receivedElement(_ element: PropfindResponseElement) {
@@ -268,7 +268,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 		do {
 			try cache.save(cloudItemMetadata, for: folderEnumerationPath, index: elementsCached)
 		} catch {
-			print("CachePropfindResponseParser caching element \(element) failed with error: \(error)")
+			CloudAccessDDLogDebug("CachePropfindResponseParser: caching element \(element) failed with error: \(error)")
 		}
 	}
 }

@@ -53,14 +53,14 @@ class WebDAVClientMock: WebDAVClient {
 		return super.PROPFIND(url: url, depth: depth, to: localURL, propertyNames: propertyNames)
 	}
 
-	override func GET(from url: URL, to localURL: URL) -> Promise<HTTPURLResponse> {
+	override func GET(from url: URL, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
 		getRequests.append(url.relativePath)
-		return super.GET(from: url, to: localURL)
+		return super.GET(from: url, to: localURL, onTaskCreation: onTaskCreation)
 	}
 
-	override func PUT(url: URL, fileURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	override func PUT(url: URL, fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
 		putRequests.append(url.relativePath)
-		return super.PUT(url: url, fileURL: fileURL)
+		return super.PUT(url: url, fileURL: fileURL, onTaskCreation: onTaskCreation)
 	}
 
 	override func MKCOL(url: URL) -> Promise<(HTTPURLResponse, Data?)> {

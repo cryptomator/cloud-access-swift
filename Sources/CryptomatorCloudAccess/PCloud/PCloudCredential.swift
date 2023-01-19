@@ -11,11 +11,12 @@ import PCloudSDKSwift
 import Promises
 
 public class PCloudCredential {
-	public let client: PCloudClient
 	public let user: OAuth.User
 	public var userID: String {
 		return String(user.id)
 	}
+
+	private let client: PCloudClient
 
 	public init(user: OAuth.User) {
 		self.user = user
@@ -26,5 +27,39 @@ public class PCloudCredential {
 		return client.fetchUserInfo().execute().then { metadata in
 			return metadata.emailAddress
 		}
+	}
+}
+
+extension PCloud {
+	/**
+	 Creates a pCloud client with a background `URLSession`.
+
+	 Does not update the `sharedClient` property. You are responsible for storing it and keeping it alive. Use if you want a more direct control over the lifetime of the `PCloudClient` object. Multiple clients can exist simultaneously.
+
+	 - Parameter user: A `OAuth.User` value obtained from the keychain or the OAuth flow.
+	 - Parameter sharedContainerIdentifier: To create a URL session for use by an app extension, set this property to a valid identifier for a container shared between the app extension and its containing app.
+	 - Returns: An instance of a `PCloudClient` ready to take requests.
+	 */
+	public static func createBackgroundClient(with user: OAuth.User, sharedContainerIdentifier: String? = nil) -> PCloudClient {
+		let bundleId = Bundle.main.bundleIdentifier ?? ""
+		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: "pCloud - \(user.id) - \(bundleId)", sharedContainerIdentifier: sharedContainerIdentifier)
+	}
+
+	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {
+		let authenticator = OAuthAccessTokenBasedAuthenticator(accessToken: accessToken)
+		let eventHub = URLSessionEventHub()
+		var configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
+		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		let session = URLSession(configuration: configuration, delegate: eventHub, delegateQueue: nil)
+		let foregroundSession = URLSession(configuration: .default, delegate: eventHub, delegateQueue: nil)
+
+		// The event hub is expected to be kept in memory by the operation builder blocks.
+		let callOperationBuilder = URLSessionBasedNetworkOperationUtilities.createCallOperationBuilder(with: .https, session: foregroundSession, delegate: eventHub)
+		let uploadOperationBuilder = URLSessionBasedNetworkOperationUtilities.createUploadOperationBuilder(with: .https, session: session, delegate: eventHub)
+		let downloadOperationBuilder = URLSessionBasedNetworkOperationUtilities.createDownloadOperationBuilder(with: session, delegate: eventHub)
+		let callTaskBuilder = PCloudAPICallTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: callOperationBuilder)
+		let uploadTaskBuilder = PCloudAPIUploadTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: uploadOperationBuilder)
+		let downloadTaskBuilder = PCloudAPIDownloadTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: downloadOperationBuilder)
+		return PCloudClient(callTaskBuilder: callTaskBuilder, uploadTaskBuilder: uploadTaskBuilder, downloadTaskBuilder: downloadTaskBuilder)
 	}
 }

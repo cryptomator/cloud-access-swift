@@ -28,11 +28,7 @@ public class S3CloudProvider: CloudProvider {
 	private static let folderContentType = "application/x-directory"
 	private static let s3MaxPageSize = 1000
 
-	init(credential: S3Credential,
-	     useBackgroundSession: Bool,
-	     transferUtilityConfiguration: AWSS3TransferUtilityConfiguration,
-	     serviceConfiguration: AWSServiceConfiguration,
-	     maxPageSize: Int) throws {
+	init(credential: S3Credential, useBackgroundSession: Bool, transferUtilityConfiguration: AWSS3TransferUtilityConfiguration, serviceConfiguration: AWSServiceConfiguration, maxPageSize: Int) throws {
 		self.credential = credential
 		AWSEndpoint.exchangeRegionNameImplementation
 		CustomAWSEndpointRegionNameStorage.shared.setRegionName(credential.region, for: credential)
@@ -72,8 +68,9 @@ public class S3CloudProvider: CloudProvider {
 		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration, maxPageSize: maxPageSize)
 	}
 
-	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of an headObject request as some providers do not answer with an access denied error
+	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+		CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
 		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: nil, maxKeys: 1)
 		guard var prefix = request.prefix else {
 			return Promise(S3CloudProviderError.invalidRequest)
@@ -82,7 +79,8 @@ public class S3CloudProvider: CloudProvider {
 			prefix.removeLast(1)
 		}
 		request.prefix = prefix
-		return service.listObjectsV2(request).then { output in
+		return service.listObjectsV2(request).then { output -> CloudItemList in
+			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
 			return CloudItemList(listObjects: output)
 		}.then { itemList -> CloudItemMetadata in
 			guard let item = itemList.items.first(where: { $0.cloudPath == cloudPath }) else {
@@ -90,43 +88,49 @@ public class S3CloudProvider: CloudProvider {
 			}
 			return item
 		}.recover { error -> CloudItemMetadata in
+			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+		CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) called")
 		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: pageToken)
-		// request includes the folder itself
-		request.maxKeys = NSNumber(value: maxPageSize + 1)
-		return service.listObjectsV2(request)
-			.recover { error -> Promise<AWSS3ListObjectsV2Output> in
-				return self.checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
-			}.then { listObjects -> CloudItemList in
-				return CloudItemList(listObjects: listObjects)
-			}.then { itemList -> Promise<(CloudItemList, Void)> in
-				let cleanedItemList = self.removeParentFolderFrom(itemList: itemList, parentFolderPath: cloudPath)
-				return all(Promise(cleanedItemList), self.validateItemList(cleanedItemList, folderPath: cloudPath))
-			}.then { itemList, _ in
-				return itemList
-			}.recover { error -> CloudItemList in
-				throw self.convertStandardError(error)
-			}
+		request.maxKeys = NSNumber(value: maxPageSize + 1) // request includes the folder itself
+		return service.listObjectsV2(request).recover { error -> Promise<AWSS3ListObjectsV2Output> in
+			return self.checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
+		}.then { output -> CloudItemList in
+			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) received output: \(output)")
+			return CloudItemList(listObjects: output)
+		}.then { itemList -> Promise<(CloudItemList, Void)> in
+			let cleanedItemList = self.removeParentFolderFrom(itemList: itemList, parentFolderPath: cloudPath)
+			return all(Promise(cleanedItemList), self.validateItemList(cleanedItemList, folderPath: cloudPath))
+		}.then { itemList, _ in
+			return itemList
+		}.recover { error -> CloudItemList in
+			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) failed with error: \(error)")
+			throw self.convertStandardError(error)
+		}
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) called")
 		if FileManager.default.fileExists(atPath: localURL.path) {
 			return Promise(CloudProviderError.itemAlreadyExists)
 		}
 		let key = getKey(for: cloudPath)
 		return transferUtility.download(to: localURL, key: key, expression: .init()).recover { _ -> Promise<Void> in
 			return self.assertFileExists(at: cloudPath)
+		}.then {
+			CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) finished")
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
-		CloudAccessDDLogDebug("start upload file at: \(cloudPath.path) - \(Date())")
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+		CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called")
 		var isDirectory: ObjCBool = false
 		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
 		if !fileExists {
@@ -155,29 +159,26 @@ public class S3CloudProvider: CloudProvider {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		}.recover { error -> Promise<Void> in
-			CloudAccessDDLogDebug("fetchItemMetadata (precondition) failed with error: \(error)")
 			guard case CloudProviderError.itemNotFound = error else {
 				return Promise(error)
 			}
 			return self.assertParentFolderExists(for: cloudPath)
 		}.then { _ -> Promise<AWSS3TransferUtilityUploadTask> in
-			CloudAccessDDLogDebug("precondition done - start upload file at: \(cloudPath.path)")
+			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) precondition done, uploading file…")
 			return self.transferUtility.uploadFile(localURL, key: key, contentType: contentType, expression: .init())
 		}.then { _ -> Promise<CloudItemMetadata> in
-			CloudAccessDDLogDebug("finished upload file at: \(cloudPath.path) - fetching metadata…")
+			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, fetching metadata…")
 			return self.fetchItemMetadata(at: cloudPath)
-		}.then { metadata -> CloudItemMetadata in
-			CloudAccessDDLogDebug("finished upload file at: \(cloudPath.path))")
-			return metadata
 		}.recover { error -> CloudItemMetadata in
+			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) called")
 		let request = createEmptyFolderPutObjectRequest(for: cloudPath)
 		request.contentType = S3CloudProvider.folderContentType
-		CloudAccessDDLogDebug("start creating folder at: \(cloudPath.path)")
 		return checkForItemExistence(at: cloudPath).then { folderExists -> Promise<Void> in
 			if folderExists {
 				return Promise(CloudProviderError.itemAlreadyExists)
@@ -185,36 +186,41 @@ public class S3CloudProvider: CloudProvider {
 			return self.assertParentFolderExists(for: cloudPath)
 		}.then { _ -> Promise<AWSS3PutObjectOutput> in
 			return self.service.putObject(request)
-		}.then { _ -> Void in
-			// no-op
-			CloudAccessDDLogDebug("finished creating folder at: \(cloudPath.path)")
+		}.then { output -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) received output: \(output)")
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) called")
 		return fetchItemMetadata(at: cloudPath).then { _ -> Promise<AWSS3DeleteObjectOutput> in
 			let request = self.createDeleteObjectRequest(for: cloudPath)
 			return self.service.deleteObject(request)
-		}.then { _ in
-			// no-op
+		}.then { output in
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) received output: \(output)")
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) called")
 		return fetchItemMetadata(at: cloudPath).then { _ in
 			return self.deleteFolder(at: cloudPath, continuationToken: nil)
 		}.then { _ in
 			// no-op
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
 		return all(fetchItemMetadata(at: sourceCloudPath), assertItemDoesNotExist(at: targetCloudPath), assertParentFolderExists(for: targetCloudPath)).then { metadata, _, _ -> Promise<Void> in
 			let itemSize = metadata.size ?? 0
 			let sourceKey = self.getKey(for: sourceCloudPath)
@@ -223,15 +229,22 @@ public class S3CloudProvider: CloudProvider {
 			return self.copyUtility.copy(copyRequest)
 		}.then { _ -> Promise<Void> in
 			return self.deleteFile(at: sourceCloudPath)
+		}.then {
+			CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
 
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
 		return all(assertItemDoesExist(at: sourceCloudPath), assertItemDoesNotExist(at: targetCloudPath), assertParentFolderExists(for: targetCloudPath)).then { _, _, _ in
 			return self.moveFolderAfterCheck(from: sourceCloudPath, to: targetCloudPath)
+		}.then {
+			CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
 		}.recover { error -> Void in
+			CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
 			throw self.convertStandardError(error)
 		}
 	}
@@ -239,7 +252,7 @@ public class S3CloudProvider: CloudProvider {
 	/**
 	 Moves a folder from `sourceCloudPath` to `targetCloudPath` after various preconditions have already been met.
 
-	 Since S3 does not support move directly, this must be realized via a copy followed by a delete of the source object. For folders this needs to be done for each individual object with the prefix of the given `folderPath`.
+	 Since S3 does not support move directly, this must be realized via a copy followed by a delete of the source object. For folders, this needs to be done for each individual object with the prefix of the given `folderPath`.
 	 */
 	func moveFolderAfterCheck(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
 		let parentSourceKey = getKey(for: sourceCloudPath)
@@ -277,7 +290,7 @@ public class S3CloudProvider: CloudProvider {
 	 Checks for continuation token invalidity.
 
 	 As not every S3 provider returns the same error message if the continuation token is invalid, we first try to convert the passed error to a `CloudProviderError.pageTokenInvalid`.
-	 If the conversion fails, because we don't know the error, we check if the folder exists at the passed `folderPath`, if this is the case we assume that the request failed because of an invalid continuation token.
+	 If the conversion fails because we don't know the error, we check if the folder exists at the passed `folderPath`. If this is the case, we assume that the request failed because of an invalid continuation token.
 	 */
 	func checkContinuationTokenForInvalidity<T>(continuationToken: String?, folderPath: CloudPath, error: Error) -> Promise<T> {
 		let convertedError = convertStandardError(error)
@@ -296,10 +309,10 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	/**
-	 Validates the given `CloudItemList`
+	 Validates the given `CloudItemList`.
 
 	 Since S3 realizes the concept of a folder via the prefixes of the files, empty folders can be realized via a 0-byte file with this prefix - for example, when creating a new folder using the AWS S3 Console.
-	 However, S3 also returns an empty list if the folder does not exist at all. Therefore, in case of an empty list, the existence of the 0 byte file must be checked by a `fetchItemMetadata(at:)` call for the given `folderPath`.
+	 However, S3 also returns an empty list if the folder does not exist at all. Therefore, in case of an empty list, the existence of the 0-byte file must be checked by a `fetchItemMetadata(at:)` call for the given `folderPath`.
 	 */
 	func validateItemList(_ itemList: CloudItemList, folderPath: CloudPath) -> Promise<Void> {
 		if !itemList.items.isEmpty || folderPath == .root {
@@ -357,7 +370,7 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	/**
-	 Creates a put object request for an empty folder.
+	 Creates a `putObject` request for an empty folder.
 
 	 Empty folders are represented in S3 due to the flat structure via a 0-byte file with the folder path incl. trailing slash.
 	 */
@@ -394,7 +407,7 @@ public class S3CloudProvider: CloudProvider {
 	/**
 	 Removes the folder corresponding given `parentFolderPath` from the given `itemList`.
 
-	 Since S3 with a` listObjectsV2` request the folder itself also occurs in the resulting list, it has to be removed again afterwards.
+	 Since S3 includes the folder itself in the resulting list for a `listObjectsV2` request, it has to be removed again afterwards.
 	 */
 	func removeParentFolderFrom(itemList: CloudItemList, parentFolderPath: CloudPath) -> CloudItemList {
 		var items = itemList.items
@@ -402,7 +415,7 @@ public class S3CloudProvider: CloudProvider {
 		return CloudItemList(items: items, nextPageToken: itemList.nextPageToken)
 	}
 
-	// - MARK: Error conversion
+	// - MARK: Error Conversion
 
 	func convertStandardError(_ error: Error, mapUnknownErrorTo unknownError: Error? = nil) -> Error {
 		if error is CloudProviderError {
@@ -473,14 +486,16 @@ public class S3CloudProvider: CloudProvider {
 	 Since S3 has
 	 */
 	func deleteFolder(at cloudPath: CloudPath, continuationToken: String?) -> Promise<String?> {
+		CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(continuationToken ?? "nil")) called")
 		let request = createListObjectsV2Request(for: cloudPath, recursive: true, pageToken: continuationToken)
-		return service.listObjectsV2(request).then { listObjects -> Promise<(Void, String?)>in
+		return service.listObjectsV2(request).then { listObjects -> Promise<(AWSS3DeleteObjectsOutput, String?)>in
 			let contents: [AWSS3Object] = listObjects.contents ?? []
 			let keys: [String] = contents.compactMap { $0.key }
 			assert(contents.count == keys.count)
 			let deleteObjectsRequest = self.createDeleteObjectsRequest(keys: keys)
 			return all(self.deleteObjects(deleteObjectsRequest), Promise(listObjects.nextContinuationToken))
-		}.then { _, continuationToken -> Promise<String?> in
+		}.then { output, continuationToken -> Promise<String?> in
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(continuationToken ?? "nil")) received output: \(output)")
 			guard let continuationToken = continuationToken else {
 				return Promise(nil)
 			}
@@ -488,21 +503,20 @@ public class S3CloudProvider: CloudProvider {
 		}
 	}
 
-	func deleteObjects(_ request: AWSS3DeleteObjectsRequest) -> Promise<Void> {
+	func deleteObjects(_ request: AWSS3DeleteObjectsRequest) -> Promise<AWSS3DeleteObjectsOutput> {
 		guard let objects = request.remove?.objects else {
 			return Promise(S3CloudProviderError.invalidRequest)
 		}
 		if objects.isEmpty {
-			return Promise(())
+			return Promise(AWSS3DeleteObjectsOutput())
 		}
-		return service.deleteObjects(request).then { _ in
-			// no-op
-		}
+		return service.deleteObjects(request)
 	}
 
 	// - MARK: Assertions
 
 	func assertParentFolderExists(for cloudPath: CloudPath) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CloudProvider: assertParentFolderExists(for: \(cloudPath.path)) called")
 		let parentPath = cloudPath.deletingLastPathComponent()
 		if parentPath == .root {
 			return Promise(())
@@ -521,7 +535,8 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	func assertItemDoesNotExist(at cloudPath: CloudPath) -> Promise<Void> {
-		checkForItemExistence(at: cloudPath).then { itemExists -> Void in
+		CloudAccessDDLogDebug("S3CloudProvider: assertItemDoesNotExist(at: \(cloudPath.path)) called")
+		return checkForItemExistence(at: cloudPath).then { itemExists -> Void in
 			if itemExists {
 				throw CloudProviderError.itemAlreadyExists
 			}
@@ -529,7 +544,8 @@ public class S3CloudProvider: CloudProvider {
 	}
 
 	func assertItemDoesExist(at cloudPath: CloudPath) -> Promise<Void> {
-		checkForItemExistence(at: cloudPath).then { itemExists -> Void in
+		CloudAccessDDLogDebug("S3CloudProvider: assertItemDoesExist(at: \(cloudPath.path)) called")
+		return checkForItemExistence(at: cloudPath).then { itemExists -> Void in
 			if !itemExists {
 				throw CloudProviderError.itemNotFound
 			}

@@ -38,16 +38,18 @@ class S3CopyTaskUtility {
 	}
 
 	private func regularCopy(_ request: S3CopyRequest) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CopyTaskUtility: regularCopy(\(request)) called")
 		let replicateRequest = AWSS3ReplicateObjectRequest()!
 		replicateRequest.replicateSource = createReplicateSourceString(for: request.sourceKey, bucket: bucket)
 		replicateRequest.bucket = bucket
 		replicateRequest.key = request.targetKey
-		return service.replicateObject(replicateRequest).then { _ in
-			// no-op
+		return service.replicateObject(replicateRequest).then { output in
+			CloudAccessDDLogDebug("S3CopyTaskUtility: regularCopy(\(request)) received output: \(output)")
 		}
 	}
 
 	private func multipartCopy(_ request: S3CopyRequest) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CopyTaskUtility: multipartCopy(\(request)) called")
 		let uploadRequest = AWSS3CreateMultipartUploadRequest()!
 		uploadRequest.key = request.targetKey
 		uploadRequest.bucket = bucket
@@ -59,6 +61,8 @@ class S3CopyTaskUtility {
 			let subTasks = requests.map { S3MultiPartCopySubTask(request: $0) }
 			let task = S3MultiPartCopyTask(subTasks: subTasks, bucket: self.bucket, key: request.targetKey, uploadID: uploadID)
 			return self.execute(task)
+		}.then {
+			CloudAccessDDLogDebug("S3CopyTaskUtility: multipartCopy(\(request)) finished")
 		}
 	}
 
@@ -66,7 +70,6 @@ class S3CopyTaskUtility {
 		let subTasks = task.subTasks.map {
 			execute($0)
 		}
-
 		return all(subTasks).then { _ in
 			self.completeTask(task)
 		}.catch { _ in
@@ -75,6 +78,7 @@ class S3CopyTaskUtility {
 	}
 
 	private func execute(_ subTask: S3MultiPartCopySubTask) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CopyTaskUtility: execute(\(subTask.request.partNumber ?? -1)) called")
 		let pendingPromise = Promise<Void>.pending()
 		operationQueue.addOperation {
 			self.semaphore.wait()
@@ -83,15 +87,15 @@ class S3CopyTaskUtility {
 		return pendingPromise.then { _ -> Promise<AWSS3UploadPartCopyOutput> in
 			return self.service.uploadPartCopy(subTask.request)
 		}.then { output -> Void in
+			CloudAccessDDLogDebug("S3CopyTaskUtility: execute(\(subTask.request.partNumber ?? -1)) received output: \(output)")
 			subTask.eTag = output.replicatePartResult?.eTag
-			print("completed partNumber: \(String(describing: subTask.request.partNumber))")
 		}.always {
 			self.semaphore.signal()
 		}
 	}
 
 	private func completeTask(_ task: S3MultiPartCopyTask) -> Promise<Void> {
-		print("start completing task…")
+		CloudAccessDDLogDebug("S3CopyTaskUtility: completeTask(\(task.uploadID)) called")
 		let completedParts: [AWSS3CompletedPart] = task.subTasks.compactMap {
 			let completedPart = AWSS3CompletedPart()
 			completedPart?.partNumber = $0.request.partNumber
@@ -106,18 +110,20 @@ class S3CopyTaskUtility {
 		completeRequest.key = task.key
 		completeRequest.uploadId = task.uploadID
 		completeRequest.multipartUpload = multipartUpload
-		return service.completeMultipartUpload(completeRequest).then { _ in
-			// no-op
+		return service.completeMultipartUpload(completeRequest).then { output in
+			CloudAccessDDLogDebug("S3CopyTaskUtility: completeTask(\(task.uploadID)) received output: \(output)")
 		}
 	}
 
-	private func abortTask(_ task: S3MultiPartCopyTask) -> Promise<AWSS3AbortMultipartUploadOutput> {
-		print("aborting task…")
+	private func abortTask(_ task: S3MultiPartCopyTask) -> Promise<Void> {
+		CloudAccessDDLogDebug("S3CopyTaskUtility: abortTask(\(task.uploadID)) called")
 		let abortRequest = AWSS3AbortMultipartUploadRequest()!
 		abortRequest.bucket = task.bucket
 		abortRequest.uploadId = task.uploadID
 		abortRequest.key = task.key
-		return service.abortMultipartUpload(abortRequest)
+		return service.abortMultipartUpload(abortRequest).then { output in
+			CloudAccessDDLogDebug("S3CopyTaskUtility: abortTask(\(task.uploadID)) received output: \(output)")
+		}
 	}
 
 	private func constructParts(for multipartUpload: AWSS3CreateMultipartUploadOutput, itemSize: Int, sourceKey: String) -> [AWSS3UploadPartCopyRequest] {

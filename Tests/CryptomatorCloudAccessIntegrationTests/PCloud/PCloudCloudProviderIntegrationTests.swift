@@ -11,6 +11,7 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
+import PCloudSDKSwift
 import Promises
 import XCTest
 
@@ -24,20 +25,23 @@ class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
 		let credential = PCloudCredentialMock()
+		let client = PCloud.createClient(with: credential.user)
 		// swiftlint:disable:next force_try
-		setUpProvider = try! PCloudCloudProvider(credential: credential)
+		setUpProvider = try! PCloudCloudProvider(client: client)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		provider = try PCloudCloudProvider(credential: credential)
+		let client = PCloud.createClient(with: credential.user)
+		provider = try PCloudCloudProvider(client: client)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
 		let invalidCredential = PCloudInvalidCredentialMock()
+		let client = PCloud.createClient(with: invalidCredential.user)
 		// swiftlint:disable:next force_try
-		provider = try! PCloudCloudProvider(credential: invalidCredential)
+		provider = try! PCloudCloudProvider(client: client)
 		return Promise(())
 	}
 

@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.5.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.7.0"))
 ```
 
 ## Usage
@@ -33,8 +33,8 @@ The core package contains several protocols, structs, and enums that build the f
 ```swift
 func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata>
 func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList>
-func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void>
-func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata>
+func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void>
+func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata>
 func createFolder(at cloudPath: CloudPath) -> Promise<Void>
 func deleteFile(at cloudPath: CloudPath) -> Promise<Void>
 func deleteFolder(at cloudPath: CloudPath) -> Promise<Void>
@@ -197,10 +197,21 @@ PCloudAuthenticator.authenticate(from: viewController).then { credential in
 }
 ```
 
-You can then use the credential to create a pCloud provider:
+You can then use the credential to create a pCloud provider.
+
+Create a pCloud provider with a pCloud client:
 
 ```swift
-let provider = PCloudCloudProvider(credential: credential)
+let client = PCloud.createClient(with: credential.user)
+let provider = PCloudCloudProvider(client: client)
+```
+
+Create a pCloud provider with a pCloud client using a background URLSession:
+
+```swift
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `PCloudCloudProvider` in an app extension 
+let client = PCloud.createBackgroundClient(with: credential.user, sharedContainerIdentifier: sharedContainerIdentifier)
+let provider = PCloudCloudProvider(client: client)
 ```
 
 ### S3
@@ -298,7 +309,7 @@ validator.validate().then { certificate in
 
 ### Local File System
 
-Since the local file system is not actually a cloud, the naming might be confusing. Even though this library is dedicated to provide access to many cloud storage services, access to the local file system still might be useful.
+Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
 
 Create a local file system provider with a root URL:
 

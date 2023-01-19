@@ -107,7 +107,7 @@ public class WebDAVProvider: CloudProvider {
 		return CloudItemList(items: response.elements, nextPageToken: response.nextPageToken)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL) -> Promise<Void> {
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		precondition(localURL.isFileURL)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
@@ -120,7 +120,7 @@ public class WebDAVProvider: CloudProvider {
 				throw CloudProviderError.itemTypeMismatch
 			}
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			let getPromise = self.client.GET(from: url, to: localURL)
+			let getPromise = self.client.GET(from: url, to: localURL, onTaskCreation: onTaskCreation)
 			progress.resignCurrent()
 			return getPromise
 		}.then { _ -> Void in
@@ -142,7 +142,7 @@ public class WebDAVProvider: CloudProvider {
 	}
 
 	// swiftlint:disable:next cyclomatic_complexity
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
@@ -163,7 +163,7 @@ public class WebDAVProvider: CloudProvider {
 			}
 		}.then { _ -> Promise<(HTTPURLResponse, Data?)> in
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			let putPromise = self.client.PUT(url: url, fileURL: localURL)
+			let putPromise = self.client.PUT(url: url, fileURL: localURL, onTaskCreation: onTaskCreation)
 			progress.resignCurrent()
 			return putPromise
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in

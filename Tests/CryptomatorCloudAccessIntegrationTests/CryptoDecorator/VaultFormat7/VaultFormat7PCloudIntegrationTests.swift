@@ -6,6 +6,7 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
+import PCloudSDKSwift
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -20,8 +21,10 @@ class VaultFormat7PCloudIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	private static let credential = PCloudCredentialMock()
+	private static let client = PCloud.createClient(with: credential.user)
+
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! PCloudCloudProvider(credential: credential)
+	private static let cloudProvider = try! PCloudCloudProvider(client: client)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {

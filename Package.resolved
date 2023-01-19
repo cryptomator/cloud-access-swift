@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/aws-amplify/aws-sdk-ios-spm.git",
         "state": {
           "branch": null,
-          "revision": "eae68dde708c17a3ed249f1926e96d5bda20d2d2",
-          "version": "2.28.5"
+          "revision": "3cbd105859036b1e0b354d902e32e62fc93cf8a2",
+          "version": "2.28.6"
         }
       },
       {
@@ -93,11 +93,11 @@
       },
       {
         "package": "JOSESwift",
-        "repositoryURL": "https://github.com/airsidemobile/JOSESwift.git",
+        "repositoryURL": "https://github.com/tobihagemann/JOSESwift.git",
         "state": {
-          "branch": null,
-          "revision": "10ed3b6736def7c26eb87135466b1cb46ea7e37f",
-          "version": "2.4.0"
+          "branch": "feature/JWE-ECDH-GCM",
+          "revision": "e851667a4e6f6e8411d21474e77442041025e93c",
+          "version": null
         }
       },
       {
@@ -150,8 +150,8 @@
         "repositoryURL": "https://github.com/apple/swift-log.git",
         "state": {
           "branch": null,
-          "revision": "6fe203dc33195667ce1759bf0182975e4653ba1c",
-          "version": "1.4.4"
+          "revision": "3e3ef75109d6801b2c44504e73f55f0dce6662c9",
+          "version": "1.5.1"
         }
       }
     ]

@@ -42,7 +42,7 @@ public struct HubConfig: Equatable, Codable {
 		self.authSuccessUrl = authSuccessUrl
 		self.authErrorUrl = authErrorUrl
 	}
-	
+
 	public let clientId: String
 	public let authEndpoint: String
 	public let tokenEndpoint: String

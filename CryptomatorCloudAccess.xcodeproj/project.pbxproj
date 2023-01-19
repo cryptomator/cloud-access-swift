@@ -141,6 +141,7 @@
 		748420CE24B8A2A600D84E58 /* missing-href.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C724B8A2A600D84E58 /* missing-href.xml */; };
 		748420CF24B8A2A600D84E58 /* file-and-folder.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C824B8A2A600D84E58 /* file-and-folder.xml */; };
 		748420D124B8A2A600D84E58 /* 403-status.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420CA24B8A2A600D84E58 /* 403-status.xml */; };
+		7484608729795421009933D8 /* VaultConfigHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7484608629795421009933D8 /* VaultConfigHelper.swift */; };
 		748A42B624AA231000DEB6D0 /* WebDAVProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B524AA231000DEB6D0 /* WebDAVProvider.swift */; };
 		748A42B824AA231D00DEB6D0 /* WebDAVAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B724AA231D00DEB6D0 /* WebDAVAuthenticator.swift */; };
 		748A42BA24AA34F300DEB6D0 /* WebDAVCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748A42B924AA34F300DEB6D0 /* WebDAVCredential.swift */; };
@@ -327,6 +328,7 @@
 		748420C724B8A2A600D84E58 /* missing-href.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "missing-href.xml"; sourceTree = "<group>"; };
 		748420C824B8A2A600D84E58 /* file-and-folder.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "file-and-folder.xml"; sourceTree = "<group>"; };
 		748420CA24B8A2A600D84E58 /* 403-status.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "403-status.xml"; sourceTree = "<group>"; };
+		7484608629795421009933D8 /* VaultConfigHelper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VaultConfigHelper.swift; sourceTree = "<group>"; };
 		748A42B524AA231000DEB6D0 /* WebDAVProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVProvider.swift; sourceTree = "<group>"; };
 		748A42B724AA231D00DEB6D0 /* WebDAVAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVAuthenticator.swift; sourceTree = "<group>"; };
 		748A42B924AA34F300DEB6D0 /* WebDAVCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVCredential.swift; sourceTree = "<group>"; };
@@ -750,6 +752,7 @@
 			children = (
 				9ECEC0AE246ED1FB00151299 /* DirectoryIdCache.swift */,
 				74F4AA1425ED3D2A00FDF2C6 /* VaultConfig.swift */,
+				7484608629795421009933D8 /* VaultConfigHelper.swift */,
 				74CF2E6B254B6683006266D6 /* VaultFormatError.swift */,
 				4A0421812642B9260033144A /* VaultProviderFactory.swift */,
 				7416F22524F6584A0074DA8E /* VaultFormat6 */,
@@ -1224,6 +1227,7 @@
 				4A567B712615D946002C4D82 /* DropboxSetup.swift in Sources */,
 				9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */,
 				7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */,
+				7484608729795421009933D8 /* VaultConfigHelper.swift in Sources */,
 				74073D1927C9406000A86C9A /* Task+Promises.swift in Sources */,
 				4A1A1194262EC46E00DAF62F /* OneDriveIdentifierCache.swift in Sources */,
 				746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */,
@@ -1746,10 +1750,10 @@
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/airsidemobile/JOSESwift.git";
+			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 2.4.0;
+				branch = "feature/JWE-ECDH-GCM";
+				kind = branch;
 			};
 		};
 		746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {

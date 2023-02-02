@@ -394,7 +394,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let query = GTLRDriveQuery_FilesList.query()
 		query.supportsAllDrives = true
 		query.includeItemsFromAllDrives = true
-		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(name)' and trashed = false"
+		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(escapedQueryValue(name))' and trashed = false"
 		query.fields = "files(id,name,mimeType,shortcutDetails)"
 		return executeQuery(query).then { result -> GoogleDriveItem in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
@@ -602,5 +602,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let lhsWithoutItemName = lhs.deletingLastPathComponent()
 		let rhsWithoutItemName = rhs.deletingLastPathComponent()
 		return lhsWithoutItemName == rhsWithoutItemName
+	}
+
+	func escapedQueryValue(_ value: String) -> String {
+		return value.replacingOccurrences(of: "'", with: "\\'")
 	}
 }

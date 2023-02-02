@@ -226,7 +226,9 @@ class WebDAVSession {
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
-		task.resume()
+		if onTaskCreation == nil {
+			task.resume()
+		}
 		return pendingPromise.then { response -> Promise<HTTPURLResponse> in
 			HTTPDebugLogger.logResponse(response, with: nil, or: localURL)
 			return Promise(response)
@@ -242,7 +244,9 @@ class WebDAVSession {
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		task.resume()
+		if onTaskCreation == nil {
+			task.resume()
+		}
 		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
 			HTTPDebugLogger.logResponse(response, with: data, or: nil)
 			return Promise((response, data))

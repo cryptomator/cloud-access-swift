@@ -48,7 +48,7 @@ extension PCloud {
 	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {
 		let authenticator = OAuthAccessTokenBasedAuthenticator(accessToken: accessToken)
 		let eventHub = URLSessionEventHub()
-		var configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
+		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		let session = URLSession(configuration: configuration, delegate: eventHub, delegateQueue: nil)
 		let foregroundSession = URLSession(configuration: .default, delegate: eventHub, delegateQueue: nil)

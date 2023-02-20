@@ -63,7 +63,12 @@ public class WebDAVProvider: CloudProvider {
 			}
 			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
 		}.recover { error -> Promise<CloudItemMetadata> in
-			return self.convertStandardError(error)
+			if case URLSessionError.httpError(_, statusCode: 405) = error {
+				// Workaround for: https://github.com/nextcloud/server/issues/34574
+				return Promise(CloudProviderError.itemNotFound)
+			} else {
+				return self.convertStandardError(error)
+			}
 		}
 	}
 
@@ -77,7 +82,12 @@ public class WebDAVProvider: CloudProvider {
 		return initialPromise.then { _ -> CloudItemList in
 			try self.getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
 		}.recover { error -> Promise<CloudItemList> in
-			return self.convertStandardError(error)
+			if case URLSessionError.httpError(_, statusCode: 405) = error {
+				// Workaround for: https://github.com/nextcloud/server/issues/34574
+				return Promise(CloudProviderError.itemNotFound)
+			} else {
+				return self.convertStandardError(error)
+			}
 		}
 	}
 
@@ -141,7 +151,6 @@ public class WebDAVProvider: CloudProvider {
 		}
 	}
 
-	// swiftlint:disable:next cyclomatic_complexity
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
@@ -170,8 +179,6 @@ public class WebDAVProvider: CloudProvider {
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401):
 				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 405):
-				return Promise(CloudProviderError.itemTypeMismatch)
 			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
 			case URLSessionError.httpError(_, statusCode: 507):

@@ -53,7 +53,7 @@ public class LocalFileSystemProvider: CloudProvider {
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
-		self.cache = try DirectoryContentDBCache(dbWriter: try DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
+		self.cache = try DirectoryContentDBCache(dbWriter: DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
 	}
 
 	deinit {
@@ -157,6 +157,9 @@ public class LocalFileSystemProvider: CloudProvider {
 					let childItemMetadata = try awaitPromise(self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath))
 					cachedItemsCount += 1
 					try self.cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
+				} catch CloudProviderError.itemNotFound {
+					// Ignore item that can't be found anyway, this should not prevent fetching item list
+					return
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed with error: \(error)")
 					promise.reject(error)

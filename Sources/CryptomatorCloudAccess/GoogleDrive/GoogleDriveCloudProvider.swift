@@ -58,7 +58,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 			}
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(try credential.getAccountID())-\(bundleId)")
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\try (credential.getAccountID())-\(bundleId)")
 			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 		} else {
 			configuration = URLSessionConfiguration.default
@@ -107,7 +107,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let progress = Progress(totalUnitCount: 1)
 		return resolvePath(forItemAt: cloudPath).then { item -> Promise<Void> in
 			progress.becomeCurrent(withPendingUnitCount: 1)
-			let downloadPromise = self.downloadFile(for: item, to: localURL, onTaskCreation: onTaskCreation)
+			let downloadPromise = self.downloadFile(for: item, to: localURL)
 			progress.resignCurrent()
 			return downloadPromise
 		}
@@ -233,7 +233,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	private func downloadFile(for item: GoogleDriveItem, to localURL: URL) -> Promise<Void> {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
 		guard item.itemType == .file || (item.itemType == .symlink && item.shortcut?.targetItemType == .file) else {
 			return Promise(CloudProviderError.itemTypeMismatch)
@@ -247,13 +247,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			progress.totalUnitCount = totalBytesExpectedToWrite // Unnecessary to set several times
 			progress.completedUnitCount = totalBytesWritten
 		}
-		return executeFetcher(fetcher) { sessionTask in
-			guard let downloadTask = sessionTask as? URLSessionDownloadTask else {
-				CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeFetcher returned an unexpected URLSessionTask")
-				return
-			}
-			onTaskCreation?(downloadTask)
-		}
+		return executeFetcher(fetcher)
 	}
 
 	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
@@ -373,7 +367,6 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				let name = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(name)
 				parentItem = try awaitPromise(self.getGoogleDriveItem(name: name, parentItem: parentItem))
-				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)
 		}
@@ -394,14 +387,17 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let query = GTLRDriveQuery_FilesList.query()
 		query.supportsAllDrives = true
 		query.includeItemsFromAllDrives = true
-		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(name)' and trashed = false"
+		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(escapedQueryValue(name))' and trashed = false"
 		query.fields = "files(id,name,mimeType,shortcutDetails)"
 		return executeQuery(query).then { result -> GoogleDriveItem in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
-					return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
+					let item = try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
+					try self.identifierCache.addOrUpdate(item)
+					return item
 				}
+				try self.identifierCache.invalidate(parentItem)
 				throw CloudProviderError.itemNotFound
 			} else {
 				throw GoogleDriveError.unexpectedResultType
@@ -558,8 +554,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func executeFetcher(_ fetcher: GTMSessionFetcher, onTaskCreation: @escaping (URLSessionTask?) -> Void) -> Promise<Void> {
-		var kvoToken: NSKeyValueObservation?
+	private func executeFetcher(_ fetcher: GTMSessionFetcher) -> Promise<Void> {
 		return Promise<Void> { fulfill, reject in
 			self.runningFetchers.append(fetcher)
 			fetcher.beginFetch { _, error in
@@ -577,14 +572,6 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				}
 				fulfill(())
 			}
-			kvoToken = fetcher.observe(\.sessionTask, options: [.new], changeHandler: { _, change in
-				guard let newValue = change.newValue, let sessionTask = newValue else {
-					return
-				}
-				onTaskCreation(sessionTask)
-			})
-		}.always {
-			kvoToken?.invalidate()
 		}
 	}
 
@@ -602,5 +589,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let lhsWithoutItemName = lhs.deletingLastPathComponent()
 		let rhsWithoutItemName = rhs.deletingLastPathComponent()
 		return lhsWithoutItemName == rhsWithoutItemName
+	}
+
+	func escapedQueryValue(_ value: String) -> String {
+		return value.replacingOccurrences(of: "'", with: "\\'")
 	}
 }

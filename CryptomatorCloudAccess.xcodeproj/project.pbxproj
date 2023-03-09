@@ -151,6 +151,7 @@
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
 		74B321E42923F979008E7C01 /* HTTPDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */; };
+		74C0FB2729B209B6008EF811 /* S3Authenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C0FB2629B209B6008EF811 /* S3Authenticator.swift */; };
 		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
 		74CF2E6C254B6683006266D6 /* VaultFormatError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CF2E6B254B6683006266D6 /* VaultFormatError.swift */; };
 		74D4AFB827B2B9E300F8EF2D /* item-metadata-missing-resourcetype.xml in Resources */ = {isa = PBXBuildFile; fileRef = 74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */; };
@@ -338,6 +339,7 @@
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDebugLogger.swift; sourceTree = "<group>"; };
+		74C0FB2629B209B6008EF811 /* S3Authenticator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = S3Authenticator.swift; sourceTree = "<group>"; };
 		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
 		74CF2E6B254B6683006266D6 /* VaultFormatError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormatError.swift; sourceTree = "<group>"; };
 		74D4AFB727B2B96000F8EF2D /* item-metadata-missing-resourcetype.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "item-metadata-missing-resourcetype.xml"; sourceTree = "<group>"; };
@@ -704,6 +706,7 @@
 				4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */,
 				4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */,
 				4AC75F8F28607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift */,
+				74C0FB2629B209B6008EF811 /* S3Authenticator.swift */,
 				4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */,
 				4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */,
 				4A07852F2859F4FE0015DAE1 /* S3Credential.swift */,
@@ -1208,6 +1211,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */,
+				74C0FB2729B209B6008EF811 /* S3Authenticator.swift in Sources */,
 				747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */,
 				4A1A1183262B078E00DAF62F /* OneDriveError.swift in Sources */,
 				740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */,

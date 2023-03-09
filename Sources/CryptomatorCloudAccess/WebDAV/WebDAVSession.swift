@@ -76,6 +76,7 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		switch (task, task.response, error) {
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, nil):
 			let runningDataTask = removeRunningDataTask(forKey: dataTask)
+			HTTPDebugLogger.logResponse(httpResponse, with: runningDataTask?.accumulatedData, or: nil)
 			guard (200 ... 299).contains(httpResponse.statusCode) else {
 				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: httpResponse.statusCode))
 				return
@@ -83,16 +84,18 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 			runningDataTask?.fulfillPromise(with: httpResponse)
 		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, .some(error)):
 			let runningDataTask = removeRunningDataTask(forKey: dataTask)
+			HTTPDebugLogger.logResponse(httpResponse, with: runningDataTask?.accumulatedData, or: nil)
 			runningDataTask?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 		case let (dataTask as URLSessionDataTask, _, .some(error)):
 			let runningDataTask = removeRunningDataTask(forKey: dataTask)
 			runningDataTask?.promise.reject(error)
 		case let (downloadTask as URLSessionDownloadTask, httpResponse as HTTPURLResponse, .some(error)):
-			let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
-			runningDownloadTaskPromise?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
+			let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask)
+			HTTPDebugLogger.logResponse(httpResponse, with: nil, or: runningDownloadTask?.localURL)
+			runningDownloadTask?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
 		case let (downloadTask as URLSessionDownloadTask, _, .some(error)):
-			let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
-			runningDownloadTaskPromise?.promise.reject(error)
+			let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask)
+			runningDownloadTask?.promise.reject(error)
 		default:
 			return
 		}
@@ -114,6 +117,7 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 			return
 		}
 		if let response = downloadTask.response as? HTTPURLResponse {
+			HTTPDebugLogger.logResponse(response, with: nil, or: runningDownloadTask.localURL)
 			guard (200 ... 299).contains(response.statusCode) else {
 				runningDownloadTask.promise.reject(URLSessionError.httpError(nil, statusCode: response.statusCode))
 				return
@@ -211,10 +215,7 @@ class WebDAVSession {
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
 		task.resume()
-		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
-			HTTPDebugLogger.logResponse(response, with: data, or: nil)
-			return Promise((response, data))
-		}
+		return pendingPromise
 	}
 
 	func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
@@ -226,11 +227,10 @@ class WebDAVSession {
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
-		task.resume()
-		return pendingPromise.then { response -> Promise<HTTPURLResponse> in
-			HTTPDebugLogger.logResponse(response, with: nil, or: localURL)
-			return Promise(response)
+		if onTaskCreation == nil {
+			task.resume()
 		}
+		return pendingPromise
 	}
 
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
@@ -242,10 +242,9 @@ class WebDAVSession {
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		task.resume()
-		return pendingPromise.then { response, data -> Promise<(HTTPURLResponse, Data?)> in
-			HTTPDebugLogger.logResponse(response, with: data, or: nil)
-			return Promise((response, data))
+		if onTaskCreation == nil {
+			task.resume()
 		}
+		return pendingPromise
 	}
 }

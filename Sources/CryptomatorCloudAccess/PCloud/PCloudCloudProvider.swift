@@ -427,7 +427,6 @@ public class PCloudCloudProvider: CloudProvider {
 				let itemName = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(itemName)
 				parentItem = try awaitPromise(self.getPCloudItem(for: itemName, withParentItem: parentItem))
-				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)
 		}
@@ -440,13 +439,16 @@ public class PCloudCloudProvider: CloudProvider {
 			guard let content = metadata.contents.first(where: { $0.fileMetadata?.name == name || $0.folderMetadata?.name == name }) else {
 				throw CloudProviderError.itemNotFound
 			}
-			return try PCloudItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), content: content)
+			let item = try PCloudItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), content: content)
+			try self.identifierCache.addOrUpdate(item)
+			return item
 		}.recover { error -> PCloudItem in
 			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error)")
 			guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
 				throw error
 			}
 			if case CallError.methodError(.folderDoesNotExist) = error {
+				try self.identifierCache.invalidate(parentItem)
 				throw CloudProviderError.itemNotFound
 			} else {
 				throw error

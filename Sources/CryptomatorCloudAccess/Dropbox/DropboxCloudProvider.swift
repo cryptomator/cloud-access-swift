@@ -202,7 +202,7 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received result: \(DBFILESMetadata.serialize(result) ?? [:])")
 				do {
-					fulfill(try self.convertDBFILESMetadataToCloudItemMetadata(result, at: cloudPath))
+					try fulfill(self.convertDBFILESMetadataToCloudItemMetadata(result, at: cloudPath))
 				} catch {
 					reject(error)
 				}
@@ -251,7 +251,7 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
 				do {
-					fulfill(try self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
+					try fulfill(self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
 				} catch {
 					reject(error)
 				}
@@ -295,7 +295,7 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
 				do {
-					fulfill(try self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
+					try fulfill(self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
 				} catch {
 					reject(error)
 				}

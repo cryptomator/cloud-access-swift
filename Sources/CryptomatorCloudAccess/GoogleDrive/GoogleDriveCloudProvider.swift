@@ -58,7 +58,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 			}
 			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\(try credential.getAccountID())-\(bundleId)")
+			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\try (credential.getAccountID())-\(bundleId)")
 			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 		} else {
 			configuration = URLSessionConfiguration.default

@@ -29,7 +29,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/tobihagemann/JOSESwift.git", .branch("feature/JWE-ECDH-GCM")),
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .exact("1.2.5")),
-		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.28.0")),
+		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.30.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.8.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "3.0.0")),

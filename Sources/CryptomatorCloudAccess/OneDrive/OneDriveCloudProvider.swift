@@ -545,6 +545,7 @@ public class OneDriveCloudProvider: CloudProvider {
 				let itemName = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(itemName)
 				parentItem = try awaitPromise(self.getOneDriveItem(for: itemName, withParentItem: parentItem))
+				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)
 		}
@@ -557,14 +558,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		let request = NSMutableURLRequest(url: url)
 		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> OneDriveItem in
 			let driveItem = try MSGraphDriveItem(data: data)
-			let item = OneDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
-			try self.identifierCache.addOrUpdate(item)
-			return item
-		}.recover { error -> OneDriveItem in
-			if case CloudProviderError.itemNotFound = error {
-				try self.identifierCache.invalidate(parentItem)
-			}
-			throw error
+			return OneDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
 		}
 	}
 

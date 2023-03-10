@@ -143,32 +143,33 @@ public class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func fillCacheAfterCheck(for cloudPath: CloudPath, url: URL, directoryEnumerator: FileManager.DirectoryEnumerator, promise: Promise<Void>) {
-		var cachedItemsCount: Int64 = 0
-		for case let childURL as URL in directoryEnumerator {
-			autoreleasepool {
-				guard !childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL) else {
-					return
-				}
-				let iCloudCompatibleChildURL = url.appendingPathComponent(self.getItemName(forItemAt: childURL))
-				guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
-					return
-				}
-				do {
-					let childItemMetadata = try awaitPromise(self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath))
-					cachedItemsCount += 1
-					try self.cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
-				} catch CloudProviderError.itemNotFound {
-					// Ignore item that can't be found anyway, this should not prevent fetching item list
-					return
-				} catch {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed with error: \(error)")
-					promise.reject(error)
-					return
+		do {
+			var cachedItemsCount: Int64 = 0
+			for case let childURL as URL in directoryEnumerator {
+				try autoreleasepool {
+					guard !childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL) else {
+						return
+					}
+					let iCloudCompatibleChildURL = url.appendingPathComponent(self.getItemName(forItemAt: childURL))
+					guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
+						return
+					}
+					do {
+						let childItemMetadata = try awaitPromise(self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath))
+						cachedItemsCount += 1
+						try self.cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
+					} catch CloudProviderError.itemNotFound {
+						// Ignore item that can't be found anyway, this should not prevent fetching item list
+						return
+					}
 				}
 			}
+			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) finished")
+			promise.fulfill(())
+		} catch {
+			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed with error: \(error)")
+			promise.reject(error)
 		}
-		CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) finished")
-		promise.fulfill(())
 	}
 
 	private func getCachedElements(for cloudPath: CloudPath, pageToken: String?) -> Promise<CloudItemList> {

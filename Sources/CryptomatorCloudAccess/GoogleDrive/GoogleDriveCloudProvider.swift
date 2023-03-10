@@ -367,6 +367,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				let name = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(name)
 				parentItem = try awaitPromise(self.getGoogleDriveItem(name: name, parentItem: parentItem))
+				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)
 		}
@@ -393,11 +394,8 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
-					let item = try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
-					try self.identifierCache.addOrUpdate(item)
-					return item
+					return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
 				}
-				try self.identifierCache.invalidate(parentItem)
 				throw CloudProviderError.itemNotFound
 			} else {
 				throw GoogleDriveError.unexpectedResultType

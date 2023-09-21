@@ -58,8 +58,8 @@ public class UnverifiedVaultConfig {
 
 	let allegedFormat: Int
 	let allegedCipherCombo: String
-	public var hub: HubConfig? {
-		return jws.header.hubTyped
+	public var allegedHubConfig: HubConfig? {
+		return jws.header.hubConfig
 	}
 
 	private let token: Data
@@ -162,8 +162,8 @@ public class VaultConfig {
 }
 
 extension JWSHeader {
-	var hubTyped: HubConfig? {
-		guard let hub = hub else {
+	var hubConfig: HubConfig? {
+		guard let hub = parameters["hub"] as? [String: String] else {
 			return nil
 		}
 		guard let json = try? JSONEncoder().encode(hub) else {

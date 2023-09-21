@@ -95,8 +95,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tobihagemann/JOSESwift.git",
       "state" : {
-        "branch" : "feature/JWE-ECDH-GCM",
-        "revision" : "e851667a4e6f6e8411d21474e77442041025e93c"
+        "branch" : "feature/cryptomator",
+        "revision" : "11442e7f1f803ef42281909c68f386b38afc5096"
       }
     },
     {

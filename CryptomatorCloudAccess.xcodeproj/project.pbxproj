@@ -1756,7 +1756,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
 			requirement = {
-				branch = "feature/JWE-ECDH-GCM";
+				branch = feature/cryptomator;
 				kind = branch;
 			};
 		};

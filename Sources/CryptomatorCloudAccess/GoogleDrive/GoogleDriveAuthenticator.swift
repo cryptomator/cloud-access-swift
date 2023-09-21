@@ -29,7 +29,7 @@ public enum GoogleDriveAuthenticator {
 		return createAuthorizationServiceForGoogle().then { configuration in
 			self.getAuthState(for: configuration, with: viewController, credential: credential)
 		}.then { authState in
-			credential.save(authState: authState)
+			try credential.save(authState: authState)
 			return Promise(())
 		}
 	}

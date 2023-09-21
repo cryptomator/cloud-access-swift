@@ -29,7 +29,8 @@ class GoogleDriveAuthenticatorMock {
 		let tokenResponse = OIDTokenResponse(request: tokenRequest, parameters: tokenParameters)
 		let authState = OIDAuthState(authorizationResponse: authResponse, tokenResponse: tokenResponse)
 		let credential = GoogleDriveCredential(userID: tokenUID)
-		credential.save(authState: authState)
+		// swiftlint:disable:next force_try
+		try! credential.save(authState: authState)
 		return credential
 	}
 }

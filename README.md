@@ -11,7 +11,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 
 ## Requirements
 
-- iOS 13.0 or higher
+- iOS 14.0 or higher
 - Swift 5
 
 ## Installation

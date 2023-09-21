@@ -95,8 +95,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tobihagemann/JOSESwift.git",
       "state" : {
-        "branch" : "feature/cryptomator",
-        "revision" : "11442e7f1f803ef42281909c68f386b38afc5096"
+        "revision" : "11442e7f1f803ef42281909c68f386b38afc5096",
+        "version" : "2.4.0-cryptomator"
       }
     },
     {

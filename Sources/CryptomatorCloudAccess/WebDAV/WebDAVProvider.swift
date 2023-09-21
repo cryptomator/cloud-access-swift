@@ -153,11 +153,16 @@ public class WebDAVProvider: CloudProvider {
 
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		precondition(localURL.isFileURL)
+		var isDirectory: ObjCBool = false
+		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
+		if !fileExists {
+			return Promise(CloudProviderError.itemNotFound)
+		}
+		if isDirectory.boolValue {
+			return Promise(CloudProviderError.itemTypeMismatch)
+		}
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			return Promise(WebDAVProviderError.resolvingURLFailed)
-		}
-		guard FileManager.default.fileExists(atPath: localURL.path) else {
-			return Promise(CloudProviderError.itemNotFound)
 		}
 		let progress = Progress(totalUnitCount: 1)
 		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
@@ -185,8 +190,6 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.quotaInsufficient)
 			case URLError.notConnectedToInternet:
 				return Promise(CloudProviderError.noInternetConnection)
-			case POSIXError.EISDIR:
-				return Promise(CloudProviderError.itemTypeMismatch)
 			default:
 				return Promise(error)
 			}

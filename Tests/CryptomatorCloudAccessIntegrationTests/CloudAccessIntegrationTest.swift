@@ -79,6 +79,15 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	/**
+	 Creates a CloudProvider with a `maxPageSize` of `maxPageSizeForLimitedCloudProvider` to test pagination.
+
+	 This method must be overridden by each subclass.
+	 */
+	func createLimitedCloudProvider() throws -> CloudProvider {
+		fatalError("Provided only abstract implementation of createLimitedCloudProvider()")
+	}
+
+	/**
 	 Initial setup for the integration tests.
 
 	 Creates the following integration test structure at the cloud provider:
@@ -426,6 +435,30 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
+	func testFetchItemListPagination() throws {
+		let expectation = XCTestExpectation()
+		let provider = try createLimitedCloudProvider()
+		let cloudPath = type(of: self).integrationTestRootCloudPath
+		var retrievedItems = [CloudItemMetadata]()
+		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { itemList -> Promise<CloudItemList> in
+			XCTAssertNotNil(itemList.nextPageToken)
+			XCTAssertEqual(3, itemList.items.count)
+			retrievedItems.append(contentsOf: itemList.items)
+			return provider.fetchItemList(forFolderAt: cloudPath, withPageToken: itemList.nextPageToken)
+		}.then { itemList in
+			XCTAssertNil(itemList.nextPageToken)
+			XCTAssertEqual(3, itemList.items.count)
+			retrievedItems.append(contentsOf: itemList.items)
+		}.catch { error in
+			XCTFail(error.localizedDescription)
+		}.always {
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 60.0)
+		let sortedRetrievedItems = retrievedItems.sorted()
+		XCTAssertEqual(expectedRootFolderItems, sortedRetrievedItems)
+	}
+
 	// MARK: - downloadFile Tests
 
 	func testDownloadFileFromRootFolder() throws {
@@ -714,7 +747,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "deleteFile can delete existing file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/FileToDelete")
 		provider.deleteFile(at: cloudPath).then {
-			self.provider.checkForItemExistence(at: cloudPath)
+			self.provider.repeatedlyCheckForItemExistence(at: cloudPath, expectToExist: false)
 		}.then { fileExists in
 			guard !fileExists else {
 				XCTFail("File still exists in the cloud")
@@ -750,7 +783,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "deleteFolder can delete existing folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/FolderToDelete")
 		provider.deleteFolder(at: cloudPath).then {
-			self.provider.checkForItemExistence(at: cloudPath)
+			self.provider.repeatedlyCheckForItemExistence(at: cloudPath, expectToExist: false)
 		}.then { folderExists in
 			guard !folderExists else {
 				XCTFail("Folder still exists in the cloud")
@@ -786,9 +819,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFile can rename file")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileToRename")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/RenamedFile")
-		let cloudPaths = [sourceCloudPath, targetCloudPath]
 		provider.moveFile(from: sourceCloudPath, to: targetCloudPath).then {
-			all(cloudPaths.map { self.provider.checkForItemExistence(at: $0) })
+			all(
+				self.provider.repeatedlyCheckForItemExistence(at: sourceCloudPath, expectToExist: false),
+				self.provider.repeatedlyCheckForItemExistence(at: targetCloudPath, expectToExist: true)
+			)
 		}.then { itemsExist in
 			let sourceItemExists = itemsExist[0]
 			let targetItemExists = itemsExist[1]
@@ -808,9 +843,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFile can move file to different parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileToMove")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/renamedAndMovedFile")
-		let cloudPaths = [sourceCloudPath, targetCloudPath]
 		provider.moveFile(from: sourceCloudPath, to: targetCloudPath).then {
-			all(cloudPaths.map { self.provider.checkForItemExistence(at: $0) })
+			all(
+				self.provider.repeatedlyCheckForItemExistence(at: sourceCloudPath, expectToExist: false),
+				self.provider.repeatedlyCheckForItemExistence(at: targetCloudPath, expectToExist: true)
+			)
 		}.then { itemsExist in
 			let sourceItemExists = itemsExist[0]
 			let targetItemExists = itemsExist[1]
@@ -883,9 +920,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFolder can rename folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderToRename")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/RenamedFolder")
-		let cloudPaths = [sourceCloudPath, targetCloudPath]
 		provider.moveFolder(from: sourceCloudPath, to: targetCloudPath).then {
-			all(cloudPaths.map { self.provider.checkForItemExistence(at: $0) })
+			all(
+				self.provider.repeatedlyCheckForItemExistence(at: sourceCloudPath, expectToExist: false),
+				self.provider.repeatedlyCheckForItemExistence(at: targetCloudPath, expectToExist: true)
+			)
 		}.then { itemsExist in
 			let sourceItemExists = itemsExist[0]
 			let targetItemExists = itemsExist[1]
@@ -905,9 +944,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let expectation = XCTestExpectation(description: "moveFolder can move folder to different parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderToMove")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/renamedAndMovedFolder")
-		let cloudPaths = [sourceCloudPath, targetCloudPath]
 		provider.moveFolder(from: sourceCloudPath, to: targetCloudPath).then {
-			all(cloudPaths.map { self.provider.checkForItemExistence(at: $0) })
+			all(
+				self.provider.repeatedlyCheckForItemExistence(at: sourceCloudPath, expectToExist: false),
+				self.provider.repeatedlyCheckForItemExistence(at: targetCloudPath, expectToExist: true)
+			)
 		}.then { itemsExist in
 			let sourceItemExists = itemsExist[0]
 			let targetItemExists = itemsExist[1]
@@ -974,37 +1015,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 30.0)
 	}
 
-	func testFetchItemListPagination() throws {
-		let expectation = XCTestExpectation()
-		let provider = try createLimitedCloudProvider()
-		let cloudPath = type(of: self).integrationTestRootCloudPath
-		var retrievedItems = [CloudItemMetadata]()
-		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { itemList -> Promise<CloudItemList> in
-			XCTAssertNotNil(itemList.nextPageToken)
-			XCTAssertEqual(3, itemList.items.count)
-			retrievedItems.append(contentsOf: itemList.items)
-			return provider.fetchItemList(forFolderAt: cloudPath, withPageToken: itemList.nextPageToken)
-		}.then { itemList in
-			XCTAssertNil(itemList.nextPageToken)
-			XCTAssertEqual(3, itemList.items.count)
-			retrievedItems.append(contentsOf: itemList.items)
-		}.catch { error in
-			XCTFail(error.localizedDescription)
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 60.0)
-		let sortedRetrievedItems = retrievedItems.sorted()
-		XCTAssertEqual(expectedRootFolderItems, sortedRetrievedItems)
-	}
-
-	/**
-	 Creates a CloudProvider with a `maxPageSize` of `maxPageSizeForLimitedCloudProvider` to test pagination.
-	 This method must be overridden by each subclass.
-	 */
-	func createLimitedCloudProvider() throws -> CloudProvider {
-		fatalError("Provided only abstract implementation of createLimitedCloudProvider()")
-	}
+	// MARK: - Helpers
 
 	private func assertReceivedCorrectMetadataAfterUploading(file localURL: URL, to cloudPath: CloudPath, metadata: CloudItemMetadata) {
 		let localFileSize: Int?
@@ -1030,5 +1041,24 @@ extension CloudItemMetadata: Comparable {
 
 	public static func == (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
 		return lhs.name == rhs.name && lhs.cloudPath == rhs.cloudPath && lhs.itemType == rhs.itemType
+	}
+}
+
+extension CloudProvider {
+	/**
+	 Checks if the item exists at the given cloud path.
+
+	 This method is primarily used as a workaround for providers with eventual consistency. It will repeatedly check if `expectToExist` doesn't match with a delay of 1 second up to a maximum of 3 attempts.
+	 */
+	func repeatedlyCheckForItemExistence(at cloudPath: CloudPath, expectToExist: Bool, attempt: Int = 0) -> Promise<Bool> {
+		return checkForItemExistence(at: cloudPath).then { itemExists in
+			if itemExists == expectToExist || attempt == 3 {
+				return Promise(itemExists)
+			} else {
+				return Promise(()).delay(1.0).then {
+					return repeatedlyCheckForItemExistence(at: cloudPath, expectToExist: expectToExist, attempt: attempt + 1)
+				}
+			}
+		}
 	}
 }

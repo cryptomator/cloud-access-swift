@@ -594,9 +594,6 @@ class WebDAVProviderTests: XCTestCase {
 		provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).then { _ in
 			XCTFail("Uploading file that is actually a folder should fail")
 		}.catch { error in
-			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
-			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
-			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			guard case CloudProviderError.itemTypeMismatch = error else {
 				XCTFail(error.localizedDescription)
 				return

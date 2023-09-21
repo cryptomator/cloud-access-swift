@@ -14,7 +14,7 @@ public var dynamicCloudAccessLogLevel = DDLogLevel.all
 
 @inlinable
 // swiftlint:disable:next identifier_name
-public func CloudAccessDDLogDebug(_ message: @autoclosure () -> Any,
+public func CloudAccessDDLogDebug(_ message: @autoclosure () -> DDLogMessageFormat,
                                   level: DDLogLevel = dynamicCloudAccessLogLevel,
                                   context: Int = 0,
                                   file: StaticString = #file,
@@ -28,7 +28,7 @@ public func CloudAccessDDLogDebug(_ message: @autoclosure () -> Any,
 
 @inlinable
 // swiftlint:disable:next identifier_name
-public func CloudAccessDDLogInfo(_ message: @autoclosure () -> Any,
+public func CloudAccessDDLogInfo(_ message: @autoclosure () -> DDLogMessageFormat,
                                  level: DDLogLevel = dynamicCloudAccessLogLevel,
                                  context: Int = 0,
                                  file: StaticString = #file,
@@ -42,7 +42,7 @@ public func CloudAccessDDLogInfo(_ message: @autoclosure () -> Any,
 
 @inlinable
 // swiftlint:disable:next identifier_name
-public func CloudAccessDDLogWarn(_ message: @autoclosure () -> Any,
+public func CloudAccessDDLogWarn(_ message: @autoclosure () -> DDLogMessageFormat,
                                  level: DDLogLevel = dynamicCloudAccessLogLevel,
                                  context: Int = 0,
                                  file: StaticString = #file,
@@ -56,7 +56,7 @@ public func CloudAccessDDLogWarn(_ message: @autoclosure () -> Any,
 
 @inlinable
 // swiftlint:disable:next identifier_name
-public func CloudAccessDDLogVerbose(_ message: @autoclosure () -> Any,
+public func CloudAccessDDLogVerbose(_ message: @autoclosure () -> DDLogMessageFormat,
                                     level: DDLogLevel = dynamicCloudAccessLogLevel,
                                     context: Int = 0,
                                     file: StaticString = #file,
@@ -70,7 +70,7 @@ public func CloudAccessDDLogVerbose(_ message: @autoclosure () -> Any,
 
 @inlinable
 // swiftlint:disable:next identifier_name
-public func CloudAccessDDLogError(_ message: @autoclosure () -> Any,
+public func CloudAccessDDLogError(_ message: @autoclosure () -> DDLogMessageFormat,
                                   level: DDLogLevel = dynamicCloudAccessLogLevel,
                                   context: Int = 0,
                                   file: StaticString = #file,

@@ -1,5 +1,5 @@
 //
-//  VaultFormat7LocalFileSystemProviderIntegrationTests.swift
+//  VaultFormat7LocalFileSystemIntegrationTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 23.06.20.

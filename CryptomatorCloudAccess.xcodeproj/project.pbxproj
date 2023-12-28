@@ -1759,8 +1759,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
 			requirement = {
-				kind = exactVersion;
-				version = "2.4.0-cryptomator";
+				branch = feature/cryptomator;
+				kind = branch;
 			};
 		};
 		746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {

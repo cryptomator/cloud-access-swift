@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.8.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.9.0"))
 ```
 
 ## Usage

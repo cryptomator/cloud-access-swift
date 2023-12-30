@@ -27,7 +27,7 @@ let package = Package(
 		.library(name: "CryptomatorCloudAccessCore", targets: ["CryptomatorCloudAccessCore"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/tobihagemann/JOSESwift.git", branch: "feature/cryptomator"),
+		.package(url: "https://github.com/tobihagemann/JOSESwift.git", exact: "2.4.1-cryptomator"),
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.2.0")),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.33.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),

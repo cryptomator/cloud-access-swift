@@ -1760,7 +1760,7 @@
 			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
 			requirement = {
 				kind = exactVersion;
-				version = "2.4.0-cryptomator";
+				version = "2.4.1-cryptomator";
 			};
 		};
 		746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {

@@ -15,7 +15,7 @@ import Promises
 #endif
 @testable import CryptomatorCryptoLib
 
-class DecoratorFactory {
+enum DecoratorFactory {
 	// MARK: - Vault Format 7
 
 	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) -> Promise<VaultFormat7ProviderDecorator> {

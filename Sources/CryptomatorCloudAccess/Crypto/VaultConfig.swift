@@ -34,21 +34,23 @@ struct VaultConfigPayload: Equatable, Codable {
 }
 
 public struct HubConfig: Equatable, Codable {
-	public init(clientId: String, authEndpoint: String, tokenEndpoint: String, devicesResourceUrl: String, authSuccessUrl: String, authErrorUrl: String) {
-		self.clientId = clientId
-		self.authEndpoint = authEndpoint
-		self.tokenEndpoint = tokenEndpoint
-		self.devicesResourceUrl = devicesResourceUrl
-		self.authSuccessUrl = authSuccessUrl
-		self.authErrorUrl = authErrorUrl
-	}
-
 	public let clientId: String
 	public let authEndpoint: String
 	public let tokenEndpoint: String
-	public let devicesResourceUrl: String
 	public let authSuccessUrl: String
 	public let authErrorUrl: String
+	public let apiBaseUrl: String?
+	public let devicesResourceUrl: String
+
+	public init(clientId: String, authEndpoint: String, tokenEndpoint: String, authSuccessUrl: String, authErrorUrl: String, apiBaseUrl: String?, devicesResourceUrl: String) {
+		self.clientId = clientId
+		self.authEndpoint = authEndpoint
+		self.tokenEndpoint = tokenEndpoint
+		self.authSuccessUrl = authSuccessUrl
+		self.authErrorUrl = authErrorUrl
+		self.apiBaseUrl = apiBaseUrl
+		self.devicesResourceUrl = devicesResourceUrl
+	}
 }
 
 public class UnverifiedVaultConfig {

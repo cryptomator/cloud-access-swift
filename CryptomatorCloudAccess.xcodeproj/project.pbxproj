@@ -1752,7 +1752,7 @@
 			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 2.33.0;
+				minimumVersion = 2.34.0;
 			};
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {

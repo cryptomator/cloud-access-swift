@@ -50,8 +50,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git",
       "state" : {
-        "revision" : "f0eafe25d26c52377c4a1c08f1dbd77320164994",
-        "version" : "7.0.0"
+        "revision" : "87c1fcf96622ab90a956bdf89331ddb4164f4855",
+        "version" : "7.2.0"
       }
     },
     {

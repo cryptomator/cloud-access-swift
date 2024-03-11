@@ -130,9 +130,8 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	private func evaluateReadingIntentForFetchItemList(_ readingIntent: NSFileAccessIntent) throws {
 		do {
-			let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-			let itemType = getItemType(from: attributes.fileResourceType)
-			guard itemType == .folder else {
+			let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.isDirectoryKey])
+			guard attributes.isDirectory ?? false else {
 				throw CloudProviderError.itemTypeMismatch
 			}
 		} catch CocoaError.fileReadNoSuchFile {

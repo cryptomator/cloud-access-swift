@@ -6,23 +6,27 @@ on:
 jobs:
   build:
     name: Build and test
-    runs-on: macos-12
+    runs-on: macos-14
     env:
       DERIVED_DATA_PATH: 'DerivedData'
-      DEVICE: 'iPhone 12 Pro'
+      DEVICE: 'iPhone 15 Pro'
     if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]')"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: .build
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+      - name: Install SwiftLint
+        run: brew install swiftlint
       - name: Run process.sh script
         run: |
           ./Scripts/process.sh
           exit $?
+      - name: Select Xcode 15.2
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app
       - name: Build
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | xcpretty
       - name: Test
@@ -59,11 +63,11 @@ jobs:
 
   release:
     name: Deploy and draft a release
-    runs-on: macos-12
+    runs-on: macos-14
     needs: build
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Draft release
         uses: actions/create-release@v1
         env:

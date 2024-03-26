@@ -28,6 +28,15 @@
       }
     },
     {
+      "identity" : "box-ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/box/box-ios-sdk.git",
+      "state" : {
+        "revision" : "daffd86b861a5f5882655bf7a01b891f6b808c1f",
+        "version" : "5.5.0"
+      }
+    },
+    {
       "identity" : "cocoalumberjack",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/CocoaLumberjack/CocoaLumberjack.git",

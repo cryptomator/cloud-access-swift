@@ -13,6 +13,6 @@ public class BoxCredential {
     public var client: BoxClient
     
     public init() {
-        self.client = BoxSDK.getClient(token: "m9DKTNlQovcvIgxRIPMaxLdjwQVDxq1g")
+        self.client = BoxSDK.getClient(token: "<Your Developer Token>")
     }
 }

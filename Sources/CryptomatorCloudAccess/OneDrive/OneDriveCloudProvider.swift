@@ -19,31 +19,31 @@ public class OneDriveCloudProvider: CloudProvider {
 	private let tmpDirURL: URL
 	private let maxPageSize: Int
 
-    init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
+	init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
 		self.identifierCache = try OneDriveIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
-    
-    public convenience init(credential: OneDriveCredential, maxPageSize: Int = .max) throws {
-        try self.init(
-            credential: credential,
-            maxPageSize: maxPageSize,
-            urlSessionConfiguration: .default
-        )
-    }
-    
-    public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, identifier: String) throws -> OneDriveCloudProvider {
-        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = OneDriveSetup.sharedContainerIdentifier
-        return try OneDriveCloudProvider(
-            credential: credential,
-            maxPageSize: maxPageSize,
-            urlSessionConfiguration: configuration
-        )
-    }
+
+	public convenience init(credential: OneDriveCredential, maxPageSize: Int = .max) throws {
+		try self.init(
+			credential: credential,
+			maxPageSize: maxPageSize,
+			urlSessionConfiguration: .default
+		)
+	}
+
+	public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, identifier: String) throws -> OneDriveCloudProvider {
+		let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+		configuration.sharedContainerIdentifier = OneDriveSetup.sharedContainerIdentifier
+		return try OneDriveCloudProvider(
+			credential: credential,
+			maxPageSize: maxPageSize,
+			urlSessionConfiguration: configuration
+		)
+	}
 
 	deinit {
 		try? FileManager.default.removeItem(at: tmpDirURL)

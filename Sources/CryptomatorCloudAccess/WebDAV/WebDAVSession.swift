@@ -186,9 +186,8 @@ class WebDAVSession {
 
 	 To avoid collisions in the `URLSession` Identifier between multiple targets (e.g. main app and app extension), the `BundleID` is used in addition to the Credential UID.
 	 */
-	static func createBackgroundSession(with delegate: WebDAVClientURLSessionDelegate, sharedContainerIdentifier: String? = nil) -> WebDAVSession {
-		let bundleId = Bundle.main.bundleIdentifier ?? ""
-		let configuration = URLSessionConfiguration.background(withIdentifier: "CloudAccessWebDAVSession_\(delegate.credential.identifier)_\(bundleId)")
+    static func createBackgroundSession(with delegate: WebDAVClientURLSessionDelegate, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVSession {
+		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		configuration.urlCredentialStorage = nil

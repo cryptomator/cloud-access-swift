@@ -32,9 +32,9 @@ public class WebDAVClient {
 
 	 If the `WebDAVClient` is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
 	 */
-	public static func withBackgroundSession(credential: WebDAVCredential, sharedContainerIdentifier: String? = nil) -> WebDAVClient {
+    public static func withBackgroundSession(credential: WebDAVCredential, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVClient {
 		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		let session = WebDAVSession.createBackgroundSession(with: urlSessionDelegate, sharedContainerIdentifier: sharedContainerIdentifier)
+        let session = WebDAVSession.createBackgroundSession(with: urlSessionDelegate, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 		return WebDAVClient(credential: credential, session: session)
 	}
 

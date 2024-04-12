@@ -14,9 +14,6 @@ import Promises
 
 public class GoogleDriveCloudProvider: CloudProvider {
 	private static let maximumUploadFetcherChunkSize: UInt = 3 * 1024 * 1024 // 3MiB per chunk as GTMSessionFetcher loads the chunk to the memory and the FileProviderExtension has a total memory limit of 15MB
-	public enum Constants {
-		public static var maxPageSize: Int { 1000 }
-	}
 
 	private let driveService: GTLRDriveService
 	private let identifierCache: GoogleDriveIdentifierCache
@@ -25,7 +22,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	private var runningFetchers: [GTMSessionFetcher]
 	private let maxPageSize: Int
 
-	init(credential: GoogleDriveCredential, maxPageSize: Int = Constants.maxPageSize, urlSessionConfiguration: URLSessionConfiguration) throws {
+	init(credential: GoogleDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.driveService = credential.driveService
 		self.identifierCache = try GoogleDriveIdentifierCache()
 		self.runningTickets = [GTLRServiceTicket]()
@@ -35,20 +32,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		try setupDriveService(credential: credential, configuration: urlSessionConfiguration)
 	}
 
-	public convenience init(credential: GoogleDriveCredential, maxPageSize: Int = Constants.maxPageSize) throws {
-		try self.init(
-			credential: credential,
-			maxPageSize: maxPageSize,
-			urlSessionConfiguration: .default
-		)
+	public convenience init(credential: GoogleDriveCredential, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
 	}
 
-	public static func withBackgroundSession(
-		credential: GoogleDriveCredential,
-		maxPageSize: Int = Constants.maxPageSize,
-		sessionIdentifier: String,
-		sharedContainerIdentifier: String? = nil
-	) throws -> GoogleDriveCloudProvider {
+	public static func withBackgroundSession(credential: GoogleDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) throws -> GoogleDriveCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		return try .init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)

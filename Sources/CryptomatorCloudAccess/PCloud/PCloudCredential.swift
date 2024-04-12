@@ -42,12 +42,7 @@ extension PCloud {
 	 - Returns: An instance of a `PCloudClient` ready to take requests.
 	 */
 	public static func createBackgroundClient(with user: OAuth.User, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> PCloudClient {
-		return createBackgroundClient(
-			withAccessToken: user.token,
-			apiHostName: user.httpAPIHostName,
-			sessionIdentifier: sessionIdentifier,
-			sharedContainerIdentifier: sharedContainerIdentifier
-		)
+		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {

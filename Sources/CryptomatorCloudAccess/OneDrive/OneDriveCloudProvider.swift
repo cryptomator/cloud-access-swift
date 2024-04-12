@@ -28,21 +28,13 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	public convenience init(credential: OneDriveCredential, maxPageSize: Int = .max) throws {
-		try self.init(
-			credential: credential,
-			maxPageSize: maxPageSize,
-			urlSessionConfiguration: .default
-		)
+		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
 	}
 
 	public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, identifier: String) throws -> OneDriveCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
 		configuration.sharedContainerIdentifier = OneDriveSetup.sharedContainerIdentifier
-		return try OneDriveCloudProvider(
-			credential: credential,
-			maxPageSize: maxPageSize,
-			urlSessionConfiguration: configuration
-		)
+		return try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
 	}
 
 	deinit {

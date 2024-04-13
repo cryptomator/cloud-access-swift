@@ -7,9 +7,9 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 import Foundation
 import Promises
@@ -70,54 +70,33 @@ class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
 		provider = CloudProviderFolderMock()
 	}
 
-	func testDoesNotCreateAnyFolderForRootPath() throws {
-		let expectation = XCTestExpectation(description: "Create no Folder for passed RootPath")
-		provider.createFolderWithIntermediates(for: CloudPath("/")).then { _ in
-			guard self.provider.createdFolders.isEmpty else {
-				XCTFail("Provider created at least one folder")
-				return
-			}
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
+	func testDoesNotCreateAnyFolderForRootPath() async throws {
+		try await provider.createFolderWithIntermediates(for: CloudPath("/")).async()
+		guard provider.createdFolders.isEmpty else {
+			XCTFail("Provider created at least one folder")
+			return
 		}
-		wait(for: [expectation], timeout: 1.0)
 	}
 
-	func testCreateFolderWithIntermediates() throws {
-		let expectation = XCTestExpectation(description: "Create all intermediate Folders for CloudPath")
+	func testCreateFolderWithIntermediates() async throws {
 		let path = CloudPath("/Foo/Bar")
-		provider.createFolderWithIntermediates(for: path).then { _ in
-			guard self.provider.createdFolders.count == 2 else {
-				XCTFail("Provider created not exactly two folders")
-				return
-			}
-			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo")))
-			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo/Bar")))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
+		try await provider.createFolderWithIntermediates(for: path).async()
+		guard provider.createdFolders.count == 2 else {
+			XCTFail("Provider created not exactly two folders")
+			return
 		}
-		wait(for: [expectation], timeout: 1.0)
+		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo")))
+		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
 	}
 
-	func testCreateFolderWithIntermediatesIfAFolderAlreadyExists() throws {
-		let expectation = XCTestExpectation(description: "Create folder without error for CloudPath if the parent folder already exists")
+	func testCreateFolderWithIntermediatesIfAFolderAlreadyExists() async throws {
 		let path = CloudPath("/Foo/Bar")
 		provider.existingFolders.append(CloudPath("/Foo"))
-		provider.createFolderWithIntermediates(for: path).then { _ in
-			guard self.provider.createdFolders.count == 1 else {
-				XCTFail("Provider created not exactly two folders")
-				return
-			}
-			XCTAssert(self.provider.createdFolders.contains(CloudPath("/Foo/Bar")))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
+		try await provider.createFolderWithIntermediates(for: path).async()
+		guard provider.createdFolders.count == 1 else {
+			XCTFail("Provider created not exactly two folders")
+			return
 		}
-		wait(for: [expectation], timeout: 1.0)
+		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
 	}
 }

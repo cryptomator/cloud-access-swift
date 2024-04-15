@@ -5,29 +5,38 @@
 //  Created by Majid Achhoud on 18.03.24.
 //
 
-import Foundation
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#endif
+import AuthenticationServices
 import BoxSDK
 import Promises
 import UIKit
 
 public enum BoxAuthenticatorError: Error {
-    case authenticationFailed
+	case authenticationFailed
 }
 
-public struct BoxAuthenticator {
-    
-    private static let sdk = BoxSDK(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
-    
-    public static func authenticate(from viewController: UIViewController) -> Promise<BoxClient> {
-        return Promise { fulfill, reject in
-            sdk.getOAuth2Client() { result in
-                switch result {
-                case let .success(client):
-                    fulfill(client)
-                case .failure(_):
-                    reject(BoxAuthenticatorError.authenticationFailed)
-                }
-            }
-        }
-    }
+public enum BoxAuthenticator {
+	public static let sdk = BoxSDK(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
+
+	public static func authenticate(from viewController: UIViewController, tokenStore: TokenStore) -> Promise<(BoxClient, String)> {
+		return Promise { fulfill, reject in
+			sdk.getOAuth2Client(tokenStore: tokenStore, context: viewController as! ASWebAuthenticationPresentationContextProviding) { result in
+				switch result {
+				case let .success(client):
+					client.users.getCurrent(fields: ["id"]) { userResult in
+						switch userResult {
+						case let .success(user):
+							fulfill((client, user.id))
+						case .failure:
+							reject(BoxAuthenticatorError.authenticationFailed)
+						}
+					}
+				case .failure:
+					reject(BoxAuthenticatorError.authenticationFailed)
+				}
+			}
+		}
+	}
 }

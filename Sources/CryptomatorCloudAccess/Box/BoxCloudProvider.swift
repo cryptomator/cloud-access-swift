@@ -11,12 +11,14 @@ import Foundation
 import Promises
 
 public class BoxCloudProvider: CloudProvider {
-    private let client: BoxClient
+    private let credential: BoxCredential
     private let identifierCache: BoxIdentifierCache
+    private let maxPageSize: Int
 
-    public init(credential: BoxCredential) throws {
-        self.client = credential.client
+    public init(credential: BoxCredential, maxPageSize: Int = .max) throws {
+        self.credential = credential
         self.identifierCache = try BoxIdentifierCache()
+        self.maxPageSize = max(1, min(maxPageSize, 1000))
     }
 
     public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
@@ -26,9 +28,6 @@ public class BoxCloudProvider: CloudProvider {
     }
 
     public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-        guard pageToken == nil else {
-            return Promise(CloudProviderError.pageTokenInvalid)
-        }
         return resolvePath(forItemAt: cloudPath).then { item in
             self.fetchItemList(for: item, pageToken: pageToken)
         }
@@ -58,6 +57,7 @@ public class BoxCloudProvider: CloudProvider {
             if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
                 throw CloudProviderError.itemAlreadyExists
             }
+
         }.recover { error -> Void in
             guard case CloudProviderError.itemNotFound = error else {
                 throw error
@@ -99,9 +99,9 @@ public class BoxCloudProvider: CloudProvider {
                 throw CloudProviderError.itemAlreadyExists
             }
         }.then {
-           return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
+            return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
         }.then { item, targetParentItem in
-           return self.moveFile(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
+            return self.moveFile(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
         }
     }
 
@@ -111,9 +111,9 @@ public class BoxCloudProvider: CloudProvider {
                 throw CloudProviderError.itemAlreadyExists
             }
         }.then {
-           return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
+            return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
         }.then { item, targetParentItem in
-           return self.moveFolder(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
+            return self.moveFolder(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
         }
     }
 
@@ -126,7 +126,7 @@ public class BoxCloudProvider: CloudProvider {
             return fetchFolderMetadata(for: item)
         } else {
             let error = CloudProviderError.itemTypeMismatch
-            CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemMetadata(for: \(item.identifier)) failed with error: \(error)")
+            CloudAccessDDLogDebug("BoxCloudCloudProvider: fetchItemMetadata(for: \(item.identifier)) failed with error: \(error)")
             return Promise(error)
         }
     }
@@ -134,12 +134,15 @@ public class BoxCloudProvider: CloudProvider {
     private func fetchFileMetadata(for item: BoxItem) -> Promise<CloudItemMetadata> {
         assert(item.itemType == .file)
         CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) called")
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
         return Promise { fulfill, reject in
-            self.client.files.get(fileId: item.identifier, fields: ["name", "size", "modified_at"]) { result in
+            client.files.get(fileId: item.identifier, fields: ["name", "size", "modified_at"]) { result in
                 switch result {
                 case let .success(file):
                     do {
-                        let metadata = try self.convertToCloudItemMetadata(file, at: item.cloudPath)
+                        let metadata = self.convertToCloudItemMetadata(file, at: item.cloudPath)
                         try self.identifierCache.addOrUpdate(item)
                         CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) successful")
                         fulfill(metadata)
@@ -149,7 +152,11 @@ public class BoxCloudProvider: CloudProvider {
                     }
                 case let .failure(error):
                     CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) failed with error: \(error)")
-                    reject(error)
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
+                        reject(error)
+                    }
                 }
             }
         }
@@ -158,12 +165,15 @@ public class BoxCloudProvider: CloudProvider {
     private func fetchFolderMetadata(for item: BoxItem) -> Promise<CloudItemMetadata> {
         assert(item.itemType == .folder)
         CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) called")
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
         return Promise { fulfill, reject in
-            self.client.folders.get(folderId: item.identifier, fields: ["name", "modified_at"]) { result in
+            client.folders.get(folderId: item.identifier, fields: ["name", "modified_at"]) { result in
                 switch result {
                 case let .success(folder):
                     do {
-                        let metadata = try self.convertToCloudItemMetadata(folder, at: item.cloudPath)
+                        let metadata = self.convertToCloudItemMetadata(folder, at: item.cloudPath)
                         try self.identifierCache.addOrUpdate(item)
                         CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) successful")
                         fulfill(metadata)
@@ -179,51 +189,37 @@ public class BoxCloudProvider: CloudProvider {
         }
     }
 
-    private func fetchItemList(for item: BoxItem, pageToken: String?) -> Promise<CloudItemList> {
-        CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(forFolderAt: \(item.identifier)) called")
-        guard item.itemType == .folder else {
-            let error = CloudProviderError.itemTypeMismatch
-            CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(forFolderAt: \(item.identifier)) failed with error: \(error)")
-            return Promise(error)
+    private func fetchItemList(for folderItem: BoxItem, pageToken: String?) -> Promise<CloudItemList> {
+        guard folderItem.itemType == .folder else {
+            return Promise(CloudProviderError.itemTypeMismatch)
         }
-
+		
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise { fulfill, reject in
-            let iterator = self.client.folders.listItems(folderId: item.identifier, usemarker: true, marker: pageToken)
-            var allItems: [CloudItemMetadata] = []
-            
+            let iterator = client.folders.listItems(folderId: folderItem.identifier, usemarker: true, marker: pageToken, limit: self.maxPageSize, fields: ["name", "size", "modified_at"])
+
             iterator.next { result in
                 switch result {
                 case let .success(page):
-                    for folderItem in page.entries {
-                        do {
-                            let childCloudPath: CloudPath
-                            let childItemMetadata: CloudItemMetadata
-
-                            switch folderItem {
-                            case let .file(file):
-                                childCloudPath = item.cloudPath.appendingPathComponent(file.name ?? "")
-                                childItemMetadata = try self.convertToCloudItemMetadata(file, at: childCloudPath)
-                            case let .folder(folder):
-                                childCloudPath = item.cloudPath.appendingPathComponent(folder.name ?? "")
-                                childItemMetadata = try self.convertToCloudItemMetadata(folder, at: childCloudPath)
-                            case .webLink:
-                                continue
-                            }
-
-                            allItems.append(childItemMetadata)
-
-                            let newItem = try BoxItem(cloudPath: childCloudPath, folderItem: folderItem)
-                            try self.identifierCache.addOrUpdate(newItem)
-                        } catch {
-                            reject(error)
-                            return
+                    let allItems = page.entries.compactMap { entry -> CloudItemMetadata? in
+                        switch entry {
+                        case let .file(file):
+                            return self.convertToCloudItemMetadata(file, at: folderItem.cloudPath.appendingPathComponent(file.name ?? ""))
+                        case let .folder(folder):
+                            return self.convertToCloudItemMetadata(folder, at: folderItem.cloudPath.appendingPathComponent(folder.name ?? ""))
+                        case .webLink:
+                            // Handling of web links as required
+                            return nil
                         }
                     }
 
                     fulfill(CloudItemList(items: allItems, nextPageToken: page.nextMarker))
-                    
+
                 case let .failure(error):
-                    reject(error)
+                    reject(CloudProviderError.pageTokenInvalid)
                 }
             }
         }
@@ -231,75 +227,101 @@ public class BoxCloudProvider: CloudProvider {
 
     private func downloadFile(for item: BoxItem, to localURL: URL) -> Promise<Void> {
         CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
+        guard item.itemType == .file else {
+            return Promise(CloudProviderError.itemTypeMismatch)
+        }
+		
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise { fulfill, reject in
-            let task = self.client.files.download(fileId: item.identifier, destinationURL: localURL) { result in
+            client.files.download(fileId: item.identifier, destinationURL: localURL) { result in
                 switch result {
                 case .success:
                     CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) finished downloading")
                     fulfill(())
                 case let .failure(error):
                     CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error)")
-                    reject(error)
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
+                        reject(error)
+                    }
                 }
             }
         }
     }
 
     private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-        CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) called")
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise { fulfill, reject in
-            do {
-                let fileData = try Data(contentsOf: localURL) //Refactor
-                let progress = Progress(totalUnitCount: Int64(fileData.count))
-                self.client.files.upload(data: fileData, name: cloudPath.lastPathComponent, parentId: parentItem.identifier, progress: { progressUpdate in
-                    print("Upload progress: \(progressUpdate.fractionCompleted)")
-                }) { (result: Result<File, BoxSDKError>) in
+            let targetFileName = cloudPath.lastPathComponent
+
+            guard let data = try? Data(contentsOf: localURL) else {
+                reject(CloudProviderError.itemNotFound)
+                return
+            }
+			
+            self.resolvePath(forItemAt: cloudPath).then { existingItem -> Void in
+               client.files.uploadVersion(forFile: existingItem.identifier, data: data, completion: { result in
                     switch result {
-                    case let .success(file):
-                        CloudAccessDDLogDebug("BoxCloudProvider: uploadFile successful with file ID: \(file.id)")
-                        let metadata = CloudItemMetadata(name: file.name ?? "", cloudPath: cloudPath, itemType: .file, lastModifiedDate: file.modifiedAt, size: file.size)
-                        do {
-                            let boxItem = BoxItem(cloudPath: cloudPath, identifier: file.id, itemType: .file)
-                            try self.identifierCache.addOrUpdate(boxItem)
-                            fulfill(metadata)
-                        } catch {
-                            reject(error)
-                        }
+                    case let .success(updatedFile):
+                        let metadata = self.convertToCloudItemMetadata(updatedFile, at: cloudPath)
+                        fulfill(metadata)
                     case let .failure(error):
-                        CloudAccessDDLogDebug("BoxCloudProvider: uploadFile failed with error: \(error.localizedDescription)")
                         reject(error)
                     }
+                })
+            }.recover { error -> Void in
+                guard case CloudProviderError.itemNotFound = error else {
+                    throw error
                 }
-            } catch {
-                reject(error)
+                client.files.upload(data: data, name: targetFileName, parentId: parentItem.identifier, completion: { result in
+                    switch result {
+                    case let .success(newFile):
+                        let metadata = self.convertToCloudItemMetadata(newFile, at: cloudPath)
+                        fulfill(metadata)
+                    case let .failure(error):
+                        if error.message == .unauthorizedAccess {
+                            reject(CloudProviderError.unauthorized)
+                        } else {
+                            reject(error)
+                        }
+                    }
+                })
             }
         }
     }
 
     private func createFolder(for parentItem: BoxItem, with name: String) -> Promise<Void> {
         CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) called")
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
         return Promise { fulfill, reject in
-            let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
-            self.resolveParentPath(forItemAt: cloudPath.deletingLastPathComponent()).then { parentItem -> Void in
-                self.client.folders.create(name: name, parentId: parentItem.identifier) { result in
-                    switch result {
-                    case let .success(folder):
-                        CloudAccessDDLogDebug("BoxCloudProvider: createFolder successful with folder ID: \(folder.id)")
-                        let newItemMetadata = CloudItemMetadata(name: folder.name ?? "", cloudPath: cloudPath.appendingPathComponent(name), itemType: .folder, lastModifiedDate: folder.modifiedAt, size: nil)
-                        do {
-                            let newItem = BoxItem(cloudPath: cloudPath.appendingPathComponent(name), identifier: folder.id, itemType: .folder)
-                            try self.identifierCache.addOrUpdate(newItem)
-                            fulfill(())
-                        } catch {
-                            reject(error)
-                        }
-                    case let .failure(error):
-                        CloudAccessDDLogDebug("BoxCloudProvider: createFolder failed with error: \(error.localizedDescription)")
+            client.folders.create(name: name, parentId: parentItem.identifier) { result in
+                switch result {
+                case let .success(folder):
+                    CloudAccessDDLogDebug("BoxCloudProvider: createFolder successful with folder ID: \(folder.id)")
+                    do {
+                        let newItem = BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: folder.id, itemType: .folder)
+                        try self.identifierCache.addOrUpdate(newItem)
+                        fulfill(())
+                    } catch {
+                        reject(error)
+                    }
+                case let .failure(error):
+                    CloudAccessDDLogDebug("BoxCloudProvider: createFolder failed with error: \(error.localizedDescription)")
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
                         reject(error)
                     }
                 }
-            }.catch { error in
-                reject(error)
             }
         }
     }
@@ -309,8 +331,13 @@ public class BoxCloudProvider: CloudProvider {
         guard item.itemType == .file else {
             return Promise(CloudProviderError.itemTypeMismatch)
         }
+		
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise<Void> { fulfill, reject in
-            self.client.files.delete(fileId: item.identifier) { result in
+            client.files.delete(fileId: item.identifier) { result in
                 switch result {
                 case .success:
                     CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) succeeded")
@@ -322,11 +349,15 @@ public class BoxCloudProvider: CloudProvider {
                         reject(error)
                     }
                 case let .failure(error):
-                    CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
+                    CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
                     if case BoxSDKErrorEnum.notFound = error.message {
                         reject(CloudProviderError.itemNotFound)
                     } else {
-                        reject(error)
+                        if error.message == .unauthorizedAccess {
+                            reject(CloudProviderError.unauthorized)
+                        } else {
+                            reject(error)
+                        }
                     }
                 }
             }
@@ -334,15 +365,20 @@ public class BoxCloudProvider: CloudProvider {
     }
 
     private func deleteFolder(for item: BoxItem) -> Promise<Void> {
-        CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) called")
+        CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) called")
         guard item.itemType == .folder else {
             return Promise(CloudProviderError.itemTypeMismatch)
         }
+		
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise<Void> { fulfill, reject in
-            self.client.folders.delete(folderId: item.identifier) { result in
+            client.folders.delete(folderId: item.identifier, recursive: true) { result in
                 switch result {
                 case .success:
-                    CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) succeeded")
+                    CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) succeeded")
                     do {
                         try self.identifierCache.invalidate(item)
                         fulfill(())
@@ -355,7 +391,11 @@ public class BoxCloudProvider: CloudProvider {
                     if case BoxSDKErrorEnum.notFound = error.message {
                         reject(CloudProviderError.itemNotFound)
                     } else {
-                        reject(error)
+                        if error.message == .unauthorizedAccess {
+                            reject(CloudProviderError.unauthorized)
+                        } else {
+                            reject(error)
+                        }
                     }
                 }
             }
@@ -364,10 +404,13 @@ public class BoxCloudProvider: CloudProvider {
 
     private func moveFile(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) -> Promise<Void> {
         CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
-
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise<Void> { fulfill, reject in
             let newName = targetCloudPath.lastPathComponent
-            self.client.files.update(fileId: sourceItem.identifier, name: newName, parentId: targetParentItem.identifier) { result in
+            client.files.update(fileId: sourceItem.identifier, name: newName, parentId: targetParentItem.identifier) { result in
                 switch result {
                 case .success:
                     CloudAccessDDLogDebug("BoxCloudProvider: moveFile succeeded for \(sourceItem.identifier) to \(targetCloudPath.path)")
@@ -381,7 +424,11 @@ public class BoxCloudProvider: CloudProvider {
                     }
                 case let .failure(error):
                     CloudAccessDDLogDebug("BoxCloudProvider: moveFile failed for \(sourceItem.identifier) with error: \(error)")
-                    reject(error)
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
+                        reject(error)
+                    }
                 }
             }
         }
@@ -389,10 +436,13 @@ public class BoxCloudProvider: CloudProvider {
 
     private func moveFolder(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) -> Promise<Void> {
         CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
-
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise<Void> { fulfill, reject in
             let newName = targetCloudPath.lastPathComponent
-            self.client.folders.update(folderId: sourceItem.identifier, name: newName, parentId: targetParentItem.identifier) { result in
+            client.folders.update(folderId: sourceItem.identifier, name: newName, parentId: targetParentItem.identifier) { result in
                 switch result {
                 case .success:
                     CloudAccessDDLogDebug("BoxCloudProvider: moveFolder succeeded for \(sourceItem.identifier) to \(targetCloudPath.path)")
@@ -406,7 +456,11 @@ public class BoxCloudProvider: CloudProvider {
                     }
                 case let .failure(error):
                     CloudAccessDDLogDebug("BoxCloudProvider: moveFolder failed for \(sourceItem.identifier) with error: \(error)")
-                    reject(error)
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
+                        reject(error)
+                    }
                 }
             }
         }
@@ -422,7 +476,7 @@ public class BoxCloudProvider: CloudProvider {
             cachedItem = identifierCache.get(pathToCheckForCache)
         }
         guard let item = cachedItem else {
-            return Promise(PCloudError.inconsistentCache)
+            return Promise(BoxError.inconsistentCache)
         }
         if pathToCheckForCache != cloudPath {
             return traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
@@ -459,10 +513,14 @@ public class BoxCloudProvider: CloudProvider {
     }
 
     func getBoxItem(for name: String, withParentItem parentItem: BoxItem) -> Promise<BoxItem> {
+		guard let client = credential.client else {
+			return Promise(CloudProviderError.unauthorized)
+		}
+		
         return Promise { fulfill, reject in
-            CloudAccessDDLogDebug("PCloudCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
+            CloudAccessDDLogDebug("BoxCloudCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
 
-            let iterator = self.client.folders.listItems(folderId: parentItem.identifier)
+            let iterator = client.folders.listItems(folderId: parentItem.identifier)
             iterator.next { result in
                 switch result {
                 case let .success(page):
@@ -479,7 +537,11 @@ public class BoxCloudProvider: CloudProvider {
                     }
                     reject(CloudProviderError.itemNotFound)
                 case let .failure(error):
-                    reject(error)
+                    if error.message == .unauthorizedAccess {
+                        reject(CloudProviderError.unauthorized)
+                    } else {
+                        reject(error)
+                    }
                 }
             }
         }
@@ -492,7 +554,7 @@ public class BoxCloudProvider: CloudProvider {
         case let .folder(folder) where folder.name == name:
             return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), folder: folder)
         case .webLink:
-            throw PCloudError.unexpectedContent
+            throw BoxError.unexpectedContent
         default:
             return nil
         }
@@ -503,15 +565,15 @@ public class BoxCloudProvider: CloudProvider {
     private func convertToCloudItemMetadata(_ content: FolderItem, at cloudPath: CloudPath) throws -> CloudItemMetadata {
         switch content {
         case let .file(fileMetadata):
-            return try convertToCloudItemMetadata(fileMetadata, at: cloudPath)
+            return convertToCloudItemMetadata(fileMetadata, at: cloudPath)
         case let .folder(folderMetadata):
-            return try convertToCloudItemMetadata(folderMetadata, at: cloudPath)
-        default: //Refactor - no default
-            throw PCloudError.unexpectedContent
+            return convertToCloudItemMetadata(folderMetadata, at: cloudPath)
+        default: // Refactor - no default
+            throw BoxError.unexpectedContent
         }
     }
 
-    private func convertToCloudItemMetadata(_ metadata: File, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+    private func convertToCloudItemMetadata(_ metadata: File, at cloudPath: CloudPath) -> CloudItemMetadata {
         let name = metadata.name ?? ""
         let itemType = CloudItemType.file
         let lastModifiedDate = metadata.modifiedAt
@@ -519,7 +581,7 @@ public class BoxCloudProvider: CloudProvider {
         return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
     }
 
-    private func convertToCloudItemMetadata(_ metadata: Folder, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+    private func convertToCloudItemMetadata(_ metadata: Folder, at cloudPath: CloudPath) -> CloudItemMetadata {
         let name = metadata.name ?? ""
         let itemType = CloudItemType.folder
         let lastModifiedDate = metadata.modifiedAt
@@ -532,14 +594,14 @@ public class BoxCloudProvider: CloudProvider {
             switch content {
             case let .file(fileMetadata):
                 let itemCloudPath = cloudPath.appendingPathComponent(fileMetadata.name ?? "")
-                let itemMetadata = try convertToCloudItemMetadata(fileMetadata, at: itemCloudPath)
+                let itemMetadata = convertToCloudItemMetadata(fileMetadata, at: itemCloudPath)
                 items.append(itemMetadata)
             case let .folder(folderMetadata):
                 let itemCloudPath = cloudPath.appendingPathComponent(folderMetadata.name ?? "")
-                let itemMetadata = try convertToCloudItemMetadata(folderMetadata, at: itemCloudPath)
+                let itemMetadata = convertToCloudItemMetadata(folderMetadata, at: itemCloudPath)
                 items.append(itemMetadata)
             default:
-                throw PCloudError.unexpectedContent
+                throw BoxError.unexpectedContent
             }
         }
         return CloudItemList(items: items, nextPageToken: nil)

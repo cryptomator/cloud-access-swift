@@ -15,30 +15,30 @@ import Promises
 import XCTest
 
 class BoxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-    override class var defaultTestSuite: XCTestSuite {
-        return XCTestSuite(forTestCaseClass: BoxCloudProviderIntegrationTests.self)
-    }
+	override class var defaultTestSuite: XCTestSuite {
+		return XCTestSuite(forTestCaseClass: BoxCloudProviderIntegrationTests.self)
+	}
 
-    private let credential = BoxCredential()
+	private let credential = BoxCredentialMock()
 
-    override class func setUp() {
-        integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
-        let credential = BoxCredential()
-        // swiftlint:disable:next force_try
-        setUpProvider = try! BoxCloudProvider(credential: credential)
-        super.setUp()
-    }
+	override class func setUp() {
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		let credential = BoxCredentialMock()
+		// swiftlint:disable:next force_try
+		setUpProvider = try! BoxCloudProvider(credential: credential)
+		super.setUp()
+	}
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        provider = try BoxCloudProvider(credential: credential)
-    }
+	override func setUpWithError() throws {
+		try super.setUpWithError()
+		provider = try BoxCloudProvider(credential: credential)
+	}
 
-    override func deauthenticate() -> Promise<Void> {
-        return Promise(())
-    }
+	override func deauthenticate() -> Promise<Void> {
+		return credential.deauthenticate()
+	}
 
-    override func createLimitedCloudProvider() throws -> CloudProvider {
-        return try BoxCloudProvider(credential: credential)
-    }
+	override func createLimitedCloudProvider() throws -> CloudProvider {
+		return try BoxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
 }

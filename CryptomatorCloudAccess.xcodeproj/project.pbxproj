@@ -459,6 +459,7 @@
 			isa = PBXGroup;
 			children = (
 				4A05900124519FFC008831F9 /* Info.plist */,
+				4ABE9AA42BCACB9100675D74 /* XCTAssertThrowsError+Async.swift */,
 				9EE62A0E247D54CD0089DAF7 /* API */,
 				4A741FF3287C71A000489C23 /* Common */,
 				7416F22624F6585A0074DA8E /* Crypto */,
@@ -469,7 +470,6 @@
 				7402B48227D2625E00BE9F8B /* PCloud */,
 				4A2745FA2847887F00E70D5F /* S3 */,
 				748420C124B8A1F800D84E58 /* WebDAV */,
-				4ABE9AA42BCACB9100675D74 /* XCTAssertThrowsError+Async.swift */,
 			);
 			path = CryptomatorCloudAccessTests;
 			sourceTree = "<group>";
@@ -609,8 +609,8 @@
 				4ACA64002615FF9700D19304 /* LocalFileSystem */,
 				4AFC5F6B263190C000744715 /* OneDrive */,
 				7402B47B27D24C0700BE9F8B /* PCloud */,
-				4ACA63F72615FF9700D19304 /* WebDAV */,
 				4ADE138128576A0F006CCCFE /* S3 */,
+				4ACA63F72615FF9700D19304 /* WebDAV */,
 			);
 			path = CryptomatorCloudAccessIntegrationTests;
 			sourceTree = "<group>";

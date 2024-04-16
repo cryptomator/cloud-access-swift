@@ -37,12 +37,12 @@ extension PCloud {
 	 Does not update the `sharedClient` property. You are responsible for storing it and keeping it alive. Use if you want a more direct control over the lifetime of the `PCloudClient` object. Multiple clients can exist simultaneously.
 
 	 - Parameter user: A `OAuth.User` value obtained from the keychain or the OAuth flow.
+	 - Parameter sessionIdentifier: The unique identifier for the `URLSessionConfiguration` object.
 	 - Parameter sharedContainerIdentifier: To create a URL session for use by an app extension, set this property to a valid identifier for a container shared between the app extension and its containing app.
 	 - Returns: An instance of a `PCloudClient` ready to take requests.
 	 */
-	public static func createBackgroundClient(with user: OAuth.User, sharedContainerIdentifier: String? = nil) -> PCloudClient {
-		let bundleId = Bundle.main.bundleIdentifier ?? ""
-		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: "pCloud - \(user.id) - \(bundleId)", sharedContainerIdentifier: sharedContainerIdentifier)
+	public static func createBackgroundClient(with user: OAuth.User, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> PCloudClient {
+		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {

@@ -22,7 +22,7 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	// swiftlint:disable:next force_try
 	private static let credential = try! OneDriveCredentialMock()
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
+	private static let cloudProvider = try! OneDriveCloudProvider(credential: credential)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {
@@ -58,7 +58,6 @@ class VaultFormat7OneDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		let limitedDelegate = try OneDriveCloudProvider(credential: VaultFormat7OneDriveIntegrationTests.credential,
-		                                                useBackgroundSession: false,
 		                                                maxPageSize: maxPageSizeForLimitedCloudProvider)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedDelegate, vaultPath: VaultFormat7OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator

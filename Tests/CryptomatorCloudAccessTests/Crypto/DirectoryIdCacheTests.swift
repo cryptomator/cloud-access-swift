@@ -55,8 +55,7 @@ class DirectoryIdCacheTests: XCTestCase {
 		XCTAssertEqual(dirId, try cache.get(siblingPath))
 	}
 
-	func testRecursiveGet() throws {
-		let expectation = XCTestExpectation(description: "recursiveGet")
+	func testRecursiveGet() async throws {
 		let path = CloudPath("/one/two/three")
 
 		var misses: [String] = []
@@ -81,13 +80,9 @@ class DirectoryIdCacheTests: XCTestCase {
 			return Promise(Data(dirId.utf8))
 		})
 
-		result.then { data in
-			XCTAssertEqual(Data("THREE".utf8), data)
-		}.always {
-			expectation.fulfill()
-		}
+		let data = try await result.async()
+		XCTAssertEqual(Data("THREE".utf8), data)
 
-		wait(for: [expectation], timeout: 1.0)
 		XCTAssertEqual("ONE", misses[0])
 		XCTAssertEqual("TWO", misses[1])
 		XCTAssertEqual("THREE", misses[2])

@@ -7,9 +7,9 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 import Foundation
 import XCTest
@@ -27,9 +27,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
 	}
 
-	func testVerifyClient() throws {
-		let expectation = XCTestExpectation(description: "verifyClient")
-
+	func testVerifyClient() async throws {
 		let optionsResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"])!
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
@@ -47,16 +45,10 @@ class WebDAVAuthenticatorTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		WebDAVAuthenticator.verifyClient(client: client).then {
-			XCTAssertTrue(self.client.optionsRequests.contains(self.baseURL.relativePath))
-			XCTAssertEqual(.zero, self.client.propfindRequests[self.baseURL.relativePath])
-			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
+		try await WebDAVAuthenticator.verifyClient(client: client).async()
+		XCTAssertTrue(client.optionsRequests.contains(baseURL.relativePath))
+		XCTAssertEqual(.zero, client.propfindRequests[baseURL.relativePath])
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	// MARK: - Internal

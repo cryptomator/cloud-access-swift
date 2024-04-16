@@ -7,9 +7,9 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 import Promises
 import XCTest
@@ -26,40 +26,25 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
-	func testVaultRootContainsFiles() {
-		let expectation = XCTestExpectation(description: "vaultRootContainsFiles")
+	func testVaultRootContainsFiles() async throws {
 		let provider = VaultFormat6CloudProviderMock()
-		provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).then { cloudItemList in
-			XCTAssertEqual(6, cloudItemList.items.count)
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng" }))
-			XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng" }))
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
+		let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).async()
+		XCTAssertEqual(6, cloudItemList.items.count)
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng" }))
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file1" }))
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "file2" }))
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng" }))
+		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng" }))
 	}
 
-	func testDir1FileContainsDirId() {
-		let expectation = XCTestExpectation(description: "dir1FileContainsDirId")
+	func testDir1FileContainsDirId() async throws {
 		let provider = VaultFormat6CloudProviderMock()
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1")).then { metadata -> Promise<Void> in
-			XCTAssertEqual(.file, metadata.itemType)
-			return provider.downloadFile(from: metadata.cloudPath, to: localURL)
-		}.then {
-			let downloadedContents = try Data(contentsOf: localURL)
-			XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1")).async()
+		XCTAssertEqual(.file, metadata.itemType)
+		try await provider.downloadFile(from: metadata.cloudPath, to: localURL).async()
+		let downloadedContents = try Data(contentsOf: localURL)
+		XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
 	}
 }

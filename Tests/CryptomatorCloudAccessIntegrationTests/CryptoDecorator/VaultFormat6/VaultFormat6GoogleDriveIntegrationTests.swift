@@ -21,7 +21,7 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	private static let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest")
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+	private static let cloudProvider = try! GoogleDriveCloudProvider(credential: credential)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
 
 	override class func setUp() {
@@ -45,7 +45,7 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
-		let cloudProvider = try GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		let cloudProvider = try GoogleDriveCloudProvider(credential: credential)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6GoogleDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
@@ -60,7 +60,6 @@ class VaultFormat6GoogleDriveIntegrationTests: CloudAccessIntegrationTest {
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
 		let cloudProvider = try GoogleDriveCloudProvider(credential: credential,
-		                                                 useBackgroundSession: false,
 		                                                 maxPageSize: maxPageSizeForLimitedCloudProvider)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6GoogleDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator

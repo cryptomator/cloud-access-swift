@@ -42,7 +42,7 @@ let package = Package(
 		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "7.2.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git", .upToNextMinor(from: "1.3.0")),
-        .package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "5.5.0")),
+		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "5.5.0"))
 	],
 	targets: [
 		.target(
@@ -63,7 +63,7 @@ let package = Package(
 				.product(name: "ObjectiveDropboxOfficial", package: "dropbox-sdk-obj-c-spm"),
 				.product(name: "PCloudSDKSwift", package: "pcloud-sdk-swift"),
 				.product(name: "Promises", package: "promises"),
-                .product(name: "BoxSDK", package: "box-ios-sdk")
+				.product(name: "BoxSDK", package: "box-ios-sdk")
 			],
 			path: "Sources/CryptomatorCloudAccess",
 			exclude: appExtensionUnsafeSources

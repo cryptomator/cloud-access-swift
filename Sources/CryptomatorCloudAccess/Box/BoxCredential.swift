@@ -16,7 +16,6 @@ public enum BoxCredentialErrors: Error {
 
 public class BoxCredential {
 	public internal(set) var client: BoxClient?
-	private(set) var userId: String?
 
 	public init(tokenStore: TokenStore) {
 		let sdk = BoxSDK(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
@@ -24,7 +23,6 @@ public class BoxCredential {
 			switch result {
 			case let .success(client):
 				self.client = client
-				self.retrieveAndStoreUserId()
 			case let .failure(error):
 				break
 			}
@@ -57,16 +55,6 @@ public class BoxCredential {
 				case let .failure(error):
 					reject(error)
 				}
-			}
-		}
-	}
-
-	private func retrieveAndStoreUserId() {
-		client?.users.getCurrent(fields: ["id"]) { [weak self] result in
-			switch result {
-			case let .success(user):
-				self?.userId = user.id
-			case .failure: break // TODO: Break ersetzen
 			}
 		}
 	}

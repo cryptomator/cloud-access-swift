@@ -11,45 +11,45 @@ import Foundation
 import GRDB
 
 struct BoxItem: Decodable, FetchableRecord, TableRecord, Equatable {
-    static let databaseTableName = "CachedEntries"
-    static let cloudPathKey = "cloudPath"
-    static let identifierKey = "identifier"
-    static let itemTypeKey = "itemType"
+	static let databaseTableName = "CachedEntries"
+	static let cloudPathKey = "cloudPath"
+	static let identifierKey = "identifier"
+	static let itemTypeKey = "itemType"
 
-    let cloudPath: CloudPath
-    let identifier: String
-    let itemType: CloudItemType
+	let cloudPath: CloudPath
+	let identifier: String
+	let itemType: CloudItemType
 }
 
 extension BoxItem {
-    init(cloudPath: CloudPath, folderItem: FolderItem) throws {
-        switch folderItem {
-            case let .file(file):
-                self.init(cloudPath: cloudPath, file: file)
-            case let .folder(folder):
-                self.init(cloudPath: cloudPath, folder: folder)
-            case let .webLink(webLink):
-                throw PCloudError.unexpectedContent
-        }
-    }
+	init(cloudPath: CloudPath, folderItem: FolderItem) throws {
+		switch folderItem {
+		case let .file(file):
+			self.init(cloudPath: cloudPath, file: file)
+		case let .folder(folder):
+			self.init(cloudPath: cloudPath, folder: folder)
+		case let .webLink(webLink):
+			throw PCloudError.unexpectedContent
+		}
+	}
 
-    init(cloudPath: CloudPath, file: File) {
-        self.cloudPath = cloudPath
-        self.identifier = file.id
-        self.itemType = .file
-    }
+	init(cloudPath: CloudPath, file: File) {
+		self.cloudPath = cloudPath
+		self.identifier = file.id
+		self.itemType = .file
+	}
 
-    init(cloudPath: CloudPath, folder: Folder) {
-        self.cloudPath = cloudPath
-        self.identifier = folder.id
-        self.itemType = .folder
-    }
+	init(cloudPath: CloudPath, folder: Folder) {
+		self.cloudPath = cloudPath
+		self.identifier = folder.id
+		self.itemType = .folder
+	}
 }
 
 extension BoxItem: PersistableRecord {
-    func encode(to container: inout PersistenceContainer) {
-        container[BoxItem.cloudPathKey] = cloudPath
-        container[BoxItem.identifierKey] = identifier
-        container[BoxItem.itemTypeKey] = itemType
-    }
+	func encode(to container: inout PersistenceContainer) {
+		container[BoxItem.cloudPathKey] = cloudPath
+		container[BoxItem.identifierKey] = identifier
+		container[BoxItem.itemTypeKey] = itemType
+	}
 }

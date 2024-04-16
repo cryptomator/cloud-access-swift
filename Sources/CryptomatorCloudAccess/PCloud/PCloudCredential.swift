@@ -19,8 +19,7 @@ public class PCloudCredential {
 	private let client: PCloudClient
 
 	public init(user: OAuth.User) {
-		
-        self.user = user
+		self.user = user
 		self.client = PCloud.createClient(with: user)
 	}
 

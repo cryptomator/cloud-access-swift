@@ -15,6 +15,7 @@ import UIKit
 
 public enum BoxAuthenticatorError: Error {
 	case authenticationFailed
+	case invalidContext
 }
 
 public enum BoxAuthenticator {
@@ -22,7 +23,13 @@ public enum BoxAuthenticator {
 
 	public static func authenticate(from viewController: UIViewController, tokenStore: TokenStore) -> Promise<(BoxClient, String)> {
 		return Promise { fulfill, reject in
-			sdk.getOAuth2Client(tokenStore: tokenStore, context: viewController as! ASWebAuthenticationPresentationContextProviding) { result in
+
+			guard let context = viewController as? ASWebAuthenticationPresentationContextProviding else {
+				reject(BoxAuthenticatorError.invalidContext)
+				return
+			}
+
+			sdk.getOAuth2Client(tokenStore: tokenStore, context: context) { result in
 				switch result {
 				case let .success(client):
 					client.users.getCurrent(fields: ["id"]) { userResult in

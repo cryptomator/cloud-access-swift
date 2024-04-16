@@ -22,17 +22,27 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	private var runningFetchers: [GTMSessionFetcher]
 	private let maxPageSize: Int
 
-	public init(credential: GoogleDriveCredential, useBackgroundSession: Bool = false, maxPageSize: Int = 1000) throws {
+	init(credential: GoogleDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.driveService = credential.driveService
 		self.identifierCache = try GoogleDriveIdentifierCache()
 		self.runningTickets = [GTLRServiceTicket]()
 		self.runningFetchers = [GTMSessionFetcher]()
 		let maxAllowedItemLimit = 1000
 		self.maxPageSize = min(max(1, maxPageSize), maxAllowedItemLimit)
-		try setupDriveService(credential: credential, useBackgroundSession: useBackgroundSession)
+		try setupDriveService(credential: credential, configuration: urlSessionConfiguration)
 	}
 
-	private func setupDriveService(credential: GoogleDriveCredential, useBackgroundSession: Bool) throws {
+	public convenience init(credential: GoogleDriveCredential, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
+	}
+
+	public static func withBackgroundSession(credential: GoogleDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) throws -> GoogleDriveCloudProvider {
+		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
+		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		return try .init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
+	}
+
+	private func setupDriveService(credential: GoogleDriveCredential, configuration: URLSessionConfiguration) throws {
 		driveService.serviceUploadChunkSize = GoogleDriveCloudProvider.maximumUploadFetcherChunkSize
 		driveService.isRetryEnabled = true
 		driveService.retryBlock = { _, suggestedWillRetry, fetchError in
@@ -52,19 +62,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			return suggestedWillRetry
 		}
 
-		let configuration: URLSessionConfiguration
-		if useBackgroundSession {
-			driveService.fetcherService.configurationBlock = { _, configuration in
-				configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
-			}
-			let bundleId = Bundle.main.bundleIdentifier ?? ""
-			configuration = URLSessionConfiguration.background(withIdentifier: "Crytomator-GoogleDriveSession-\try (credential.getAccountID())-\(bundleId)")
-			configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
-		} else {
-			configuration = URLSessionConfiguration.default
+		driveService.fetcherService.configurationBlock = { _, configurationToConfigure in
+			configurationToConfigure.sharedContainerIdentifier = configuration.sharedContainerIdentifier
 		}
-
 		driveService.fetcherService.configuration = configuration
+
 		driveService.fetcherService.isRetryEnabled = true
 		driveService.fetcherService.retryBlock = { suggestedWillRetry, error, response in
 			if let error = error as NSError? {

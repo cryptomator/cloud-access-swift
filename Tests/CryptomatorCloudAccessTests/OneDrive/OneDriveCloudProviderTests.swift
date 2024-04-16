@@ -21,7 +21,7 @@ class OneDriveCloudProviderTests: XCTestCase {
 	let maxPageSize = 100
 	override func setUpWithError() throws {
 		let credential = try OneDriveCredential(with: "Test", authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
-		provider = try OneDriveCloudProvider(credential: credential, useBackgroundSession: false, maxPageSize: maxPageSize)
+		provider = try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize)
 	}
 
 	func testChildrenRequest() throws {

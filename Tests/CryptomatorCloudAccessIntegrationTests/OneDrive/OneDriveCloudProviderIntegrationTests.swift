@@ -25,14 +25,14 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
 		// swiftlint:disable:next force_try
-		setUpProvider = try! OneDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		setUpProvider = try! OneDriveCloudProvider(credential: credential)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		OneDriveCloudProviderIntegrationTests.credential.resetAccessTokenOverride()
-		provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential, useBackgroundSession: false)
+		provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
@@ -46,7 +46,6 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		return try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential,
-		                                 useBackgroundSession: false,
 		                                 maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

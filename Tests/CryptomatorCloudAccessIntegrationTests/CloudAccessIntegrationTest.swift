@@ -836,7 +836,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		}.always {
 			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 20.0)
+		wait(for: [expectation], timeout: 60.0)
 	}
 
 	func testMoveFileToDifferentParentFolder() throws {
@@ -911,7 +911,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		}.always {
 			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 30.0)
+		wait(for: [expectation], timeout: 60.0)
 	}
 
 	// MARK: - moveFolder Tests
@@ -1012,7 +1012,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		}.always {
 			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 30.0)
+		wait(for: [expectation], timeout: 60.0)
 	}
 
 	// MARK: - Helpers

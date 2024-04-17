@@ -48,19 +48,14 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		XCTAssertFalse(shortened.pointsToLNG)
 	}
 
-	func testGetOriginalPath() {
+	func testGetOriginalPath() async throws {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.lng")
-		let expectation = XCTestExpectation(description: "callback called")
 
-		cache.getOriginalPath(shortened) { lngFileName -> Promise<Data> in
+		let longName = try await cache.getOriginalPath(shortened) { lngFileName -> Promise<Data> in
 			XCTAssertEqual("shortened.lng", lngFileName)
 			return Promise("loooong".data(using: .utf8)!)
-		}.then { longName in
-			XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
+		}.async()
+		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
 	}
 
 	func testDeflatePath() throws {

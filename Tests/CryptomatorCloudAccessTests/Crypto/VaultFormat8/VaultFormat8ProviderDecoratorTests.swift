@@ -36,21 +36,14 @@ class VaultFormat8ProviderDecoratorTests: XCTestCase {
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
-	func testCreateFolder() {
-		let expectation = XCTestExpectation(description: "createFolder")
-		decorator.createFolder(at: CloudPath("/Directory 1")).then {
-			XCTAssertEqual(3, self.provider.createdFolders.count)
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99"))
-			XCTAssertTrue(self.provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
-			XCTAssertEqual(2, self.provider.createdFiles.count)
-			XCTAssertNotNil(self.provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
-			XCTAssertNotNil(self.provider.createdFiles["pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"])
-		}.catch { error in
-			XCTFail("Error in promise: \(error)")
-		}.always {
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 1.0)
+	func testCreateFolder() async throws {
+		try await decorator.createFolder(at: CloudPath("/Directory 1")).async()
+		XCTAssertEqual(3, provider.createdFolders.count)
+		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99"))
+		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
+		XCTAssertEqual(2, provider.createdFiles.count)
+		XCTAssertNotNil(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
+		XCTAssertNotNil(provider.createdFiles["pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"])
 	}
 }

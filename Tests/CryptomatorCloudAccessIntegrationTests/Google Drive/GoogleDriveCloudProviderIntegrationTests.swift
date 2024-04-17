@@ -25,14 +25,14 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
 		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest")
 		// swiftlint:disable:next force_try
-		setUpProvider = try! GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		setUpProvider = try! GoogleDriveCloudProvider(credential: credential)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
-		provider = try GoogleDriveCloudProvider(credential: credential, useBackgroundSession: false)
+		provider = try GoogleDriveCloudProvider(credential: credential)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
@@ -42,7 +42,6 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		return try GoogleDriveCloudProvider(credential: credential,
-		                                    useBackgroundSession: false,
 		                                    maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

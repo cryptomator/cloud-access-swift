@@ -6,11 +6,10 @@ on:
 jobs:
   build:
     name: Build and test
-    runs-on: macos-14
+    runs-on: [self-hosted, macOS, ARM64]
     env:
       DERIVED_DATA_PATH: 'DerivedData'
       DEVICE: 'iPhone 15 Pro'
-    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]')"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -25,8 +24,8 @@ jobs:
         run: |
           ./Scripts/process.sh
           exit $?
-      - name: Select Xcode 15.2
-        run: sudo xcode-select -s /Applications/Xcode_15.2.app
+      - name: Select Xcode 15.3
+        run: sudo xcode-select -s /Applications/Xcode_15.3.app
       - name: Build
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | xcpretty
       - name: Test
@@ -39,9 +38,47 @@ jobs:
         env:
           CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
         continue-on-error: true
+
+  integration-tests:
+    name: Run integration tests for ${{ matrix.name }}
+    runs-on: [self-hosted, macOS, ARM64]
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    env:
+      DERIVED_DATA_PATH: 'DerivedData'
+      DEVICE: 'iPhone 15 Pro'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: Common
+          scheme-name: CommonIntegrationTests
+        - name: Dropbox
+          scheme-name: DropboxIntegrationTests
+        - name: Google Drive
+          scheme-name: GoogleDriveIntegrationTests
+        - name: Local File System
+          scheme-name: LocalFileSystemIntegrationTests
+        - name: OneDrive
+          scheme-name: OneDriveIntegrationTests
+        - name: pCloud
+          scheme-name: PCloudIntegrationTests
+        - name: S3
+          scheme-name: S3IntegrationTests
+        - name: WebDAV
+          scheme-name: WebDAVIntegrationTests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      - name: Select Xcode 15.3
+        run: sudo xcode-select -s /Applications/Xcode_15.3.app
       - name: Run integration tests
-        if: startsWith(github.ref, 'refs/tags/')
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme 'CryptomatorCloudAccessIntegrationTests' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH test | xcpretty
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme '${{ matrix.scheme-name }}' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH test | xcpretty
         env:
           DROPBOX_ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
           GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}

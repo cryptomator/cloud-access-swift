@@ -102,7 +102,7 @@ public class LocalFileSystemProvider: CloudProvider {
 				url.stopAccessingSecurityScopedResource()
 			}
 		}
-		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url)
 		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed coordinated read with error: \(error)")
@@ -130,9 +130,8 @@ public class LocalFileSystemProvider: CloudProvider {
 
 	private func evaluateReadingIntentForFetchItemList(_ readingIntent: NSFileAccessIntent) throws {
 		do {
-			let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-			let itemType = getItemType(from: attributes.fileResourceType)
-			guard itemType == .folder else {
+			let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.isDirectoryKey])
+			guard attributes.isDirectory ?? false else {
 				throw CloudProviderError.itemTypeMismatch
 			}
 		} catch CocoaError.fileReadNoSuchFile {
@@ -458,7 +457,7 @@ public class LocalFileSystemProvider: CloudProvider {
 	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) called")
 		let promise = Promise<CloudItemMetadata>.pending()
-		let readingIntent = NSFileAccessIntent.readingIntent(with: url)
+		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
 		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
 			if let error = error {
 				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed coordinated read with error: \(error)")

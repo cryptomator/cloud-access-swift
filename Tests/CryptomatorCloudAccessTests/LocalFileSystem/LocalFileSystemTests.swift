@@ -113,7 +113,6 @@ class LocalFileSystemTests: XCTestCase {
 	}
 
 	func testDownloadFileWithTypeMismatchError() async throws {
-		let expectation = XCTestExpectation(description: "downloadFile with itemTypeMismatch error")
 		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
 		try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false, attributes: nil)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)

@@ -23,8 +23,8 @@ public class OneDriveCredential {
 	private let clientApplication: MSALPublicClientApplication
 
 	public convenience init(with identifier: String) throws {
-		let authProvider = OneDriveAuthenticationProvider(identifier: identifier, clientApplication: OneDriveSetup.clientApplication, scopes: OneDriveCredential.scopes)
-		try self.init(with: identifier, authProvider: authProvider, clientApplication: OneDriveSetup.clientApplication)
+		let authProvider = OneDriveAuthenticationProvider(identifier: identifier, clientApplication: OneDriveSetup.constants.clientApplication, scopes: OneDriveCredential.scopes)
+		try self.init(with: identifier, authProvider: authProvider, clientApplication: OneDriveSetup.constants.clientApplication)
 	}
 
 	init(with identifier: String, authProvider: MSAuthenticationProvider, clientApplication: MSALPublicClientApplication) throws {

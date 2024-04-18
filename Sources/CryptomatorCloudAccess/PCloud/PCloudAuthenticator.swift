@@ -20,29 +20,23 @@ public enum PCloudAuthenticatorError: Error {
 }
 
 public class PCloudAuthenticator {
-	private let appKey: String
-
-	public init(appKey: String) {
-		self.appKey = appKey
-	}
-
-	public func authenticate(from viewController: UIViewController) -> Promise<PCloudCredential> {
+	public static func authenticate(from viewController: UIViewController) -> Promise<PCloudCredential> {
 		let promise: Promise<OAuth.Result>
 		if #available(iOS 13, *) {
 			guard let window = viewController.view.window else {
 				assertionFailure("Cannot present from a view controller that is not part of the view hierarchy.")
 				return Promise(PCloudAuthenticatorError.missingWindow)
 			}
-			promise = OAuth.performAuthorizationFlow(with: window, appKey: appKey)
+			promise = OAuth.performAuthorizationFlow(with: window, appKey: PCloudSetup.constants.appKey)
 		} else {
-			promise = OAuth.performAuthorizationFlow(with: WebViewControllerPresenterMobile(presentingViewController: viewController), appKey: appKey)
+			promise = OAuth.performAuthorizationFlow(with: WebViewControllerPresenterMobile(presentingViewController: viewController), appKey: PCloudSetup.constants.appKey)
 		}
 		return promise.then { result in
 			return try self.completeAuthorizationFlow(result: result)
 		}
 	}
 
-	private func completeAuthorizationFlow(result: OAuth.Result) throws -> PCloudCredential {
+	private static func completeAuthorizationFlow(result: OAuth.Result) throws -> PCloudCredential {
 		switch result {
 		case let .success(user):
 			return PCloudCredential(user: user)

@@ -33,7 +33,7 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> OneDriveCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = OneDriveSetup.sharedContainerIdentifier
+		configuration.sharedContainerIdentifier = OneDriveSetup.constants.sharedContainerIdentifier
 		return try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
 	}
 

@@ -11,8 +11,8 @@ import Foundation
 public class PCloudSetup {
 	public static var constants: PCloudSetup!
 
-	let appKey: String
-	let sharedContainerIdentifier: String?
+	public let appKey: String
+	public let sharedContainerIdentifier: String?
 
 	public init(appKey: String, sharedContainerIdentifier: String?) {
 		self.appKey = appKey

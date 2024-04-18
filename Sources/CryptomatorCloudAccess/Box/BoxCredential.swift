@@ -23,7 +23,7 @@ public class BoxCredential {
 			switch result {
 			case let .success(client):
 				self.client = client
-			case let .failure(error):
+			case let .failure:
 				break
 			}
 		}
@@ -43,7 +43,7 @@ public class BoxCredential {
 	}
 
 	public func getUsername() -> Promise<String> {
-		return Promise<String> { fulfill, reject in
+		return Promise<String>(on: .global()) { fulfill, reject in
 			self.client?.users.getCurrent(fields: ["name"]) { result in
 				switch result {
 				case let .success(user):

@@ -152,6 +152,7 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		749F59A52BD1211500AB299A /* PCloudSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749F59A42BD1211500AB299A /* PCloudSetup.swift */; };
 		74B321E42923F979008E7C01 /* HTTPDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */; };
 		74C0FB2729B209B6008EF811 /* S3Authenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C0FB2629B209B6008EF811 /* S3Authenticator.swift */; };
 		74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C596E724F022AF00FFD17E /* CloudPath.swift */; };
@@ -342,6 +343,7 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		749F59A42BD1211500AB299A /* PCloudSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudSetup.swift; sourceTree = "<group>"; };
 		74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDebugLogger.swift; sourceTree = "<group>"; };
 		74C0FB2629B209B6008EF811 /* S3Authenticator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = S3Authenticator.swift; sourceTree = "<group>"; };
 		74C596E724F022AF00FFD17E /* CloudPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPath.swift; sourceTree = "<group>"; };
@@ -827,6 +829,7 @@
 				746F091A27BD029C003FCD9F /* PCloudError.swift */,
 				746F091827BD0077003FCD9F /* PCloudIdentifierCache.swift */,
 				746F091627BD006D003FCD9F /* PCloudItem.swift */,
+				749F59A42BD1211500AB299A /* PCloudSetup.swift */,
 				74073D1827C9406000A86C9A /* Task+Promises.swift */,
 			);
 			path = PCloud;
@@ -1258,6 +1261,7 @@
 				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
 				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
+				749F59A52BD1211500AB299A /* PCloudSetup.swift in Sources */,
 				4AC75F9028607B20002731FE /* CustomAWSEndpointRegionNameStorage.swift in Sources */,
 				4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */,
 				9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */,

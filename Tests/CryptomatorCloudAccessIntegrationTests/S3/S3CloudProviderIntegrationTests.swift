@@ -24,18 +24,20 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 		S3CloudProviderIntegrationTests.onetimeAWSIntegrationTestsSetup
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
 		// swiftlint:disable:next force_try
-		setUpProvider = try! S3CloudProvider(credential: .mock)
+		setUpProvider = try! S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		provider = try S3CloudProvider(credential: .mock)
+		provider = try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
 		do {
-			provider = try S3CloudProvider(credential: .unauthorizedMock)
+			let correctCredential = IntegrationTestSecrets.s3Credential
+			let invalidCredential = S3Credential(accessKey: correctCredential.accessKey, secretKey: correctCredential.secretKey + "Foo", url: correctCredential.url, bucket: correctCredential.bucket, region: correctCredential.region)
+			provider = try S3CloudProvider(credential: invalidCredential)
 		} catch {
 			return Promise(error)
 		}
@@ -43,10 +45,10 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 	}
 
 	func testMultiPartCopy() throws {
-		let credential = S3Credential.mock
+		let credential = IntegrationTestSecrets.s3Credential
 		let endpoint = AWSEndpoint(url: credential.url)
 		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
-		let region = S3Credential.mock.region.aws_regionTypeValue()
+		let region = credential.region.aws_regionTypeValue()
 		let serviceConfiguration = try XCTUnwrap(AWSServiceConfiguration(region: region, endpoint: endpoint, credentialsProvider: credentialsProvider))
 		AWSS3.register(with: serviceConfiguration, forKey: credential.identifier)
 		let service = AWSS3.s3(forKey: credential.identifier)
@@ -78,22 +80,8 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
-		return try S3CloudProvider(credential: .mock, maxPageSize: maxPageSizeForLimitedCloudProvider)
+		return try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
-}
-
-extension S3Credential {
-	static let mock = S3Credential(accessKey: IntegrationTestSecrets.s3AccessKey,
-	                               secretKey: IntegrationTestSecrets.s3SecretKey,
-	                               url: IntegrationTestSecrets.s3URL,
-	                               bucket: IntegrationTestSecrets.s3Bucket,
-	                               region: IntegrationTestSecrets.s3RegionName)
-
-	static let unauthorizedMock = S3Credential(accessKey: IntegrationTestSecrets.s3AccessKey,
-	                                           secretKey: IntegrationTestSecrets.s3SecretKey + "Foo",
-	                                           url: IntegrationTestSecrets.s3URL,
-	                                           bucket: IntegrationTestSecrets.s3Bucket,
-	                                           region: IntegrationTestSecrets.s3RegionName)
 }
 
 extension S3CloudProviderIntegrationTests {

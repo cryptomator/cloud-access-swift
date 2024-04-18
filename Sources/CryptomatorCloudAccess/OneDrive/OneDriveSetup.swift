@@ -9,7 +9,14 @@
 import Foundation
 import MSAL
 
-public enum OneDriveSetup {
-	public static var clientApplication: MSALPublicClientApplication!
-	public static var sharedContainerIdentifier: String?
+public class OneDriveSetup {
+	public static var constants: OneDriveSetup!
+
+	public let clientApplication: MSALPublicClientApplication
+	public let sharedContainerIdentifier: String?
+
+	public init(clientApplication: MSALPublicClientApplication, sharedContainerIdentifier: String?) {
+		self.clientApplication = clientApplication
+		self.sharedContainerIdentifier = sharedContainerIdentifier
+	}
 }

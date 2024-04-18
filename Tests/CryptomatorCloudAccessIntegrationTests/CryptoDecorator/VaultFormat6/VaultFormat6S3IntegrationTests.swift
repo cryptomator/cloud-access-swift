@@ -21,7 +21,7 @@ class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! S3CloudProvider(credential: .mock)
+	private static let cloudProvider = try! S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
 
 	override class func setUp() {
@@ -58,7 +58,7 @@ class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
-		let limitedDelegate = try S3CloudProvider(credential: .mock, maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let limitedDelegate = try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6S3IntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}

@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.9.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.10.0"))
 ```
 
 ## Usage
@@ -151,8 +151,14 @@ GoogleDriveAuthenticator.authenticate(credential: credential, from: viewControll
 You can then use the credential to create a Google Drive provider:
 
 ```swift
-let useBackgroundSession = ... // optional: only needed if you want to create a `GoogleDriveProvider` with a background `URLSession`, defaults to `false`
-let provider = GoogleDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
+let provider = GoogleDriveCloudProvider(credential: credential)
+```
+
+Or create a Google Drive provider using a background URLSession:
+
+```swift
+let sessionIdentifier = ...
+let provider = GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### OneDrive
@@ -160,8 +166,9 @@ let provider = GoogleDriveCloudProvider(credential: credential, useBackgroundSes
 Set up the `Info.plist` and your app delegate as described in [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-objc). In addition, the following constants must be set once, e.g. in your app delegate:
 
 ```swift
-OneDriveSetup.sharedContainerIdentifier = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession` in an app extension
-OneDriveSetup.clientApplication = ... // your `MSALPublicClientApplication`
+let clientApplication = ... // your `MSALPublicClientApplication`
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession` in an app extension
+OneDriveSetup.constants = OneDriveSetup(clientApplication: clientApplication, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 Begin the authentication flow:
@@ -179,11 +186,25 @@ OneDriveAuthenticator.authenticate(from: viewController).then { credential in
 You can then use the credential to create a OneDrive provider:
 
 ```swift
-let useBackgroundSession = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession`, defaults to `false`
-let provider = OneDriveCloudProvider(credential: credential, useBackgroundSession: useBackgroundSession)
+let provider = OneDriveCloudProvider(credential: credential)
+```
+
+Or create a OneDrive provider using a background URLSession:
+
+```swift
+let sessionIdentifier = ...
+let provider = OneDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### pCloud
+
+The following constants must be set once, e.g. in your app delegate:
+
+```swift
+let appKey = ... // your pCloud app key
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession` in an app extension
+PCloudSetup.constants = PCloudSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier)
+```
 
 Begin the authentication flow:
 
@@ -197,20 +218,18 @@ PCloudAuthenticator.authenticate(from: viewController).then { credential in
 }
 ```
 
-You can then use the credential to create a pCloud provider.
-
-Create a pCloud provider with a pCloud client:
+You can then use the credential to create a pCloud provider with a pCloud client:
 
 ```swift
 let client = PCloud.createClient(with: credential.user)
 let provider = PCloudCloudProvider(client: client)
 ```
 
-Create a pCloud provider with a pCloud client using a background URLSession:
+Or create a pCloud provider with a pCloud client using a background URLSession:
 
 ```swift
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `PCloudCloudProvider` in an app extension 
-let client = PCloud.createBackgroundClient(with: credential.user, sharedContainerIdentifier: sharedContainerIdentifier)
+let sessionIdentifier = ...
+let client = PCloud.createBackgroundClient(with: credential.user, sessionIdentifier: sessionIdentifier)
 let provider = PCloudCloudProvider(client: client)
 ```
 
@@ -228,15 +247,13 @@ let identifier = ... // optional: you might want to give this credential an iden
 let credential = S3Credential(accessKey: accessKey, secretKey: secretKey, url: url, bucket: bucket, region: region, identifier: identifier)
 ```
 
-You can then use the credential to create a S3 provider.
-
-Create a S3 provider with a S3 credential:
+You can then use the credential to create a S3 provider:
 
 ```swift
 let provider = try S3Provider(credential: credential)
 ```
 
-Create a S3 provider using a background URLSession:
+Or create a S3 provider using a background URLSession:
 
 ```swift
 let sharedContainerIdentifier = ... // optional: only needed if you want to create a `S3CloudProvider` in an app extension 
@@ -267,20 +284,19 @@ let identifier = ... // optional: you might want to give this credential an iden
 let credential = WebDAVCredential(baseURL: baseURL, username: username, password: password, allowedCertificate: allowedCertificate, identifier: identifier)
 ```
 
-You can then use the credential to create a WebDAV provider.
-
-Create a WebDAV provider with a WebDAV client:
+You can then use the credential to create a WebDAV provider with a WebDAV client:
 
 ```swift
 let client = WebDAVClient(credential: credential)
 let provider = WebDAVProvider(with: client)
 ```
 
-Create a WebDAV provider with a WebDAV client using a background URLSession:
+Or create a WebDAV provider with a WebDAV client using a background URLSession:
 
 ```swift
+let sessionIdentifier = ...
 let sharedContainerIdentifier = ... // optional: only needed if you want to create a `WebDAVProvider` in an app extension 
-let client = WebDAVClient.withBackgroundSession(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier)
+let client = WebDAVClient.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 let provider = WebDAVProvider(with: client)
 ```
 

@@ -36,9 +36,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
 	}
 
-	public static func withBackgroundSession(credential: GoogleDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) throws -> GoogleDriveCloudProvider {
+	public static func withBackgroundSession(credential: GoogleDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> GoogleDriveCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		configuration.sharedContainerIdentifier = GoogleDriveSetup.constants.sharedContainerIdentifier
 		return try .init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
 	}
 

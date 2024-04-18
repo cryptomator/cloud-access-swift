@@ -41,15 +41,15 @@ extension PCloud {
 	 - Parameter sharedContainerIdentifier: To create a URL session for use by an app extension, set this property to a valid identifier for a container shared between the app extension and its containing app.
 	 - Returns: An instance of a `PCloudClient` ready to take requests.
 	 */
-	public static func createBackgroundClient(with user: OAuth.User, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> PCloudClient {
-		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+	public static func createBackgroundClient(with user: OAuth.User, sessionIdentifier: String) -> PCloudClient {
+		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: sessionIdentifier)
 	}
 
-	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {
+	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String) -> PCloudClient {
 		let authenticator = OAuthAccessTokenBasedAuthenticator(accessToken: accessToken)
 		let eventHub = URLSessionEventHub()
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		configuration.sharedContainerIdentifier = PCloudSetup.constants.sharedContainerIdentifier
 		let session = URLSession(configuration: configuration, delegate: eventHub, delegateQueue: nil)
 		let foregroundSession = URLSession(configuration: .default, delegate: eventHub, delegateQueue: nil)
 

@@ -12,8 +12,8 @@ import MSAL
 public class OneDriveSetup {
 	public static var constants: OneDriveSetup!
 
-	let clientApplication: MSALPublicClientApplication
-	let sharedContainerIdentifier: String?
+	public let clientApplication: MSALPublicClientApplication
+	public let sharedContainerIdentifier: String?
 
 	public init(clientApplication: MSALPublicClientApplication, sharedContainerIdentifier: String?) {
 		self.clientApplication = clientApplication

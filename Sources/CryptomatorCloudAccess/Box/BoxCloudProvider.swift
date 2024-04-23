@@ -126,7 +126,7 @@ public class BoxCloudProvider: CloudProvider {
 			return fetchFolderMetadata(for: item)
 		} else {
 			let error = CloudProviderError.itemTypeMismatch
-			CloudAccessDDLogDebug("BoxCloudCloudProvider: fetchItemMetadata(for: \(item.identifier)) failed with error: \(error)")
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemMetadata(for: \(item.identifier)) failed with error: \(error)")
 			return Promise(error)
 		}
 	}
@@ -518,7 +518,7 @@ public class BoxCloudProvider: CloudProvider {
 		}
 
 		return Promise { fulfill, reject in
-			CloudAccessDDLogDebug("BoxCloudCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
+			CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
 
 			let iterator = client.folders.listItems(folderId: parentItem.identifier)
 			iterator.next { result in

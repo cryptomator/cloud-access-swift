@@ -11,5 +11,4 @@ import Foundation
 public enum BoxError: Error {
 	case unexpectedContent
 	case inconsistentCache
-	case fileLinkNotFound
 }

@@ -27,9 +27,9 @@ let package = Package(
 		.library(name: "CryptomatorCloudAccessCore", targets: ["CryptomatorCloudAccessCore"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/tobihagemann/JOSESwift.git", exact: "2.4.1-cryptomator"),
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.3.0")),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.34.0")),
+		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "5.5.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.8.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "3.4.0")),
@@ -42,7 +42,7 @@ let package = Package(
 		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "7.2.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git", .upToNextMinor(from: "1.3.0")),
-		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "5.5.0"))
+		.package(url: "https://github.com/tobihagemann/JOSESwift.git", exact: "2.4.1-cryptomator")
 	],
 	targets: [
 		.target(
@@ -50,6 +50,7 @@ let package = Package(
 			dependencies: [
 				.product(name: "AWSCore", package: "aws-sdk-ios-spm"),
 				.product(name: "AWSS3", package: "aws-sdk-ios-spm"),
+				.product(name: "BoxSDK", package: "box-ios-sdk"),
 				.product(name: "CocoaLumberjackSwift", package: "CocoaLumberjack"),
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
 				.product(name: "GoogleAPIClientForREST_Drive", package: "google-api-objectivec-client-for-rest"),
@@ -62,8 +63,7 @@ let package = Package(
 				.product(name: "MSGraphClientSDK", package: "msgraph-sdk-objc-models-spm"),
 				.product(name: "ObjectiveDropboxOfficial", package: "dropbox-sdk-obj-c-spm"),
 				.product(name: "PCloudSDKSwift", package: "pcloud-sdk-swift"),
-				.product(name: "Promises", package: "promises"),
-				.product(name: "BoxSDK", package: "box-ios-sdk")
+				.product(name: "Promises", package: "promises")
 			],
 			path: "Sources/CryptomatorCloudAccess",
 			exclude: appExtensionUnsafeSources

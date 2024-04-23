@@ -1,8 +1,9 @@
 //
 //  BoxCredential.swift
-//
+//  CryptomatorCloudAccess
 //
 //  Created by Majid Achhoud on 19.03.24.
+//  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
 import AuthenticationServices

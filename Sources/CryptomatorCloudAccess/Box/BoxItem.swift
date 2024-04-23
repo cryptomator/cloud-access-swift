@@ -29,7 +29,7 @@ extension BoxItem {
 		case let .folder(folder):
 			self.init(cloudPath: cloudPath, folder: folder)
 		case let .webLink(webLink):
-			throw PCloudError.unexpectedContent
+			throw BoxError.unexpectedContent
 		}
 	}
 

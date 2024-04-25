@@ -8,6 +8,8 @@ If you would like to run integration tests that require authentication, you have
 
 ```sh
 #!/bin/sh
+export BOX_ACCESS_TOKEN=...
+export BOX_REFRESH_TOKEN=...
 export DROPBOX_ACCESS_TOKEN=...
 export GOOGLE_DRIVE_CLIENT_ID=...
 export GOOGLE_DRIVE_REFRESH_TOKEN=...
@@ -32,6 +34,21 @@ If you aren't using the Xcode project, you may have to run `./create-integration
 If you are building via a CI system, set these secret environment variables accordingly.
 
 ### How to Get the Secrets
+
+#### Box
+
+To get the access token for Box, generate a developer token in the Box Developer Portal. For more detailed instructions, check out the [OAuth 2.0 Documentation from Box](https://developer.box.com/guides/authentication/oauth2/).
+
+To obtain the refresh token from Box, it is recommended to extract it from `authenticate` after a successful login. The easiest way to do this is to set a breakpoint inside the `BoxAuthenticator`:
+
+```swift
+public static func authenticate(from viewController: UIViewController, tokenStore: TokenStore) -> Promise<(BoxClient, String)> {
+	return Promise {
+  // ...
+  fulfill((client, user.id)) // set breakpoint here
+  // ...
+}
+```
 
 #### Dropbox
 

@@ -84,6 +84,7 @@ Begin the authentication flow:
 
 ```swift
 let tokenStore = BoxTokenStore()
+let credential = BoxCredential(tokenStore: tokenStore)
 let viewController = ... // the presenting `UIViewController`
 BoxAuthenticator.authenticate(credential: credential, from: viewController).then { 
   // authentication successful

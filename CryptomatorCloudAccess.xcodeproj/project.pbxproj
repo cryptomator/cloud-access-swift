@@ -186,6 +186,8 @@
 		9ED0E624246198F600FDB438 /* VaultFormat7CloudProviderMockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ED0E623246198F600FDB438 /* VaultFormat7CloudProviderMockTests.swift */; };
 		9EE62A0D247D54760089DAF7 /* CloudProvider+Convenience.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */; };
 		9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */; };
+		B322A2BB2BDF7F9F00306F01 /* VaultFormat7BoxIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B322A2BA2BDF7F9F00306F01 /* VaultFormat7BoxIntegrationTests.swift */; };
+		B322A2BD2BDF7FBE00306F01 /* VaultFormat6BoxIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B322A2BC2BDF7FBE00306F01 /* VaultFormat6BoxIntegrationTests.swift */; };
 		B3408AC82BCD32CA005271D2 /* BoxCredentialMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3408AC72BCD32CA005271D2 /* BoxCredentialMock.swift */; };
 		B3408ACA2BCDAA09005271D2 /* BoxError.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3408AC92BCDAA09005271D2 /* BoxError.swift */; };
 		B3D513912BA9A32200DE0D36 /* BoxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D5138D2BA9A32200DE0D36 /* BoxAuthenticator.swift */; };
@@ -384,6 +386,8 @@
 		9ED0E623246198F600FDB438 /* VaultFormat7CloudProviderMockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7CloudProviderMockTests.swift; sourceTree = "<group>"; };
 		9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudProvider+Convenience.swift"; sourceTree = "<group>"; };
 		9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CloudProvider+ConvenienceTests.swift"; sourceTree = "<group>"; };
+		B322A2BA2BDF7F9F00306F01 /* VaultFormat7BoxIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7BoxIntegrationTests.swift; sourceTree = "<group>"; };
+		B322A2BC2BDF7FBE00306F01 /* VaultFormat6BoxIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat6BoxIntegrationTests.swift; sourceTree = "<group>"; };
 		B3408AC72BCD32CA005271D2 /* BoxCredentialMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxCredentialMock.swift; sourceTree = "<group>"; };
 		B3408AC92BCDAA09005271D2 /* BoxError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxError.swift; sourceTree = "<group>"; };
 		B3D5138D2BA9A32200DE0D36 /* BoxAuthenticator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BoxAuthenticator.swift; sourceTree = "<group>"; };
@@ -653,6 +657,7 @@
 		4ACA63DA2615FF3B00D19304 /* VaultFormat6 */ = {
 			isa = PBXGroup;
 			children = (
+				B322A2BC2BDF7FBE00306F01 /* VaultFormat6BoxIntegrationTests.swift */,
 				4ACA63CB2615FF0000D19304 /* VaultFormat6DropboxIntegrationTests.swift */,
 				4ACA63D02615FF1600D19304 /* VaultFormat6GoogleDriveIntegrationTests.swift */,
 				4ACA63C62615FED700D19304 /* VaultFormat6LocalFileSystemIntegrationTests.swift */,
@@ -667,6 +672,7 @@
 		4ACA63E12615FF6400D19304 /* VaultFormat7 */ = {
 			isa = PBXGroup;
 			children = (
+				B322A2BA2BDF7F9F00306F01 /* VaultFormat7BoxIntegrationTests.swift */,
 				4ACA63E42615FF6400D19304 /* VaultFormat7DropboxIntegrationTests.swift */,
 				4ACA63E22615FF6400D19304 /* VaultFormat7GoogleDriveIntegrationTests.swift */,
 				4ACA63E52615FF6400D19304 /* VaultFormat7LocalFileSystemIntegrationTests.swift */,
@@ -1433,6 +1439,7 @@
 				7467A0D627DF9A8000BCFDF8 /* VaultFormat6PCloudIntegrationTests.swift in Sources */,
 				4AC75F9C2861A6DE002731FE /* VaultFormat6S3IntegrationTests.swift in Sources */,
 				4ACA63A02615FE2C00D19304 /* CloudAccessIntegrationTest.swift in Sources */,
+				B322A2BB2BDF7F9F00306F01 /* VaultFormat7BoxIntegrationTests.swift in Sources */,
 				B3D513972BA9A44000DE0D36 /* BoxCloudProviderIntegrationTests.swift in Sources */,
 				B3408AC82BCD32CA005271D2 /* BoxCredentialMock.swift in Sources */,
 				4ACA64262616054F00D19304 /* IntegrationTestSecrets.swift in Sources */,
@@ -1444,6 +1451,7 @@
 				4ACA63BB2615FEA600D19304 /* DecoratorFactory.swift in Sources */,
 				4ACA64042615FF9800D19304 /* GoogleDriveAuthenticatorMock.swift in Sources */,
 				4ACA64082615FF9800D19304 /* CloudProvider+CreateIntermediateFolderTests.swift in Sources */,
+				B322A2BD2BDF7FBE00306F01 /* VaultFormat6BoxIntegrationTests.swift in Sources */,
 				4ACA64022615FF9800D19304 /* DropboxCloudProviderIntegrationTests.swift in Sources */,
 				4ACA63D62615FF2E00D19304 /* VaultFormat6WebDAVIntegrationTests.swift in Sources */,
 				4AFC5F67263190BB00744715 /* OneDriveCloudProviderIntegrationTests.swift in Sources */,

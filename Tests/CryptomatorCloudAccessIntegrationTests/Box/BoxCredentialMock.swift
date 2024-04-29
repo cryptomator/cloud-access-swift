@@ -16,17 +16,14 @@ import Promises
 #endif
 
 class BoxCredentialMock: BoxCredential {
-	let tokenStore: MemoryTokenStore
-
 	init() {
 		BoxSetup.constants = BoxSetup(clientId: "", clientSecret: "", sharedContainerIdentifier: "")
-		self.tokenStore = MemoryTokenStore()
-		tokenStore.tokenInfo = TokenInfo(accessToken: IntegrationTestSecrets.boxAccessToken, refreshToken: IntegrationTestSecrets.boxRefreshToken, expiresIn: 3600, tokenType: "bearer")
-		super.init(tokenStore: tokenStore)
+		super.init(tokenStore: MemoryTokenStore())
+		client = BoxSDK.getClient(token: IntegrationTestSecrets.boxDeveloperToken)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
-		tokenStore.tokenInfo = TokenInfo(accessToken: "invalid", expiresIn: 0)
+		client = BoxSDK.getClient(token: "invalid")
 		return Promise(())
 	}
 }

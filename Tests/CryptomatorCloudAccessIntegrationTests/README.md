@@ -38,17 +38,6 @@ If you are building via a CI system, set these secret environment variables acco
 
 To get a developer token for Box, generate it in the Box Developer Portal, keeping in mind that it expires after 60 minutes. For more detailed instructions, check out the [OAuth 2.0 Documentation from Box](https://developer.box.com/guides/authentication/oauth2/).
 
-To obtain the refresh token from Box, it is recommended to extract it from `authenticate` after a successful login. The easiest way to do this is to set a breakpoint inside the `BoxAuthenticator`:
-
-```swift
-public static func authenticate(from viewController: UIViewController, tokenStore: TokenStore) -> Promise<(BoxClient, String)> {
-	return Promise {
-  // ...
-  fulfill((client, user.id)) // set breakpoint here
-  // ...
-}
-```
-
 #### Dropbox
 
 To get the access token for Dropbox, generate a token in the Dropbox Developer Portal. For more detailed instructions, check out the [OAuth Guide from Dropbox](https://developers.dropbox.com/oauth-guide).

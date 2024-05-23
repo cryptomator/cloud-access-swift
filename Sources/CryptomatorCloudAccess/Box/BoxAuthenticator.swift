@@ -10,7 +10,7 @@
 import CryptomatorCloudAccessCore
 #endif
 import AuthenticationServices
-import BoxSDK
+import BoxSdkGen
 import Promises
 import UIKit
 
@@ -20,31 +20,28 @@ public enum BoxAuthenticatorError: Error {
 }
 
 public enum BoxAuthenticator {
-	public static let sdk = BoxSDK(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
+	public static func authenticate(from viewController: UIViewController, tokenStorage: TokenStorage) -> Promise<BoxCredential> {
+		let pendingPromise = Promise<BoxCredential>.pending()
 
-	public static func authenticate(from viewController: UIViewController, tokenStore: TokenStore) -> Promise<(BoxClient, String)> {
-		return Promise { fulfill, reject in
-
-			guard let context = viewController as? ASWebAuthenticationPresentationContextProviding else {
-				reject(BoxAuthenticatorError.invalidContext)
-				return
-			}
-
-			sdk.getOAuth2Client(tokenStore: tokenStore, context: context) { result in
-				switch result {
-				case let .success(client):
-					client.users.getCurrent(fields: ["id"]) { userResult in
-						switch userResult {
-						case let .success(user):
-							fulfill((client, user.id))
-						case .failure:
-							reject(BoxAuthenticatorError.authenticationFailed)
-						}
-					}
-				case .failure:
-					reject(BoxAuthenticatorError.authenticationFailed)
+		_Concurrency.Task {
+			do {
+				guard let context = viewController as? ASWebAuthenticationPresentationContextProviding else {
+					throw BoxAuthenticatorError.invalidContext
 				}
+
+				let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
+				let oauth = BoxOAuth(config: config)
+
+				// Run the login flow and store the access token using tokenStorage
+				try await oauth.runLoginFlow(options: .init(), context: context)
+				// TODO: Catch error when login failed
+
+				pendingPromise.fulfill(BoxCredential(tokenStore: tokenStorage))
+			} catch {
+				pendingPromise.reject(BoxAuthenticatorError.authenticationFailed)
 			}
 		}
+
+		return pendingPromise
 	}
 }

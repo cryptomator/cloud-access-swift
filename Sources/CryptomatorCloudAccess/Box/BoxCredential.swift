@@ -7,56 +7,56 @@
 //
 
 import AuthenticationServices
-import BoxSDK
+import BoxSdkGen
 import Foundation
 import Promises
 
 public enum BoxCredentialErrors: Error {
 	case noUsername
+	case authenticationFailed
 }
 
 public class BoxCredential {
-	public internal(set) var client: BoxClient?
+	public var client: BoxClient
 
-	public init(tokenStore: TokenStore) {
-		let sdk = BoxSDK(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
-		sdk.getOAuth2Client(tokenStore: tokenStore) { result in
-			switch result {
-			case let .success(client):
-				self.client = client
-			case let .failure:
-				break
-			}
-		}
+	public init(tokenStore: TokenStorage) {
+		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStore)
+		let oauth = BoxOAuth(config: config)
+		self.client = BoxClient(auth: oauth)
 	}
 
 	public func deauthenticate() -> Promise<Void> {
-		return Promise<Void> { fulfill, reject in
-			self.client?.destroy { result in
-				switch result {
-				case .success:
-					fulfill(())
-				case let .failure(error):
-					reject(error)
-				}
+		let pendingPromise = Promise<Void>.pending()
+
+		_Concurrency.Task {
+			do {
+				let networkSession = NetworkSession()
+				try await self.client.auth.revokeToken(networkSession: networkSession)
+				pendingPromise.fulfill(())
+			} catch {
+				pendingPromise.reject(error)
 			}
 		}
+
+		return pendingPromise
 	}
 
 	public func getUsername() -> Promise<String> {
-		return Promise<String>(on: .global()) { fulfill, reject in
-			self.client?.users.getCurrent(fields: ["name"]) { result in
-				switch result {
-				case let .success(user):
-					if let name = user.name {
-						fulfill(name)
-					} else {
-						reject(BoxCredentialErrors.noUsername)
-					}
-				case let .failure(error):
-					reject(error)
+		let pendingPromise = Promise<String>.pending()
+
+		_Concurrency.Task {
+			do {
+				let user = try await client.users.getUserMe()
+				if let name = user.name {
+					pendingPromise.fulfill(name)
+				} else {
+					pendingPromise.reject(BoxCredentialErrors.noUsername)
 				}
+			} catch {
+				pendingPromise.reject(error)
 			}
 		}
+
+		return pendingPromise
 	}
 }

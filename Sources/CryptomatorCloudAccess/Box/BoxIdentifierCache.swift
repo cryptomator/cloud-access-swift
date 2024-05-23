@@ -6,7 +6,6 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-import BoxSDK
 import Foundation
 import GRDB
 

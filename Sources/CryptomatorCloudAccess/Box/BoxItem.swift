@@ -6,7 +6,7 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-import BoxSDK
+import BoxSdkGen
 import Foundation
 import GRDB
 
@@ -22,24 +22,27 @@ struct BoxItem: Decodable, FetchableRecord, TableRecord, Equatable {
 }
 
 extension BoxItem {
-	init(cloudPath: CloudPath, folderItem: FolderItem) throws {
+	// TODO: Must be checked whether this init is needed at all
+
+	init(cloudPath: CloudPath, folderItem: FileOrFolderOrWebLink) throws {
 		switch folderItem {
 		case let .file(file):
 			self.init(cloudPath: cloudPath, file: file)
 		case let .folder(folder):
 			self.init(cloudPath: cloudPath, folder: folder)
-		case let .webLink(webLink):
+		// Weblinks are currently not supported, if required they can be added later.
+		case .webLink:
 			throw BoxError.unexpectedContent
 		}
 	}
 
-	init(cloudPath: CloudPath, file: File) {
+	init(cloudPath: CloudPath, file: FileBase) {
 		self.cloudPath = cloudPath
 		self.identifier = file.id
 		self.itemType = .file
 	}
 
-	init(cloudPath: CloudPath, folder: Folder) {
+	init(cloudPath: CloudPath, folder: FolderBase) {
 		self.cloudPath = cloudPath
 		self.identifier = folder.id
 		self.itemType = .folder

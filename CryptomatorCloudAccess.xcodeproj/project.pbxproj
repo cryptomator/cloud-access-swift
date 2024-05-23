@@ -194,7 +194,7 @@
 		B3D513922BA9A32200DE0D36 /* BoxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D5138E2BA9A32200DE0D36 /* BoxCredential.swift */; };
 		B3D513932BA9A32200DE0D36 /* BoxSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */; };
 		B3D513972BA9A44000DE0D36 /* BoxCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D513952BA9A3BB00DE0D36 /* BoxCloudProviderIntegrationTests.swift */; };
-		B3FC94A42BA9A98200D1ECFD /* BoxSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B3FC94A32BA9A98200D1ECFD /* BoxSDK */; };
+		B3D620D22BFC7B2E007301C1 /* BoxSdkGen in Frameworks */ = {isa = PBXBuildFile; productRef = B3D620D12BFC7B2E007301C1 /* BoxSdkGen */; };
 		B3FC94A62BA9AA4400D1ECFD /* BoxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A52BA9AA4400D1ECFD /* BoxCloudProvider.swift */; };
 		B3FC94A82BA9AEEC00D1ECFD /* BoxIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A72BA9AEEC00D1ECFD /* BoxIdentifierCache.swift */; };
 		B3FC94AA2BA9AEFC00D1ECFD /* BoxItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A92BA9AEFC00D1ECFD /* BoxItem.swift */; };
@@ -405,7 +405,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				4A75E1C428806F5800952FE6 /* MSGraphClientModels in Frameworks */,
-				B3FC94A42BA9A98200D1ECFD /* BoxSDK in Frameworks */,
 				4A75E1C728806FA100952FE6 /* MSGraphClientSDK in Frameworks */,
 				4AF0AA7C2844DDD200C20B75 /* AWSS3 in Frameworks */,
 				74F9355D251F67A3001F4ADA /* CryptomatorCryptoLib in Frameworks */,
@@ -419,6 +418,7 @@
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
+				B3D620D22BFC7B2E007301C1 /* BoxSdkGen in Frameworks */,
 				4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1074,7 +1074,7 @@
 				4A75E1C628806FA100952FE6 /* MSGraphClientSDK */,
 				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
 				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
-				B3FC94A32BA9A98200D1ECFD /* BoxSDK */,
+				B3D620D12BFC7B2E007301C1 /* BoxSdkGen */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1165,7 +1165,7 @@
 				4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */,
 				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
 				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
-				B3FC94A12BA9A8E600D1ECFD /* XCRemoteSwiftPackageReference "box-ios-sdk" */,
+				B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1888,12 +1888,12 @@
 				minimumVersion = 2.3.0;
 			};
 		};
-		B3FC94A12BA9A8E600D1ECFD /* XCRemoteSwiftPackageReference "box-ios-sdk" */ = {
+		B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/box/box-ios-sdk.git";
+			repositoryURL = "https://github.com/box/box-swift-sdk-gen.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 5.5.0;
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.2.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -1974,10 +1974,10 @@
 			package = 74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */;
 			productName = Promises;
 		};
-		B3FC94A32BA9A98200D1ECFD /* BoxSDK */ = {
+		B3D620D12BFC7B2E007301C1 /* BoxSdkGen */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B3FC94A12BA9A8E600D1ECFD /* XCRemoteSwiftPackageReference "box-ios-sdk" */;
-			productName = BoxSDK;
+			package = B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */;
+			productName = BoxSdkGen;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -121,7 +121,7 @@ class VaultFormat6ShortenedNameCache {
 			return Promise(originalName)
 		} else {
 			return loadLngFile(shortenedName).then { data -> String in
-				let originalName = String(data: data, encoding: .utf8)!
+				let originalName = String(decoding: data, as: UTF8.self)
 				try? self.addToCache(shortenedName, originalName: originalName)
 				return originalName
 			}

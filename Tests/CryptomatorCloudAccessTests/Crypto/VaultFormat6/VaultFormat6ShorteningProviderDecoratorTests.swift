@@ -70,7 +70,7 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q"))
 		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q/OD"))
 		XCTAssertEqual(2, provider.createdFiles.count)
-		XCTAssertEqual("ciphertext4".data(using: .utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
+		XCTAssertEqual(Data("ciphertext4".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
 		XCTAssertEqual(String(repeating: "file4", count: 26).data(using: .utf8), provider.createdFiles["pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
 		XCTAssertEqual("File 4 (Long)", metadata.name)
 		XCTAssertEqual(.file, metadata.itemType)
@@ -87,7 +87,7 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
 		XCTAssertEqual(2, provider.createdFiles.count)
 		XCTAssertNotNil(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
-		XCTAssertEqual("0\(String(repeating: "dir3", count: 33))".data(using: .utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
+		XCTAssertEqual(Data("0\(String(repeating: "dir3", count: 33))".utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
 	}
 
 	func testDeleteFileWithLongName() async throws {
@@ -141,7 +141,7 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL"))
 		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL/2X"))
 		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertEqual("0\(String(repeating: "dir3", count: 33))".data(using: .utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
+		XCTAssertEqual(Data("0\(String(repeating: "dir3", count: 33))".utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
 		XCTAssertEqual(1, provider.moved.count)
 		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
 	}

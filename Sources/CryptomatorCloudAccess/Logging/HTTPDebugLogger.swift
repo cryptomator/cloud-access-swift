@@ -42,6 +42,7 @@ enum HTTPDebugLogger {
 		guard let bodyData = request.httpBody else {
 			return .none
 		}
+		// swiftlint:disable:next non_optional_string_data_conversion
 		if let body = String(data: bodyData, encoding: .utf8) {
 			if body.isEmpty {
 				return .empty
@@ -102,6 +103,7 @@ enum HTTPDebugLogger {
 		if let contentEncodingHeaderField = response.value(forHTTPHeaderField: "Content-Encoding"), contentEncodingHeaderField.caseInsensitiveCompare("identity") != .orderedSame {
 			return .encoded
 		}
+		// swiftlint:disable:next non_optional_string_data_conversion
 		if let body = String(data: bodyData, encoding: .utf8) {
 			if body.isEmpty {
 				return .empty

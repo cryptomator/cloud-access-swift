@@ -55,7 +55,7 @@ public class CryptorMock: Cryptor {
 	}
 
 	override public func encryptDirId(_ dirId: Data) throws -> String {
-		if let dirId = dirIds[String(data: dirId, encoding: .utf8)!] {
+		if let dirId = dirIds[String(decoding: dirId, as: UTF8.self)] {
 			return dirId
 		} else {
 			return "99ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"

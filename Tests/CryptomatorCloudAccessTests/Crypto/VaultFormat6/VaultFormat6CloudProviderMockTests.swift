@@ -45,6 +45,6 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 		XCTAssertEqual(.file, metadata.itemType)
 		try await provider.downloadFile(from: metadata.cloudPath, to: localURL).async()
 		let downloadedContents = try Data(contentsOf: localURL)
-		XCTAssertEqual("dir1-id".data(using: .utf8), downloadedContents)
+		XCTAssertEqual(Data("dir1-id".utf8), downloadedContents)
 	}
 }

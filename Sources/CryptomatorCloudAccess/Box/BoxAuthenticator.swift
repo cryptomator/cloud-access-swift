@@ -29,7 +29,7 @@ public enum BoxAuthenticator {
 					throw BoxAuthenticatorError.invalidContext
 				}
 
-				let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret)
+				let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
 				let oauth = BoxOAuth(config: config)
 
 				// Run the login flow and store the access token using tokenStorage

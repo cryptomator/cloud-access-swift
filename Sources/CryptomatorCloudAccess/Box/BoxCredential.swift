@@ -59,4 +59,19 @@ public class BoxCredential {
 
 		return pendingPromise
 	}
+
+	public func getUserId() -> Promise<String> {
+		let pendingPromise = Promise<String>.pending()
+
+		_Concurrency.Task {
+			do {
+				let user = try await client.users.getUserMe()
+				pendingPromise.fulfill(user.id)
+			} catch {
+				pendingPromise.reject(error)
+			}
+		}
+
+		return pendingPromise
+	}
 }

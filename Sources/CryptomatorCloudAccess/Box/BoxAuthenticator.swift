@@ -17,6 +17,7 @@ import UIKit
 public enum BoxAuthenticatorError: Error {
 	case authenticationFailed
 	case invalidContext
+	case loginCancelled
 }
 
 public enum BoxAuthenticator {
@@ -34,11 +35,18 @@ public enum BoxAuthenticator {
 
 				// Run the login flow and store the access token using tokenStorage
 				try await oauth.runLoginFlow(options: .init(), context: context)
-				// TODO: Catch error when login failed
 
-				pendingPromise.fulfill(BoxCredential(tokenStore: tokenStorage))
-			} catch {
-				pendingPromise.reject(BoxAuthenticatorError.authenticationFailed)
+				pendingPromise.fulfill(BoxCredential(tokenStorage: tokenStorage))
+			} catch let error as ASWebAuthenticationSessionError {
+				if error.code == .canceledLogin {
+					// Handle the login cancellation
+					CloudAccessDDLogDebug("BoxAuthenticator: Login flow cancelled by the user.")
+					pendingPromise.reject(BoxAuthenticatorError.loginCancelled)
+				} else {
+					// Handle other authentication errors
+					CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed with error: \(error.localizedDescription).")
+					pendingPromise.reject(BoxAuthenticatorError.authenticationFailed)
+				}
 			}
 		}
 

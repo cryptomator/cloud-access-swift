@@ -15,31 +15,14 @@ import Promises
 @testable import CryptomatorCloudAccess
 #endif
 
-// Custom in-memory token storage
-class InMemoryTokenStore: TokenStorage {
-	private var tokenInfo: AccessToken?
-
-	func store(token: AccessToken) async throws {
-		tokenInfo = token
-	}
-
-	func get() async throws -> AccessToken? {
-		return tokenInfo
-	}
-
-	func clear() async throws {
-		tokenInfo = nil
-	}
-}
-
 class BoxCredentialMock: BoxCredential {
 	init() {
 		// Set up Box constants for testing purposes
 		BoxSetup.constants = BoxSetup(clientId: "", clientSecret: "", sharedContainerIdentifier: "")
 
 		// Initialize the BoxCredential with InMemoryTokenStore
-		let tokenStore = InMemoryTokenStore()
-		super.init(tokenStore: tokenStore)
+		let tokenStore = InMemoryTokenStorage()
+		super.init(tokenStorage: tokenStore)
 
 		// Override the client with a test token using BoxDeveloperTokenAuth
 		let devTokenAuth = BoxDeveloperTokenAuth(token: IntegrationTestSecrets.boxDeveloperToken)

@@ -7,6 +7,7 @@
 //
 
 import BoxSdkGen
+import CryptoKit
 import Foundation
 import Promises
 
@@ -14,11 +15,23 @@ public class BoxCloudProvider: CloudProvider {
 	private let credential: BoxCredential
 	private let identifierCache: BoxIdentifierCache
 	private let maxPageSize: Int
+	private let networkSession: NetworkSession
 
-	public init(credential: BoxCredential, maxPageSize: Int = .max) throws {
+	public init(credential: BoxCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.credential = credential
 		self.identifierCache = try BoxIdentifierCache()
 		self.maxPageSize = max(1, min(maxPageSize, 1000))
+		self.networkSession = NetworkSession(configuration: urlSessionConfiguration)
+	}
+
+	public convenience init(credential: BoxCredential, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
+	}
+
+	public static func withBackgroundSession(credential: BoxCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> BoxCloudProvider {
+		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
+		configuration.sharedContainerIdentifier = BoxSetup.constants.sharedContainerIdentifier
+		return try BoxCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
 	}
 
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
@@ -39,7 +52,7 @@ public class BoxCloudProvider: CloudProvider {
 			return Promise(CloudProviderError.itemAlreadyExists)
 		}
 		return resolvePath(forItemAt: cloudPath).then { item in
-			self.downloadFile(for: item, to: localURL)
+			self.downloadFile(for: item, to: localURL, onTaskCreation: onTaskCreation)
 		}
 	}
 
@@ -65,7 +78,7 @@ public class BoxCloudProvider: CloudProvider {
 		}.then { _ -> Promise<BoxItem> in
 			return self.resolveParentPath(forItemAt: cloudPath)
 		}.then { parentItem in
-			return self.uploadFile(for: parentItem, from: localURL, to: cloudPath)
+			return self.uploadFile(for: parentItem, from: localURL, to: cloudPath, onTaskCreation: onTaskCreation)
 		}
 	}
 
@@ -220,7 +233,7 @@ public class BoxCloudProvider: CloudProvider {
 		return pendingPromise
 	}
 
-	private func downloadFile(for item: BoxItem, to localURL: URL) -> Promise<Void> {
+	private func downloadFile(for item: BoxItem, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
 		CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
 		guard item.itemType == .file else {
 			return Promise(CloudProviderError.itemTypeMismatch)
@@ -232,14 +245,27 @@ public class BoxCloudProvider: CloudProvider {
 
 		_Concurrency.Task {
 			do {
-				_ = try await client.downloads.downloadFile(fileId: item.identifier, downloadDestinationURL: localURL)
-				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) finished downloading")
-				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier)) error: unauthorized access")
-				pendingPromise.reject(CloudProviderError.unauthorized)
+				let request = try await client.downloads.downloadFile(fileId: item.identifier, downloadDestinationURL: localURL)
+				let task = networkSession.session.downloadTask(with: request) { url, _, error in
+					if let error = error {
+						CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
+						pendingPromise.reject(error)
+					} else if let url = url {
+						do {
+							try FileManager.default.moveItem(at: url, to: localURL)
+							CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) succeeded")
+							pendingPromise.fulfill(())
+						} catch {
+							CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
+							pendingPromise.reject(error)
+						}
+					}
+				}
+
+				onTaskCreation?(task)
+				task.resume()
 			} catch {
-				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier)) error: \(error.localizedDescription)")
+				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
 				pendingPromise.reject(error)
 			}
 		}
@@ -247,64 +273,185 @@ public class BoxCloudProvider: CloudProvider {
 		return pendingPromise
 	}
 
-	private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
 		let client = credential.client
+		let pendingPromise = Promise<CloudItemMetadata>.pending()
 
+		_Concurrency.Task {
+			do {
+				// TODO: Change Error Type
+				let attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
+				guard let fileSize = attributes[.size] as? Int64 else {
+					throw CloudProviderError.unauthorized
+				}
+
+				guard FileManager.default.fileExists(atPath: localURL.path) else {
+					throw CloudProviderError.itemNotFound
+				}
+
+				let targetFileName = cloudPath.lastPathComponent
+
+				if fileSize > 20 * 1024 * 1024 {
+					// Use Chunked Upload API for files larger than 20MB
+					CloudAccessDDLogDebug("BoxCloudProvider: Starting chunked upload for file: \(targetFileName)")
+					chunkedFileUpload(client: client, from: localURL, fileSize: fileSize, targetFileName: targetFileName, parentItem: parentItem, cloudPath: cloudPath, onTaskCreation: onTaskCreation).then { metadata in
+						pendingPromise.fulfill(metadata)
+					}.catch { error in
+						pendingPromise.reject(error)
+					}
+				} else {
+					// Use normal upload for smaller files
+					CloudAccessDDLogDebug("BoxCloudProvider: Starting normal upload for file: \(targetFileName)")
+					normalFileUpload(for: parentItem, from: localURL, to: cloudPath, onTaskCreation: onTaskCreation).then { metadata in
+						pendingPromise.fulfill(metadata)
+					}.catch { error in
+						pendingPromise.reject(error)
+					}
+				}
+			} catch {
+				CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
+				pendingPromise.reject(error)
+			}
+		}
+
+		return pendingPromise
+	}
+
+	private func normalFileUpload(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+		let client = credential.client
 		let pendingPromise = Promise<CloudItemMetadata>.pending()
 
 		_Concurrency.Task {
 			do {
 				guard let fileStream = InputStream(url: localURL) else {
+					CloudAccessDDLogDebug("BoxCloudProvider: normalFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) - file not found")
 					return pendingPromise.reject(CloudProviderError.itemNotFound)
 				}
 
 				let targetFileName = cloudPath.lastPathComponent
 
-				let requestBody = UploadFileVersionRequestBody(
-					attributes: UploadFileVersionRequestBodyAttributesField(
-						name: targetFileName
-					),
-					file: fileStream
-				)
-
-				let existingItem = try await resolvePath(forItemAt: cloudPath).async()
-				let updatedFile = try await client.uploads.uploadFileVersion(fileId: existingItem.identifier, requestBody: requestBody)
-				let list = try self.convertToCloudItemList(updatedFile, at: cloudPath.deletingLastPathComponent())
-				guard let metadata = list.items.first else {
-					throw CloudProviderError.itemNotFound
-				}
-
-				pendingPromise.fulfill(metadata)
-
-			} catch CloudProviderError.itemNotFound {
 				do {
-					guard let fileStream = InputStream(url: localURL) else {
-						return pendingPromise.reject(CloudProviderError.itemNotFound)
+					let existingItem = try await resolvePath(forItemAt: cloudPath).async()
+					let requestBody = UploadFileVersionRequestBody(
+						attributes: UploadFileVersionRequestBodyAttributesField(name: targetFileName),
+						file: fileStream,
+						fileFileName: targetFileName
+					)
+					// Use InputStream directly for uploading
+					let files = try await client.uploads.uploadFileVersion(fileId: existingItem.identifier, requestBody: requestBody)
+
+					if let updatedFile = files.entries?.first {
+						let cloudMetadata = convertToCloudItemMetadata(updatedFile, at: cloudPath)
+						CloudAccessDDLogDebug("BoxCloudProvider: normalFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) succeeded")
+						pendingPromise.fulfill(cloudMetadata)
+					} else {
+						throw CloudProviderError.itemNotFound
 					}
-
-					let targetFileName = cloudPath.lastPathComponent
-
+				} catch CloudProviderError.itemNotFound {
 					let requestBody = UploadFileRequestBody(
 						attributes: UploadFileRequestBodyAttributesField(
 							name: targetFileName,
 							parent: UploadFileRequestBodyAttributesParentField(id: parentItem.identifier)
 						),
-						file: fileStream
+						file: fileStream,
+						fileFileName: targetFileName
 					)
-					let newFile = try await client.uploads.uploadFile(requestBody: requestBody)
-					let list = try self.convertToCloudItemList(newFile, at: cloudPath.deletingLastPathComponent())
-					guard let metadata = list.items.first else {
+					// Use InputStream directly for uploading
+					let files = try await client.uploads.uploadFile(requestBody: requestBody)
+
+					if let newFile = files.entries?.first {
+						let cloudMetadata = convertToCloudItemMetadata(newFile, at: cloudPath)
+						CloudAccessDDLogDebug("BoxCloudProvider: normalFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) new file created successfully")
+						pendingPromise.fulfill(cloudMetadata)
+					} else {
 						throw CloudProviderError.itemNotFound
 					}
-					pendingPromise.fulfill(metadata)
-				} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-					pendingPromise.reject(CloudProviderError.unauthorized)
 				} catch {
-					// Handling other upload errors
+					CloudAccessDDLogDebug("BoxCloudProvider: normalFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
 					pendingPromise.reject(error)
 				}
 			} catch {
-				// General error handling if something goes wrong when determining the path
+				CloudAccessDDLogDebug("BoxCloudProvider: normalFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
+				pendingPromise.reject(error)
+			}
+		}
+
+		return pendingPromise
+	}
+
+	private func chunkedFileUpload(client: BoxClient, from localURL: URL, fileSize: Int64, targetFileName: String, parentItem: BoxItem, cloudPath: CloudPath, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+		let pendingPromise = Promise<CloudItemMetadata>.pending()
+
+		_Concurrency.Task {
+			do {
+				let requestBody = CreateFileUploadSessionRequestBody(folderId: parentItem.identifier, fileSize: fileSize, fileName: targetFileName)
+				let uploadSession = try await client.chunkedUploads.createFileUploadSession(requestBody: requestBody)
+
+				guard let uploadSessionId = uploadSession.id else {
+					throw BoxSDKError(message: "Failed to retrieve upload session ID")
+				}
+				CloudAccessDDLogDebug("BoxCloudProvider: Upload session created with ID: \(uploadSessionId)")
+
+				let chunkSize = uploadSession.partSize ?? 8 * 1024 * 1024 // Default to 8MB per chunk
+				var bytesUploaded: Int64 = 0
+				var partArray: [UploadPart] = []
+
+				guard let fileStream = InputStream(url: localURL) else {
+					throw BoxSDKError(message: "Unable to create input stream from file URL")
+				}
+
+				fileStream.open()
+				var totalSHA1 = Insecure.SHA1()
+
+				while bytesUploaded < fileSize {
+					var buffer = [UInt8](repeating: 0, count: Int(chunkSize))
+					let bytesRead = fileStream.read(&buffer, maxLength: buffer.count)
+					if bytesRead < 0 {
+						throw fileStream.streamError ?? BoxSDKError(message: "Unknown file stream error")
+					}
+
+					let chunkData = Data(buffer[0 ..< bytesRead])
+					let range = bytesUploaded ..< bytesUploaded + Int64(bytesRead)
+					let contentRange = "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(fileSize)"
+
+					let sha1 = Insecure.SHA1.hash(data: chunkData)
+					let sha1Base64 = Data(sha1).base64EncodedString()
+					let digestHeader = "sha=\(sha1Base64)"
+					totalSHA1.update(data: chunkData)
+
+					let headers = UploadFilePartHeaders(digest: digestHeader, contentRange: contentRange)
+					CloudAccessDDLogDebug("BoxCloudProvider: Uploading chunk with content range: \(contentRange)")
+
+					let uploadedPart = try await client.chunkedUploads.uploadFilePart(uploadSessionId: uploadSessionId, requestBody: InputStream(data: chunkData), headers: headers)
+
+					if let part = uploadedPart.part {
+						partArray.append(part)
+					} else {
+						throw BoxSDKError(message: "Failed to retrieve upload part")
+					}
+
+					bytesUploaded += Int64(bytesRead)
+				}
+
+				fileStream.close()
+
+				let finalSha1Base64 = Data(totalSHA1.finalize()).base64EncodedString()
+				let digestHeaderFinal = "sha=\(finalSha1Base64)"
+				let commitRequestBody = CreateFileUploadSessionCommitRequestBody(parts: partArray)
+				let commitHeaders = CreateFileUploadSessionCommitHeaders(digest: digestHeaderFinal)
+				CloudAccessDDLogDebug("BoxCloudProvider: Committing upload session with ID: \(uploadSessionId)")
+
+				let commitResponse = try await client.chunkedUploads.createFileUploadSessionCommit(uploadSessionId: uploadSession.id ?? "", requestBody: commitRequestBody, headers: commitHeaders)
+
+				guard let file = commitResponse.entries?.first else {
+					throw CloudProviderError.itemNotFound
+				}
+
+				let cloudMetadata = convertToCloudItemMetadata(file, at: cloudPath)
+				CloudAccessDDLogDebug("BoxCloudProvider: chunkedFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) succeeded")
+				pendingPromise.fulfill(cloudMetadata)
+			} catch {
+				CloudAccessDDLogDebug("BoxCloudProvider: chunkedFileUpload(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
 				pendingPromise.reject(error)
 			}
 		}

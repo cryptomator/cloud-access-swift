@@ -19,8 +19,8 @@ public enum BoxCredentialErrors: Error {
 public class BoxCredential {
 	public var client: BoxClient
 
-	public init(tokenStore: TokenStorage) {
-		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStore)
+	public init(tokenStorage: TokenStorage) {
+		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
 		let oauth = BoxOAuth(config: config)
 		self.client = BoxClient(auth: oauth)
 	}

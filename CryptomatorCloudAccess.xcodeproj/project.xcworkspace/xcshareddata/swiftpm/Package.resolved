@@ -28,6 +28,15 @@
       }
     },
     {
+      "identity" : "box-swift-sdk-gen",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/box/box-swift-sdk-gen.git",
+      "state" : {
+        "revision" : "e5069af728c4b4f048078dfb5aed683c926da857",
+        "version" : "0.2.0"
+      }
+    },
+    {
       "identity" : "cocoalumberjack",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/CocoaLumberjack/CocoaLumberjack.git",
@@ -149,8 +158,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "532d8b529501fb73a2455b179e0bbb6d49b652ed",
-        "version" : "1.5.3"
+        "revision" : "e97a6fcb1ab07462881ac165fdbb37f067e205d5",
+        "version" : "1.5.4"
       }
     }
   ],

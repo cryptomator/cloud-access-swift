@@ -38,6 +38,8 @@ If you are building via a CI system, set these secret environment variables acco
 
 To get a developer token for Box, generate it in the Box Developer Portal, keeping in mind that it expires after 60 minutes. For more detailed instructions, check out the [OAuth 2.0 Documentation from Box](https://developer.box.com/guides/authentication/oauth2/).
 
+We use Developer Tokens instead of OAuth 2.0 tokens for our integration tests because they are simpler to manage. OAuth tokens require a mechanism to refresh tokens and update secrets, which introduces complexity. Developer Tokens, although they expire every 60 minutes, are easier to generate and replace manually, making them more practical for our current setup.
+
 #### Dropbox
 
 To get the access token for Dropbox, generate a token in the Dropbox Developer Portal. For more detailed instructions, check out the [OAuth Guide from Dropbox](https://developers.dropbox.com/oauth-guide).

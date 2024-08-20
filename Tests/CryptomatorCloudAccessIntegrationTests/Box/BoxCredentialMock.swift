@@ -17,20 +17,13 @@ import Promises
 
 class BoxCredentialMock: BoxCredential {
 	init() {
-		// Set up Box constants for testing purposes
 		BoxSetup.constants = BoxSetup(clientId: "", clientSecret: "", sharedContainerIdentifier: "")
-
-		// Initialize the BoxCredential with InMemoryTokenStore
-		let tokenStore = InMemoryTokenStorage()
-		super.init(tokenStorage: tokenStore)
-
-		// Override the client with a test token using BoxDeveloperTokenAuth
+		super.init(tokenStorage: InMemoryTokenStorage())
 		let devTokenAuth = BoxDeveloperTokenAuth(token: IntegrationTestSecrets.boxDeveloperToken)
 		client = BoxClient(auth: devTokenAuth)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
-		// Set the client to an invalid token for deauthentication in tests
 		let invalidTokenAuth = BoxDeveloperTokenAuth(token: "invalid")
 		client = BoxClient(auth: invalidTokenAuth)
 		return Promise(())

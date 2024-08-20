@@ -746,23 +746,14 @@ public class BoxCloudProvider: CloudProvider {
 		let name = metadata.name ?? ""
 		let itemType = CloudItemType.file
 		let size = metadata.size.map { Int($0) }
-		let dateString = metadata.modifiedAt
-
-		let dateFormatter = ISO8601DateFormatter()
-
-		let lastModifiedDate = dateString != nil ? dateFormatter.date(from: dateString!) : nil
+		let lastModifiedDate = metadata.modifiedAt
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 	}
 
 	private func convertToCloudItemMetadata(_ metadata: Folder, at cloudPath: CloudPath) -> CloudItemMetadata {
 		let name = metadata.name ?? ""
 		let itemType = CloudItemType.folder
-		let dateString = metadata.modifiedAt
-
-		let dateFormatter = ISO8601DateFormatter()
-
-		let lastModifiedDate = dateString != nil ? dateFormatter.date(from: dateString!) : nil
-
+		let lastModifiedDate = metadata.modifiedAt
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: nil)
 	}
 
@@ -770,11 +761,7 @@ public class BoxCloudProvider: CloudProvider {
 		let name = metadata.name ?? ""
 		let itemType = CloudItemType.file
 		let size = metadata.size.map { Int($0) }
-		let dateString = metadata.modifiedAt
-
-		let dateFormatter = ISO8601DateFormatter()
-
-		let lastModifiedDate = dateString != nil ? dateFormatter.date(from: dateString!) : nil
+		let lastModifiedDate = metadata.modifiedAt
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 	}
 

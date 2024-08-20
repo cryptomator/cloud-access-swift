@@ -13,7 +13,6 @@ import Promises
 
 public enum BoxCredentialErrors: Error {
 	case noUsername
-	case authenticationFailed
 }
 
 public class BoxCredential {
@@ -27,7 +26,6 @@ public class BoxCredential {
 
 	public func deauthenticate() -> Promise<Void> {
 		let pendingPromise = Promise<Void>.pending()
-
 		_Concurrency.Task {
 			do {
 				let networkSession = NetworkSession()
@@ -37,13 +35,11 @@ public class BoxCredential {
 				pendingPromise.reject(error)
 			}
 		}
-
 		return pendingPromise
 	}
 
 	public func getUsername() -> Promise<String> {
 		let pendingPromise = Promise<String>.pending()
-
 		_Concurrency.Task {
 			do {
 				let user = try await client.users.getUserMe()
@@ -56,13 +52,11 @@ public class BoxCredential {
 				pendingPromise.reject(error)
 			}
 		}
-
 		return pendingPromise
 	}
 
 	public func getUserId() -> Promise<String> {
 		let pendingPromise = Promise<String>.pending()
-
 		_Concurrency.Task {
 			do {
 				let user = try await client.users.getUserMe()
@@ -71,7 +65,6 @@ public class BoxCredential {
 				pendingPromise.reject(error)
 			}
 		}
-
 		return pendingPromise
 	}
 }

@@ -22,20 +22,6 @@ struct BoxItem: Decodable, FetchableRecord, TableRecord, Equatable {
 }
 
 extension BoxItem {
-	// TODO: Must be checked whether this init is needed at all
-
-	init(cloudPath: CloudPath, folderItem: FileOrFolderOrWebLink) throws {
-		switch folderItem {
-		case let .file(file):
-			self.init(cloudPath: cloudPath, file: file)
-		case let .folder(folder):
-			self.init(cloudPath: cloudPath, folder: folder)
-		// Weblinks are currently not supported, if required they can be added later.
-		case .webLink:
-			throw BoxError.unexpectedContent
-		}
-	}
-
 	init(cloudPath: CloudPath, file: FileBase) {
 		self.cloudPath = cloudPath
 		self.identifier = file.id

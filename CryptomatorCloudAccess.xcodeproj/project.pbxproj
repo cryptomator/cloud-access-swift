@@ -448,7 +448,6 @@
 				74F9354B251F66EE001F4ADA /* Sources */,
 				74F9354C251F66F8001F4ADA /* Tests */,
 				4A058FF224519FFC008831F9 /* Products */,
-				B3FC94A22BA9A98200D1ECFD /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -1019,13 +1018,6 @@
 				B3408AC72BCD32CA005271D2 /* BoxCredentialMock.swift */,
 			);
 			path = Box;
-			sourceTree = "<group>";
-		};
-		B3FC94A22BA9A98200D1ECFD /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

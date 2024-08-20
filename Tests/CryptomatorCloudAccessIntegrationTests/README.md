@@ -8,7 +8,9 @@ If you would like to run integration tests that require authentication, you have
 
 ```sh
 #!/bin/sh
-export BOX_DEVELOPER_TOKEN=...
+export BOX_CLIENT_ID=...
+export BOX_CLIENT_SECRET=...
+export BOX_ENTERPRISE_ID=...
 export DROPBOX_ACCESS_TOKEN=...
 export GOOGLE_DRIVE_CLIENT_ID=...
 export GOOGLE_DRIVE_REFRESH_TOKEN=...
@@ -33,12 +35,6 @@ If you aren't using the Xcode project, you may have to run `./create-integration
 If you are building via a CI system, set these secret environment variables accordingly.
 
 ### How to Get the Secrets
-
-#### Box
-
-To get a developer token for Box, generate it in the Box Developer Portal, keeping in mind that it expires after 60 minutes. For more detailed instructions, check out the [OAuth 2.0 Documentation from Box](https://developer.box.com/guides/authentication/oauth2/).
-
-We use Developer Tokens instead of OAuth 2.0 tokens for our integration tests because they are simpler to manage. OAuth tokens require a mechanism to refresh tokens and update secrets, which introduces complexity. Developer Tokens, although they expire every 60 minutes, are easier to generate and replace manually, making them more practical for our current setup.
 
 #### Dropbox
 

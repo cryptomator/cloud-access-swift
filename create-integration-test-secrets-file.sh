@@ -17,7 +17,9 @@ import CryptomatorCloudAccess
 import Foundation
 
 enum IntegrationTestSecrets {
-	static let boxDeveloperToken = "${BOX_DEVELOPER_TOKEN}"
+	static let boxClientId = "${BOX_CLIENT_ID}"
+	static let boxClientSecret = "${BOX_CLIENT_SECRET}"
+	static let boxEnterpriseId = "${BOX_ENTERPRISE_ID}"
 	static let dropboxAccessToken = "${DROPBOX_ACCESS_TOKEN}"
 	static let googleDriveClientId = "${GOOGLE_DRIVE_CLIENT_ID}"
 	static let googleDriveRefreshToken = "${GOOGLE_DRIVE_REFRESH_TOKEN}"

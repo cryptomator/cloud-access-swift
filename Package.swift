@@ -30,7 +30,7 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "1.3.0")),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.34.0")),
-		.package(url: "https://github.com/box/box-swift-sdk-gen.git", .upToNextMinor(from: "0.2.0")),
+		.package(url: "https://github.com/box/box-swift-sdk-gen.git", .upToNextMinor(from: "0.3.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.8.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "3.4.0")),

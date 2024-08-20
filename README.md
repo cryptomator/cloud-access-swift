@@ -71,7 +71,7 @@ let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: m
 
 ### Box
 
-Modify your app delegate as described in [Box iOS SDK](https://github.com/box/box-ios-sdk). In addition, the following constants must be set once, e.g. in your app delegate:
+The following constants must be set once, e.g. in your app delegate:
 
 ```swift
 let clientId = ... // your Box client identifier
@@ -97,6 +97,13 @@ You can then use the credential to create a Box provider:
 
 ```swift
 let provider = BoxCloudProvider(credential: credential)
+```
+
+Or create a Box provider using a background URLSession:
+
+```swift
+let sessionIdentifier = ...
+let provider = BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### Dropbox

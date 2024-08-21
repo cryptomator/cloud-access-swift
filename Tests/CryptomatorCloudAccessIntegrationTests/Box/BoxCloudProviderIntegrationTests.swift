@@ -35,7 +35,10 @@ class BoxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentica
 	}
 
 	override func deauthenticate() -> Promise<Void> {
-		return credential.deauthenticate()
+		let invalidCredential = BoxInvalidCredentialMock()
+		// swiftlint:disable:next force_try
+		provider = try! BoxCloudProvider(credential: invalidCredential)
+		return Promise(())
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {

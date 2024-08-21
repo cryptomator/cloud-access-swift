@@ -7,7 +7,6 @@
 //
 
 import BoxSdkGen
-import CryptoKit
 import Foundation
 import Promises
 
@@ -142,11 +141,9 @@ public class BoxCloudProvider: CloudProvider {
 				CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) received file: \(file)")
 				let cloudItemMetadata = convertToCloudItemMetadata(file, at: item.cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -162,11 +159,9 @@ public class BoxCloudProvider: CloudProvider {
 				CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received folder: \(folder)")
 				let cloudItemMetadata = convertToCloudItemMetadata(folder, at: item.cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -188,7 +183,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.reject(CloudProviderError.pageTokenInvalid)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -207,7 +202,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.fulfill(())
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -269,7 +264,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -295,7 +290,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -311,7 +306,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeNewFile(for: \(parentItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -327,7 +322,7 @@ public class BoxCloudProvider: CloudProvider {
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeExistingFile(for: \(existingItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -364,11 +359,9 @@ public class BoxCloudProvider: CloudProvider {
 				let item = BoxItem(cloudPath: cloudPath, folder: folder)
 				try self.identifierCache.addOrUpdate(item)
 				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -386,13 +379,11 @@ public class BoxCloudProvider: CloudProvider {
 				CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) succeeded")
 				try self.identifierCache.invalidate(item)
 				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch let error as BoxAPIError where error.responseInfo.statusCode == 404 {
 				pendingPromise.reject(CloudProviderError.itemNotFound)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -411,13 +402,11 @@ public class BoxCloudProvider: CloudProvider {
 				CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) succeeded")
 				try self.identifierCache.invalidate(item)
 				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch let error as BoxAPIError where error.responseInfo.statusCode == 404 {
 				pendingPromise.reject(CloudProviderError.itemNotFound)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -438,11 +427,9 @@ public class BoxCloudProvider: CloudProvider {
 				let targetItem = BoxItem(cloudPath: targetCloudPath, file: file)
 				try self.identifierCache.addOrUpdate(targetItem)
 				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -463,11 +450,9 @@ public class BoxCloudProvider: CloudProvider {
 				let newItem = BoxItem(cloudPath: targetCloudPath, folder: folder)
 				try self.identifierCache.addOrUpdate(newItem)
 				pendingPromise.fulfill(())
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -525,11 +510,9 @@ public class BoxCloudProvider: CloudProvider {
 			do {
 				let foundItem = try await findBoxItem(in: parentItem, withName: name, marker: nil)
 				pendingPromise.fulfill(foundItem)
-			} catch let error as BoxSDKError where error.message.contains("Developer token has expired") {
-				pendingPromise.reject(CloudProviderError.unauthorized)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error.localizedDescription)")
-				pendingPromise.reject(error)
+				pendingPromise.reject(convertStandardError(error))
 			}
 		}
 		return pendingPromise
@@ -600,5 +583,14 @@ public class BoxCloudProvider: CloudProvider {
 			}
 		}
 		return CloudItemList(items: items, nextPageToken: folderItems.nextMarker)
+	}
+
+	private func convertStandardError(_ error: Error) -> Error {
+		switch error {
+		case let error as BoxAPIError where error.responseInfo.statusCode == 401:
+			return CloudProviderError.unauthorized
+		default:
+			return error
+		}
 	}
 }

@@ -6,9 +6,8 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
+import BoxSdkGen
 import Foundation
-import Promises
-@testable import BoxSdkGen
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
@@ -21,6 +20,15 @@ class BoxCredentialMock: BoxCredential {
 		super.init(tokenStorage: InMemoryTokenStorage())
 		let config = CCGConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, enterpriseId: IntegrationTestSecrets.boxEnterpriseId)
 		auth = BoxCCGAuth(config: config)
+		client = BoxClient(auth: auth)
+	}
+}
+
+class BoxInvalidCredentialMock: BoxCredential {
+	init() {
+		BoxSetup.constants = BoxSetup(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret, sharedContainerIdentifier: "")
+		super.init(tokenStorage: InMemoryTokenStorage())
+		auth = BoxAuthenticationMock()
 		client = BoxClient(auth: auth)
 	}
 }

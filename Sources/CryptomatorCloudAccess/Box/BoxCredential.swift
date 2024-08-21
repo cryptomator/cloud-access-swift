@@ -16,12 +16,13 @@ public enum BoxCredentialErrors: Error {
 }
 
 public class BoxCredential {
-	public var client: BoxClient
+	var auth: Authentication
+	var client: BoxClient
 
 	public init(tokenStorage: TokenStorage) {
 		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
-		let oauth = BoxOAuth(config: config)
-		self.client = BoxClient(auth: oauth)
+		self.auth = BoxOAuth(config: config)
+		self.client = BoxClient(auth: auth)
 	}
 
 	public func deauthenticate() -> Promise<Void> {

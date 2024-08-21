@@ -28,6 +28,15 @@
       }
     },
     {
+      "identity" : "box-swift-sdk-gen",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/box/box-swift-sdk-gen.git",
+      "state" : {
+        "revision" : "b3fd5bfb78f67639151a6a11ba52bad0587e4d34",
+        "version" : "0.3.0"
+      }
+    },
+    {
       "identity" : "cocoalumberjack",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/CocoaLumberjack/CocoaLumberjack.git",

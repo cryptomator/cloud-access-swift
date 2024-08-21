@@ -8,7 +8,6 @@
 
 import Foundation
 import ObjectiveDropboxOfficial
-import Promises
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else

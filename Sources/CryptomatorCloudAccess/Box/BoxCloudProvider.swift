@@ -509,6 +509,7 @@ public class BoxCloudProvider: CloudProvider {
 		_Concurrency.Task {
 			do {
 				let foundItem = try await findBoxItem(in: parentItem, withName: name, marker: nil)
+				CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) found item: \(foundItem)")
 				pendingPromise.fulfill(foundItem)
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error.localizedDescription)")
@@ -521,7 +522,7 @@ public class BoxCloudProvider: CloudProvider {
 	func findBoxItem(in parentItem: BoxItem, withName name: String, marker: String?) async throws -> BoxItem {
 		let queryParams = GetFolderItemsQueryParams(fields: ["name", "size", "modified_at"], usemarker: true, marker: marker, limit: Int64(maxPageSize))
 		let items = try await client.folders.getFolderItems(folderId: parentItem.identifier, queryParams: queryParams)
-		CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) received items: \(items)")
+		CloudAccessDDLogDebug("BoxCloudProvider: findBoxItem(in: \(name), withName: \(name), marker: \(marker ?? "nil")) received items: \(items)")
 		if let foundItem = try await locateBoxItem(in: items, withName: name, parentItem: parentItem) {
 			return foundItem
 		} else if let nextMarker = items.nextMarker {
@@ -589,6 +590,8 @@ public class BoxCloudProvider: CloudProvider {
 		switch error {
 		case let error as BoxAPIError where error.responseInfo.statusCode == 401:
 			return CloudProviderError.unauthorized
+		case let error as BoxAPIError where error.responseInfo.statusCode == 404:
+			return CloudProviderError.itemNotFound
 		default:
 			return error
 		}

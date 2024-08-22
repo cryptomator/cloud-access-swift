@@ -56,7 +56,7 @@ public class BoxCredential {
 		return pendingPromise
 	}
 
-	public func getUserId() -> Promise<String> {
+	public func getUserID() -> Promise<String> {
 		let pendingPromise = Promise<String>.pending()
 		_Concurrency.Task {
 			do {

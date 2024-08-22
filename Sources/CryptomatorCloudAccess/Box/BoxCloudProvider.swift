@@ -138,7 +138,7 @@ public class BoxCloudProvider: CloudProvider {
 		_Concurrency.Task {
 			do {
 				let file = try await client.files.getFileById(fileId: item.identifier)
-				CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) received file: \(file)")
+				CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) received file: \((try? file.serializeToString()) ?? file)")
 				let cloudItemMetadata = convertToCloudItemMetadata(file, at: item.cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
@@ -156,7 +156,7 @@ public class BoxCloudProvider: CloudProvider {
 		_Concurrency.Task {
 			do {
 				let folder = try await client.folders.getFolderById(folderId: item.identifier)
-				CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received folder: \(folder)")
+				CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received folder: \((try? folder.serializeToString()) ?? folder)")
 				let cloudItemMetadata = convertToCloudItemMetadata(folder, at: item.cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
@@ -176,7 +176,7 @@ public class BoxCloudProvider: CloudProvider {
 			do {
 				let queryParams = GetFolderItemsQueryParams(fields: ["name", "size", "modified_at"], usemarker: true, marker: pageToken, limit: Int64(self.maxPageSize))
 				let items = try await client.folders.getFolderItems(folderId: folderItem.identifier, queryParams: queryParams)
-				CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) received items: \(items)")
+				CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) received items: \((try? items.serializeToString()) ?? items)")
 				let cloudItemList = try convertToCloudItemList(items, at: folderItem.cloudPath)
 				pendingPromise.fulfill(cloudItemList)
 			} catch let error as BoxAPIError where error.responseInfo.statusCode == 400 {
@@ -259,7 +259,7 @@ public class BoxCloudProvider: CloudProvider {
 				guard let file = files.entries?.first else {
 					throw CloudProviderError.itemNotFound
 				}
-				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) received file: \(file)")
+				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) received file: \((try? file.serializeToString()) ?? file)")
 				let cloudItemMetadata = convertToCloudItemMetadata(file, at: cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
@@ -285,7 +285,7 @@ public class BoxCloudProvider: CloudProvider {
 				guard let file = files.entries?.first else {
 					throw CloudProviderError.itemNotFound
 				}
-				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) received file: \(file)")
+				CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) received file: \((try? file.serializeToString()) ?? file)")
 				let cloudItemMetadata = convertToCloudItemMetadata(file, at: cloudPath)
 				pendingPromise.fulfill(cloudItemMetadata)
 			} catch {
@@ -344,7 +344,7 @@ public class BoxCloudProvider: CloudProvider {
 		guard let file = committedSession.entries?.first else {
 			throw CloudProviderError.itemNotFound
 		}
-		CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeFile(for: \(uploadSession), to: \(cloudPath), fileSize: \(fileSize)) received file: \(file)")
+		CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeFile(for: \(uploadSession), to: \(cloudPath), fileSize: \(fileSize)) received file: \((try? file.serializeToString()) ?? file)")
 		return convertToCloudItemMetadata(file, at: cloudPath)
 	}
 
@@ -354,7 +354,7 @@ public class BoxCloudProvider: CloudProvider {
 			do {
 				let requestBody = CreateFolderRequestBody(name: name, parent: CreateFolderRequestBodyParentField(id: parentItem.identifier))
 				let folder = try await client.folders.createFolder(requestBody: requestBody)
-				CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received folder: \(folder)")
+				CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received folder: \((try? folder.serializeToString()) ?? folder)")
 				let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
 				let item = BoxItem(cloudPath: cloudPath, folder: folder)
 				try self.identifierCache.addOrUpdate(item)
@@ -422,7 +422,7 @@ public class BoxCloudProvider: CloudProvider {
 					parent: UpdateFileByIdRequestBodyParentField(id: targetParentItem.identifier)
 				)
 				let file = try await client.files.updateFileById(fileId: sourceItem.identifier, requestBody: requestBody)
-				CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received file: \(file)")
+				CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received file: \((try? file.serializeToString()) ?? file)")
 				try self.identifierCache.invalidate(sourceItem)
 				let targetItem = BoxItem(cloudPath: targetCloudPath, file: file)
 				try self.identifierCache.addOrUpdate(targetItem)
@@ -445,7 +445,7 @@ public class BoxCloudProvider: CloudProvider {
 					parent: UpdateFolderByIdRequestBodyParentField(id: targetParentItem.identifier)
 				)
 				let folder = try await client.folders.updateFolderById(folderId: sourceItem.identifier, requestBody: requestBody)
-				CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received folder: \(folder)")
+				CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received folder: \((try? folder.serializeToString()) ?? folder)")
 				try self.identifierCache.invalidate(sourceItem)
 				let newItem = BoxItem(cloudPath: targetCloudPath, folder: folder)
 				try self.identifierCache.addOrUpdate(newItem)
@@ -522,7 +522,7 @@ public class BoxCloudProvider: CloudProvider {
 	func findBoxItem(in parentItem: BoxItem, withName name: String, marker: String?) async throws -> BoxItem {
 		let queryParams = GetFolderItemsQueryParams(fields: ["name", "size", "modified_at"], usemarker: true, marker: marker, limit: Int64(maxPageSize))
 		let items = try await client.folders.getFolderItems(folderId: parentItem.identifier, queryParams: queryParams)
-		CloudAccessDDLogDebug("BoxCloudProvider: findBoxItem(in: \(name), withName: \(name), marker: \(marker ?? "nil")) received items: \(items)")
+		CloudAccessDDLogDebug("BoxCloudProvider: findBoxItem(in: \(name), withName: \(name), marker: \(marker ?? "nil")) received items: \((try? items.serializeToString()) ?? items)")
 		if let foundItem = try await locateBoxItem(in: items, withName: name, parentItem: parentItem) {
 			return foundItem
 		} else if let nextMarker = items.nextMarker {

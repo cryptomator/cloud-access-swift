@@ -332,15 +332,15 @@ public class BoxCloudProvider: CloudProvider {
 		guard let fileStream = InputStream(url: localURL) else {
 			throw CloudProviderError.itemNotFound
 		}
-		guard let uploadSessionId = uploadSession.id, let partSize = uploadSession.partSize else {
+		guard let uploadPartUrl = uploadSession.sessionEndpoints?.uploadPart, let commitUrl = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize else {
 			throw BoxSDKError(message: "Failed to retrieve upload session data")
 		}
 		let fileHash = Hash(algorithm: .sha1)
-		let chunksIterator = Utils.iterateChunks(stream: fileStream, chunkSize: partSize)
-		let results = try await Utils.reduceIterator(iterator: chunksIterator, reducer: client.chunkedUploads.reducer, initialValue: PartAccumulator(lastIndex: -1, parts: [], fileSize: Int64(fileSize), uploadSessionId: uploadSessionId, fileHash: fileHash))
+		let chunksIterator = Utils.iterateChunks(stream: fileStream, chunkSize: partSize, fileSize: Int64(fileSize))
+		let results = try await Utils.reduceIterator(iterator: chunksIterator, reducer: client.chunkedUploads.reducer, initialValue: PartAccumulator(lastIndex: -1, parts: [], fileSize: Int64(fileSize), uploadPartUrl: uploadPartUrl, fileHash: fileHash))
 		let sha1 = await fileHash.digestHash(encoding: "base64")
 		let digest = "\("sha=")\(sha1)"
-		let committedSession = try await client.chunkedUploads.createFileUploadSessionCommit(uploadSessionId: uploadSessionId, requestBody: CreateFileUploadSessionCommitRequestBody(parts: results.parts), headers: CreateFileUploadSessionCommitHeaders(digest: digest))
+		let committedSession = try await client.chunkedUploads.createFileUploadSessionCommitByUrl(url: commitUrl, requestBody: CreateFileUploadSessionCommitByUrlRequestBody(parts: results.parts), headers: CreateFileUploadSessionCommitByUrlHeaders(digest: digest))
 		guard let file = committedSession.entries?.first else {
 			throw CloudProviderError.itemNotFound
 		}

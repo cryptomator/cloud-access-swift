@@ -16,21 +16,23 @@ public enum BoxCredentialErrors: Error {
 }
 
 public class BoxCredential {
-	var auth: Authentication
-	var client: BoxClient
+	let client: BoxClient
 
-	public init(tokenStorage: TokenStorage) {
-		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
-		self.auth = BoxOAuth(config: config)
+	init(auth: Authentication) {
 		self.client = BoxClient(auth: auth)
+	}
+
+	public convenience init(tokenStorage: TokenStorage) {
+		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
+		let auth = BoxOAuth(config: config)
+		self.init(auth: auth)
 	}
 
 	public func deauthenticate() -> Promise<Void> {
 		let pendingPromise = Promise<Void>.pending()
 		_Concurrency.Task {
 			do {
-				let networkSession = NetworkSession()
-				try await self.client.auth.revokeToken(networkSession: networkSession)
+				try await self.client.auth.revokeToken(networkSession: nil)
 				pendingPromise.fulfill(())
 			} catch {
 				pendingPromise.reject(error)

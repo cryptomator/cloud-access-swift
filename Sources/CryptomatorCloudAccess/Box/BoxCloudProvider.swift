@@ -17,7 +17,7 @@ public class BoxCloudProvider: CloudProvider {
 
 	public init(credential: BoxCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		let networkSession = NetworkSession(configuration: urlSessionConfiguration)
-		self.client = BoxClient(auth: credential.auth, networkSession: networkSession)
+		self.client = BoxClient(auth: credential.client.auth, networkSession: networkSession)
 		self.identifierCache = try BoxIdentifierCache()
 		self.maxPageSize = max(1, min(maxPageSize, 1000))
 	}

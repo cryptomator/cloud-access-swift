@@ -16,19 +16,15 @@ import Foundation
 
 class BoxCredentialMock: BoxCredential {
 	init() {
-		BoxSetup.constants = BoxSetup(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret, sharedContainerIdentifier: "")
-		super.init(tokenStorage: InMemoryTokenStorage())
-		let config = CCGConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, enterpriseId: IntegrationTestSecrets.boxEnterpriseId)
-		auth = BoxCCGAuth(config: config)
-		client = BoxClient(auth: auth)
+		let config = CCGConfig(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret, enterpriseId: IntegrationTestSecrets.boxEnterpriseId)
+		let auth = BoxCCGAuth(config: config)
+		super.init(auth: auth)
 	}
 }
 
 class BoxInvalidCredentialMock: BoxCredential {
 	init() {
-		BoxSetup.constants = BoxSetup(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret, sharedContainerIdentifier: "")
-		super.init(tokenStorage: InMemoryTokenStorage())
-		auth = BoxAuthenticationMock()
-		client = BoxClient(auth: auth)
+		let auth = BoxAuthenticationMock()
+		super.init(auth: auth)
 	}
 }

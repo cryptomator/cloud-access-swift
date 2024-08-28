@@ -84,7 +84,7 @@ class VaultFormat6ProviderDecoratorTests: XCTestCase {
 //		progress.becomeCurrent(withPendingUnitCount: 1)
 		let metadata = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false).async()
 		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertEqual("ciphertext1".data(using: .utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"])
+		XCTAssertEqual(Data("ciphertext1".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"])
 		XCTAssertEqual("File 1", metadata.name)
 		XCTAssertEqual(.file, metadata.itemType)
 		XCTAssertEqual("/File 1", metadata.cloudPath.path)
@@ -130,8 +130,8 @@ class VaultFormat6ProviderDecoratorTests: XCTestCase {
 			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 		]
 		let files = [
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id".data(using: .utf8)!,
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3": "ciphertext3".data(using: .utf8)!
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": Data("dir2-id".utf8),
+			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3": Data("ciphertext3".utf8)
 		]
 
 		let provider = VaultFormat6CloudProviderMock(folders: folders, files: files)
@@ -150,7 +150,7 @@ class VaultFormat6ProviderDecoratorTests: XCTestCase {
 			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 		]
 		let files = [
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": "dir1-id".data(using: .utf8)!
+			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": Data("dir1-id".utf8)
 		]
 		let provider = VaultFormat6CloudProviderMock(folders: folders, files: files)
 		let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)

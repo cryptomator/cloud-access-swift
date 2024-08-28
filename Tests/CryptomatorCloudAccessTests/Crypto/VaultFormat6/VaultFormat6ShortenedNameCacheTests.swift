@@ -53,7 +53,7 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 
 		let longName = try await cache.getOriginalPath(shortened) { lngFileName -> Promise<Data> in
 			XCTAssertEqual("shortened.lng", lngFileName)
-			return Promise("loooong".data(using: .utf8)!)
+			return Promise(Data("loooong".utf8))
 		}.async()
 		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
 	}

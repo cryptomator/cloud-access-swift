@@ -66,9 +66,9 @@ public class WebDAVClient {
 		request.httpMethod = "PROPFIND"
 		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
 		request.setValue("application/xml", forHTTPHeaderField: "Content-Type")
-		request.httpBody = """
+		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
-		""".data(using: .utf8)
+		""".utf8)
 		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: nil)
 	}
 
@@ -77,9 +77,9 @@ public class WebDAVClient {
 		request.httpMethod = "PROPFIND"
 		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
 		request.setValue("application/xml", forHTTPHeaderField: "Content-Type")
-		request.httpBody = """
+		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
-		""".data(using: .utf8)
+		""".utf8)
 		return webDAVSession.performDataTask(with: request)
 	}
 

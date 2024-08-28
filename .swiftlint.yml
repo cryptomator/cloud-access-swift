@@ -1,6 +1,7 @@
 disabled_rules:
   - file_length
   - line_length
+  - redundant_void_return
   - todo
   - type_body_length
 

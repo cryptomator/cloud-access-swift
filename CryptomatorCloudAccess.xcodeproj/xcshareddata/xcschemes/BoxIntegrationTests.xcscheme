@@ -23,9 +23,6 @@
             </BuildableReference>
             <SkippedTests>
                <Test
-                  Identifier = "BoxCloudProviderIntegrationTests">
-               </Test>
-               <Test
                   Identifier = "CloudAccessIntegrationTest">
                </Test>
                <Test
@@ -53,7 +50,7 @@
                   Identifier = "PCloudCloudProviderIntegrationTests">
                </Test>
                <Test
-                  Identifier = "VaultFormat6BoxIntegrationTests">
+                  Identifier = "S3CloudProviderIntegrationTests">
                </Test>
                <Test
                   Identifier = "VaultFormat6DropboxIntegrationTests">
@@ -71,10 +68,10 @@
                   Identifier = "VaultFormat6PCloudIntegrationTests">
                </Test>
                <Test
-                  Identifier = "VaultFormat6WebDAVIntegrationTests">
+                  Identifier = "VaultFormat6S3IntegrationTests">
                </Test>
                <Test
-                  Identifier = "VaultFormat7BoxIntegrationTests">
+                  Identifier = "VaultFormat6WebDAVIntegrationTests">
                </Test>
                <Test
                   Identifier = "VaultFormat7DropboxIntegrationTests">
@@ -90,6 +87,9 @@
                </Test>
                <Test
                   Identifier = "VaultFormat7PCloudIntegrationTests">
+               </Test>
+               <Test
+                  Identifier = "VaultFormat7S3IntegrationTests">
                </Test>
                <Test
                   Identifier = "VaultFormat7WebDAVIntegrationTests">

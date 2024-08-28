@@ -69,7 +69,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 
 		let longName = try await cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
 			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Promise("loooong.c9r".data(using: .utf8)!)
+			return Promise(Data("loooong.c9r".utf8))
 		}.async()
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
 	}
@@ -79,7 +79,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 
 		let longName = try await cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
 			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Promise("loooong.c9r".data(using: .utf8)!)
+			return Promise(Data("loooong.c9r".utf8))
 		}.async()
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
 	}

@@ -21,7 +21,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.10.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "1.11.0"))
 ```
 
 ## Usage
@@ -68,6 +68,43 @@ let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: m
 ```
 
 :warning: This library supports vault version 6 and higher.
+
+### Box
+
+The following constants must be set once, e.g. in your app delegate:
+
+```swift
+let clientId = ... // your Box client identifier
+let clientSecret = ... // your Box client secret
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `BoxCloudProvider` with a background `URLSession` in an app extension 
+BoxSetup.constants = BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier)
+```
+
+Begin the authentication flow:
+
+```swift
+let tokenStore = BoxTokenStore()
+let credential = BoxCredential(tokenStore: tokenStore)
+let viewController = ... // the presenting `UIViewController`
+BoxAuthenticator.authenticate(credential: credential, from: viewController).then { 
+  // authentication successful
+}.catch { error in
+  // error handling
+}
+```
+
+You can then use the credential to create a Box provider:
+
+```swift
+let provider = BoxCloudProvider(credential: credential)
+```
+
+Or create a Box provider using a background URLSession:
+
+```swift
+let sessionIdentifier = ...
+let provider = BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+```
 
 ### Dropbox
 

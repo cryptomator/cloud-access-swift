@@ -15,12 +15,14 @@ public class OneDriveCloudProvider: CloudProvider {
 	private static let maxUploadFileChunkLength = 16 * 320 * 1024 // 5MiB
 
 	private let client: MSHTTPClient
+	private let unauthenticatedClient: MSHTTPClient
 	private let identifierCache: OneDriveIdentifierCache
 	private let tmpDirURL: URL
 	private let maxPageSize: Int
 
 	init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
+		self.unauthenticatedClient = MSClientFactory.createUnauthenticatedHTTPClient(with: urlSessionConfiguration)
 		self.identifierCache = try OneDriveIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
@@ -483,7 +485,9 @@ public class OneDriveCloudProvider: CloudProvider {
 	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, localURL: URL) -> Promise<(Data, HTTPURLResponse)> {
 		HTTPDebugLogger.logRequest(request as URLRequest)
 		return Promise<(Data, HTTPURLResponse)> { fulfill, reject in
-			let task = MSURLSessionUploadTask(request: request, fromFile: localURL, client: self.client) { data, response, error in
+			// We have to use an unauthenticated client, because the PUT request shouldn't contain an Authorization header.
+			// https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#remarks
+			let task = MSURLSessionUploadTask(request: request, fromFile: localURL, client: self.unauthenticatedClient) { data, response, error in
 				if let response = response {
 					HTTPDebugLogger.logResponse(response, with: data, or: nil)
 				}

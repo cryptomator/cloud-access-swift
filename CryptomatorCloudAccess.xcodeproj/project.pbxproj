@@ -153,6 +153,7 @@
 		748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */; };
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
+		749D91152C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */; };
 		749F59A52BD1211500AB299A /* PCloudSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749F59A42BD1211500AB299A /* PCloudSetup.swift */; };
 		74B321E42923F979008E7C01 /* HTTPDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */; };
 		74C0FB2729B209B6008EF811 /* S3Authenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74C0FB2629B209B6008EF811 /* S3Authenticator.swift */; };
@@ -357,6 +358,7 @@
 		748BD4CB24B4D3820001CA8C /* Date+RFC822.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+RFC822.swift"; sourceTree = "<group>"; };
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
+		749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MSClientFactory+UnauthenticatedClient.swift"; sourceTree = "<group>"; };
 		749F59A42BD1211500AB299A /* PCloudSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudSetup.swift; sourceTree = "<group>"; };
 		74B321E32923F979008E7C01 /* HTTPDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDebugLogger.swift; sourceTree = "<group>"; };
 		74C0FB2629B209B6008EF811 /* S3Authenticator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = S3Authenticator.swift; sourceTree = "<group>"; };
@@ -530,6 +532,7 @@
 		4A1A11692629A53300DAF62F /* OneDrive */ = {
 			isa = PBXGroup;
 			children = (
+				749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */,
 				4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */,
 				4A3896CD2632D65B00BA3E88 /* OneDriveAuthenticationProvider.swift */,
 				4A1A11782629ACD500DAF62F /* OneDriveAuthenticator.swift */,
@@ -1332,6 +1335,7 @@
 				9ECEC0AF246ED1FB00151299 /* DirectoryIdCache.swift in Sources */,
 				4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */,
 				745949E225F22F4D00B7B28C /* VaultFormat8ProviderDecorator.swift in Sources */,
+				749D91152C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift in Sources */,
 				745949E625F2326D00B7B28C /* VaultFormat8ShorteningProviderDecorator.swift in Sources */,
 				4A628EB8252F610C0097DE94 /* URLSession+Promises.swift in Sources */,
 				4A567B692615D64E002C4D82 /* GoogleDriveSetup.swift in Sources */,

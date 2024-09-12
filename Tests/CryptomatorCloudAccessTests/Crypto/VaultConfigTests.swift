@@ -86,7 +86,7 @@ class VaultConfigTests: XCTestCase {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
-		let tokenComponents = String(decoding: token, as: UTF8.self).split(separator: ".")
+		let tokenComponents = String(data: token, encoding: .utf8)!.split(separator: ".")
 		// check header
 		let header: [String: String] = try decodeTokenComponent(String(tokenComponents[0]))
 		XCTAssertEqual(["typ": "JWT", "alg": "HS256", "kid": "masterkeyfile:masterkey.cryptomator"], header)

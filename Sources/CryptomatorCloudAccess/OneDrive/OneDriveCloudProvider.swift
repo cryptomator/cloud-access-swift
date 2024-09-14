@@ -20,9 +20,9 @@ public class OneDriveCloudProvider: CloudProvider {
 	private let tmpDirURL: URL
 	private let maxPageSize: Int
 
-	init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
+	init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration, unauthenticatedURLSessionConfiguration: URLSessionConfiguration) throws {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
-		self.unauthenticatedClient = MSClientFactory.createUnauthenticatedHTTPClient(with: urlSessionConfiguration)
+		self.unauthenticatedClient = MSClientFactory.createUnauthenticatedHTTPClient(with: unauthenticatedURLSessionConfiguration)
 		self.identifierCache = try OneDriveIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
@@ -30,13 +30,15 @@ public class OneDriveCloudProvider: CloudProvider {
 	}
 
 	public convenience init(credential: OneDriveCredential, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
+		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default, unauthenticatedURLSessionConfiguration: .default)
 	}
 
 	public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> OneDriveCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
 		configuration.sharedContainerIdentifier = OneDriveSetup.constants.sharedContainerIdentifier
-		return try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
+		let unauthenticatedConfiguration = URLSessionConfiguration.background(withIdentifier: "\(sessionIdentifier)_unauthenticated")
+		unauthenticatedConfiguration.sharedContainerIdentifier = OneDriveSetup.constants.sharedContainerIdentifier
+		return try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration, unauthenticatedURLSessionConfiguration: unauthenticatedConfiguration)
 	}
 
 	deinit {

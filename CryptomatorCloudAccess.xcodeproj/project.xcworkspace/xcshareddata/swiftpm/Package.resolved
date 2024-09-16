@@ -1,5 +1,5 @@
 {
-  "originHash" : "9cadc7a70613b038fe8d97d191b9a6f48d09309fa0636f36dfa1ef6376591ebc",
+  "originHash" : "1e544db849a8e8bec5142a55d1c8c095e3af91fce1264266393ab47c4271d671",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -31,10 +31,10 @@
     {
       "identity" : "box-swift-sdk-gen",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/box/box-swift-sdk-gen.git",
+      "location" : "https://github.com/tobihagemann/box-swift-sdk-gen.git",
       "state" : {
-        "revision" : "a6b5793ab4053f9b55b840245ad07c9e3fdae344",
-        "version" : "0.5.0"
+        "revision" : "b2bb9db3b4fc5e86807f3c5043bedcab9fdf48f7",
+        "version" : "0.5.0-cryptomator"
       }
     },
     {

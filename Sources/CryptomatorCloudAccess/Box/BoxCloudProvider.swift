@@ -245,15 +245,12 @@ public class BoxCloudProvider: CloudProvider {
 		let pendingPromise = Promise<CloudItemMetadata>.pending()
 		_Concurrency.Task {
 			do {
-				guard let fileStream = InputStream(url: localURL) else {
-					throw CloudProviderError.itemNotFound
-				}
 				let requestBody = UploadFileRequestBody(
 					attributes: UploadFileRequestBodyAttributesField(
 						name: cloudPath.lastPathComponent,
 						parent: UploadFileRequestBodyAttributesParentField(id: parentItem.identifier)
 					),
-					file: fileStream
+					fileURL: localURL
 				)
 				let files = try await client.uploads.uploadFile(requestBody: requestBody)
 				guard let file = files.entries?.first else {
@@ -274,12 +271,9 @@ public class BoxCloudProvider: CloudProvider {
 		let pendingPromise = Promise<CloudItemMetadata>.pending()
 		_Concurrency.Task {
 			do {
-				guard let fileStream = InputStream(url: localURL) else {
-					throw CloudProviderError.itemNotFound
-				}
 				let requestBody = UploadFileVersionRequestBody(
 					attributes: UploadFileVersionRequestBodyAttributesField(name: cloudPath.lastPathComponent),
-					file: fileStream
+					fileURL: localURL
 				)
 				let files = try await client.uploads.uploadFileVersion(fileId: existingItem.identifier, requestBody: requestBody)
 				guard let file = files.entries?.first else {
@@ -329,14 +323,11 @@ public class BoxCloudProvider: CloudProvider {
 	}
 
 	private func uploadLargeFile(for uploadSession: UploadSession, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
-		guard let fileStream = InputStream(url: localURL) else {
-			throw CloudProviderError.itemNotFound
-		}
 		guard let uploadPartUrl = uploadSession.sessionEndpoints?.uploadPart, let commitUrl = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize else {
 			throw BoxSDKError(message: "Failed to retrieve upload session data")
 		}
 		let fileHash = Hash(algorithm: .sha1)
-		let chunksIterator = Utils.iterateChunks(stream: fileStream, chunkSize: partSize, fileSize: Int64(fileSize))
+		let chunksIterator = Utils.iterateChunks(fileURL: localURL, chunkSize: partSize, fileSize: Int64(fileSize))
 		let results = try await Utils.reduceIterator(iterator: chunksIterator, reducer: client.chunkedUploads.reducer, initialValue: PartAccumulator(lastIndex: -1, parts: [], fileSize: Int64(fileSize), uploadPartUrl: uploadPartUrl, fileHash: fileHash))
 		let sha1 = await fileHash.digestHash(encoding: "base64")
 		let digest = "\("sha=")\(sha1)"

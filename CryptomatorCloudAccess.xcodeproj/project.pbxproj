@@ -1890,10 +1890,10 @@
 		};
 		B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/box/box-swift-sdk-gen.git";
+			repositoryURL = "https://github.com/tobihagemann/box-swift-sdk-gen.git";
 			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 0.5.0;
+				kind = exactVersion;
+				version = "0.5.0-cryptomator";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

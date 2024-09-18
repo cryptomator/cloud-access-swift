@@ -37,7 +37,7 @@ let package = Package(
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "4.0.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "3.1.0")),
 		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "2.3.0")),
-		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "5.26.0")),
+		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "6.29.1")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "1.6.0")),
 		.package(url: "https://github.com/pCloud/pcloud-sdk-swift.git", .upToNextMinor(from: "3.2.0")),
 		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "7.2.0")),

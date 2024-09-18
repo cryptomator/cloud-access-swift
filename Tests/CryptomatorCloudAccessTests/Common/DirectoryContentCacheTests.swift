@@ -29,7 +29,7 @@ class DirectoryContentCacheTests: XCTestCase {
 	let subfolderPath = CloudPath("/subfolder")
 
 	override func setUpWithError() throws {
-		let inMemoryDB = DatabaseQueue()
+		let inMemoryDB = try DatabaseQueue()
 		cache = try DirectoryContentDBCache(dbWriter: inMemoryDB, maxPageSize: maxPageSize)
 	}
 

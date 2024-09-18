@@ -106,7 +106,7 @@ class VaultFormat7ShortenedNameCache {
 		self.vaultPath = vaultPath
 		self.threshold = threshold
 		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
 				table.column(CachedEntry.shortenedNameKey, .text).notNull().primaryKey()

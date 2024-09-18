@@ -13,7 +13,7 @@ class BoxIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: BoxItem.databaseTableName) { table in
 				table.column(BoxItem.cloudPathKey, .text).notNull().primaryKey()

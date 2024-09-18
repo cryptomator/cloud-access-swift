@@ -14,7 +14,7 @@ class PCloudIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: PCloudItem.databaseTableName) { table in
 				table.column(PCloudItem.cloudPathKey, .text).notNull().primaryKey()

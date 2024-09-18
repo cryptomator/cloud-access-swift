@@ -46,7 +46,7 @@ extension PCloudItem {
 }
 
 extension PCloudItem: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[PCloudItem.cloudPathKey] = cloudPath
 		container[PCloudItem.identifierKey] = identifier
 		container[PCloudItem.itemTypeKey] = itemType

@@ -19,7 +19,7 @@ private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 }
 
 extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[CachedEntry.cleartextPathKey] = cleartextPath
 		container[CachedEntry.dirIdKey] = dirId
 	}

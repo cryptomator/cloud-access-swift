@@ -19,7 +19,7 @@ private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 }
 
 extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[CachedEntry.cleartextPathKey] = cleartextPath
 		container[CachedEntry.dirIdKey] = dirId
 	}
@@ -29,7 +29,7 @@ class DirectoryIdCache {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
 				table.column(CachedEntry.cleartextPathKey, .text).notNull().primaryKey()

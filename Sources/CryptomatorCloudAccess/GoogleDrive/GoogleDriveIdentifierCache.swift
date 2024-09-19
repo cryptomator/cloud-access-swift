@@ -13,7 +13,7 @@ class GoogleDriveIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: GoogleDriveItem.databaseTableName) { table in
 				table.column(GoogleDriveItem.cloudPathKey, .text).notNull().primaryKey()

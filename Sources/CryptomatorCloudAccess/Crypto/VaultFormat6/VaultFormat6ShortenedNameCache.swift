@@ -25,7 +25,7 @@ private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 }
 
 extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[CachedEntry.shortenedNameKey] = shortenedName
 		container[CachedEntry.originalNameKey] = originalName
 	}
@@ -48,7 +48,7 @@ class VaultFormat6ShortenedNameCache {
 	init(vaultPath: CloudPath) throws {
 		self.vaultPath = vaultPath
 		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: CachedEntry.databaseTableName) { table in
 				table.column(CachedEntry.shortenedNameKey, .text).notNull().primaryKey()

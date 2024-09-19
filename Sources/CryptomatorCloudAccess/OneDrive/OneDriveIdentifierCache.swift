@@ -13,7 +13,7 @@ class OneDriveIdentifierCache {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = DatabaseQueue()
+		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in
 			try db.create(table: OneDriveItem.databaseTableName) { table in
 				table.column(OneDriveItem.cloudPathKey, .text).notNull().primaryKey()

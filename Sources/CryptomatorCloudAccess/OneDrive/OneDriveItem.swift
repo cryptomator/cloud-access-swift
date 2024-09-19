@@ -42,7 +42,7 @@ struct OneDriveItem: Decodable, FetchableRecord, TableRecord, Equatable {
 }
 
 extension OneDriveItem: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[OneDriveItem.cloudPathKey] = cloudPath
 		container[OneDriveItem.identifierKey] = identifier
 		container[OneDriveItem.driveIdentifierKey] = driveIdentifier

@@ -36,7 +36,7 @@ extension BoxItem {
 }
 
 extension BoxItem: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) {
+	func encode(to container: inout PersistenceContainer) throws {
 		container[BoxItem.cloudPathKey] = cloudPath
 		container[BoxItem.identifierKey] = identifier
 		container[BoxItem.itemTypeKey] = itemType

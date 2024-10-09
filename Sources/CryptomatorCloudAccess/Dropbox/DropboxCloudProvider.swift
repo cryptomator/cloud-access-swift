@@ -24,6 +24,8 @@ public class DropboxCloudProvider: CloudProvider {
 		switch dropboxError {
 		case .tooManyWriteOperations, .internalServerError, .rateLimitError:
 			return true
+		case .authError:
+			return false
 		default:
 			return false
 		}
@@ -192,7 +194,11 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				if let networkError = networkError {
 					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestErrorToDropboxError(networkError))
+					if networkError.isAuthError() {
+						reject(CloudProviderError.unauthorized)
+					} else {
+						reject(self.convertRequestErrorToDropboxError(networkError))
+					}
 					return
 				}
 				guard let result = result else {
@@ -565,10 +571,11 @@ public class DropboxCloudProvider: CloudProvider {
 		if parentCloudPath == CloudPath("/") {
 			return Promise(())
 		}
-		return checkForItemExistence(at: parentCloudPath).then { itemExists -> Void in
+		return checkForItemExistence(at: parentCloudPath).then { itemExists in
 			guard itemExists else {
 				throw CloudProviderError.parentFolderDoesNotExist
 			}
+			return Promise(())
 		}
 	}
 

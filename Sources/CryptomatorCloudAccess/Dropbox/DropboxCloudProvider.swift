@@ -24,8 +24,6 @@ public class DropboxCloudProvider: CloudProvider {
 		switch dropboxError {
 		case .tooManyWriteOperations, .internalServerError, .rateLimitError:
 			return true
-		case .authError:
-			return false
 		default:
 			return false
 		}
@@ -193,12 +191,8 @@ public class DropboxCloudProvider: CloudProvider {
 					return
 				}
 				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					if networkError.isAuthError() {
-						reject(CloudProviderError.unauthorized)
-					} else {
-						reject(self.convertRequestErrorToDropboxError(networkError))
-					}
+					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata failed with networkError: \(networkError)")
+					reject(self.convertRequestError(networkError)) 
 					return
 				}
 				guard let result = result else {
@@ -247,7 +241,7 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				if let networkError = networkError {
 					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestErrorToDropboxError(networkError))
+					reject(self.convertRequestError(networkError))
 					return
 				}
 				guard let result = result else {
@@ -290,7 +284,7 @@ public class DropboxCloudProvider: CloudProvider {
 					if networkError.isBadInputError(), let errorContent = networkError.errorContent, errorContent.contains("invalidPageToken") {
 						reject(CloudProviderError.pageTokenInvalid)
 					} else {
-						reject(self.convertRequestErrorToDropboxError(networkError))
+						reject(self.convertRequestError(networkError))
 					}
 					return
 				}
@@ -337,7 +331,7 @@ public class DropboxCloudProvider: CloudProvider {
 					if networkError.isClientError(), case CocoaError.fileWriteFileExists = networkError.asClientError().nsError {
 						reject(CloudProviderError.itemAlreadyExists)
 					} else {
-						reject(self.convertRequestErrorToDropboxError(networkError))
+						reject(self.convertRequestError(networkError))
 					}
 					return
 				}
@@ -401,13 +395,13 @@ public class DropboxCloudProvider: CloudProvider {
 			guard let requestError = fileUrlsToRequestErrors[localURL] else {
 				return DropboxError.unexpectedError
 			}
-			return convertRequestErrorToDropboxError(requestError)
+			return convertRequestError(requestError)
 		} else if let finishBatchRouteError = finishBatchRouteError {
 			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with finishBatchRouteError: \(finishBatchRouteError)")
 			return DropboxError.asyncPollError
 		} else if let finishBatchRequestError = finishBatchRequestError {
 			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with finishBatchRequestError: \(finishBatchRequestError)")
-			return convertRequestErrorToDropboxError(finishBatchRequestError)
+			return convertRequestError(finishBatchRequestError)
 		} else {
 			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with missingResult")
 			return DropboxError.missingResult
@@ -443,7 +437,7 @@ public class DropboxCloudProvider: CloudProvider {
 					}
 					if let networkError = networkError {
 						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with networkError: \(networkError)")
-						reject(self.convertRequestErrorToDropboxError(networkError))
+						reject(self.convertRequestError(networkError))
 						return
 					}
 					guard let result = result else {
@@ -479,7 +473,7 @@ public class DropboxCloudProvider: CloudProvider {
 					}
 					if let networkError = networkError {
 						CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-						reject(self.convertRequestErrorToDropboxError(networkError))
+						reject(self.convertRequestError(networkError))
 						return
 					}
 					guard let result = result else {
@@ -512,7 +506,7 @@ public class DropboxCloudProvider: CloudProvider {
 				}
 				if let networkError = networkError {
 					CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestErrorToDropboxError(networkError))
+					reject(self.convertRequestError(networkError))
 					return
 				}
 				guard let result = result else {
@@ -551,7 +545,7 @@ public class DropboxCloudProvider: CloudProvider {
 					}
 					if let networkError = networkError {
 						CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with networkError: \(networkError)")
-						reject(self.convertRequestErrorToDropboxError(networkError))
+						reject(self.convertRequestError(networkError))
 						return
 					}
 					guard let result = result else {
@@ -571,11 +565,10 @@ public class DropboxCloudProvider: CloudProvider {
 		if parentCloudPath == CloudPath("/") {
 			return Promise(())
 		}
-		return checkForItemExistence(at: parentCloudPath).then { itemExists in
+		return checkForItemExistence(at: parentCloudPath).then { itemExists -> Void in
 			guard itemExists else {
 				throw CloudProviderError.parentFolderDoesNotExist
 			}
-			return Promise(())
 		}
 	}
 
@@ -649,26 +642,26 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 	}
 
-	func convertRequestErrorToDropboxError(_ error: DBRequestError) -> DropboxError {
+	func convertRequestError(_ error: DBRequestError) -> Error {
 		if error.isHttpError() {
-			return .httpError
+			return DropboxError.httpError
 		} else if error.isBadInputError() {
-			return .badInputError
+			return DropboxError.badInputError
 		} else if error.isAuthError() {
-			return .authError
+			return CloudProviderError.unauthorized
 		} else if error.isAccessError() {
-			return .accessError
+			return DropboxError.accessError
 		} else if error.isPathRootError() {
-			return .pathRootError
+			return DropboxError.pathRootError
 		} else if error.isRateLimitError() {
 			let rateLimitError = error.asRateLimitError()
-			return .rateLimitError(retryAfter: rateLimitError.backoff.intValue)
+			return DropboxError.rateLimitError(retryAfter: rateLimitError.backoff.intValue)
 		} else if error.isInternalServerError() {
-			return .internalServerError
+			return DropboxError.internalServerError
 		} else if error.isClientError() {
-			return .clientError
+			return DropboxError.clientError
 		} else {
-			return .unexpectedError
+			return DropboxError.unexpectedError
 		}
 	}
 }

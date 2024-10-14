@@ -579,7 +579,7 @@ public class BoxCloudProvider: CloudProvider {
 
 	private func convertStandardError(_ error: Error) -> Error {
 		switch error {
-		case let error as BoxAPIError where error.responseInfo.statusCode == 400 || error.responseInfo.statusCode == 401:
+		case let error as BoxAPIError where error.responseInfo.statusCode == 401 || error.description.contains("Invalid refresh token"):
 			return CloudProviderError.unauthorized
 		case let error as BoxAPIError where error.responseInfo.statusCode == 404:
 			return CloudProviderError.itemNotFound

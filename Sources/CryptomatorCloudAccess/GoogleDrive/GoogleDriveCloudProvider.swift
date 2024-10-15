@@ -6,6 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import AppAuthCore
 import Foundation
 import GoogleAPIClientForREST_Drive
 import GRDB
@@ -532,7 +533,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeQuery(\(query.requestID)) failed with error: \(error)")
 					if error.domain == NSURLErrorDomain, error.code == NSURLErrorNotConnectedToInternet || error.code == NSURLErrorCannotConnectToHost || error.code == NSURLErrorNetworkConnectionLost || error.code == NSURLErrorDNSLookupFailed || error.code == NSURLErrorResourceUnavailable || error.code == NSURLErrorInternationalRoamingOff {
 						reject(CloudProviderError.noInternetConnection)
-					} else if error.domain == kGTLRErrorObjectDomain, error.code == 401 || error.code == 403 {
+					} else if (error.domain == kGTLRErrorObjectDomain && (error.code == 401 || error.code == 403)) || (error.domain == OIDOAuthTokenErrorDomain && error.code == OIDErrorCodeOAuth.invalidGrant.rawValue) {
 						reject(CloudProviderError.unauthorized)
 					} else if error.domain == kGTLRErrorObjectDomain, error.code == 404 {
 						reject(CloudProviderError.itemNotFound)

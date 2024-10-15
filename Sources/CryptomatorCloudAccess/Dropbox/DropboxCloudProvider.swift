@@ -191,7 +191,7 @@ public class DropboxCloudProvider: CloudProvider {
 					return
 				}
 				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata failed with networkError: \(networkError)")
+					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with networkError: \(networkError)")
 					reject(self.convertRequestError(networkError)) 
 					return
 				}

@@ -17,7 +17,6 @@ public enum DropboxError: Error {
 
 	case httpError
 	case badInputError
-	case authError
 	case accessError
 	case pathRootError
 	case rateLimitError(retryAfter: Int)

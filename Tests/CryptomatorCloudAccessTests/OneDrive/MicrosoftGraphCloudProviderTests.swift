@@ -1,5 +1,5 @@
 //
-//  OneDriveCloudProviderTests.swift
+//  MicrosoftGraphCloudProviderTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 26.04.21.
@@ -16,16 +16,16 @@ import XCTest
 @testable import CryptomatorCloudAccess
 #endif
 
-class OneDriveCloudProviderTests: XCTestCase {
-	var provider: OneDriveCloudProvider!
+class MicrosoftGraphCloudProviderTests: XCTestCase {
+	var provider: MicrosoftGraphCloudProvider!
 	let maxPageSize = 100
 	override func setUpWithError() throws {
-		let credential = try OneDriveCredential(with: "Test", authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
-		provider = try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize)
+		let credential = try MicrosoftGraphCredential(with: "Test", authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
+		provider = try MicrosoftGraphCloudProvider(credential: credential, maxPageSize: maxPageSize)
 	}
 
 	func testChildrenRequest() throws {
-		let item = OneDriveItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.childrenRequest(for: item)
 		XCTAssertEqual(HTTPMethodGet, request.httpMethod)
 		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100")!, request.url)
@@ -33,7 +33,7 @@ class OneDriveCloudProviderTests: XCTestCase {
 	}
 
 	func testContentRequest() throws {
-		let item = OneDriveItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.contentRequest(for: item)
 		XCTAssertEqual(HTTPMethodGet, request.httpMethod)
 		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/content")!, request.url)
@@ -41,7 +41,7 @@ class OneDriveCloudProviderTests: XCTestCase {
 	}
 
 	func testCreateUploadSessionRequest() throws {
-		let parentItem = OneDriveItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+		let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.createUploadSessionRequest(for: parentItem, with: "Test.txt")
 		XCTAssertEqual(HTTPMethodPost, request.httpMethod)
 		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier:/Test.txt:/createUploadSession")!, request.url)
@@ -71,7 +71,7 @@ class OneDriveCloudProviderTests: XCTestCase {
 	}
 
 	func testCreateFolderRequest() throws {
-		let parentItem = OneDriveItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+		let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"subFolder\",\"folder\":{}}"
 		let request = try provider.createFolderRequest(for: parentItem, with: "subFolder")
 		XCTAssertEqual(HTTPMethodPost, request.httpMethod)
@@ -80,7 +80,7 @@ class OneDriveCloudProviderTests: XCTestCase {
 	}
 
 	func testDeleteItemRequest() throws {
-		let item = OneDriveItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
+		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
 		let request = try provider.deleteItemRequest(for: item)
 		XCTAssertEqual(HTTPMethodDelete, request.httpMethod)
 		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier")!, request.url)
@@ -88,8 +88,8 @@ class OneDriveCloudProviderTests: XCTestCase {
 	}
 
 	func testMoveItemRequest() throws {
-		let item = OneDriveItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
-		let newParentItem = OneDriveItem(cloudPath: CloudPath("/Folder"), identifier: "TestIdentifier-Folder", driveIdentifier: nil, itemType: .folder)
+		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
+		let newParentItem = MicrosoftGraphItem(cloudPath: CloudPath("/Folder"), identifier: "TestIdentifier-Folder", driveIdentifier: nil, itemType: .folder)
 		let targetCloudPath = CloudPath("/Folder/test.txt")
 		let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"test.txt\",\"parentReference\":{\"id\":\"TestIdentifier-Folder\"}}"
 		let request = try provider.moveItemRequest(for: item, with: newParentItem, targetCloudPath: targetCloudPath)

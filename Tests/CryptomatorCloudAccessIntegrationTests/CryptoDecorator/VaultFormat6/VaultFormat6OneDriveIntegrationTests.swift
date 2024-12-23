@@ -1,5 +1,5 @@
 //
-//  VaultFormat6OneDriveIntegrationTests.swift
+//  VaultFormat6MicrosoftGraphIntegrationTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 04.05.21.
@@ -14,15 +14,15 @@ import XCTest
 #endif
 @testable import Promises
 
-class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
+class VaultFormat6MicrosoftGraphIntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat6OneDriveIntegrationTests.self)
+		return XCTestSuite(forTestCaseClass: VaultFormat6MicrosoftGraphIntegrationTests.self)
 	}
 
 	// swiftlint:disable:next force_try
-	private static let credential = try! OneDriveCredentialMock()
+	private static let credential = try! MicrosoftGraphCredentialMock()
 	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! OneDriveCloudProvider(credential: credential)
+	private static let cloudProvider = try! MicrosoftGraphCloudProvider(credential: credential)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
 
 	override class func setUp() {
@@ -45,7 +45,7 @@ class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6MicrosoftGraphIntegrationTests.cloudProvider, vaultPath: VaultFormat6MicrosoftGraphIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
@@ -57,9 +57,9 @@ class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
-		let limitedDelegate = try OneDriveCloudProvider(credential: VaultFormat6OneDriveIntegrationTests.credential,
+		let limitedDelegate = try MicrosoftGraphCloudProvider(credential: VaultFormat6MicrosoftGraphIntegrationTests.credential,
 		                                                maxPageSize: maxPageSizeForLimitedCloudProvider)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6MicrosoftGraphIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {

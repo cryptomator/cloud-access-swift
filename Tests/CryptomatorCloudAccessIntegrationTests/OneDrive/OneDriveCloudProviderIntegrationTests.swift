@@ -1,5 +1,5 @@
 //
-//  OneDriveCloudProviderIntegrationTests.swift
+//  MicrosoftGraphCloudProviderIntegrationTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 22.04.21.
@@ -14,30 +14,30 @@ import CryptomatorCloudAccess
 import Promises
 import XCTest
 
-class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
+class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: OneDriveCloudProviderIntegrationTests.self)
+		return XCTestSuite(forTestCaseClass: MicrosoftGraphCloudProviderIntegrationTests.self)
 	}
 
 	// swiftlint:disable:next force_try
-	private static let credential = try! OneDriveCredentialMock() // Instantiate once because OneDrive doesn't like to get access token from refresh token frequently
+	private static let credential = try! MicrosoftGraphCredentialMock() // Instantiate once because MicrosoftGraph doesn't like to get access token from refresh token frequently
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
 		// swiftlint:disable:next force_try
-		setUpProvider = try! OneDriveCloudProvider(credential: credential)
+		setUpProvider = try! MicrosoftGraphCloudProvider(credential: credential)
 		super.setUp()
 	}
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		OneDriveCloudProviderIntegrationTests.credential.resetAccessTokenOverride()
-		provider = try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential)
+		MicrosoftGraphCloudProviderIntegrationTests.credential.resetAccessTokenOverride()
+		provider = try MicrosoftGraphCloudProvider(credential: MicrosoftGraphCloudProviderIntegrationTests.credential)
 	}
 
 	override func deauthenticate() -> Promise<Void> {
 		do {
-			try OneDriveCloudProviderIntegrationTests.credential.deauthenticate()
+			try MicrosoftGraphCloudProviderIntegrationTests.credential.deauthenticate()
 			return Promise(())
 		} catch {
 			return Promise(error)
@@ -45,7 +45,7 @@ class OneDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthe
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
-		return try OneDriveCloudProvider(credential: OneDriveCloudProviderIntegrationTests.credential,
+		return try MicrosoftGraphCloudProvider(credential: MicrosoftGraphCloudProviderIntegrationTests.credential,
 		                                 maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

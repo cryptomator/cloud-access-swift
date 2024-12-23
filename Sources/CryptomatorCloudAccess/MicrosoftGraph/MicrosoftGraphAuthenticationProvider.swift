@@ -1,5 +1,5 @@
 //
-//  OneDriveAuthenticationProvider.swift
+//  MicrosoftGraphAuthenticationProvider.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 23.04.21.
@@ -11,12 +11,12 @@ import MSAL
 import MSGraphClientSDK
 import Promises
 
-enum OneDriveAuthenticationProviderError: Error {
+enum MicrosoftGraphAuthenticationProviderError: Error {
 	case noAccounts
 	case accountNotFound
 }
 
-class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
+class MicrosoftGraphAuthenticationProvider: NSObject, MSAuthenticationProvider {
 	private let identifier: String
 	private let clientApplication: MSALPublicClientApplication
 	private let scopes: [String]
@@ -38,7 +38,7 @@ class OneDriveAuthenticationProvider: NSObject, MSAuthenticationProvider {
 		let parameters = MSALAccountEnumerationParameters(identifier: identifier)
 		clientApplication.accountsFromDevice(for: parameters).then { accounts -> Promise<MSALResult> in
 			guard let account = accounts.first else {
-				return Promise(OneDriveAuthenticationProviderError.accountNotFound)
+				return Promise(MicrosoftGraphAuthenticationProviderError.accountNotFound)
 			}
 			let tokenParameters = MSALSilentTokenParameters(scopes: scopes, account: account)
 			return self.clientApplication.acquireTokenSilent(with: tokenParameters)
@@ -67,7 +67,7 @@ private extension MSALPublicClientApplication {
 				case let (_, .some(error)):
 					reject(error)
 				default:
-					reject(OneDriveAuthenticationProviderError.noAccounts)
+					reject(MicrosoftGraphAuthenticationProviderError.noAccounts)
 				}
 			}
 		}
@@ -82,7 +82,7 @@ private extension MSALPublicClientApplication {
 				case let (_, .some(error)):
 					reject(error)
 				default:
-					reject(OneDriveError.unexpectedResult)
+					reject(MicrosoftGraphError.unexpectedResult)
 				}
 			}
 		}

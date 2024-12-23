@@ -1,5 +1,5 @@
 //
-//  OneDriveCredential.swift
+//  MicrosoftGraphCredential.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 16.04.21.
@@ -11,32 +11,31 @@ import MSAL
 import MSGraphClientSDK
 import Promises
 
-public enum OneDriveCredentialError: Error {
+public enum MicrosoftGraphCredentialError: Error {
 	case noUsername
 }
 
-public class OneDriveCredential {
-	public static let scopes = ["https://graph.microsoft.com/Files.ReadWrite"]
-
+public class MicrosoftGraphCredential {
 	public let identifier: String
+	public class var scopes: [String] {
+		return ["https://graph.microsoft.com/Files.ReadWrite"] 
+	}
+
 	let authProvider: MSAuthenticationProvider
 	private let clientApplication: MSALPublicClientApplication
 
-	public convenience init(with identifier: String) throws {
-		let authProvider = OneDriveAuthenticationProvider(identifier: identifier, clientApplication: OneDriveSetup.constants.clientApplication, scopes: OneDriveCredential.scopes)
-		try self.init(with: identifier, authProvider: authProvider, clientApplication: OneDriveSetup.constants.clientApplication)
-	}
-
-	init(with identifier: String, authProvider: MSAuthenticationProvider, clientApplication: MSALPublicClientApplication) throws {
+	public required init(with identifier: String) throws {
 		self.identifier = identifier
-		self.authProvider = authProvider
+		let clientApplication = MicrosoftGraphSetup.constants.clientApplication
+		let authProvider = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: clientApplication, scopes: Self.scopes)
 		self.clientApplication = clientApplication
+		self.authProvider = authProvider
 	}
 
 	public func getUsername() throws -> String {
 		let account = try clientApplication.account(forIdentifier: identifier)
 		guard let username = account.username else {
-			throw OneDriveCredentialError.noUsername
+			throw MicrosoftGraphCredentialError.noUsername
 		}
 		return username
 	}
@@ -46,3 +45,4 @@ public class OneDriveCredential {
 		try clientApplication.remove(account)
 	}
 }
+

@@ -20,7 +20,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 	var provider: MicrosoftGraphCloudProvider!
 	let maxPageSize = 100
 	override func setUpWithError() throws {
-		let credential = try MicrosoftGraphCredential(with: "Test", authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
+		let credential = MicrosoftGraphCredential(identifier: "Test", scopes: ["TestScope"], authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
 		provider = try MicrosoftGraphCloudProvider(credential: credential, maxPageSize: maxPageSize)
 	}
 

@@ -14,10 +14,10 @@ import Foundation
 #endif
 
 class MicrosoftGraphCredentialMock: MicrosoftGraphCredential {
-	init() throws {
+	init() {
 		let authProvider = MSAuthenticationProviderMock()
 		let clientApplication = MSALPublicClientApplicationStub()
-		try super.init(with: "IntegrationTests", authProvider: authProvider, clientApplication: clientApplication)
+		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphScopes.oneDrive, authProvider: authProvider, clientApplication: clientApplication)
 	}
 
 	func resetAccessTokenOverride() {

@@ -12,42 +12,32 @@ import CryptomatorCloudAccessCore
 import MSAL
 import Promises
 import UIKit
-import CryptomatorCommonCore
 
 public enum MicrosoftGraphAuthenticatorError: Error {
 	case missingAccountIdentifier
 }
 
-public enum MicrosoftGraphAuthenticator {
-	public static func authenticate(from viewController: UIViewController, for providerType: CloudProviderType) -> Promise<MicrosoftGraphCredential> {
-		let scopes: [String]
-		let credentialType: MicrosoftGraphCredential.Type
-
-		switch providerType {
-		case .oneDrive:
-			scopes = OneDriveCredential.scopes
-			credentialType = OneDriveCredential.self
-		case .sharePoint:
-			scopes = SharePointCredential.scopes
-			credentialType = SharePointCredential.self
-		default:
-			return Promise(MicrosoftGraphAuthenticatorError.missingAccountIdentifier)
-		}
-
+public class MicrosoftGraphAuthenticator {
+	public static func authenticate(from viewController: UIViewController, with scopes: [String]) -> Promise<MicrosoftGraphCredential> {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
 		let interactiveParameters = MSALInteractiveTokenParameters(scopes: scopes, webviewParameters: webviewParameters)
 		interactiveParameters.promptType = .login
-
 		return MicrosoftGraphSetup.constants.clientApplication.acquireToken(with: interactiveParameters).then { result -> MicrosoftGraphCredential in
 			guard let identifier = result.account.identifier else {
 				throw MicrosoftGraphAuthenticatorError.missingAccountIdentifier
 			}
-
-			return try credentialType.init(with: identifier)
+			return MicrosoftGraphCredential(identifier: identifier, scopes: scopes)
 		}
 	}
-}
 
+	public static func authenticateForOneDrive(from viewController: UIViewController) -> Promise<MicrosoftGraphCredential> {
+		return authenticate(from: viewController, with: MicrosoftGraphScopes.oneDrive)
+	}
+
+	public static func authenticateForSharePoint(from viewController: UIViewController) -> Promise<MicrosoftGraphCredential> {
+		return authenticate(from: viewController, with: MicrosoftGraphScopes.sharePoint)
+	}
+}
 
 private extension MSALPublicClientApplication {
 	func acquireToken(with interactiveParameters: MSALInteractiveTokenParameters) -> Promise<MSALResult> {

@@ -19,8 +19,7 @@ class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWit
 		return XCTestSuite(forTestCaseClass: MicrosoftGraphCloudProviderIntegrationTests.self)
 	}
 
-	// swiftlint:disable:next force_try
-	private static let credential = try! MicrosoftGraphCredentialMock() // Instantiate once because MicrosoftGraph doesn't like to get access token from refresh token frequently
+	private static let credential = MicrosoftGraphCredentialMock() // Instantiate once because MicrosoftGraph doesn't like to get access token from refresh token frequently
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
@@ -46,6 +45,6 @@ class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWit
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		return try MicrosoftGraphCloudProvider(credential: MicrosoftGraphCloudProviderIntegrationTests.credential,
-		                                 maxPageSize: maxPageSizeForLimitedCloudProvider)
+		                                       maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

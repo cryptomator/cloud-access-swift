@@ -1,5 +1,5 @@
 //
-//  MicrosoftGraphClientFactory+UnauthenticatedClient.swift
+//  MSClientFactory+UnauthenticatedClient.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Tobias Hagemann on 12.09.24.

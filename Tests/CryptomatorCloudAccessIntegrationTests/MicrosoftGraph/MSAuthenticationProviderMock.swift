@@ -52,10 +52,10 @@ class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider {
 		request.httpMethod = "POST"
 		var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
 		components.queryItems = [
-			URLQueryItem(name: "client_id", value: IntegrationTestSecrets.microsoftGraphClientId),
+			URLQueryItem(name: "client_id", value: IntegrationTestSecrets.oneDriveClientId),
 			URLQueryItem(name: "scope", value: "https://graph.microsoft.com/Files.ReadWrite"),
-			URLQueryItem(name: "refresh_token", value: IntegrationTestSecrets.microsoftGraphRefreshToken),
-			URLQueryItem(name: "redirect_uri", value: IntegrationTestSecrets.microsoftGraphRedirectUri),
+			URLQueryItem(name: "refresh_token", value: IntegrationTestSecrets.oneDriveRefreshToken),
+			URLQueryItem(name: "redirect_uri", value: IntegrationTestSecrets.oneDriveRedirectUri),
 			URLQueryItem(name: "grant_type", value: "refresh_token")
 		]
 		request.httpBody = Data(components.url!.query!.utf8)

@@ -19,8 +19,7 @@ class VaultFormat6MicrosoftGraphIntegrationTests: CloudAccessIntegrationTest {
 		return XCTestSuite(forTestCaseClass: VaultFormat6MicrosoftGraphIntegrationTests.self)
 	}
 
-	// swiftlint:disable:next force_try
-	private static let credential = try! MicrosoftGraphCredentialMock()
+	private static let credential = MicrosoftGraphCredentialMock()
 	// swiftlint:disable:next force_try
 	private static let cloudProvider = try! MicrosoftGraphCloudProvider(credential: credential)
 	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
@@ -58,7 +57,7 @@ class VaultFormat6MicrosoftGraphIntegrationTests: CloudAccessIntegrationTest {
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
 		let limitedDelegate = try MicrosoftGraphCloudProvider(credential: VaultFormat6MicrosoftGraphIntegrationTests.credential,
-		                                                maxPageSize: maxPageSizeForLimitedCloudProvider)
+		                                                      maxPageSize: maxPageSizeForLimitedCloudProvider)
 		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6MicrosoftGraphIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}

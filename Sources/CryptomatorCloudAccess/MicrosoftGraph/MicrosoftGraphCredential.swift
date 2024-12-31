@@ -17,19 +17,20 @@ public enum MicrosoftGraphCredentialError: Error {
 
 public class MicrosoftGraphCredential {
 	public let identifier: String
-	public class var scopes: [String] {
-		return ["https://graph.microsoft.com/Files.ReadWrite"] 
-	}
-
+	public let scopes: [String]
 	let authProvider: MSAuthenticationProvider
 	private let clientApplication: MSALPublicClientApplication
 
-	public required init(with identifier: String) throws {
+	public convenience init(identifier: String, scopes: [String]) {
+		let authProvider = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: MicrosoftGraphSetup.constants.clientApplication, scopes: scopes)
+		self.init(identifier: identifier, scopes: scopes, authProvider: authProvider, clientApplication: MicrosoftGraphSetup.constants.clientApplication)
+	}
+
+	init(identifier: String, scopes: [String], authProvider: MSAuthenticationProvider, clientApplication: MSALPublicClientApplication) {
 		self.identifier = identifier
-		let clientApplication = MicrosoftGraphSetup.constants.clientApplication
-		let authProvider = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: clientApplication, scopes: Self.scopes)
-		self.clientApplication = clientApplication
+		self.scopes = scopes
 		self.authProvider = authProvider
+		self.clientApplication = clientApplication
 	}
 
 	public func getUsername() throws -> String {
@@ -46,3 +47,12 @@ public class MicrosoftGraphCredential {
 	}
 }
 
+public extension MicrosoftGraphCredential {
+	static func createForOneDrive(with identifier: String) -> MicrosoftGraphCredential {
+		return MicrosoftGraphCredential(identifier: identifier, scopes: MicrosoftGraphScopes.oneDrive)
+	}
+
+	static func createForSharePoint(with identifier: String) -> MicrosoftGraphCredential {
+		return MicrosoftGraphCredential(identifier: identifier, scopes: MicrosoftGraphScopes.sharePoint)
+	}
+}

@@ -1,5 +1,5 @@
 //
-//  MicrosoftGraphDriveItem+CloudItemType.swift
+//  MSGraphDriveItem+CloudItemType.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 29.04.21.

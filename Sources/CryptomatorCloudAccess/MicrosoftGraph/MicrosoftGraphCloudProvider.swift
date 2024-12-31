@@ -16,29 +16,31 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private let client: MSHTTPClient
 	private let unauthenticatedClient: MSHTTPClient
+	private let driveIdentifier: String?
 	private let identifierCache: MicrosoftGraphIdentifierCache
 	private let tmpDirURL: URL
 	private let maxPageSize: Int
 
-	init(credential: MicrosoftGraphCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration, unauthenticatedURLSessionConfiguration: URLSessionConfiguration) throws {
+	init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration, unauthenticatedURLSessionConfiguration: URLSessionConfiguration) throws {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
 		self.unauthenticatedClient = MSClientFactory.createUnauthenticatedHTTPClient(with: unauthenticatedURLSessionConfiguration)
+		self.driveIdentifier = driveIdentifier
 		self.identifierCache = try MicrosoftGraphIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
-	public convenience init(credential: MicrosoftGraphCredential, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default, unauthenticatedURLSessionConfiguration: .default)
+	public convenience init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: .default, unauthenticatedURLSessionConfiguration: .default)
 	}
 
-	public static func withBackgroundSession(credential: MicrosoftGraphCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> MicrosoftGraphCloudProvider {
+	public static func withBackgroundSession(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, sessionIdentifier: String) throws -> MicrosoftGraphCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
 		configuration.sharedContainerIdentifier = MicrosoftGraphSetup.constants.sharedContainerIdentifier
 		let unauthenticatedConfiguration = URLSessionConfiguration.background(withIdentifier: "\(sessionIdentifier)_unauthenticated")
 		unauthenticatedConfiguration.sharedContainerIdentifier = MicrosoftGraphSetup.constants.sharedContainerIdentifier
-		return try MicrosoftGraphCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration, unauthenticatedURLSessionConfiguration: unauthenticatedConfiguration)
+		return try MicrosoftGraphCloudProvider(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: configuration, unauthenticatedURLSessionConfiguration: unauthenticatedConfiguration)
 	}
 
 	deinit {
@@ -322,7 +324,7 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 	// MARK: - Requests
 
 	func requestURLString(for item: MicrosoftGraphItem) -> String {
-		if let driveIdentifier = item.driveIdentifier {
+		if let driveIdentifier = item.driveIdentifier ?? driveIdentifier {
 			return "\(MSGraphBaseURL)/drives/\(driveIdentifier)/items/\(item.identifier)"
 		} else {
 			return "\(MSGraphBaseURL)/me/drive/items/\(item.identifier)"

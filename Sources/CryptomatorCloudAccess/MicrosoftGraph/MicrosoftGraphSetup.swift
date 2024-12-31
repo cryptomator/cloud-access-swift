@@ -1,5 +1,5 @@
 //
-//  MicrosoftGraphSetup.swift.swift
+//  MicrosoftGraphSetup.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 16.04.21.

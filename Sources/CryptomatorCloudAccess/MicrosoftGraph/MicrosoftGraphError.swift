@@ -16,5 +16,4 @@ public enum MicrosoftGraphError: Error {
 	case unexpectedHTTPStatusCode(code: Int)
 	case invalidFileHandle
 	case missingFileSize
-	case invalidAuthProvider
 }

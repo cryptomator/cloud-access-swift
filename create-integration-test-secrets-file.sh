@@ -23,9 +23,9 @@ enum IntegrationTestSecrets {
 	static let dropboxAccessToken = "${DROPBOX_ACCESS_TOKEN}"
 	static let googleDriveClientId = "${GOOGLE_DRIVE_CLIENT_ID}"
 	static let googleDriveRefreshToken = "${GOOGLE_DRIVE_REFRESH_TOKEN}"
-	static let oneDriveClientId = "${ONEDRIVE_CLIENT_ID}"
-	static let oneDriveRedirectUri = "${ONEDRIVE_REDIRECT_URI_SCHEME}://auth"
-	static let oneDriveRefreshToken = "${ONEDRIVE_REFRESH_TOKEN}"
+	static let microsoftGraphClientId = "${MICROSOFT_GRAPH_CLIENT_ID}"
+	static let microsoftGraphRedirectUri = "${MICROSOFT_GRAPH_REDIRECT_URI_SCHEME}://auth"
+	static let microsoftGraphRefreshToken = "${MICROSOFT_GRAPH_REFRESH_TOKEN}"
 	static let pCloudAccessToken = "${PCLOUD_ACCESS_TOKEN}"
 	static let pCloudHTTPAPIHostName = "${PCLOUD_HTTP_API_HOST_NAME}"
 	static let s3Credential = S3Credential(accessKey: "${S3_ACCESS_KEY}", secretKey: "${S3_SECRET_KEY}", url: URL(string: "${S3_URL}")!, bucket: "${S3_BUCKET}", region: "${S3_REGION}")

@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum MicrosoftGraphScopes {
-	static let oneDrive = ["https://graph.microsoft.com/Files.ReadWrite"]
-	static let sharePoint = ["https://graph.microsoft.com/Sites.ReadWrite.All"]
+public enum MicrosoftGraphScopes {
+	public static let oneDrive = ["https://graph.microsoft.com/Files.ReadWrite"]
+	public static let sharePoint = ["https://graph.microsoft.com/Files.ReadWrite", "https://graph.microsoft.com/Sites.Read.All"]
 }

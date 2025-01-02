@@ -18,19 +18,6 @@ public class MicrosoftGraphDiscovery {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: .default)
 	}
 
-	public func fetchMyOneDrive() -> Promise<MicrosoftGraphDrive> {
-		let request: NSMutableURLRequest
-		do {
-			request = try myOneDriveRequest()
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphDrive in
-			let drive = try MSGraphDrive(data: data)
-			return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
-		}
-	}
-
 	public func fetchSharePointSite(for hostName: String, serverRelativePath: String) -> Promise<MicrosoftGraphSite> {
 		let request: NSMutableURLRequest
 		do {
@@ -63,14 +50,6 @@ public class MicrosoftGraphDiscovery {
 	}
 
 	// MARK: - Requests
-
-	func myOneDriveRequest() throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(MSGraphBaseURL)/me/drive") else {
-			throw MicrosoftGraphError.invalidURL
-		}
-		let request = NSMutableURLRequest(url: url)
-		return request
-	}
 
 	func sharePointSiteRequest(for hostName: String, serverRelativePath: String) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):/sites/\(serverRelativePath)") else {

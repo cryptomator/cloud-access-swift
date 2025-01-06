@@ -9,6 +9,6 @@
 import Foundation
 
 public struct MicrosoftGraphSite: Codable {
-	let identifier: String
-	let displayName: String?
+	public let identifier: String
+	public let displayName: String?
 }

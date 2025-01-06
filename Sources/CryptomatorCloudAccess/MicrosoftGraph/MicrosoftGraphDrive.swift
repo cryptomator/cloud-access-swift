@@ -10,5 +10,5 @@ import Foundation
 
 public struct MicrosoftGraphDrive: Codable {
 	let identifier: String
-	let name: String?
+	public let name: String?
 }

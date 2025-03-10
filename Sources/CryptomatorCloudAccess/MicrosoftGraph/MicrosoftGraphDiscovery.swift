@@ -31,10 +31,10 @@ public class MicrosoftGraphDiscovery {
 		}
 	}
 
-	public func fetchSharePointDocumentLibraries(for siteIdentifier: String) -> Promise<[MicrosoftGraphDrive]> {
+	public func fetchSharePointDrives(for siteID: String) -> Promise<[MicrosoftGraphDrive]> {
 		let request: NSMutableURLRequest
 		do {
-			request = try sharePointDocumentLibrariesRequest(for: siteIdentifier)
+			request = try sharePointDrivesRequest(for: siteID)
 		} catch {
 			return Promise(error)
 		}
@@ -49,6 +49,19 @@ public class MicrosoftGraphDiscovery {
 		}
 	}
 
+	public func fetchDrive(for driveID: String) -> Promise<MicrosoftGraphDrive> {
+		let request: NSMutableURLRequest
+		do {
+			request = try sharePointDriveRequest(for: driveID)
+		} catch {
+			return Promise(error)
+		}
+		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphDrive in
+			let drive = try MSGraphDrive(data: data)
+			return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
+		}
+	}
+
 	// MARK: - Requests
 
 	func sharePointSiteRequest(for hostName: String, serverRelativePath: String) throws -> NSMutableURLRequest {
@@ -59,8 +72,16 @@ public class MicrosoftGraphDiscovery {
 		return request
 	}
 
-	func sharePointDocumentLibrariesRequest(for siteIdentifier: String) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(siteIdentifier)/drives") else {
+	func sharePointDrivesRequest(for siteID: String) throws -> NSMutableURLRequest {
+		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(siteID)/drives") else {
+			throw MicrosoftGraphError.invalidURL
+		}
+		let request = NSMutableURLRequest(url: url)
+		return request
+	}
+
+	func sharePointDriveRequest(for driveID: String) throws -> NSMutableURLRequest {
+		guard let url = URL(string: "\(MSGraphBaseURL)/drives/\(driveID)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)

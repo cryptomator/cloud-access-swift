@@ -30,12 +30,8 @@ public class MicrosoftGraphAuthenticator {
 		}
 	}
 
-	public static func authenticateForOneDrive(from viewController: UIViewController) -> Promise<MicrosoftGraphCredential> {
-		return authenticate(from: viewController, with: MicrosoftGraphScopes.oneDrive)
-	}
-
-	public static func authenticateForSharePoint(from viewController: UIViewController) -> Promise<MicrosoftGraphCredential> {
-		return authenticate(from: viewController, with: MicrosoftGraphScopes.sharePoint)
+	public static func authenticate(from viewController: UIViewController, for type: MicrosoftGraphType) -> Promise<MicrosoftGraphCredential> {
+		return authenticate(from: viewController, with: type.scopes)
 	}
 }
 

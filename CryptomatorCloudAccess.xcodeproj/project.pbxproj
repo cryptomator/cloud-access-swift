@@ -137,6 +137,7 @@
 		747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */; };
 		747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */; };
 		747A7802269882D0005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */; };
+		747B05952D7F0F89000BA015 /* MicrosoftGraphType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */; };
 		748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C424B8A2A600D84E58 /* empty-folder.xml */; };
 		748420CC24B8A2A600D84E58 /* malformatted-xml.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C524B8A2A600D84E58 /* malformatted-xml.xml */; };
 		748420CD24B8A2A600D84E58 /* malformatted-date.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C624B8A2A600D84E58 /* malformatted-date.xml */; };
@@ -154,7 +155,6 @@
 		7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */; };
 		7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */; };
 		749D50732D22972A00427353 /* MicrosoftGraphDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D506F2D22972A00427353 /* MicrosoftGraphDiscovery.swift */; };
-		749D50842D23E4E100427353 /* MicrosoftGraphScopes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D50832D23E4DE00427353 /* MicrosoftGraphScopes.swift */; };
 		749D50872D23FD1300427353 /* MicrosoftGraphSite.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D50862D23FD1300427353 /* MicrosoftGraphSite.swift */; };
 		749D50882D23FD1300427353 /* MicrosoftGraphDrive.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D50852D23FD1300427353 /* MicrosoftGraphDrive.swift */; };
 		749D91152C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */; };
@@ -346,6 +346,7 @@
 		747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveItem.swift; sourceTree = "<group>"; };
 		747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GTLRDrive_File+CloudItemType.swift"; sourceTree = "<group>"; };
 		747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphIdentifierCacheTests.swift; sourceTree = "<group>"; };
+		747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphType.swift; sourceTree = "<group>"; };
 		748420C424B8A2A600D84E58 /* empty-folder.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "empty-folder.xml"; sourceTree = "<group>"; };
 		748420C524B8A2A600D84E58 /* malformatted-xml.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "malformatted-xml.xml"; sourceTree = "<group>"; };
 		748420C624B8A2A600D84E58 /* malformatted-date.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "malformatted-date.xml"; sourceTree = "<group>"; };
@@ -363,7 +364,6 @@
 		7494505E24BC5C3300149816 /* PropfindResponseParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PropfindResponseParserTests.swift; sourceTree = "<group>"; };
 		7494B06C249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecoratorTests.swift; sourceTree = "<group>"; };
 		749D506F2D22972A00427353 /* MicrosoftGraphDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphDiscovery.swift; sourceTree = "<group>"; };
-		749D50832D23E4DE00427353 /* MicrosoftGraphScopes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphScopes.swift; sourceTree = "<group>"; };
 		749D50852D23FD1300427353 /* MicrosoftGraphDrive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphDrive.swift; sourceTree = "<group>"; };
 		749D50862D23FD1300427353 /* MicrosoftGraphSite.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphSite.swift; sourceTree = "<group>"; };
 		749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MSClientFactory+UnauthenticatedClient.swift"; sourceTree = "<group>"; };
@@ -549,9 +549,9 @@
 				4A1A1182262B078E00DAF62F /* MicrosoftGraphError.swift */,
 				4A1A1193262EC46E00DAF62F /* MicrosoftGraphIdentifierCache.swift */,
 				4A1A118E262D95E600DAF62F /* MicrosoftGraphItem.swift */,
-				749D50832D23E4DE00427353 /* MicrosoftGraphScopes.swift */,
 				4A1A117D2629AD8F00DAF62F /* MicrosoftGraphSetup.swift */,
 				749D50862D23FD1300427353 /* MicrosoftGraphSite.swift */,
+				747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */,
 				749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */,
 				4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */,
 			);
@@ -1297,6 +1297,7 @@
 				747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */,
 				4A1A1183262B078E00DAF62F /* MicrosoftGraphError.swift in Sources */,
 				B3D513922BA9A32200DE0D36 /* BoxCredential.swift in Sources */,
+				747B05952D7F0F89000BA015 /* MicrosoftGraphType.swift in Sources */,
 				740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */,
 				74FD6C4824F6F3AA00C8D3C4 /* VaultFormat6ShorteningProviderDecorator.swift in Sources */,
 				4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */,
@@ -1337,7 +1338,6 @@
 				7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */,
 				4A3896CE2632D65B00BA3E88 /* MicrosoftGraphAuthenticationProvider.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
-				749D50842D23E4E100427353 /* MicrosoftGraphScopes.swift in Sources */,
 				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
 				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,

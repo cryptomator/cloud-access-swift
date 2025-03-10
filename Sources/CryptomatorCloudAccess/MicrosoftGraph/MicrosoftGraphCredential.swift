@@ -21,6 +21,10 @@ public class MicrosoftGraphCredential {
 	let authProvider: MSAuthenticationProvider
 	private let clientApplication: MSALPublicClientApplication
 
+	public convenience init(identifier: String, type: MicrosoftGraphType) {
+		self.init(identifier: identifier, scopes: type.scopes)
+	}
+
 	public convenience init(identifier: String, scopes: [String]) {
 		let authProvider = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: MicrosoftGraphSetup.constants.clientApplication, scopes: scopes)
 		self.init(identifier: identifier, scopes: scopes, authProvider: authProvider, clientApplication: MicrosoftGraphSetup.constants.clientApplication)
@@ -44,15 +48,5 @@ public class MicrosoftGraphCredential {
 	public func deauthenticate() throws {
 		let account = try clientApplication.account(forIdentifier: identifier)
 		try clientApplication.remove(account)
-	}
-}
-
-public extension MicrosoftGraphCredential {
-	static func createForOneDrive(with identifier: String) -> MicrosoftGraphCredential {
-		return MicrosoftGraphCredential(identifier: identifier, scopes: MicrosoftGraphScopes.oneDrive)
-	}
-
-	static func createForSharePoint(with identifier: String) -> MicrosoftGraphCredential {
-		return MicrosoftGraphCredential(identifier: identifier, scopes: MicrosoftGraphScopes.sharePoint)
 	}
 }

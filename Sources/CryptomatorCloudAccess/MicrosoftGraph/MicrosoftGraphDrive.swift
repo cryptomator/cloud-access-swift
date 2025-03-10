@@ -9,6 +9,12 @@
 import Foundation
 
 public struct MicrosoftGraphDrive: Codable {
-	let identifier: String
+	public let identifier: String
 	public let name: String?
+}
+
+extension MicrosoftGraphDrive: Equatable {
+	public static func == (lhs: MicrosoftGraphDrive, rhs: MicrosoftGraphDrive) -> Bool {
+		return lhs.identifier == rhs.identifier
+	}
 }

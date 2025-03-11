@@ -15,6 +15,8 @@ import UIKit
 
 public enum MicrosoftGraphAuthenticatorError: Error {
 	case missingAccountIdentifier
+	case serverDeclinedScopes
+	case userCanceled
 }
 
 public class MicrosoftGraphAuthenticator {
@@ -27,6 +29,15 @@ public class MicrosoftGraphAuthenticator {
 				throw MicrosoftGraphAuthenticatorError.missingAccountIdentifier
 			}
 			return MicrosoftGraphCredential(identifier: identifier, scopes: scopes)
+		}.recover { error -> MicrosoftGraphCredential in
+			if let error = error as NSError?, error.domain == MSALErrorDomain {
+				if error.code == MSALError.serverDeclinedScopes.rawValue {
+					throw MicrosoftGraphAuthenticatorError.serverDeclinedScopes
+				} else if error.code == MSALError.userCanceled.rawValue {
+					throw MicrosoftGraphAuthenticatorError.userCanceled
+				}
+			}
+			throw error
 		}
 	}
 

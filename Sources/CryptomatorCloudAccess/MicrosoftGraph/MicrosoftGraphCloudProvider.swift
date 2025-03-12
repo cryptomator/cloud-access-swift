@@ -612,10 +612,10 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private func mapStatusCodeToError(_ statusCode: Int) -> Error {
 		switch statusCode {
+		case MSClientErrorCode.MSClientErrorCodeUnauthorized.rawValue, MSClientErrorCode.MSClientErrorCodeForbidden.rawValue:
+			return CloudProviderError.unauthorized
 		case MSClientErrorCode.MSClientErrorCodeNotFound.rawValue:
 			return CloudProviderError.itemNotFound
-		case MSClientErrorCode.MSClientErrorCodeUnauthorized.rawValue:
-			return CloudProviderError.unauthorized
 		case MSClientErrorCode.MSClientErrorCodeInsufficientStorage.rawValue:
 			return CloudProviderError.quotaInsufficient
 		default:

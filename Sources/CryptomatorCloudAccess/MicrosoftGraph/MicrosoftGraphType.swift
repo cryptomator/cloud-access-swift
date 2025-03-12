@@ -18,7 +18,7 @@ public enum MicrosoftGraphType: Codable, DatabaseValueConvertible {
 		case .oneDrive:
 			return ["https://graph.microsoft.com/Files.ReadWrite"]
 		case .sharePoint:
-			return ["https://graph.microsoft.com/Files.ReadWrite", "https://graph.microsoft.com/Sites.Read.All"]
+			return ["https://graph.microsoft.com/Sites.ReadWrite.All"]
 		}
 	}
 }

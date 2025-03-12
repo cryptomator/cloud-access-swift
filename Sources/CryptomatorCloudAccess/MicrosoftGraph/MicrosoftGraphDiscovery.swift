@@ -65,7 +65,7 @@ public class MicrosoftGraphDiscovery {
 	// MARK: - Requests
 
 	func sharePointSiteRequest(for hostName: String, serverRelativePath: String) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):/sites/\(serverRelativePath)") else {
+		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):\(serverRelativePath)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)

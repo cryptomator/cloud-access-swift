@@ -144,7 +144,7 @@ func application(_: UIApplication, open url: URL, options _: [UIApplication.Open
       let credential = DropboxCredential(tokenUID: tokenUID)
       DropboxAuthenticator.pendingAuthentication?.fulfill(credential)
       } else if authResult.isCancel() {
-        DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.userCanceled)
+        DropboxAuthenticator.pendingAuthentication?.reject(CocoaError(.userCancelled))
       } else if authResult.isError() {
         DropboxAuthenticator.pendingAuthentication?.reject(authResult.nsError)
       }

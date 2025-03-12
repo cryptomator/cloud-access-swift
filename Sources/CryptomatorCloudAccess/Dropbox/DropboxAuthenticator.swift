@@ -16,7 +16,6 @@ import Promises
 public enum DropboxAuthenticatorError: Error {
 	case authenticationFailed
 	case noPendingAuthentication
-	case userCanceled
 }
 
 public class DropboxAuthenticator {

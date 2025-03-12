@@ -14,10 +14,6 @@ import Foundation
 import GoogleAPIClientForREST_Drive
 import Promises
 
-public enum GoogleDriveAuthenticatorError: Error {
-	case userCanceled
-}
-
 public enum GoogleDriveAuthenticator {
 	private static let scopes = [kGTLRAuthScopeDrive, OIDScopeEmail]
 	public static var currentAuthorizationFlow: OIDExternalUserAgentSession?
@@ -57,7 +53,7 @@ public enum GoogleDriveAuthenticator {
 					credential.deauthenticate()
 					if let error = error as NSError? {
 						if error.domain == OIDGeneralErrorDomain, error.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue || error.code == OIDErrorCode.programCanceledAuthorizationFlow.rawValue {
-							return reject(GoogleDriveAuthenticatorError.userCanceled)
+							return reject(CocoaError(.userCancelled))
 						}
 						return reject(error)
 					}

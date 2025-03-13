@@ -1,5 +1,5 @@
 //
-//  OneDriveIdentifierCacheTests.swift
+//  MicrosoftGraphIdentifierCacheTests.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Tobias Hagemann on 09.07.21.
@@ -14,22 +14,22 @@ import XCTest
 @testable import CryptomatorCloudAccess
 #endif
 
-class OneDriveIdentifierCacheTests: XCTestCase {
-	var identifierCache: OneDriveIdentifierCache!
+class MicrosoftGraphIdentifierCacheTests: XCTestCase {
+	var identifierCache: MicrosoftGraphIdentifierCache!
 
 	override func setUpWithError() throws {
-		identifierCache = try OneDriveIdentifierCache()
+		identifierCache = try MicrosoftGraphIdentifierCache()
 	}
 
 	func testRootItemIsCachedAtStart() throws {
-		let expectedRootItem = OneDriveItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder)
+		let expectedRootItem = MicrosoftGraphItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)
 		XCTAssertEqual(expectedRootItem, rootItem)
 	}
 
 	func testAddAndGetForFileCloudPath() throws {
-		let itemToStore = OneDriveItem(cloudPath: CloudPath("/abc/test.txt"), identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .file)
+		let itemToStore = MicrosoftGraphItem(cloudPath: CloudPath("/abc/test.txt"), identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .file)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -37,7 +37,7 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 	}
 
 	func testAddAndGetForFolderCloudPath() throws {
-		let itemToStore = OneDriveItem(cloudPath: CloudPath("/abc/test--a-"), identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
+		let itemToStore = MicrosoftGraphItem(cloudPath: CloudPath("/abc/test--a-"), identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(itemToStore.cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -46,9 +46,9 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 
 	func testUpdateWithDifferentIdentifierForCachedCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = OneDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
+		let itemToStore = MicrosoftGraphItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
-		let newItemToStore = OneDriveItem(cloudPath: cloudPath, identifier: "NewerIdentifer879978123.1-", driveIdentifier: nil, itemType: .folder)
+		let newItemToStore = MicrosoftGraphItem(cloudPath: cloudPath, identifier: "NewerIdentifer879978123.1-", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(newItemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
@@ -57,19 +57,19 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 
 	func testInvalidateIncludingSubPaths() throws {
 		let path = CloudPath("/foo")
-		let itemToStore = OneDriveItem(cloudPath: path, identifier: "foo", driveIdentifier: nil, itemType: .folder)
+		let itemToStore = MicrosoftGraphItem(cloudPath: path, identifier: "foo", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 
 		let subPath1 = CloudPath("/foo/bar")
-		let subItemToStore1 = OneDriveItem(cloudPath: subPath1, identifier: "sub1", driveIdentifier: nil, itemType: .folder)
+		let subItemToStore1 = MicrosoftGraphItem(cloudPath: subPath1, identifier: "sub1", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(subItemToStore1)
 
 		let subPath2 = CloudPath("/foo/baz")
-		let subItemToStore2 = OneDriveItem(cloudPath: subPath2, identifier: "sub2", driveIdentifier: nil, itemType: .folder)
+		let subItemToStore2 = MicrosoftGraphItem(cloudPath: subPath2, identifier: "sub2", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(subItemToStore2)
 
 		let siblingPath = CloudPath("/bar/foo")
-		let siblingItemToStore = OneDriveItem(cloudPath: siblingPath, identifier: "sibling", driveIdentifier: nil, itemType: .folder)
+		let siblingItemToStore = MicrosoftGraphItem(cloudPath: siblingPath, identifier: "sibling", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(siblingItemToStore)
 
 		try identifierCache.invalidate(itemToStore)
@@ -81,12 +81,12 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 
 	func testGetAfterInvalidatingDifferentIdentifier() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
-		let itemToStore = OneDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
+		let itemToStore = MicrosoftGraphItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(itemToStore)
 		let retrievedItem = identifierCache.get(cloudPath)
 		XCTAssertNotNil(retrievedItem)
 		let secondCloudPath = CloudPath("/test/AAAAAAAAAAAA/test.txt")
-		let secondItemToStore = OneDriveItem(cloudPath: secondCloudPath, identifier: "SecondIdentifer@@^1!!´´$", driveIdentifier: nil, itemType: .folder)
+		let secondItemToStore = MicrosoftGraphItem(cloudPath: secondCloudPath, identifier: "SecondIdentifer@@^1!!´´$", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.addOrUpdate(secondItemToStore)
 		try identifierCache.invalidate(itemToStore)
 		XCTAssertNil(identifierCache.get(cloudPath))
@@ -98,7 +98,7 @@ class OneDriveIdentifierCacheTests: XCTestCase {
 	func testInvalidateForNonExistentCloudPath() throws {
 		let cloudPath = CloudPath("/abc/test--a-")
 		XCTAssertNil(identifierCache.get(cloudPath))
-		let nonExistentItem = OneDriveItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
+		let nonExistentItem = MicrosoftGraphItem(cloudPath: cloudPath, identifier: "TestABC--1234@^", driveIdentifier: nil, itemType: .folder)
 		try identifierCache.invalidate(nonExistentItem)
 	}
 }

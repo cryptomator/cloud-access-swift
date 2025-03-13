@@ -1,5 +1,5 @@
 //
-//  OneDriveCloudProvider.swift
+//  MicrosoftGraphCloudProvider.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 16.04.21.
@@ -11,34 +11,36 @@ import MSGraphClientModels
 import MSGraphClientSDK
 import Promises
 
-public class OneDriveCloudProvider: CloudProvider {
+public class MicrosoftGraphCloudProvider: CloudProvider {
 	private static let maxUploadFileChunkLength = 16 * 320 * 1024 // 5MiB
 
 	private let client: MSHTTPClient
 	private let unauthenticatedClient: MSHTTPClient
-	private let identifierCache: OneDriveIdentifierCache
+	private let driveIdentifier: String?
+	private let identifierCache: MicrosoftGraphIdentifierCache
 	private let tmpDirURL: URL
 	private let maxPageSize: Int
 
-	init(credential: OneDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration, unauthenticatedURLSessionConfiguration: URLSessionConfiguration) throws {
+	init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration, unauthenticatedURLSessionConfiguration: URLSessionConfiguration) throws {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: urlSessionConfiguration)
 		self.unauthenticatedClient = MSClientFactory.createUnauthenticatedHTTPClient(with: unauthenticatedURLSessionConfiguration)
-		self.identifierCache = try OneDriveIdentifierCache()
+		self.driveIdentifier = driveIdentifier
+		self.identifierCache = try MicrosoftGraphIdentifierCache()
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
-	public convenience init(credential: OneDriveCredential, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default, unauthenticatedURLSessionConfiguration: .default)
+	public convenience init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
+		try self.init(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: .default, unauthenticatedURLSessionConfiguration: .default)
 	}
 
-	public static func withBackgroundSession(credential: OneDriveCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> OneDriveCloudProvider {
+	public static func withBackgroundSession(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, sessionIdentifier: String) throws -> MicrosoftGraphCloudProvider {
 		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = OneDriveSetup.constants.sharedContainerIdentifier
+		configuration.sharedContainerIdentifier = MicrosoftGraphSetup.constants.sharedContainerIdentifier
 		let unauthenticatedConfiguration = URLSessionConfiguration.background(withIdentifier: "\(sessionIdentifier)_unauthenticated")
-		unauthenticatedConfiguration.sharedContainerIdentifier = OneDriveSetup.constants.sharedContainerIdentifier
-		return try OneDriveCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration, unauthenticatedURLSessionConfiguration: unauthenticatedConfiguration)
+		unauthenticatedConfiguration.sharedContainerIdentifier = MicrosoftGraphSetup.constants.sharedContainerIdentifier
+		return try MicrosoftGraphCloudProvider(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: configuration, unauthenticatedURLSessionConfiguration: unauthenticatedConfiguration)
 	}
 
 	deinit {
@@ -85,7 +87,7 @@ public class OneDriveCloudProvider: CloudProvider {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
 		guard let fileSize = attributes[FileAttributeKey.size] as? Int else {
-			return Promise(OneDriveError.missingFileSize)
+			return Promise(MicrosoftGraphError.missingFileSize)
 		}
 		return fetchItemMetadata(at: cloudPath).then { metadata -> Void in
 			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
@@ -95,7 +97,7 @@ public class OneDriveCloudProvider: CloudProvider {
 			guard case CloudProviderError.itemNotFound = error else {
 				throw error
 			}
-		}.then { _ -> Promise<OneDriveItem> in
+		}.then { _ -> Promise<MicrosoftGraphItem> in
 			return self.resolveParentPath(forItemAt: cloudPath)
 		}.then { item in
 			return self.uploadFile(for: item, from: localURL, to: cloudPath, fileSize: fileSize)
@@ -141,7 +143,7 @@ public class OneDriveCloudProvider: CloudProvider {
 			if itemExists {
 				throw CloudProviderError.itemAlreadyExists
 			}
-		}.then { _ -> Promise<(OneDriveItem, OneDriveItem)> in
+		}.then { _ -> Promise<(MicrosoftGraphItem, MicrosoftGraphItem)> in
 			return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
 		}.then { item, targetParentItem in
 			self.moveItem(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
@@ -150,9 +152,9 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	// MARK: - Operations
 
-	private func fetchItemMetadata(for item: OneDriveItem) -> Promise<CloudItemMetadata> {
+	private func fetchItemMetadata(for item: MicrosoftGraphItem) -> Promise<CloudItemMetadata> {
 		guard let url = URL(string: requestURLString(for: item)) else {
-			return Promise(OneDriveError.invalidURL)
+			return Promise(MicrosoftGraphError.invalidURL)
 		}
 		let request = NSMutableURLRequest(url: url)
 		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> CloudItemMetadata in
@@ -162,7 +164,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func fetchItemList(for item: OneDriveItem) -> Promise<CloudItemList> {
+	private func fetchItemList(for item: MicrosoftGraphItem) -> Promise<CloudItemList> {
 		guard item.itemType == .folder else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
@@ -201,14 +203,14 @@ public class OneDriveCloudProvider: CloudProvider {
 					continue
 				}
 				let childCloudPath = cloudPath.appendingPathComponent(name)
-				let childItem = OneDriveItem(cloudPath: childCloudPath, driveItem: driveItem)
+				let childItem = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
 				try self.identifierCache.addOrUpdate(childItem)
 			}
 			return try self.convertToCloudItemList(collection, at: cloudPath)
 		}
 	}
 
-	private func downloadFile(for item: OneDriveItem, to localURL: URL) -> Promise<Void> {
+	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL) -> Promise<Void> {
 		guard item.itemType == .file else {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
@@ -221,17 +223,17 @@ public class OneDriveCloudProvider: CloudProvider {
 		return executeMSURLDownloadTask(with: request, to: localURL)
 	}
 
-	private func uploadFile(for parentItem: OneDriveItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) -> Promise<CloudItemMetadata> {
+	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) -> Promise<CloudItemMetadata> {
 		return createUploadSession(for: parentItem, with: cloudPath.lastPathComponent).then { uploadURL in
 			self.uploadFileChunk(from: localURL, to: uploadURL, offset: 0, totalFileSize: fileSize)
 		}.then { driveItem -> CloudItemMetadata in
-			let item = OneDriveItem(cloudPath: cloudPath, driveItem: driveItem)
+			let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
 			try self.identifierCache.addOrUpdate(item)
 			return try self.convertToCloudItemMetadata(driveItem, at: cloudPath)
 		}
 	}
 
-	private func createUploadSession(for parentItem: OneDriveItem, with filename: String) -> Promise<URL> {
+	private func createUploadSession(for parentItem: MicrosoftGraphItem, with filename: String) -> Promise<URL> {
 		let request: NSMutableURLRequest
 		do {
 			request = try createUploadSessionRequest(for: parentItem, with: filename)
@@ -241,7 +243,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> URL in
 			let uploadSession = try MSGraphUploadSession(data: data)
 			guard let uploadSessionURLString = uploadSession.uploadUrl, let uploadSessionURL = URL(string: uploadSessionURLString) else {
-				throw OneDriveError.invalidURL
+				throw MicrosoftGraphError.invalidURL
 			}
 			return uploadSessionURL
 		}
@@ -251,7 +253,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		let localFileChunkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let chunkLength: Int
 		do {
-			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: OneDriveCloudProvider.maxUploadFileChunkLength)
+			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: MicrosoftGraphCloudProvider.maxUploadFileChunkLength)
 		} catch {
 			return Promise(error)
 		}
@@ -271,7 +273,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func createFolder(for parentItem: OneDriveItem, with name: String) -> Promise<Void> {
+	private func createFolder(for parentItem: MicrosoftGraphItem, with name: String) -> Promise<Void> {
 		let request: NSMutableURLRequest
 		do {
 			request = try createFolderRequest(for: parentItem, with: name)
@@ -284,12 +286,12 @@ public class OneDriveCloudProvider: CloudProvider {
 			}
 			let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
 			let driveItem = try MSGraphDriveItem(data: data)
-			let item = OneDriveItem(cloudPath: cloudPath, driveItem: driveItem)
+			let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
 			try self.identifierCache.addOrUpdate(item)
 		}
 	}
 
-	private func deleteItem(for item: OneDriveItem) -> Promise<Void> {
+	private func deleteItem(for item: MicrosoftGraphItem) -> Promise<Void> {
 		let request: NSMutableURLRequest
 		do {
 			request = try deleteItemRequest(for: item)
@@ -304,7 +306,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func moveItem(from sourceItem: OneDriveItem, toParent targetParentItem: OneDriveItem, targetCloudPath: CloudPath) -> Promise<Void> {
+	private func moveItem(from sourceItem: MicrosoftGraphItem, toParent targetParentItem: MicrosoftGraphItem, targetCloudPath: CloudPath) -> Promise<Void> {
 		let request: NSMutableURLRequest
 		do {
 			request = try moveItemRequest(for: sourceItem, with: targetParentItem, targetCloudPath: targetCloudPath)
@@ -314,40 +316,40 @@ public class OneDriveCloudProvider: CloudProvider {
 		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> Void in
 			try self.identifierCache.invalidate(sourceItem)
 			let driveItem = try MSGraphDriveItem(data: data)
-			let targetItem = OneDriveItem(cloudPath: targetCloudPath, driveItem: driveItem)
+			let targetItem = MicrosoftGraphItem(cloudPath: targetCloudPath, driveItem: driveItem)
 			try self.identifierCache.addOrUpdate(targetItem)
 		}
 	}
 
 	// MARK: - Requests
 
-	func requestURLString(for item: OneDriveItem) -> String {
-		if let driveIdentifier = item.driveIdentifier {
+	func requestURLString(for item: MicrosoftGraphItem) -> String {
+		if let driveIdentifier = item.driveIdentifier ?? driveIdentifier {
 			return "\(MSGraphBaseURL)/drives/\(driveIdentifier)/items/\(item.identifier)"
 		} else {
 			return "\(MSGraphBaseURL)/me/drive/items/\(item.identifier)"
 		}
 	}
 
-	func childrenRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
+	func childrenRequest(for item: MicrosoftGraphItem) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(requestURLString(for: item))/children?$top=\(maxPageSize)") else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		return request
 	}
 
-	func contentRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
+	func contentRequest(for item: MicrosoftGraphItem) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(requestURLString(for: item))/content") else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		return request
 	}
 
-	func createUploadSessionRequest(for parentItem: OneDriveItem, with name: String) throws -> NSMutableURLRequest {
+	func createUploadSessionRequest(for parentItem: MicrosoftGraphItem, with name: String) throws -> NSMutableURLRequest {
 		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName):/createUploadSession") else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		request.httpMethod = HTTPMethodPost
@@ -362,9 +364,9 @@ public class OneDriveCloudProvider: CloudProvider {
 		return request
 	}
 
-	func createFolderRequest(for parentItem: OneDriveItem, with name: String) throws -> NSMutableURLRequest {
+	func createFolderRequest(for parentItem: MicrosoftGraphItem, with name: String) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(requestURLString(for: parentItem))/children") else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -377,18 +379,18 @@ public class OneDriveCloudProvider: CloudProvider {
 		return request
 	}
 
-	func deleteItemRequest(for item: OneDriveItem) throws -> NSMutableURLRequest {
+	func deleteItemRequest(for item: MicrosoftGraphItem) throws -> NSMutableURLRequest {
 		guard let url = URL(string: requestURLString(for: item)) else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		request.httpMethod = HTTPMethodDelete
 		return request
 	}
 
-	func moveItemRequest(for item: OneDriveItem, with newParentItem: OneDriveItem, targetCloudPath: CloudPath) throws -> NSMutableURLRequest {
+	func moveItemRequest(for item: MicrosoftGraphItem, with newParentItem: MicrosoftGraphItem, targetCloudPath: CloudPath) throws -> NSMutableURLRequest {
 		guard let url = URL(string: requestURLString(for: item)) else {
-			throw OneDriveError.invalidURL
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
 		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -429,7 +431,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data, HTTPURLResponse)> {
 		return executeRawMSURLSessionDataTask(with: request).then { data, response -> (Data, HTTPURLResponse) in
 			guard let data = data, let response = response as? HTTPURLResponse else {
-				throw OneDriveError.unexpectedResult
+				throw MicrosoftGraphError.unexpectedResult
 			}
 			return (data, response)
 		}
@@ -447,7 +449,7 @@ public class OneDriveCloudProvider: CloudProvider {
 	private func executeMSURLSessionDataTaskWithoutData(with request: NSMutableURLRequest) -> Promise<HTTPURLResponse> {
 		return executeRawMSURLSessionDataTask(with: request).then { _, response -> HTTPURLResponse in
 			guard let response = response as? HTTPURLResponse else {
-				throw OneDriveError.unexpectedResult
+				throw MicrosoftGraphError.unexpectedResult
 			}
 			return response
 		}
@@ -475,7 +477,7 @@ public class OneDriveCloudProvider: CloudProvider {
 				case let (_, _, .some(error)):
 					reject(error)
 				default:
-					reject(OneDriveError.unexpectedResult)
+					reject(MicrosoftGraphError.unexpectedResult)
 				}
 			}
 			task?.execute()
@@ -499,7 +501,7 @@ public class OneDriveCloudProvider: CloudProvider {
 				case let (_, _, .some(error)):
 					reject(error)
 				default:
-					reject(OneDriveError.unexpectedResult)
+					reject(MicrosoftGraphError.unexpectedResult)
 				}
 			}
 			task?.execute()
@@ -510,7 +512,7 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	// MARK: - Resolve Path
 
-	private func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<OneDriveItem> {
+	private func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<MicrosoftGraphItem> {
 		var pathToCheckForCache = cloudPath
 		var cachedItem = identifierCache.get(pathToCheckForCache)
 		while cachedItem == nil, !pathToCheckForCache.pathComponents.isEmpty {
@@ -518,7 +520,7 @@ public class OneDriveCloudProvider: CloudProvider {
 			cachedItem = identifierCache.get(pathToCheckForCache)
 		}
 		guard let item = cachedItem else {
-			return Promise(OneDriveError.inconsistentCache)
+			return Promise(MicrosoftGraphError.inconsistentCache)
 		}
 		if pathToCheckForCache != cloudPath {
 			return traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
@@ -526,9 +528,9 @@ public class OneDriveCloudProvider: CloudProvider {
 		return Promise(item)
 	}
 
-	private func resolveParentPath(forItemAt cloudPath: CloudPath) -> Promise<OneDriveItem> {
+	private func resolveParentPath(forItemAt cloudPath: CloudPath) -> Promise<MicrosoftGraphItem> {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		return resolvePath(forItemAt: parentCloudPath).recover { error -> OneDriveItem in
+		return resolvePath(forItemAt: parentCloudPath).recover { error -> MicrosoftGraphItem in
 			if case CloudProviderError.itemNotFound = error {
 				throw CloudProviderError.parentFolderDoesNotExist
 			} else {
@@ -537,7 +539,7 @@ public class OneDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: OneDriveItem) -> Promise<OneDriveItem> {
+	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: MicrosoftGraphItem) -> Promise<MicrosoftGraphItem> {
 		assert(startCloudPath.pathComponents.count < endCloudPath.pathComponents.count)
 		let startIndex = startCloudPath.pathComponents.count
 		let endIndex = endCloudPath.pathComponents.count
@@ -547,21 +549,21 @@ public class OneDriveCloudProvider: CloudProvider {
 			for i in startIndex ..< endIndex {
 				let itemName = endCloudPath.pathComponents[i]
 				currentPath = currentPath.appendingPathComponent(itemName)
-				parentItem = try awaitPromise(self.getOneDriveItem(for: itemName, withParentItem: parentItem))
+				parentItem = try awaitPromise(self.getMicrosoftGraphItem(for: itemName, withParentItem: parentItem))
 				try self.identifierCache.addOrUpdate(parentItem)
 			}
 			fulfill(parentItem)
 		}
 	}
 
-	private func getOneDriveItem(for name: String, withParentItem parentItem: OneDriveItem) -> Promise<OneDriveItem> {
+	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) -> Promise<MicrosoftGraphItem> {
 		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName):") else {
-			return Promise(OneDriveError.invalidURL)
+			return Promise(MicrosoftGraphError.invalidURL)
 		}
 		let request = NSMutableURLRequest(url: url)
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> OneDriveItem in
+		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphItem in
 			let driveItem = try MSGraphDriveItem(data: data)
-			return OneDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
+			return MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
 		}
 	}
 
@@ -569,7 +571,7 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	private func convertToCloudItemMetadata(_ driveItem: MSGraphDriveItem, at cloudPath: CloudPath) throws -> CloudItemMetadata {
 		guard let name = driveItem.name else {
-			throw OneDriveError.missingItemName
+			throw MicrosoftGraphError.missingItemName
 		}
 		let itemType = driveItem.getCloudItemType()
 		let lastModifiedDate = driveItem.fileSystemInfo?.lastModifiedDateTime
@@ -581,10 +583,10 @@ public class OneDriveCloudProvider: CloudProvider {
 		var items = [CloudItemMetadata]()
 		for case let item as [AnyHashable: Any] in collection.value {
 			guard let driveItem = MSGraphDriveItem(dictionary: item) else {
-				throw OneDriveError.unexpectedResult
+				throw MicrosoftGraphError.unexpectedResult
 			}
 			guard let name = driveItem.name else {
-				throw OneDriveError.missingItemName
+				throw MicrosoftGraphError.missingItemName
 			}
 			let itemCloudPath = cloudPath.appendingPathComponent(name)
 			let itemMetadata = try convertToCloudItemMetadata(driveItem, at: itemCloudPath)
@@ -610,20 +612,20 @@ public class OneDriveCloudProvider: CloudProvider {
 
 	private func mapStatusCodeToError(_ statusCode: Int) -> Error {
 		switch statusCode {
+		case MSClientErrorCode.MSClientErrorCodeUnauthorized.rawValue, MSClientErrorCode.MSClientErrorCodeForbidden.rawValue:
+			return CloudProviderError.unauthorized
 		case MSClientErrorCode.MSClientErrorCodeNotFound.rawValue:
 			return CloudProviderError.itemNotFound
-		case MSClientErrorCode.MSClientErrorCodeUnauthorized.rawValue:
-			return CloudProviderError.unauthorized
 		case MSClientErrorCode.MSClientErrorCodeInsufficientStorage.rawValue:
 			return CloudProviderError.quotaInsufficient
 		default:
-			return OneDriveError.unexpectedHTTPStatusCode(code: statusCode)
+			return MicrosoftGraphError.unexpectedHTTPStatusCode(code: statusCode)
 		}
 	}
 
 	private func convertStandardError(_ error: Error) -> Error {
 		switch error {
-		case OneDriveAuthenticationProviderError.accountNotFound, OneDriveAuthenticationProviderError.noAccounts:
+		case MicrosoftGraphAuthenticationProviderError.accountNotFound, MicrosoftGraphAuthenticationProviderError.noAccounts:
 			return CloudProviderError.unauthorized
 		default:
 			return error

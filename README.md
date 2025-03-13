@@ -112,7 +112,7 @@ Set up the `Info.plist` as described in the [official Dropbox Objective-C SDK](h
 
 ```swift
 let appKey = ... // your Dropbox app key
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `DropboxProvider` in an app extension and set `forceForegroundSession = false`
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `DropboxCloudProvider` in an app extension and set `forceForegroundSession = false`
 let keychainService = ... // the service name for the keychain, use `nil` to use default
 let forceForegroundSession = ... // if set to `true`, all network requests are made on foreground sessions (by default, most download/upload operations are performed with a background session)
 DropboxSetup.constants = DropboxSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier, keychainService: keychainService, forceForegroundSession: forceForegroundSession)
@@ -144,7 +144,7 @@ func application(_: UIApplication, open url: URL, options _: [UIApplication.Open
       let credential = DropboxCredential(tokenUID: tokenUID)
       DropboxAuthenticator.pendingAuthentication?.fulfill(credential)
       } else if authResult.isCancel() {
-        DropboxAuthenticator.pendingAuthentication?.reject(DropboxAuthenticatorError.userCanceled)
+        DropboxAuthenticator.pendingAuthentication?.reject(CocoaError(.userCancelled))
       } else if authResult.isError() {
         DropboxAuthenticator.pendingAuthentication?.reject(authResult.nsError)
       }
@@ -168,7 +168,7 @@ Modify your app delegate as described in [AppAuth](https://github.com/openid/App
 ```swift
 let clientId = ... // your Google Drive client identifier
 let redirectURL = ...
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `GoogleDriveProvider` with a background `URLSession` in an app extension 
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `GoogleDriveCloudProvider` with a background `URLSession` in an app extension 
 GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: redirectURL, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
@@ -198,39 +198,58 @@ let sessionIdentifier = ...
 let provider = GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
-### OneDrive
+### Microsoft Graph
+
+Accessing OneDrive and SharePoint can both be done via Microsoft Graph.
 
 Set up the `Info.plist` and your app delegate as described in [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-objc). In addition, the following constants must be set once, e.g. in your app delegate:
 
 ```swift
 let clientApplication = ... // your `MSALPublicClientApplication`
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession` in an app extension
-OneDriveSetup.constants = OneDriveSetup(clientApplication: clientApplication, sharedContainerIdentifier: sharedContainerIdentifier)
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `MicrosoftGraphCloudProvider` with a background `URLSession` in an app extension
+MicrosoftGraphSetup.constants = MicrosoftGraphSetup(clientApplication: clientApplication, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
+
+In this example, we will use OneDrive. You can also use SharePoint by replacing `.oneDrive` with `.sharePoint` in the following code snippet. Internally, the only difference is the scopes that are requested. If you want, you can also request custom scopes by using the method `MicrosoftGraphAuthenticator.authenticate(from viewController: UIViewController, with scopes: [String])`.
 
 Begin the authentication flow:
 
 ```swift
 let viewController = ... // the presenting `UIViewController`
-OneDriveAuthenticator.authenticate(from: viewController).then { credential in
-  // do something with `OneDriveCredential`
+MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive).then { credential in
+  // do something with `MicrosoftGraphCredential`
   // you probably want to save `credential.identifier` to re-create the credential later
 }.catch { error in
   // error handling
 }
 ```
 
-You can then use the credential to create a OneDrive provider:
+You can then use the credential to create a Microsoft Graph provider:
 
 ```swift
-let provider = OneDriveCloudProvider(credential: credential)
+let provider = MicrosoftGraphCloudProvider(credential: credential)
 ```
 
-Or create a OneDrive provider using a background URLSession:
+Or create a Microsoft Graph provider using a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let provider = OneDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let provider = MicrosoftGraphCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+```
+
+For SharePoint, it could be useful to do some discovery first:
+
+```swift
+let discovery = MicrosoftGraphDiscovery(credential: credential)
+let siteURL = ... // the URL of the SharePoint site
+discovery.fetchSharePointSite(for: siteURL).then { site in
+  // do something with `MicrosoftGraphSite`, e.g.:
+  return discovery.fetchSharePointDrives(for: site.identifier)
+}.then { drives in
+  // do something with `[MicrosoftGraphDrive]`
+}.catch { error in
+  // error handling
+}
 ```
 
 ### pCloud
@@ -239,7 +258,7 @@ The following constants must be set once, e.g. in your app delegate:
 
 ```swift
 let appKey = ... // your pCloud app key
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `OneDriveProvider` with a background `URLSession` in an app extension
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `PCloudCloudProvider` with a background `URLSession` in an app extension
 PCloudSetup.constants = PCloudSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 

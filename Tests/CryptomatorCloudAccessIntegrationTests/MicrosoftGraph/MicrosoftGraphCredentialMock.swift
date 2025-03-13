@@ -1,5 +1,5 @@
 //
-//  OneDriveCredentialMock.swift
+//  MicrosoftGraphCredentialMock.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Tobias Hagemann on 20.05.21.
@@ -13,11 +13,11 @@ import Foundation
 @testable import CryptomatorCloudAccess
 #endif
 
-class OneDriveCredentialMock: OneDriveCredential {
-	init() throws {
+class MicrosoftGraphCredentialMock: MicrosoftGraphCredential {
+	init() {
 		let authProvider = MSAuthenticationProviderMock()
 		let clientApplication = MSALPublicClientApplicationStub()
-		try super.init(with: "IntegrationTests", authProvider: authProvider, clientApplication: clientApplication)
+		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphScopes.oneDrive, authProvider: authProvider, clientApplication: clientApplication)
 	}
 
 	func resetAccessTokenOverride() {

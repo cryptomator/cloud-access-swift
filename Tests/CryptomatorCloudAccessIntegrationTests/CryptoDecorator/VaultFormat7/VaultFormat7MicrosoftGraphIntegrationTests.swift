@@ -1,5 +1,5 @@
 //
-//  VaultFormat6OneDriveIntegrationTests.swift
+//  VaultFormat7MicrosoftGraphIntegrationTests.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Philipp Schmid on 04.05.21.
@@ -14,21 +14,20 @@ import XCTest
 #endif
 @testable import Promises
 
-class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
+class VaultFormat7MicrosoftGraphIntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
-		return XCTestSuite(forTestCaseClass: VaultFormat6OneDriveIntegrationTests.self)
+		return XCTestSuite(forTestCaseClass: VaultFormat7MicrosoftGraphIntegrationTests.self)
 	}
 
+	private static let credential = MicrosoftGraphCredentialMock()
 	// swiftlint:disable:next force_try
-	private static let credential = try! OneDriveCredentialMock()
-	// swiftlint:disable:next force_try
-	private static let cloudProvider = try! OneDriveCloudProvider(credential: credential)
-	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
+	private static let cloudProvider = try! MicrosoftGraphCloudProvider(credential: credential)
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
 		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
-			DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
+			DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
 		}.then { decorator in
 			setUpProvider = decorator
 		}
@@ -45,7 +44,7 @@ class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
 
 	override func setUpWithError() throws {
 		try super.setUpWithError()
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6OneDriveIntegrationTests.cloudProvider, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7MicrosoftGraphIntegrationTests.cloudProvider, vaultPath: VaultFormat7MicrosoftGraphIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
@@ -57,9 +56,9 @@ class VaultFormat6OneDriveIntegrationTests: CloudAccessIntegrationTest {
 	}
 
 	override func createLimitedCloudProvider() throws -> CloudProvider {
-		let limitedDelegate = try OneDriveCloudProvider(credential: VaultFormat6OneDriveIntegrationTests.credential,
-		                                                maxPageSize: maxPageSizeForLimitedCloudProvider)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6OneDriveIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
+		let limitedDelegate = try MicrosoftGraphCloudProvider(credential: VaultFormat7MicrosoftGraphIntegrationTests.credential,
+		                                                      maxPageSize: maxPageSizeForLimitedCloudProvider)
+		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedDelegate, vaultPath: VaultFormat7MicrosoftGraphIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
 			self.provider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {

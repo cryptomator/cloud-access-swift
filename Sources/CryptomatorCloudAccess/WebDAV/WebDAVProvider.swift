@@ -137,7 +137,7 @@ public class WebDAVProvider: CloudProvider {
 			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
+			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.itemNotFound)
@@ -182,7 +182,7 @@ public class WebDAVProvider: CloudProvider {
 			return putPromise
 		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
+			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
@@ -206,7 +206,7 @@ public class WebDAVProvider: CloudProvider {
 			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
+			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 405):
 				return Promise(CloudProviderError.itemAlreadyExists)
@@ -257,7 +257,7 @@ public class WebDAVProvider: CloudProvider {
 			// no-op
 		}.recover { error -> Promise<Void> in
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401):
+			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.itemNotFound)
@@ -277,7 +277,7 @@ public class WebDAVProvider: CloudProvider {
 
 	func convertStandardError<T>(_ error: Error) -> Promise<T> {
 		switch error {
-		case URLSessionError.httpError(_, statusCode: 401):
+		case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
 			return Promise(CloudProviderError.unauthorized)
 		case URLSessionError.httpError(_, statusCode: 404):
 			return Promise(CloudProviderError.itemNotFound)

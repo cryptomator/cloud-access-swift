@@ -1,5 +1,5 @@
 //
-//  OneDriveError.swift
+//  MicrosoftGraphError.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 17.04.21.
@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum OneDriveError: Error {
+public enum MicrosoftGraphError: Error {
 	case invalidURL
 	case unexpectedResult
 	case inconsistentCache

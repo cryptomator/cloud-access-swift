@@ -17,7 +17,6 @@ import UIKit
 public enum BoxAuthenticatorError: Error {
 	case authenticationFailed
 	case invalidContext
-	case userCanceled
 }
 
 public enum BoxAuthenticator {
@@ -35,7 +34,7 @@ public enum BoxAuthenticator {
 			} catch let error as ASWebAuthenticationSessionError {
 				if error.code == .canceledLogin {
 					CloudAccessDDLogDebug("BoxAuthenticator: Login flow canceled by the user.")
-					pendingPromise.reject(BoxAuthenticatorError.userCanceled)
+					pendingPromise.reject(CocoaError(.userCancelled))
 				} else {
 					CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed with error: \(error.localizedDescription).")
 					pendingPromise.reject(BoxAuthenticatorError.authenticationFailed)

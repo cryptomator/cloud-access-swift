@@ -1,5 +1,5 @@
 //
-//  OneDriveItem.swift
+//  MicrosoftGraphItem.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Philipp Schmid on 19.04.21.
@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 import MSGraphClientModels
 
-struct OneDriveItem: Decodable, FetchableRecord, TableRecord, Equatable {
+struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	static let databaseTableName = "CachedEntries"
 	static let cloudPathKey = "cloudPath"
 	static let identifierKey = "identifier"
@@ -41,11 +41,11 @@ struct OneDriveItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	}
 }
 
-extension OneDriveItem: PersistableRecord {
+extension MicrosoftGraphItem: PersistableRecord {
 	func encode(to container: inout PersistenceContainer) throws {
-		container[OneDriveItem.cloudPathKey] = cloudPath
-		container[OneDriveItem.identifierKey] = identifier
-		container[OneDriveItem.driveIdentifierKey] = driveIdentifier
-		container[OneDriveItem.itemTypeKey] = itemType
+		container[MicrosoftGraphItem.cloudPathKey] = cloudPath
+		container[MicrosoftGraphItem.identifierKey] = identifier
+		container[MicrosoftGraphItem.driveIdentifierKey] = driveIdentifier
+		container[MicrosoftGraphItem.itemTypeKey] = itemType
 	}
 }

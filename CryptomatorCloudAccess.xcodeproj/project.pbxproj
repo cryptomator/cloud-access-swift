@@ -134,6 +134,7 @@
 		7470C54D2656A44600E361B8 /* MSALPublicClientApplicationStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7470C54C2656A44600E361B8 /* MSALPublicClientApplicationStub.swift */; };
 		7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */; };
 		7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */; };
+		7478BA492D82EA0A00BD3250 /* URL+SharePointValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7478BA482D82E9FE00BD3250 /* URL+SharePointValidation.swift */; };
 		747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */; };
 		747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */; };
 		747A7802269882D0005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */; };
@@ -343,6 +344,7 @@
 		7470C54C2656A44600E361B8 /* MSALPublicClientApplicationStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MSALPublicClientApplicationStub.swift; sourceTree = "<group>"; };
 		7471BDAD24865B6F000D05FC /* LocalFileSystemProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalFileSystemProvider.swift; sourceTree = "<group>"; };
 		7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidator.swift; sourceTree = "<group>"; };
+		7478BA482D82E9FE00BD3250 /* URL+SharePointValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+SharePointValidation.swift"; sourceTree = "<group>"; };
 		747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveItem.swift; sourceTree = "<group>"; };
 		747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GTLRDrive_File+CloudItemType.swift"; sourceTree = "<group>"; };
 		747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphIdentifierCacheTests.swift; sourceTree = "<group>"; };
@@ -554,6 +556,7 @@
 				747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */,
 				749D91142C92EFA600FAD1A4 /* MSClientFactory+UnauthenticatedClient.swift */,
 				4AD55338263ABA4200126046 /* MSGraphDriveItem+CloudItemType.swift */,
+				7478BA482D82E9FE00BD3250 /* URL+SharePointValidation.swift */,
 			);
 			path = MicrosoftGraph;
 			sourceTree = "<group>";
@@ -1299,6 +1302,7 @@
 				B3D513922BA9A32200DE0D36 /* BoxCredential.swift in Sources */,
 				747B05952D7F0F89000BA015 /* MicrosoftGraphType.swift in Sources */,
 				740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */,
+				7478BA492D82EA0A00BD3250 /* URL+SharePointValidation.swift in Sources */,
 				74FD6C4824F6F3AA00C8D3C4 /* VaultFormat6ShorteningProviderDecorator.swift in Sources */,
 				4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */,
 				B3D513912BA9A32200DE0D36 /* BoxAuthenticator.swift in Sources */,

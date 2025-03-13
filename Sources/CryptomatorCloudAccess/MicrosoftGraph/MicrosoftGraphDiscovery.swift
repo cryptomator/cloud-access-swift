@@ -18,10 +18,10 @@ public class MicrosoftGraphDiscovery {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: .default)
 	}
 
-	public func fetchSharePointSite(for hostName: String, serverRelativePath: String) -> Promise<MicrosoftGraphSite> {
+	public func fetchSharePointSite(for siteURL: URL) -> Promise<MicrosoftGraphSite> {
 		let request: NSMutableURLRequest
 		do {
-			request = try sharePointSiteRequest(for: hostName, serverRelativePath: serverRelativePath)
+			request = try sharePointSiteRequest(for: siteURL)
 		} catch {
 			return Promise(error)
 		}
@@ -64,7 +64,12 @@ public class MicrosoftGraphDiscovery {
 
 	// MARK: - Requests
 
-	func sharePointSiteRequest(for hostName: String, serverRelativePath: String) throws -> NSMutableURLRequest {
+	func sharePointSiteRequest(for siteURL: URL) throws -> NSMutableURLRequest {
+		try siteURL.validateForSharePoint()
+		guard let hostName = siteURL.host else {
+			throw MicrosoftGraphError.invalidURL
+		}
+		let serverRelativePath = siteURL.relativePath
 		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):\(serverRelativePath)") else {
 			throw MicrosoftGraphError.invalidURL
 		}

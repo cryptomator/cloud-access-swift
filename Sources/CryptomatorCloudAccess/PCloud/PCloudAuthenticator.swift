@@ -16,7 +16,6 @@ import UIKit
 
 public enum PCloudAuthenticatorError: Error {
 	case missingWindow
-	case userCanceled
 }
 
 public class PCloudAuthenticator {
@@ -43,7 +42,7 @@ public class PCloudAuthenticator {
 		case let .failure(error):
 			throw error
 		case .cancel:
-			throw PCloudAuthenticatorError.userCanceled
+			throw CocoaError(.userCancelled)
 		}
 	}
 }

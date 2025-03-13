@@ -41,7 +41,7 @@
                   Identifier = "LocalFileSystemProviderIntegrationTests">
                </Test>
                <Test
-                  Identifier = "OneDriveCloudProviderIntegrationTests">
+                  Identifier = "MicrosoftGraphCloudProviderIntegrationTests">
                </Test>
                <Test
                   Identifier = "PCloudCloudProviderIntegrationTests">
@@ -62,7 +62,7 @@
                   Identifier = "VaultFormat6LocalFileSystemIntegrationTests">
                </Test>
                <Test
-                  Identifier = "VaultFormat6OneDriveIntegrationTests">
+                  Identifier = "VaultFormat6MicrosoftGraphIntegrationTests">
                </Test>
                <Test
                   Identifier = "VaultFormat6PCloudIntegrationTests">
@@ -86,7 +86,7 @@
                   Identifier = "VaultFormat7LocalFileSystemIntegrationTests">
                </Test>
                <Test
-                  Identifier = "VaultFormat7OneDriveIntegrationTests">
+                  Identifier = "VaultFormat7MicrosoftGraphIntegrationTests">
                </Test>
                <Test
                   Identifier = "VaultFormat7PCloudIntegrationTests">

@@ -562,7 +562,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				self.runningFetchers.removeAll { $0 == fetcher }
 				if let error = error as NSError? {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeFetcher(\(fetcher.request?.description ?? "nil")) failed with error: \(error)")
-					if error.domain == kGTMSessionFetcherStatusDomain, error.code == 401 {
+					if error.domain == kGTMSessionFetcherStatusDomain && (error.code == 401 || error.code == 403) {
 						reject(CloudProviderError.unauthorized)
 					} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 404 {
 						reject(CloudProviderError.itemNotFound)

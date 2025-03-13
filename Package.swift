@@ -13,7 +13,7 @@ import PackageDescription
 let appExtensionUnsafeSources = [
 	"Dropbox/DropboxAuthenticator.swift",
 	"GoogleDrive/GoogleDriveAuthenticator.swift",
-	"OneDrive/OneDriveAuthenticator.swift",
+	"MicrosoftGraph/MicrosoftGraphAuthenticator.swift",
 	"PCloud/PCloudAuthenticator.swift",
 	"Box/BoxAuthenticator.swift"
 ]

@@ -17,7 +17,7 @@ class MicrosoftGraphCredentialMock: MicrosoftGraphCredential {
 	init() {
 		let authProvider = MSAuthenticationProviderMock()
 		let clientApplication = MSALPublicClientApplicationStub()
-		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphScopes.oneDrive, authProvider: authProvider, clientApplication: clientApplication)
+		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, authProvider: authProvider, clientApplication: clientApplication)
 	}
 
 	func resetAccessTokenOverride() {

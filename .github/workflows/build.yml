@@ -63,8 +63,8 @@ jobs:
           scheme-name: GoogleDriveIntegrationTests
         - name: Local File System
           scheme-name: LocalFileSystemIntegrationTests
-        - name: OneDrive
-          scheme-name: OneDriveIntegrationTests
+        - name: Microsoft Graph
+          scheme-name: MicrosoftGraphIntegrationTests
         - name: pCloud
           scheme-name: PCloudIntegrationTests
         - name: S3

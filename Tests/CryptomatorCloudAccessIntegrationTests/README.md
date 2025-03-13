@@ -52,9 +52,9 @@ private static func getAuthState(for configuration: OIDServiceConfiguration, wit
 }
 ```
 
-#### OneDrive
+#### Microsoft Graph
 
-To get the secrets for OneDrive, it is necessary to extract them from the keychain after a successful login. The following method may help you to extract the OneDrive secrets from the keychain:
+The easiest way to get the secrets for Microsoft Graph is to use OneDrive. It is necessary to extract them from the keychain after a successful login. The following method may help you to extract the Microsoft Graph secrets from the keychain:
 
 ```swift
 func extractOneDriveSecretsFromKeychain() {
@@ -76,7 +76,7 @@ func extractOneDriveSecretsFromKeychain() {
     for item in array {
       if let data = item[kSecValueData as String] as? Data, let string = String(data: data, encoding: .utf8) {
         if string.contains("\"credential_type\":\"RefreshToken\"") {
-          print("OneDrive Refresh Token Data:\n\(string)")
+          print("Microsoft Graph Refresh Token Data:\n\(string)")
         }
       }
     }
@@ -155,7 +155,7 @@ The respective `CloudProvider` is tested here very generally for the specificati
 
 - Correct use of the cache for `resolvePath`.
 
-### OneDrive
+### Microsoft Graph
 
 - Correct use of the cache for `resolvePath`.
 

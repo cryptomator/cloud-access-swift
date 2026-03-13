@@ -19,7 +19,9 @@ struct C9SDir {
 struct VaultFormat7ShorteningResult {
 	let cloudPath: CloudPath
 	let c9sDir: C9SDir?
-	var pointsToC9S: Bool { cloudPath == c9sDir?.cloudPath }
+	var pointsToC9S: Bool {
+		cloudPath == c9sDir?.cloudPath
+	}
 }
 
 private struct CachedEntry: Decodable, FetchableRecord, TableRecord {

@@ -16,7 +16,7 @@ import XCTest
 
 class WebDAVClientTests: XCTestCase {
 	func testSanitizeBaseURLWithMissingTrailingSlash() throws {
-		let credential = WebDAVCredential(baseURL: URL(string: "/cloud/remote.php/webdav")!, username: "", password: "", allowedCertificate: nil)
+		let credential = try WebDAVCredential(baseURL: XCTUnwrap(URL(string: "/cloud/remote.php/webdav")), username: "", password: "", allowedCertificate: nil)
 		let delegate = WebDAVClientURLSessionDelegate(credential: credential)
 		let configuration = URLSessionConfiguration.default
 		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
@@ -25,7 +25,7 @@ class WebDAVClientTests: XCTestCase {
 	}
 
 	func testSanitizeBaseURLWithTrailingSlash() throws {
-		let credential = WebDAVCredential(baseURL: URL(string: "/cloud/remote.php/webdav/")!, username: "", password: "", allowedCertificate: nil)
+		let credential = try WebDAVCredential(baseURL: XCTUnwrap(URL(string: "/cloud/remote.php/webdav/")), username: "", password: "", allowedCertificate: nil)
 		let delegate = WebDAVClientURLSessionDelegate(credential: credential)
 		let configuration = URLSessionConfiguration.default
 		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)

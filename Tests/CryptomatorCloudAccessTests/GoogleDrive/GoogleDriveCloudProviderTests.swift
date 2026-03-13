@@ -22,7 +22,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		provider = try GoogleDriveCloudProvider(credential: credential)
 	}
 
-	func testOnlyItemNameChangedWorksWithFolders() throws {
+	func testOnlyItemNameChangedWorksWithFolders() {
 		let oldCloudPath = CloudPath("/AAAAAA/BBBBBBB")
 		let newCloudPathOnlyFolderNameChanged = CloudPath("/AAAAAA/CCCCCCC")
 		XCTAssertTrue(provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathOnlyFolderNameChanged))
@@ -34,7 +34,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		XCTAssertFalse(provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathParentFolderAndFolderNameChanged))
 	}
 
-	func testOnlyItemNameChangedWorksWithFiles() throws {
+	func testOnlyItemNameChangedWorksWithFiles() {
 		let oldCloudPath = CloudPath("/AAAAAA/test.txt")
 		let newCloudPathOnlyFileNameChanged = CloudPath("/AAAAAA/renamedTest.txt")
 		XCTAssertTrue(provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathOnlyFileNameChanged))

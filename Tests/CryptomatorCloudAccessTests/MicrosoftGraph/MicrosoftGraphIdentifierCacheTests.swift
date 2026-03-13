@@ -21,7 +21,7 @@ class MicrosoftGraphIdentifierCacheTests: XCTestCase {
 		identifierCache = try MicrosoftGraphIdentifierCache()
 	}
 
-	func testRootItemIsCachedAtStart() throws {
+	func testRootItemIsCachedAtStart() {
 		let expectedRootItem = MicrosoftGraphItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)

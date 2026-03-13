@@ -21,7 +21,7 @@ class PCloudIdentifierCacheTests: XCTestCase {
 		identifierCache = try PCloudIdentifierCache()
 	}
 
-	func testRootItemIsCachedAtStart() throws {
+	func testRootItemIsCachedAtStart() {
 		let expectedRootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: 0, itemType: .folder)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)

@@ -19,7 +19,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		fatalError("Not implemented")
 	}
 
-	func testFetchItemMetadataWithUnauthorizedError() throws {
+	func testFetchItemMetadataWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized fetchItemMetadata")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		deauthenticate().then {
@@ -37,7 +37,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListWithUnauthorizedError() throws {
+	func testFetchItemListWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized fetchItemList")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder")
 		deauthenticate().then {
@@ -55,7 +55,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDownloadFileWithUnauthorizedError() throws {
+	func testDownloadFileWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized downloadFile")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -95,7 +95,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testCreateFolderWithUnauthorizedError() throws {
+	func testCreateFolderWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized createFolder")
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		deauthenticate().then {
@@ -113,7 +113,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFileWithUnauthorizedError() throws {
+	func testDeleteFileWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized deleteFile")
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		deauthenticate().then {
@@ -131,7 +131,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFolderWithUnauthorizedError() throws {
+	func testDeleteFolderWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized deleteFolder")
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		deauthenticate().then {
@@ -149,7 +149,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileWithUnauthorizedError() throws {
+	func testMoveFileWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized moveFile")
 		let sourceCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		let targetCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolderAA")
@@ -168,7 +168,7 @@ class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderWithUnauthorizedError() throws {
+	func testMoveFolderWithUnauthorizedError() {
 		let expectation = XCTestExpectation(description: "unauthorized moveFolder")
 		let sourceCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		let targetCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolderAA")

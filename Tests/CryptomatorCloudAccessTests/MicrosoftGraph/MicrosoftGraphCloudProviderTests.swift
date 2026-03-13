@@ -28,7 +28,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.childrenRequest(for: item)
 		XCTAssertEqual(HTTPMethodGet, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100"), request.url)
 		XCTAssertNil(request.httpBody)
 	}
 
@@ -36,7 +36,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.contentRequest(for: item)
 		XCTAssertEqual(HTTPMethodGet, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/content")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/content"), request.url)
 		XCTAssertNil(request.httpBody)
 	}
 
@@ -44,12 +44,12 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.createUploadSessionRequest(for: parentItem, with: "Test.txt")
 		XCTAssertEqual(HTTPMethodPost, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier:/Test.txt:/createUploadSession")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier:/Test.txt:/createUploadSession"), request.url)
 		XCTAssertNil(request.httpBody)
 	}
 
 	func testFileCunkUploadRequest() throws {
-		let uploadURL = URL(string: "example.com")!
+		let uploadURL = try XCTUnwrap(URL(string: "example.com"))
 		let chunkLength = 26
 		let totalLength = 128
 		let request = provider.fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: 0, totalLength: totalLength)
@@ -60,7 +60,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 	}
 
 	func testFileCunkUploadRequestWithOffset() throws {
-		let uploadURL = URL(string: "example.com")!
+		let uploadURL = try XCTUnwrap(URL(string: "example.com"))
 		let chunkLength = 26
 		let totalLength = 128
 		let request = provider.fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: 26, totalLength: totalLength)
@@ -75,7 +75,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"subFolder\",\"folder\":{}}"
 		let request = try provider.createFolderRequest(for: parentItem, with: "subFolder")
 		XCTAssertEqual(HTTPMethodPost, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children"), request.url)
 		XCTAssertEqual(expectedRequestBody.data(using: .utf8), request.httpBody)
 	}
 
@@ -83,7 +83,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
 		let request = try provider.deleteItemRequest(for: item)
 		XCTAssertEqual(HTTPMethodDelete, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier"), request.url)
 		XCTAssertNil(request.httpBody)
 	}
 
@@ -94,7 +94,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"test.txt\",\"parentReference\":{\"id\":\"TestIdentifier-Folder\"}}"
 		let request = try provider.moveItemRequest(for: item, with: newParentItem, targetCloudPath: targetCloudPath)
 		XCTAssertEqual(HTTPMethodPatch, request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier")!, request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier"), request.url)
 		XCTAssertEqual(expectedRequestBody.data(using: .utf8), request.httpBody)
 	}
 }

@@ -37,10 +37,10 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemMetadata() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -53,15 +53,15 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
 		XCTAssertEqual(1074, metadata.size)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testFetchItemMetadataWithNotFoundError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -80,8 +80,8 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).async()) { error in
@@ -92,10 +92,10 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemMetadataWithMissingResourcetype() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 		let propfindData = try getTestData(forResource: "item-metadata-missing-resourcetype", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -108,14 +108,14 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
 		XCTAssertEqual(1074, metadata.size)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testFetchItemList() async throws {
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -135,7 +135,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemListWithNotFoundError() async throws {
-		let propfindResponse = HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == self.baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -151,10 +151,10 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemListWithTypeMismatchError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -173,7 +173,7 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
-		let failureResponse = HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).async()) { error in
@@ -184,11 +184,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFile() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -197,7 +197,7 @@ class WebDAVProviderTests: XCTestCase {
 		})
 
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let getResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -215,11 +215,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileWithNotFoundError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -227,7 +227,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let getResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -244,12 +244,12 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileWithAlreadyExistsError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -258,7 +258,7 @@ class WebDAVProviderTests: XCTestCase {
 		})
 
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let getResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let getResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -275,11 +275,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileWithTypeMismatchError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -300,8 +300,8 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()) { error in
@@ -313,11 +313,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFile() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -325,7 +325,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, nil)
 		})
 
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let putResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
 		let putData = Data()
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
@@ -334,7 +334,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (putResponse, putData)
 		})
 
-		let propfindResponseAfterUpload = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponseAfterUpload = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
@@ -349,18 +349,18 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
 		XCTAssertEqual(1074, metadata.size)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testUploadFileWithReplaceExisting() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -369,7 +369,7 @@ class WebDAVProviderTests: XCTestCase {
 		})
 
 		let putData = Data()
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let putResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -377,7 +377,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (putResponse, putData)
 		})
 
-		let propfindResponseAfterUpload = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponseAfterUpload = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
@@ -392,7 +392,7 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
 		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT")!, metadata.lastModifiedDate)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
 		XCTAssertEqual(1074, metadata.size)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
@@ -408,12 +408,12 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithAlreadyExistsError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -430,11 +430,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithTypeMismatchError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false, attributes: nil)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -453,12 +453,12 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithReplaceExistingAndAlreadyExistsError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -475,11 +475,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithParentFolderDoesNotExistError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -487,7 +487,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, nil)
 		})
 
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let putResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -503,11 +503,11 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithParentFolderDoesNotExistErrorWhenReceiving404Error() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let propfindResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -515,7 +515,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, nil)
 		})
 
-		let putResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let putResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -536,8 +536,8 @@ class WebDAVProviderTests: XCTestCase {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
@@ -549,9 +549,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testCreateFolder() async throws {
-		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "foo/", relativeTo: baseURL))
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let mkcolResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -563,9 +563,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testCreateFolderWithAlreadyExistsError() async throws {
-		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "foo/", relativeTo: baseURL))
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let mkcolResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -580,9 +580,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testCreateFolderWithParentFolderDoesNotExistError() async throws {
-		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "foo/", relativeTo: baseURL))
 
-		let mkcolResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let mkcolResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -600,8 +600,8 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
-		let responseURL = URL(string: "foo/", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "foo/", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.createFolder(at: CloudPath("/foo")).async()) { error in
@@ -612,9 +612,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDeleteFile() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let deleteResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -627,9 +627,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDeleteFileWithNotFoundError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let deleteResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let deleteResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -648,8 +648,8 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.deleteFile(at: CloudPath("/Documents/About.txt")).async()) { error in
@@ -660,9 +660,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveFile() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let moveResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -676,9 +676,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveFileWithNotFoundError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let moveResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -694,10 +694,10 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveFileWithAlreadyExistsError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 		let moveData = try getTestData(forResource: "item-move-412-error", withExtension: "xml")
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let moveResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -713,9 +713,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testMoveFileWithParentFolderDoesNotExistError() async throws {
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-		let moveResponse = HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let moveResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
 			guard let url = request.url, url.path == responseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
@@ -734,8 +734,8 @@ class WebDAVProviderTests: XCTestCase {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
 		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
 
-		let responseURL = URL(string: "Documents/About.txt", relativeTo: baseURL)!
-		let failureResponse = HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil)!
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()) { error in

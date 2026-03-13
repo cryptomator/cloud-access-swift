@@ -531,7 +531,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				self.runningTickets.removeAll { $0 == ticket }
 				if let error = error as NSError? {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeQuery(\(query.requestID)) failed with error: \(error)")
-					if error.domain == NSURLErrorDomain, error.code == NSURLErrorNotConnectedToInternet || error.code == NSURLErrorCannotConnectToHost || error.code == NSURLErrorNetworkConnectionLost || error.code == NSURLErrorDNSLookupFailed || error.code == NSURLErrorResourceUnavailable || error.code == NSURLErrorInternationalRoamingOff {
+					if isNetworkConnectionError(error) {
 						reject(CloudProviderError.noInternetConnection)
 					} else if (error.domain == kGTLRErrorObjectDomain && (error.code == 401 || error.code == 403)) || (error.domain == OIDOAuthTokenErrorDomain && error.code == OIDErrorCodeOAuth.invalidGrant.rawValue) {
 						reject(CloudProviderError.unauthorized)
@@ -562,7 +562,9 @@ public class GoogleDriveCloudProvider: CloudProvider {
 				self.runningFetchers.removeAll { $0 == fetcher }
 				if let error = error as NSError? {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeFetcher(\(fetcher.request?.description ?? "nil")) failed with error: \(error)")
-					if error.domain == kGTMSessionFetcherStatusDomain && (error.code == 401 || error.code == 403) {
+					if isNetworkConnectionError(error) {
+						reject(CloudProviderError.noInternetConnection)
+					} else if error.domain == kGTMSessionFetcherStatusDomain && (error.code == 401 || error.code == 403) {
 						reject(CloudProviderError.unauthorized)
 					} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 404 {
 						reject(CloudProviderError.itemNotFound)

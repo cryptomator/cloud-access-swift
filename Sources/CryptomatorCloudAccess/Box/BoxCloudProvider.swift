@@ -578,6 +578,9 @@ public class BoxCloudProvider: CloudProvider {
 	}
 
 	private func convertStandardError(_ error: Error) -> Error {
+		if isNetworkConnectionError(error) {
+			return CloudProviderError.noInternetConnection
+		}
 		switch error {
 		case let error as BoxAPIError where (error.responseInfo.statusCode == 400 && error.responseInfo.rawBody?.contains("invalid_grant") == true) || error.responseInfo.statusCode == 401 || error.responseInfo.statusCode == 403:
 			return CloudProviderError.unauthorized

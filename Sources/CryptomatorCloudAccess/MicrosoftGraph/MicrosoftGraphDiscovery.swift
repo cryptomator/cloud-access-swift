@@ -73,24 +73,21 @@ public class MicrosoftGraphDiscovery {
 		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):\(serverRelativePath)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		let request = NSMutableURLRequest(url: url)
-		return request
+		return NSMutableURLRequest(url: url)
 	}
 
 	func sharePointDrivesRequest(for siteID: String) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(siteID)/drives") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		let request = NSMutableURLRequest(url: url)
-		return request
+		return NSMutableURLRequest(url: url)
 	}
 
 	func sharePointDriveRequest(for driveID: String) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(MSGraphBaseURL)/drives/\(driveID)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		let request = NSMutableURLRequest(url: url)
-		return request
+		return NSMutableURLRequest(url: url)
 	}
 
 	// MARK: - Execution

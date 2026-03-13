@@ -44,9 +44,10 @@ struct DirectoryContentCacheResponse {
 }
 
 struct DirectoryContentDBCache: DirectoryContentCache {
-	let dbWriter: DatabaseWriter
+	let dbWriter: any DatabaseWriter
 	let maxPageSize: Int
-	private let cachedStatement: Statement
+
+	private static let insertSQL = "INSERT INTO entries (cacheIndex, name, itemType, lastModified, size, folderEnumerationPath) VALUES (?, ?, ?, ?, ?, ?)"
 
 	private static var migrator: DatabaseMigrator {
 		var migrator = DatabaseMigrator()
@@ -64,13 +65,10 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 		return migrator
 	}
 
-	init(dbWriter: DatabaseWriter, maxPageSize: Int) throws {
+	init(dbWriter: any DatabaseWriter, maxPageSize: Int) throws {
 		self.dbWriter = dbWriter
 		self.maxPageSize = maxPageSize
 		try DirectoryContentDBCache.migrator.migrate(dbWriter)
-		self.cachedStatement = try dbWriter.write { db in
-			return try db.cachedStatement(sql: "INSERT INTO entries (cacheIndex, name, itemType, lastModified, size, folderEnumerationPath) VALUES (?, ?, ?, ?, ?, ?)")
-		}
 		// reduce the cache size from 2000 KiB to 500 KiB
 		try dbWriter.write { db in
 			try db.execute(sql: "pragma cache_size = -500")
@@ -79,8 +77,9 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 
 	func save(_ element: CloudItemMetadata, for folderEnumerationPath: CloudPath, index: Int64) throws {
 		try autoreleasepool {
-			_ = try dbWriter.write { _ in
-				try cachedStatement.execute(arguments: [index, element.name, element.itemType, element.lastModifiedDate?.timeIntervalSinceReferenceDate, element.size, folderEnumerationPath])
+			_ = try dbWriter.write { db in
+				let statement = try db.cachedStatement(sql: DirectoryContentDBCache.insertSQL)
+				try statement.execute(arguments: [index, element.name, element.itemType, element.lastModifiedDate?.timeIntervalSinceReferenceDate, element.size, folderEnumerationPath])
 			}
 		}
 	}

@@ -17,7 +17,7 @@ Continuous integration hosting is provided by [MacStadium](https://www.macstadiu
 
 ## Requirements
 
-- iOS 14.0 or higher
+- iOS 16.0 or higher
 - Swift 5
 
 ## Installation

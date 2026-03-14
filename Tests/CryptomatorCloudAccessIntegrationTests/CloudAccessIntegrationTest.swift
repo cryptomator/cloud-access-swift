@@ -567,6 +567,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let initialLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let initialTestContent = "Start content"
 		try initialTestContent.write(to: initialLocalURL, atomically: true, encoding: .utf8)
+		let overwrittenUploadURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let overwrittenLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let overwrittenTestContent = "Overwritten content"
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/FileToOverwrite.txt")
@@ -578,10 +579,10 @@ class CloudAccessIntegrationTest: XCTestCase {
 		provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: false).then { cloudItemMetadata -> Promise<CloudItemMetadata> in
 			XCTAssertTrue(progress.completedUnitCount >= progress.totalUnitCount)
 			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
-			try overwrittenTestContent.write(to: initialLocalURL, atomically: true, encoding: .utf8)
-			return self.provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: true)
+			try overwrittenTestContent.write(to: overwrittenUploadURL, atomically: true, encoding: .utf8)
+			return self.provider.uploadFile(from: overwrittenUploadURL, to: cloudPath, replaceExisting: true)
 		}.then { cloudItemMetadata -> Promise<Void> in
-			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
+			self.assertReceivedCorrectMetadataAfterUploading(file: overwrittenUploadURL, to: cloudPath, metadata: cloudItemMetadata)
 			return self.provider.downloadFile(from: cloudPath, to: overwrittenLocalURL)
 		}.then { _ in
 			self.provider.deleteFile(at: cloudPath)

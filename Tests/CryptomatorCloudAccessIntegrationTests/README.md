@@ -42,22 +42,28 @@ To get the access token for Dropbox, generate a token in the Dropbox Developer P
 
 #### Google Drive
 
-To get the refresh token for Google Drive, it is recommended to extract it from the `authState` after a successful login. The easiest way to do this is to set a breakpoint inside the `GoogleDriveAuthenticator`:
+To get the refresh token for Google Drive, extract it from the keychain after a successful login. The auth session is stored by GTMAppAuth with the item name `GoogleDriveAuth` + user ID. The following method can be used to extract the refresh token:
 
 ```swift
-private static func getAuthState(for configuration: OIDServiceConfiguration, with presentingViewController: UIViewController, credential: GoogleDriveCredential) -> Promise<OIDAuthState> {
-  // ...
-  fulfill(authState) // set breakpoint here
-  // ...
+import AppAuthCore
+import GTMAppAuth
+
+func extractGoogleDriveRefreshToken(userID: String) {
+  let store = KeychainStore(itemName: "GoogleDriveAuth" + userID)
+  if let authSession = try? store.retrieveAuthSession() {
+    print("GOOGLE_DRIVE_REFRESH_TOKEN=\(authSession.authState.refreshToken ?? "nil")")
+  }
 }
 ```
 
 #### Microsoft Graph
 
-The easiest way to get the secrets for Microsoft Graph is to use OneDrive. It is necessary to extract them from the keychain after a successful login. The following method may help you to extract the Microsoft Graph secrets from the keychain:
+To get the refresh token for Microsoft Graph, extract it from the keychain after a successful login. MSAL stores credentials as JSON in the keychain. The following method queries all keychain entries and filters for refresh tokens:
 
 ```swift
-func extractOneDriveSecretsFromKeychain() {
+import Security
+
+func extractMicrosoftGraphRefreshToken() {
   let query: [String: Any] = [
     kSecClass as String: kSecClassGenericPassword,
     kSecReturnAttributes as String: true,
@@ -65,18 +71,18 @@ func extractOneDriveSecretsFromKeychain() {
     kSecMatchLimit as String: kSecMatchLimitAll
   ]
   var result: AnyObject?
-  let lastResultCode = withUnsafeMutablePointer(to: &result) {
+  let status = withUnsafeMutablePointer(to: &result) {
     SecItemCopyMatching(query as CFDictionary, UnsafeMutablePointer($0))
   }
-  if lastResultCode == noErr {
-    guard let array = result as? [[String: Any]] else {
-      print("No items were found in the keychain")
-      return
-    }
+  if status == noErr, let array = result as? [[String: Any]] {
     for item in array {
-      if let data = item[kSecValueData as String] as? Data, let string = String(data: data, encoding: .utf8) {
-        if string.contains("\"credential_type\":\"RefreshToken\"") {
-          print("Microsoft Graph Refresh Token Data:\n\(string)")
+      if let data = item[kSecValueData as String] as? Data,
+         let string = String(data: data, encoding: .utf8),
+         string.contains("\"credential_type\":\"RefreshToken\"") {
+        if let jsonData = string.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+           let refreshToken = json["secret"] as? String {
+          print("MICROSOFT_GRAPH_REFRESH_TOKEN=\(refreshToken)")
         }
       }
     }
@@ -86,14 +92,12 @@ func extractOneDriveSecretsFromKeychain() {
 
 #### pCloud
 
-To get the access token for pCloud, it is recommended to extract it from `completeAuthorizationFlow` after a successful login. The easiest way to do this is to set a breakpoint inside the `PCloudAuthenticator`:
+To get the access token for pCloud, extract it from the `PCloudCredential` after a successful login. The credential's `user` property has public access to the token and API host name. The following can be added to `CloudAuthenticator.authenticatePCloud` in the iOS app:
 
 ```swift
-private func completeAuthorizationFlow(result: OAuth.Result) throws -> PCloudCredential {
-  // ...
-  return PCloudCredential(user: user) // set breakpoint here
-  // ...
-}
+// Inside the .then block, `credential` is a PCloudCredential
+print("PCLOUD_ACCESS_TOKEN=\(credential.user.token)")
+print("PCLOUD_HTTP_API_HOST_NAME=\(credential.user.httpAPIHostName)")
 ```
 
 ## Create Integration Tests for New Cloud Provider

@@ -12,8 +12,8 @@ import CryptomatorCloudAccessCore
 import CryptomatorCloudAccess
 #endif
 import PCloudSDKSwift
-import Promises
 import XCTest
+@testable import Promises
 
 class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	override class var defaultTestSuite: XCTestSuite {
@@ -29,6 +29,25 @@ class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		// swiftlint:disable:next force_try
 		setUpProvider = try! PCloudCloudProvider(client: client)
 		super.setUp()
+		guard classSetUpError == nil else { return }
+		// Wait for pCloud's eventual consistency to catch up after setUp uploaded all test fixtures.
+		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
+		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
+		guard waitForPromises(timeout: 60.0) else {
+			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
+			return
+		}
+	}
+
+	private static func waitForConsistency(provider: CloudProvider, folderPath: CloudPath, expectedItemCount: Int, attempt: Int = 0) -> Promise<Void> {
+		return provider.fetchItemList(forFolderAt: folderPath, withPageToken: nil).then { itemList -> Promise<Void> in
+			if itemList.items.count >= expectedItemCount || attempt >= 10 {
+				return Promise(())
+			}
+			return Promise(()).delay(1.0).then {
+				return waitForConsistency(provider: provider, folderPath: folderPath, expectedItemCount: expectedItemCount, attempt: attempt + 1)
+			}
+		}
 	}
 
 	override func setUpWithError() throws {

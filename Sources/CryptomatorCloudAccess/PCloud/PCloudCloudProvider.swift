@@ -54,28 +54,36 @@ public class PCloudCloudProvider: CloudProvider {
 		if isDirectory.boolValue {
 			return Promise(CloudProviderError.itemTypeMismatch)
 		}
-		return fetchItemMetadata(at: cloudPath).then { metadata -> Void in
-			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
-				throw CloudProviderError.itemAlreadyExists
+		return resolveParentPath(forItemAt: cloudPath).then { parentItem -> Promise<PCloudItem> in
+			let targetName = cloudPath.lastPathComponent
+			return self.client.listFolder(parentItem.identifier, recursively: false).execute().then { metadata -> PCloudItem in
+				let existingContent = metadata.contents.first(where: { $0.fileMetadata?.name == targetName || $0.folderMetadata?.name == targetName })
+				if let existingContent = existingContent {
+					if !replaceExisting || existingContent.folderMetadata != nil {
+						throw CloudProviderError.itemAlreadyExists
+					}
+				}
+				return parentItem
+			}.recover { error -> PCloudItem in
+				guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
+					throw error
+				}
+				if case CallError.methodError(.folderDoesNotExist) = error {
+					throw CloudProviderError.parentFolderDoesNotExist
+				} else {
+					throw error
+				}
 			}
-		}.recover { error -> Void in
-			guard case CloudProviderError.itemNotFound = error else {
-				throw error
-			}
-		}.then { _ -> Promise<PCloudItem> in
-			return self.resolveParentPath(forItemAt: cloudPath)
 		}.then { parentItem in
 			return self.uploadFile(for: parentItem, from: localURL, to: cloudPath)
 		}
 	}
 
 	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: cloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
+		return resolveParentPath(forItemAt: cloudPath).then { parentItem -> Promise<PCloudItem> in
+			return self.checkForNameCollision(cloudPath.lastPathComponent, inFolder: parentItem).then {
+				return parentItem
 			}
-		}.then {
-			self.resolveParentPath(forItemAt: cloudPath)
 		}.then { parentItem in
 			return self.createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 		}
@@ -94,26 +102,14 @@ public class PCloudCloudProvider: CloudProvider {
 	}
 
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: targetCloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then {
-			return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
-		}.then { item, targetParentItem in
-			return self.moveFile(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
+		return resolveForMove(from: sourceCloudPath, to: targetCloudPath).then { sourceItem, targetParentItem in
+			return self.moveFile(from: sourceItem, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 		}
 	}
 
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: targetCloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then {
-			return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
-		}.then { item, targetParentItem in
-			return self.moveFolder(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
+		return resolveForMove(from: sourceCloudPath, to: targetCloudPath).then { sourceItem, targetParentItem in
+			return self.moveFolder(from: sourceItem, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 		}
 	}
 
@@ -405,6 +401,15 @@ public class PCloudCloudProvider: CloudProvider {
 		return Promise(item)
 	}
 
+	private func resolveForMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<(PCloudItem, PCloudItem)> {
+		return resolveParentPath(forItemAt: targetCloudPath).then { targetParentItem -> Promise<(PCloudItem, PCloudItem)> in
+			return all(
+				self.checkForNameCollision(targetCloudPath.lastPathComponent, inFolder: targetParentItem).then { targetParentItem },
+				self.resolvePath(forItemAt: sourceCloudPath)
+			)
+		}
+	}
+
 	private func resolveParentPath(forItemAt cloudPath: CloudPath) -> Promise<PCloudItem> {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
 		return resolvePath(forItemAt: parentCloudPath).recover { error -> PCloudItem in
@@ -455,6 +460,23 @@ public class PCloudCloudProvider: CloudProvider {
 	}
 
 	// MARK: - Helpers
+
+	private func checkForNameCollision(_ name: String, inFolder parentItem: PCloudItem) -> Promise<Void> {
+		return client.listFolder(parentItem.identifier, recursively: false).execute().then { metadata -> Void in
+			if metadata.contents.contains(where: { $0.fileMetadata?.name == name || $0.folderMetadata?.name == name }) {
+				throw CloudProviderError.itemAlreadyExists
+			}
+		}.recover { error -> Void in
+			guard let error = error as? CallError<PCloudAPI.ListFolder.Error> else {
+				throw error
+			}
+			if case CallError.methodError(.folderDoesNotExist) = error {
+				throw CloudProviderError.parentFolderDoesNotExist
+			} else {
+				throw error
+			}
+		}
+	}
 
 	private func convertToCloudItemMetadata(_ content: Content, at cloudPath: CloudPath) throws -> CloudItemMetadata {
 		if let fileMetadata = content.fileMetadata {

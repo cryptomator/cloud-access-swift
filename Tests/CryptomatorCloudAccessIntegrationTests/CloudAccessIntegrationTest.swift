@@ -45,6 +45,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	override class func setUp() {
+		classSetUpError = nil
 		precondition(setUpProvider != nil)
 		precondition(integrationTestParentCloudPath != nil)
 		let setUpPromise = setUpForIntegrationTest(at: setUpProvider, integrationTestRootCloudPath: integrationTestRootCloudPath)

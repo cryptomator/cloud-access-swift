@@ -404,8 +404,8 @@ public class PCloudCloudProvider: CloudProvider {
 	private func resolveForMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<(PCloudItem, PCloudItem)> {
 		return resolveParentPath(forItemAt: targetCloudPath).then { targetParentItem -> Promise<(PCloudItem, PCloudItem)> in
 			return all(
-				self.checkForNameCollision(targetCloudPath.lastPathComponent, inFolder: targetParentItem).then { targetParentItem },
-				self.resolvePath(forItemAt: sourceCloudPath)
+				self.resolvePath(forItemAt: sourceCloudPath),
+				self.checkForNameCollision(targetCloudPath.lastPathComponent, inFolder: targetParentItem).then { targetParentItem }
 			)
 		}
 	}

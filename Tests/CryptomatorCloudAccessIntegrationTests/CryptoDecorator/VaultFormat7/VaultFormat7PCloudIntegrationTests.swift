@@ -43,6 +43,14 @@ class VaultFormat7PCloudIntegrationTests: CloudAccessIntegrationTest {
 			return
 		}
 		super.setUp()
+		guard classSetUpError == nil else { return }
+		// Wait for pCloud's eventual consistency to catch up after setUp uploaded all test fixtures.
+		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
+		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
+		guard waitForPromises(timeout: 60.0) else {
+			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
+			return
+		}
 	}
 
 	override func setUpWithError() throws {

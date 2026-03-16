@@ -41,7 +41,35 @@ class VaultFormat7S3IntegrationTests: CloudAccessIntegrationTest {
 			classSetUpError = error
 			return
 		}
+		// Wait for Scaleway S3's eventual consistency to catch up after vault creation.
+		_ = waitForVaultReadiness(provider: setUpProvider)
+		guard waitForPromises(timeout: 60.0) else {
+			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
+			return
+		}
 		super.setUp()
+		guard classSetUpError == nil else { return }
+		// Wait for Scaleway S3's eventual consistency to catch up after setUp uploaded all test fixtures.
+		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
+		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
+		guard waitForPromises(timeout: 60.0) else {
+			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
+			return
+		}
+	}
+
+	private static func waitForVaultReadiness(provider: CloudProvider, attempt: Int = 0) -> Promise<Void> {
+		let probePath = CloudPath("/.s3-consistency-probe")
+		return provider.createFolderIfMissing(at: probePath).then {
+			return provider.deleteFolderIfExisting(at: probePath)
+		}.recover { error -> Promise<Void> in
+			if attempt >= 10 {
+				return Promise(error)
+			}
+			return Promise(()).delay(2.0).then {
+				return waitForVaultReadiness(provider: provider, attempt: attempt + 1)
+			}
+		}
 	}
 
 	override func setUpWithError() throws {

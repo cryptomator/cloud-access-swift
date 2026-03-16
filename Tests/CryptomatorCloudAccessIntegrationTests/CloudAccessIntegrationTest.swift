@@ -60,7 +60,8 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	override class func tearDown() {
-		_ = setUpProvider.deleteFolder(at: integrationTestRootCloudPath).then {
+		guard let provider = setUpProvider else { return }
+		_ = provider.deleteFolder(at: integrationTestRootCloudPath).then {
 			setUpProvider = nil
 		}
 		_ = waitForPromises(timeout: 60.0)
@@ -224,14 +225,49 @@ class CloudAccessIntegrationTest: XCTestCase {
 					FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
 					let cloudPath = integrationTestRootCloudPath.appendingPathComponent(nextObject)
 					if isDirectory.boolValue {
-						try awaitPromise(provider.createFolder(at: cloudPath))
+						try retryOnEventualConsistencyError { try awaitPromise(provider.createFolder(at: cloudPath)) }
 					} else {
-						_ = try awaitPromise(provider.uploadFile(from: fileURL, to: cloudPath, replaceExisting: false))
+						try retryOnEventualConsistencyError { _ = try awaitPromise(provider.uploadFile(from: fileURL, to: cloudPath, replaceExisting: false)) }
 					}
 				}
 				fulfill(())
 			} catch {
 				reject(error)
+			}
+		}
+	}
+
+	/// Retries an operation that fails due to eventual consistency (e.g. S3).
+	/// During setUp, `parentFolderDoesNotExist` and `itemNotFound` indicate that a just-created parent
+	/// folder or its directory metadata hasn't propagated yet.
+	private static func retryOnEventualConsistencyError(maxAttempts: Int = 10, operation: () throws -> Void) throws {
+		var lastError: Error = CloudProviderError.parentFolderDoesNotExist
+		for attempt in 0 ..< maxAttempts {
+			do {
+				try operation()
+				return
+			} catch CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound {
+				lastError = CloudProviderError.parentFolderDoesNotExist
+				if attempt == maxAttempts - 1 {
+					throw lastError
+				}
+				Thread.sleep(forTimeInterval: 1.0)
+			}
+		}
+	}
+
+	/// Polls `fetchItemList` until the expected number of items is visible, retrying up to 10 times with a 1-second delay.
+	/// Used after setUp uploads test fixtures to wait for eventual consistency (e.g. S3, pCloud).
+	static func waitForConsistency(provider: CloudProvider, folderPath: CloudPath, expectedItemCount: Int, attempt: Int = 0) -> Promise<Void> {
+		return provider.fetchItemList(forFolderAt: folderPath, withPageToken: nil).then { itemList -> Promise<Void> in
+			if itemList.items.count >= expectedItemCount {
+				return Promise(())
+			}
+			if attempt >= 10 {
+				return Promise(IntegrationTestError.consistencyTimeout)
+			}
+			return Promise(()).delay(1.0).then {
+				return waitForConsistency(provider: provider, folderPath: folderPath, expectedItemCount: expectedItemCount, attempt: attempt + 1)
 			}
 		}
 	}

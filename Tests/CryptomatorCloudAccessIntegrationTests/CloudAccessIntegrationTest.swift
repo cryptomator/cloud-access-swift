@@ -272,6 +272,33 @@ class CloudAccessIntegrationTest: XCTestCase {
 		}
 	}
 
+	/// Waits for a vault's `d/` directory structure to become visible on S3.
+	/// Uses the raw S3 provider (not the vault decorator) to avoid partial-state issues
+	/// where the vault decorator's `createFolder` is not idempotent on retry.
+	/// Validates both `fetchItemList` and `fetchItemMetadata` on `d/` since the vault
+	/// decorator's internal `assertParentFolderExists` relies on `fetchItemMetadata`.
+	static func waitForVaultReadiness(rawProvider: CloudProvider, vaultPath: CloudPath, attempt: Int = 0) -> Promise<Void> {
+		let dFolderPath = vaultPath.appendingPathComponent("d")
+		return rawProvider.fetchItemList(forFolderAt: dFolderPath, withPageToken: nil).then { itemList -> Promise<Void> in
+			guard let firstChild = itemList.items.first else {
+				throw CloudProviderError.itemNotFound
+			}
+			// Also verify that fetchItemMetadata sees both d/ and its first child (e.g. d/AB/).
+			// This is the same operation assertParentFolderExists uses internally.
+			return all(
+				rawProvider.fetchItemMetadata(at: dFolderPath),
+				rawProvider.fetchItemMetadata(at: firstChild.cloudPath)
+			).then { _, _ in () }
+		}.recover { _ -> Promise<Void> in
+			if attempt >= 30 {
+				return Promise(IntegrationTestError.consistencyTimeout)
+			}
+			return Promise(()).delay(2.0).then {
+				return waitForVaultReadiness(rawProvider: rawProvider, vaultPath: vaultPath, attempt: attempt + 1)
+			}
+		}
+	}
+
 	// MARK: - fetchItemMetadata Tests
 
 	func testFetchItemMetadataForFile() {
@@ -678,7 +705,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let testContent = type(of: self).testContentForFilesInTestFolder
 		try testContent.write(to: localURL, atomically: true, encoding: .utf8)
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/overwriteFolder.txt")
-		provider.createFolder(at: cloudPath).then { _ in
+		provider.createFolder(at: cloudPath).then {
+			// Delay to allow eventual consistency propagation (e.g. S3, pCloud) so that
+			// uploadFile's pre-upload existence check can detect the just-created folder.
+			return Promise(()).delay(5.0)
+		}.then {
 			return self.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: true)
 		}.then { _ in
 			XCTFail("uploadFile fulfilled to already existing folder with replace existing")
@@ -1086,14 +1117,14 @@ extension CloudProvider {
 	/**
 	 Checks if the item exists at the given cloud path.
 
-	 This method is primarily used as a workaround for providers with eventual consistency. It will repeatedly check if `expectToExist` doesn't match with a delay of 1 second up to a maximum of 3 attempts.
+	 This method is primarily used as a workaround for providers with eventual consistency. It will repeatedly check if `expectToExist` doesn't match with a delay of 2 seconds up to 10 retries (11 total checks).
 	 */
 	func repeatedlyCheckForItemExistence(at cloudPath: CloudPath, expectToExist: Bool, attempt: Int = 0) -> Promise<Bool> {
 		return checkForItemExistence(at: cloudPath).then { itemExists in
-			if itemExists == expectToExist || attempt == 3 {
+			if itemExists == expectToExist || attempt == 10 {
 				return Promise(itemExists)
 			} else {
-				return Promise(()).delay(1.0).then {
+				return Promise(()).delay(2.0).then {
 					return repeatedlyCheckForItemExistence(at: cloudPath, expectToExist: expectToExist, attempt: attempt + 1)
 				}
 			}

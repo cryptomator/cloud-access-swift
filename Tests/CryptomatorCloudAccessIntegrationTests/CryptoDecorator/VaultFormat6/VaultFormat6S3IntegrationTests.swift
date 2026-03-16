@@ -42,7 +42,7 @@ class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 			return
 		}
 		// Wait for Scaleway S3's eventual consistency to catch up after vault creation.
-		_ = waitForVaultReadiness()
+		_ = waitForVaultReadiness(rawProvider: cloudProvider, vaultPath: vaultPath)
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
 			return
@@ -55,31 +55,6 @@ class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 		guard waitForPromises(timeout: 60.0) else {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
 			return
-		}
-	}
-
-	/// Waits for the vault's `d/` directory structure to become visible on S3.
-	/// Uses the raw S3 provider (not the vault decorator) to avoid partial-state issues
-	/// where the vault decorator's `createFolder` is not idempotent on retry.
-	private static func waitForVaultReadiness(attempt: Int = 0) -> Promise<Void> {
-		let dFolderPath = vaultPath.appendingPathComponent("d")
-		return cloudProvider.fetchItemList(forFolderAt: dFolderPath, withPageToken: nil).then { itemList -> Promise<Void> in
-			guard !itemList.items.isEmpty else {
-				if attempt >= 30 {
-					return Promise(IntegrationTestError.consistencyTimeout)
-				}
-				return Promise(()).delay(2.0).then {
-					return waitForVaultReadiness(attempt: attempt + 1)
-				}
-			}
-			return Promise(())
-		}.recover { error -> Promise<Void> in
-			if attempt >= 30 {
-				return Promise(error)
-			}
-			return Promise(()).delay(2.0).then {
-				return waitForVaultReadiness(attempt: attempt + 1)
-			}
 		}
 	}
 

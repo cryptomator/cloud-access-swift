@@ -36,17 +36,6 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 		}
 	}
 
-	private static func waitForConsistency(provider: CloudProvider, folderPath: CloudPath, expectedItemCount: Int, attempt: Int = 0) -> Promise<Void> {
-		return provider.fetchItemList(forFolderAt: folderPath, withPageToken: nil).then { itemList -> Promise<Void> in
-			if itemList.items.count >= expectedItemCount || attempt >= 10 {
-				return Promise(())
-			}
-			return Promise(()).delay(1.0).then {
-				return waitForConsistency(provider: provider, folderPath: folderPath, expectedItemCount: expectedItemCount, attempt: attempt + 1)
-			}
-		}
-	}
-
 	override func setUpWithError() throws {
 		try super.setUpWithError()
 		provider = try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)

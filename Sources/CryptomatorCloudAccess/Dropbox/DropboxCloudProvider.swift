@@ -659,6 +659,9 @@ public class DropboxCloudProvider: CloudProvider {
 		} else if error.isInternalServerError() {
 			return DropboxError.internalServerError
 		} else if error.isClientError() {
+			if isNetworkConnectionError(error.asClientError().nsError) {
+				return CloudProviderError.noInternetConnection
+			}
 			return DropboxError.clientError
 		} else {
 			return DropboxError.unexpectedError

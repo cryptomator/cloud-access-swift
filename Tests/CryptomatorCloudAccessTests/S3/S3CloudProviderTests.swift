@@ -21,7 +21,7 @@ class S3CloudProviderTests: XCTestCase {
 		provider = try S3CloudProvider(credential: .stub)
 	}
 
-	func testGetPrefix() throws {
+	func testGetPrefix() {
 		let rootCloudPath = CloudPath("/")
 		XCTAssertEqual("", provider.getPrefix(for: rootCloudPath))
 
@@ -31,12 +31,12 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual("foo/bar/", provider.getPrefix(for: CloudPath("/foo/bar")))
 	}
 
-	func testGetKey() throws {
+	func testGetKey() {
 		XCTAssertEqual("foo.txt", provider.getKey(for: CloudPath("/foo.txt")))
 		XCTAssertEqual("foo/bar.txt", provider.getKey(for: CloudPath("/foo/bar.txt")))
 	}
 
-	func testMapUnknownAWSS3ErrorToInvalidPageToken() throws {
+	func testMapUnknownAWSS3ErrorToInvalidPageToken() {
 		let awsS3ContinuationTokenError = NSError(domain: AWSS3ErrorDomain, code: 0, userInfo: ["Code": "InvalidArgument", "ArgumentName": "continuation-token"])
 		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(awsS3ContinuationTokenError) as? CloudProviderError)
 

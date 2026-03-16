@@ -17,7 +17,7 @@ class S3CopyTaskUtility {
 	private let operationQueue: OperationQueue
 	private let semaphore: DispatchSemaphore
 	private let maxPartSize: Int
-	// allowed maximum part size is 5GiB in multipart upload.
+	/// allowed maximum part size is 5GiB in multipart upload.
 	private static let maxPartSize = 5 * 1024 * 1024 * 1024
 
 	init(service: AWSS3, bucket: String, concurrencyLimit: Int = 4, maxPartSize: Int = S3CopyTaskUtility.maxPartSize) {

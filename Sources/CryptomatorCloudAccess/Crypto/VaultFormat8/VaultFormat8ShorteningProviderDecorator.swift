@@ -16,7 +16,7 @@ import Foundation
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat8ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds the given `threshold`.
  */
 class VaultFormat8ShorteningProviderDecorator: VaultFormat7ShorteningProviderDecorator {
-	override public init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
+	override init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
 		try super.init(delegate: delegate, vaultPath: vaultPath, threshold: threshold)
 	}
 

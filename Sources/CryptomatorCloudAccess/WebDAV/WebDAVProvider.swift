@@ -141,11 +141,12 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.unauthorized)
 			case URLSessionError.httpError(_, statusCode: 404):
 				return Promise(CloudProviderError.itemNotFound)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
 			case CocoaError.fileWriteFileExists:
 				return Promise(CloudProviderError.itemAlreadyExists)
 			default:
+				if isNetworkConnectionError(error) {
+					return Promise(CloudProviderError.noInternetConnection)
+				}
 				return Promise(error)
 			}
 		}
@@ -188,9 +189,10 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
 			case URLSessionError.httpError(_, statusCode: 507):
 				return Promise(CloudProviderError.quotaInsufficient)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
 			default:
+				if isNetworkConnectionError(error) {
+					return Promise(CloudProviderError.noInternetConnection)
+				}
 				return Promise(error)
 			}
 		}.then { _, _ -> Promise<CloudItemMetadata> in
@@ -214,9 +216,10 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.parentFolderDoesNotExist)
 			case URLSessionError.httpError(_, statusCode: 507):
 				return Promise(CloudProviderError.quotaInsufficient)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
 			default:
+				if isNetworkConnectionError(error) {
+					return Promise(CloudProviderError.noInternetConnection)
+				}
 				return Promise(error)
 			}
 		}
@@ -267,9 +270,10 @@ public class WebDAVProvider: CloudProvider {
 				return Promise(CloudProviderError.itemAlreadyExists)
 			case URLSessionError.httpError(_, statusCode: 507):
 				return Promise(CloudProviderError.quotaInsufficient)
-			case URLError.notConnectedToInternet:
-				return Promise(CloudProviderError.noInternetConnection)
 			default:
+				if isNetworkConnectionError(error) {
+					return Promise(CloudProviderError.noInternetConnection)
+				}
 				return Promise(error)
 			}
 		}
@@ -281,9 +285,10 @@ public class WebDAVProvider: CloudProvider {
 			return Promise(CloudProviderError.unauthorized)
 		case URLSessionError.httpError(_, statusCode: 404):
 			return Promise(CloudProviderError.itemNotFound)
-		case URLError.notConnectedToInternet:
-			return Promise(CloudProviderError.noInternetConnection)
 		default:
+			if isNetworkConnectionError(error) {
+				return Promise(CloudProviderError.noInternetConnection)
+			}
 			return Promise(error)
 		}
 	}

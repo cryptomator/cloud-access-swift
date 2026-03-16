@@ -21,7 +21,7 @@ class GoogleDriveIdentifierCacheTests: XCTestCase {
 		identifierCache = try GoogleDriveIdentifierCache()
 	}
 
-	func testRootItemIsCachedAtStart() throws {
+	func testRootItemIsCachedAtStart() {
 		let expectedRootItem = GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder, shortcut: nil)
 		let rootItem = identifierCache.get(expectedRootItem.cloudPath)
 		XCTAssertNotNil(rootItem)

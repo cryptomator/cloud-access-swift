@@ -14,6 +14,8 @@
 		4A05900E2451A145008831F9 /* CloudItemList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05900D2451A145008831F9 /* CloudItemList.swift */; };
 		4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590112451A180008831F9 /* CloudItemMetadata.swift */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
+		E00861F84DC147ECB9B19E34 /* NetworkConnectionError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DAB1C070984F179681E2B8 /* NetworkConnectionError.swift */; };
+		71515B8520704180B19B44CE /* NetworkConnectionErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A308ED4691D4D12A3C0F7BF /* NetworkConnectionErrorTests.swift */; };
 		4A0785302859F4FE0015DAE1 /* S3Credential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A07852F2859F4FE0015DAE1 /* S3Credential.swift */; };
 		4A0785322859F5860015DAE1 /* S3CopyTaskUtility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */; };
 		4A0785342859F5E30015DAE1 /* AWSS3+Promises.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */; };
@@ -235,6 +237,8 @@
 		4A05900D2451A145008831F9 /* CloudItemList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemList.swift; sourceTree = "<group>"; };
 		4A0590112451A180008831F9 /* CloudItemMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudItemMetadata.swift; sourceTree = "<group>"; };
 		4A05901C2451DD26008831F9 /* CloudProviderError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudProviderError.swift; sourceTree = "<group>"; };
+		44DAB1C070984F179681E2B8 /* NetworkConnectionError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConnectionError.swift; sourceTree = "<group>"; };
+		0A308ED4691D4D12A3C0F7BF /* NetworkConnectionErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkConnectionErrorTests.swift; sourceTree = "<group>"; };
 		4A07852F2859F4FE0015DAE1 /* S3Credential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3Credential.swift; sourceTree = "<group>"; };
 		4A0785312859F5860015DAE1 /* S3CopyTaskUtility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CopyTaskUtility.swift; sourceTree = "<group>"; };
 		4A0785332859F5E30015DAE1 /* AWSS3+Promises.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AWSS3+Promises.swift"; sourceTree = "<group>"; };
@@ -526,6 +530,7 @@
 				4A05900B2451A107008831F9 /* CloudProvider.swift */,
 				9EE62A0C247D54760089DAF7 /* CloudProvider+Convenience.swift */,
 				4A05901C2451DD26008831F9 /* CloudProviderError.swift */,
+				44DAB1C070984F179681E2B8 /* NetworkConnectionError.swift */,
 			);
 			path = API;
 			sourceTree = "<group>";
@@ -1012,6 +1017,7 @@
 			children = (
 				74DF965D24F3DE6400763713 /* CloudPathTests.swift */,
 				9EE62A0F247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift */,
+				0A308ED4691D4D12A3C0F7BF /* NetworkConnectionErrorTests.swift */,
 			);
 			path = API;
 			sourceTree = "<group>";
@@ -1342,6 +1348,7 @@
 				7416F22924F659550074DA8E /* VaultFormat6ProviderDecorator.swift in Sources */,
 				4A3896CE2632D65B00BA3E88 /* MicrosoftGraphAuthenticationProvider.swift in Sources */,
 				4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */,
+				E00861F84DC147ECB9B19E34 /* NetworkConnectionError.swift in Sources */,
 				4A0785362859FA820015DAE1 /* AWSEndpoint+CustomRegionName.swift in Sources */,
 				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
@@ -1415,6 +1422,7 @@
 				4ABE9AA62BCACD1300675D74 /* XCTAssertThrowsError+Async.swift in Sources */,
 				4A30DAF62636D79C004B5B4E /* MicrosoftGraphCloudProviderTests.swift in Sources */,
 				9EE62A10247D54E90089DAF7 /* CloudProvider+ConvenienceTests.swift in Sources */,
+				71515B8520704180B19B44CE /* NetworkConnectionErrorTests.swift in Sources */,
 				74E32BEA283E575B005D8A54 /* VaultFormat8CryptorMock.swift in Sources */,
 				9ED0E622246180AB00FDB438 /* VaultFormat7CloudProviderMock.swift in Sources */,
 				7416F22D24F678AF0074DA8E /* VaultFormat6CloudProviderMockTests.swift in Sources */,
@@ -1547,7 +1555,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1607,7 +1615,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-expression-type-checking=200 -Xfrontend -warn-long-function-bodies=200";
@@ -1793,7 +1801,7 @@
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.4.0;
+				minimumVersion = 5.2.0;
 			};
 		};
 		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
@@ -1801,7 +1809,7 @@
 			repositoryURL = "https://github.com/google/GTMAppAuth.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 4.1.0;
+				minimumVersion = 5.0.0;
 			};
 		};
 		4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */ = {
@@ -1817,7 +1825,7 @@
 			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.7.0;
+				minimumVersion = 2.0.0;
 			};
 		};
 		4A75E1C228806F5800952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-models-spm" */ = {
@@ -1849,7 +1857,7 @@
 			repositoryURL = "https://github.com/CocoaLumberjack/CocoaLumberjack.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.8.0;
+				minimumVersion = 3.9.0;
 			};
 		};
 		4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */ = {
@@ -1857,7 +1865,7 @@
 			repositoryURL = "https://github.com/aws-amplify/aws-sdk-ios-spm.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 2.35.0;
+				minimumVersion = 2.41.0;
 			};
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
@@ -1873,7 +1881,7 @@
 			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 1.5.0;
+				minimumVersion = 2.9.0;
 			};
 		};
 		746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */ = {
@@ -1897,7 +1905,7 @@
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 6.29.1;
+				minimumVersion = 7.10.0;
 			};
 		};
 		74F93565251F6863001F4ADA /* XCRemoteSwiftPackageReference "promises" */ = {

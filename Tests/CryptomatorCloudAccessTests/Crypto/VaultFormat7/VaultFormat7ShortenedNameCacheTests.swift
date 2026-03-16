@@ -31,31 +31,31 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual(originalName, try cache.getCached(shortenedName))
 	}
 
-	func testGetShortenedPath1() throws {
+	func testGetShortenedPath1() {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
 		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r")
 		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNotNil(shortened.c9sDir)
-		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("\(longName).c9r", shortened.c9sDir?.originalName)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir?.cloudPath.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.cloudPath.path)
 		XCTAssertTrue(shortened.pointsToC9S)
 	}
 
-	func testGetShortenedPath2() throws {
+	func testGetShortenedPath2() {
 		let longName = String(repeating: "a", count: 217) // 221 chars when including .c9r
 		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName).c9r/dir.c9r")
 		let shortened = cache.getShortenedPath(originalPath)
 
 		XCTAssertNotNil(shortened.c9sDir)
-		XCTAssertEqual("\(longName).c9r", shortened.c9sDir!.originalName)
-		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir!.cloudPath.path)
+		XCTAssertEqual("\(longName).c9r", shortened.c9sDir?.originalName)
+		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir?.cloudPath.path)
 		XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.cloudPath.path)
 		XCTAssertFalse(shortened.pointsToC9S)
 	}
 
-	func testGetShortenedPath3() throws {
+	func testGetShortenedPath3() {
 		let originalPath = CloudPath("/foo/bar/d/2/30")
 		let shortened = cache.getShortenedPath(originalPath)
 
@@ -84,21 +84,21 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
 	}
 
-	func testDeflatePath1() throws {
+	func testDeflatePath1() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r")
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
 		XCTAssertEqual("/foo/bar/d/2/30/short.c9s/dir.c9r", shortened.path)
 	}
 
-	func testDeflatePath2() throws {
+	func testDeflatePath2() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r")
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 
 		XCTAssertEqual("/foo/bar/d/2/30/short.c9s", shortened.path)
 	}
 
-	func testDeflatePath3() throws {
+	func testDeflatePath3() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong.c9r/dir.c9r/baz")
 		let shortened = cache.deflatePath(originalPath, with: "short.c9s")
 

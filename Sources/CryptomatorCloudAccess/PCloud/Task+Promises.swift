@@ -21,6 +21,8 @@ extension CallTask {
 					switch error {
 					case .authError, .otherAPIError:
 						reject(CloudProviderError.unauthorized)
+					case let .clientError(underlyingError) where isNetworkConnectionError(underlyingError):
+						reject(CloudProviderError.noInternetConnection)
 					default:
 						reject(error)
 					}
@@ -39,7 +41,11 @@ extension DownloadTask {
 				case let .success(url):
 					fulfill(url)
 				case let .failure(error):
-					reject(error)
+					if case let .clientError(underlyingError) = error, isNetworkConnectionError(underlyingError) {
+						reject(CloudProviderError.noInternetConnection)
+					} else {
+						reject(error)
+					}
 				}
 			}
 			self.start()
@@ -58,6 +64,8 @@ extension UploadTask {
 					switch error {
 					case .authError, .otherAPIError:
 						reject(CloudProviderError.unauthorized)
+					case let .clientError(underlyingError) where isNetworkConnectionError(underlyingError):
+						reject(CloudProviderError.noInternetConnection)
 					default:
 						reject(error)
 					}

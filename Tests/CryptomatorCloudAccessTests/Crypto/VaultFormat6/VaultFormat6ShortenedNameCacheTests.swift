@@ -31,7 +31,7 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual(originalName, try cache.getCached(shortenedName))
 	}
 
-	func testGetShortenedPath1() throws {
+	func testGetShortenedPath1() {
 		let longName = String(repeating: "a", count: 130)
 		let originalPath = CloudPath("/foo/bar/d/2/30/\(longName)")
 		let shortened = cache.getShortenedPath(originalPath)
@@ -40,7 +40,7 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		XCTAssertTrue(shortened.pointsToLNG)
 	}
 
-	func testGetShortenedPath2() throws {
+	func testGetShortenedPath2() {
 		let originalPath = CloudPath("/foo/bar/d/2/30")
 		let shortened = cache.getShortenedPath(originalPath)
 
@@ -58,7 +58,7 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
 	}
 
-	func testDeflatePath() throws {
+	func testDeflatePath() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong")
 		let shortened = cache.deflatePath(originalPath, with: "short.lng")
 

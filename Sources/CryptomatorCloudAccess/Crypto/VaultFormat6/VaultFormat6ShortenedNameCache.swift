@@ -13,7 +13,9 @@ import Promises
 
 struct VaultFormat6ShorteningResult {
 	let cloudPath: CloudPath
-	var pointsToLNG: Bool { cloudPath.pathExtension == "lng" }
+	var pointsToLNG: Bool {
+		cloudPath.pathExtension == "lng"
+	}
 }
 
 private struct CachedEntry: Decodable, FetchableRecord, TableRecord {

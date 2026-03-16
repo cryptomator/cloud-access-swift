@@ -23,7 +23,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWith403Status() throws {
 		let xmlParser = try getXMLParser(forResource: "403-status", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
 		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
 		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
@@ -38,7 +38,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithEmptyFolder() throws {
 		let xmlParser = try getXMLParser(forResource: "empty-folder", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
 		XCTAssertFalse(cacheMock.saveForIndexCalled)
 		assertCacheNotClearedAndNotFetched()
@@ -46,7 +46,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithFileAndFolder() throws {
 		let xmlParser = try getXMLParser(forResource: "file-and-folder", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
 		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
 		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
@@ -63,7 +63,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithMalformattedDate() throws {
 		let xmlParser = try getXMLParser(forResource: "malformatted-date", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
 		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
 		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
@@ -79,7 +79,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithMalformattedXML() throws {
 		let xmlParser = try getXMLParser(forResource: "malformatted-xml", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		XCTAssertThrowsError(try parser.fillCache(), "malformatted xml response") { error in
 			let nsError = error as NSError
 			XCTAssertEqual(XMLParser.errorDomain, nsError.domain)
@@ -88,7 +88,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithMissingHref() throws {
 		let xmlParser = try getXMLParser(forResource: "missing-href", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		XCTAssertThrowsError(try parser.fillCache(), "missing href") { error in
 			XCTAssertEqual(.itemTypeMismatch, error as? CloudProviderError)
 		}
@@ -97,7 +97,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 
 	func testResponseWithPartial404Status() throws {
 		let xmlParser = try getXMLParser(forResource: "partial-404-status", withExtension: "xml")
-		let parser = CachePropfindResponseParser(xmlParser, responseURL: URL(string: "/")!, cache: cacheMock, folderEnumerationPath: .root)
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
 		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
 		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }

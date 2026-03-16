@@ -35,8 +35,7 @@ extension AWSS3TransferUtility {
 		return AWSS3TransferUtility.queue.sync {
 			guard AWSS3TransferUtility.foregroundUtilities.contains(self) else {
 				print("called background URLSession")
-				let originalBackgroundURLSession = self.foregroundURLSession
-				return originalBackgroundURLSession
+				return self.foregroundURLSession
 			}
 			print("called foregroundURLSession")
 			if let session = AWSS3TransferUtility.sessions[ObjectIdentifier(self)] {

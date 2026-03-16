@@ -45,6 +45,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	override class func setUp() {
+		classSetUpError = nil
 		precondition(setUpProvider != nil)
 		precondition(integrationTestParentCloudPath != nil)
 		let setUpPromise = setUpForIntegrationTest(at: setUpProvider, integrationTestRootCloudPath: integrationTestRootCloudPath)
@@ -59,7 +60,8 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	override class func tearDown() {
-		_ = setUpProvider.deleteFolder(at: integrationTestRootCloudPath).then {
+		guard let provider = setUpProvider else { return }
+		_ = provider.deleteFolder(at: integrationTestRootCloudPath).then {
 			setUpProvider = nil
 		}
 		_ = waitForPromises(timeout: 60.0)
@@ -223,9 +225,9 @@ class CloudAccessIntegrationTest: XCTestCase {
 					FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
 					let cloudPath = integrationTestRootCloudPath.appendingPathComponent(nextObject)
 					if isDirectory.boolValue {
-						try awaitPromise(provider.createFolder(at: cloudPath))
+						try retryOnEventualConsistencyError { try awaitPromise(provider.createFolder(at: cloudPath)) }
 					} else {
-						_ = try awaitPromise(provider.uploadFile(from: fileURL, to: cloudPath, replaceExisting: false))
+						try retryOnEventualConsistencyError { _ = try awaitPromise(provider.uploadFile(from: fileURL, to: cloudPath, replaceExisting: false)) }
 					}
 				}
 				fulfill(())
@@ -235,9 +237,71 @@ class CloudAccessIntegrationTest: XCTestCase {
 		}
 	}
 
+	/// Retries an operation that fails due to eventual consistency (e.g. S3).
+	/// During setUp, `parentFolderDoesNotExist` and `itemNotFound` indicate that a just-created parent
+	/// folder or its directory metadata hasn't propagated yet.
+	private static func retryOnEventualConsistencyError(maxAttempts: Int = 10, operation: () throws -> Void) throws {
+		var lastError: Error = CloudProviderError.parentFolderDoesNotExist
+		for attempt in 0 ..< maxAttempts {
+			do {
+				try operation()
+				return
+			} catch CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound {
+				lastError = CloudProviderError.parentFolderDoesNotExist
+				if attempt == maxAttempts - 1 {
+					throw lastError
+				}
+				Thread.sleep(forTimeInterval: 2.0)
+			}
+		}
+	}
+
+	/// Polls `fetchItemList` until the expected number of items is visible, retrying up to 10 times with a 1-second delay.
+	/// Used after setUp uploads test fixtures to wait for eventual consistency (e.g. S3, pCloud).
+	static func waitForConsistency(provider: CloudProvider, folderPath: CloudPath, expectedItemCount: Int, attempt: Int = 0) -> Promise<Void> {
+		return provider.fetchItemList(forFolderAt: folderPath, withPageToken: nil).then { itemList -> Promise<Void> in
+			if itemList.items.count >= expectedItemCount {
+				return Promise(())
+			}
+			if attempt >= 10 {
+				return Promise(IntegrationTestError.consistencyTimeout)
+			}
+			return Promise(()).delay(1.0).then {
+				return waitForConsistency(provider: provider, folderPath: folderPath, expectedItemCount: expectedItemCount, attempt: attempt + 1)
+			}
+		}
+	}
+
+	/// Waits for a vault's `d/` directory structure to become visible on S3.
+	/// Uses the raw S3 provider (not the vault decorator) to avoid partial-state issues
+	/// where the vault decorator's `createFolder` is not idempotent on retry.
+	/// Validates both `fetchItemList` and `fetchItemMetadata` on `d/` since the vault
+	/// decorator's internal `assertParentFolderExists` relies on `fetchItemMetadata`.
+	static func waitForVaultReadiness(rawProvider: CloudProvider, vaultPath: CloudPath, attempt: Int = 0) -> Promise<Void> {
+		let dFolderPath = vaultPath.appendingPathComponent("d")
+		return rawProvider.fetchItemList(forFolderAt: dFolderPath, withPageToken: nil).then { itemList -> Promise<Void> in
+			guard let firstChild = itemList.items.first else {
+				throw CloudProviderError.itemNotFound
+			}
+			// Also verify that fetchItemMetadata sees both d/ and its first child (e.g. d/AB/).
+			// This is the same operation assertParentFolderExists uses internally.
+			return all(
+				rawProvider.fetchItemMetadata(at: dFolderPath),
+				rawProvider.fetchItemMetadata(at: firstChild.cloudPath)
+			).then { _, _ in () }
+		}.recover { _ -> Promise<Void> in
+			if attempt >= 30 {
+				return Promise(IntegrationTestError.consistencyTimeout)
+			}
+			return Promise(()).delay(2.0).then {
+				return waitForVaultReadiness(rawProvider: rawProvider, vaultPath: vaultPath, attempt: attempt + 1)
+			}
+		}
+	}
+
 	// MARK: - fetchItemMetadata Tests
 
-	func testFetchItemMetadataForFile() throws {
+	func testFetchItemMetadataForFile() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		provider.fetchItemMetadata(at: cloudPath).then { metadata in
@@ -252,7 +316,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemMetadataForFolder() throws {
+	func testFetchItemMetadataForFolder() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder")
 		provider.fetchItemMetadata(at: cloudPath).then { metadata in
@@ -268,7 +332,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemMetadataForFileWithNotFoundError() throws {
+	func testFetchItemMetadataForFileWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for nonexistent file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("thisFileMustNotExist.pdf")
 		provider.fetchItemMetadata(at: cloudPath).then { _ in
@@ -284,7 +348,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemMetadataForFolderWithNotFoundError() throws {
+	func testFetchItemMetadataForFolderWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for nonexistent folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("thisFolderMustNotExist")
 		provider.fetchItemMetadata(at: cloudPath).then { _ in
@@ -300,7 +364,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemMetadataForFileInSubfolder() throws {
+	func testFetchItemMetadataForFileInSubfolder() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for file in subfolder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/test 0.txt")
 		provider.fetchItemMetadata(at: cloudPath).then { metadata in
@@ -315,7 +379,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemMetadataForFolderInSubfolder() throws {
+	func testFetchItemMetadataForFolderInSubfolder() {
 		let expectation = XCTestExpectation(description: "fetchItemMetadata for folder in subfolder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder")
 		provider.fetchItemMetadata(at: cloudPath).then { metadata in
@@ -331,7 +395,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - fetchItemList Tests
 
-	func testFetchItemListForRootFolder() throws {
+	func testFetchItemListForRootFolder() {
 		let expectation = XCTestExpectation(description: "fetchItemList for root folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath
 		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { retrievedItemList in
@@ -346,7 +410,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListForSubfolder() throws {
+	func testFetchItemListForSubfolder() {
 		let expectation = XCTestExpectation(description: "fetchItemList for subfolder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder")
 		let expectedItems = [
@@ -371,7 +435,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListForEmptyFolder() throws {
+	func testFetchItemListForEmptyFolder() {
 		let expectation = XCTestExpectation(description: "fetchItemList for empty folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder")
 		let expectedItems = [CloudItemMetadata]()
@@ -387,7 +451,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListWithNotFoundError() throws {
+	func testFetchItemListWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "fetchItemList for nonexistent folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("thisFolderMustNotExist")
 		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { _ in
@@ -403,7 +467,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListWithTypeMismatchError() throws {
+	func testFetchItemListWithTypeMismatchError() {
 		let expectation = XCTestExpectation(description: "fetchItemList for file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil).then { _ in
@@ -419,7 +483,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListWithPageTokenInvalidError() throws {
+	func testFetchItemListWithPageTokenInvalidError() {
 		let expectation = XCTestExpectation(description: "fetchItemList with invalid page token")
 		let cloudPath = type(of: self).integrationTestRootCloudPath
 		provider.fetchItemList(forFolderAt: cloudPath, withPageToken: "invalidPageToken").then { _ in
@@ -461,7 +525,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - downloadFile Tests
 
-	func testDownloadFileFromRootFolder() throws {
+	func testDownloadFileFromRootFolder() {
 		let expectation = XCTestExpectation(description: "downloadFile from root folder")
 		let expectedFileContent = type(of: self).testContentForFilesInRoot
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
@@ -485,7 +549,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDownloadFileFromSubfolder() throws {
+	func testDownloadFileFromSubfolder() {
 		let expectation = XCTestExpectation(description: "downloadFile from subfolder")
 		let expectedFileContent = type(of: self).testContentForFilesInTestFolder
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/test 0.txt")
@@ -508,7 +572,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDownloadFileWithNotFoundError() throws {
+	func testDownloadFileWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "downloadFile for nonexistent file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("thisFileMustNotExist.txt")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -543,7 +607,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDownloadFileFailWithTypeMismatchError() throws {
+	func testDownloadFileFailWithTypeMismatchError() {
 		let expectation = XCTestExpectation(description: "downloadFile for folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -567,6 +631,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let initialLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let initialTestContent = "Start content"
 		try initialTestContent.write(to: initialLocalURL, atomically: true, encoding: .utf8)
+		let overwrittenUploadURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let overwrittenLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let overwrittenTestContent = "Overwritten content"
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/FileToOverwrite.txt")
@@ -578,10 +643,10 @@ class CloudAccessIntegrationTest: XCTestCase {
 		provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: false).then { cloudItemMetadata -> Promise<CloudItemMetadata> in
 			XCTAssertTrue(progress.completedUnitCount >= progress.totalUnitCount)
 			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
-			try overwrittenTestContent.write(to: initialLocalURL, atomically: true, encoding: .utf8)
-			return self.provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: true)
+			try overwrittenTestContent.write(to: overwrittenUploadURL, atomically: true, encoding: .utf8)
+			return self.provider.uploadFile(from: overwrittenUploadURL, to: cloudPath, replaceExisting: true)
 		}.then { cloudItemMetadata -> Promise<Void> in
-			self.assertReceivedCorrectMetadataAfterUploading(file: initialLocalURL, to: cloudPath, metadata: cloudItemMetadata)
+			self.assertReceivedCorrectMetadataAfterUploading(file: overwrittenUploadURL, to: cloudPath, metadata: cloudItemMetadata)
 			return self.provider.downloadFile(from: cloudPath, to: overwrittenLocalURL)
 		}.then { _ in
 			self.provider.deleteFile(at: cloudPath)
@@ -598,7 +663,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testUploadFileWithNotFoundError() throws {
+	func testUploadFileWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "uploadFile for nonexistent file")
 		let localURL = tmpDirURL.appendingPathComponent("nonExistentFile.txt", isDirectory: false)
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/nonExistentFile.txt")
@@ -640,7 +705,11 @@ class CloudAccessIntegrationTest: XCTestCase {
 		let testContent = type(of: self).testContentForFilesInTestFolder
 		try testContent.write(to: localURL, atomically: true, encoding: .utf8)
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/overwriteFolder.txt")
-		provider.createFolder(at: cloudPath).then { _ in
+		provider.createFolder(at: cloudPath).then {
+			// Delay to allow eventual consistency propagation (e.g. S3, pCloud) so that
+			// uploadFile's pre-upload existence check can detect the just-created folder.
+			return Promise(()).delay(5.0)
+		}.then {
 			return self.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: true)
 		}.then { _ in
 			XCTFail("uploadFile fulfilled to already existing folder with replace existing")
@@ -694,7 +763,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - createFolder Tests
 
-	func testCreateFolderForFolderWithAlreadyExistsError() throws {
+	func testCreateFolderForFolderWithAlreadyExistsError() {
 		let expectation = XCTestExpectation(description: "createFolder for already existing folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder")
 		provider.createFolder(at: cloudPath).then { _ in
@@ -709,7 +778,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testCreateFolderForFileWithAlreadyExistsError() throws {
+	func testCreateFolderForFileWithAlreadyExistsError() {
 		let expectation = XCTestExpectation(description: "createFolder for already existing file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		provider.createFolder(at: cloudPath).then { _ in
@@ -725,7 +794,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testCreateFolderWithParentFolderDoesNotExistError() throws {
+	func testCreateFolderWithParentFolderDoesNotExistError() {
 		let expectation = XCTestExpectation(description: "createFolder to nonexistent parent folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("thisFolderMustNotExist-AAA").appendingPathComponent("folderToCreate")
 		provider.createFolder(at: cloudPath).then { _ in
@@ -743,7 +812,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - deleteFile Tests
 
-	func testDeleteFile() throws {
+	func testDeleteFile() {
 		let expectation = XCTestExpectation(description: "deleteFile can delete existing file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/FileToDelete")
 		provider.deleteFile(at: cloudPath).then {
@@ -761,7 +830,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFileWithNotFoundError() throws {
+	func testDeleteFileWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "deleteFile for nonexistent file")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/thisFileMustNotExist")
 		provider.deleteFile(at: cloudPath).then {
@@ -779,7 +848,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - deleteFolder Tests
 
-	func testDeleteFolderCanDeleteExistingFolder() throws {
+	func testDeleteFolderCanDeleteExistingFolder() {
 		let expectation = XCTestExpectation(description: "deleteFolder can delete existing folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/FolderToDelete")
 		provider.deleteFolder(at: cloudPath).then {
@@ -797,7 +866,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFolderWithNotFoundError() throws {
+	func testDeleteFolderWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "deleteFolder for nonexistent folder")
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForDeleteItems/thisFolderMustNotExist")
 		provider.deleteFolder(at: cloudPath).then {
@@ -815,7 +884,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - moveFile Tests
 
-	func testMoveFileAsRename() throws {
+	func testMoveFileAsRename() {
 		let expectation = XCTestExpectation(description: "moveFile can rename file")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileToRename")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/RenamedFile")
@@ -839,7 +908,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileToDifferentParentFolder() throws {
+	func testMoveFileToDifferentParentFolder() {
 		let expectation = XCTestExpectation(description: "moveFile can move file to different parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileToMove")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/renamedAndMovedFile")
@@ -863,7 +932,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileWithNotFoundError() throws {
+	func testMoveFileWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "moveFile for nonexistent file")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/thisFileMustNotExist.pdf")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/thisFileMustNotExistRenamed.pdf")
@@ -880,7 +949,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileWithAlreadyExistsError() throws {
+	func testMoveFileWithAlreadyExistsError() {
 		let expectation = XCTestExpectation(description: "moveFile to already existing file")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileForItemAlreadyExists")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileForItemTypeMismatch")
@@ -897,7 +966,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileWithParentFolderDoesNotExistError() throws {
+	func testMoveFileWithParentFolderDoesNotExistError() {
 		let expectation = XCTestExpectation(description: "moveFile to nonexistent parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FileForParentFolderDoesNotExist")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/thisFolderMustNotExist/FileForParentFolderDoesNotExists")
@@ -916,7 +985,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 
 	// MARK: - moveFolder Tests
 
-	func testMoveFolderAsRename() throws {
+	func testMoveFolderAsRename() {
 		let expectation = XCTestExpectation(description: "moveFolder can rename folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderToRename")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/RenamedFolder")
@@ -940,7 +1009,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderToDifferentParentFolder() throws {
+	func testMoveFolderToDifferentParentFolder() {
 		let expectation = XCTestExpectation(description: "moveFolder can move folder to different parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderToMove")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/renamedAndMovedFolder")
@@ -964,7 +1033,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderWithNotFoundError() throws {
+	func testMoveFolderWithNotFoundError() {
 		let expectation = XCTestExpectation(description: "moveFolder for nonexistent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/thisFolderMustNotExist")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/MoveItemsInThisFolder/thisFolderMustNotExistRenamed")
@@ -981,7 +1050,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderWithAlreadyExistsError() throws {
+	func testMoveFolderWithAlreadyExistsError() {
 		let expectation = XCTestExpectation(description: "moveFolder to already existing folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderForItemAlreadyExists")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderForItemTypeMismatch")
@@ -998,7 +1067,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderWithParentFolderDoesNotExistError() throws {
+	func testMoveFolderWithParentFolderDoesNotExistError() {
 		let expectation = XCTestExpectation(description: "moveFolder to nonexistent parent folder")
 		let sourceCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/FolderForParentFolderDoesNotExist")
 		let targetCloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder/FolderForMoveItems/thisFolderMustNotExist/FolderForParentFolderDoesNotExist")
@@ -1048,14 +1117,14 @@ extension CloudProvider {
 	/**
 	 Checks if the item exists at the given cloud path.
 
-	 This method is primarily used as a workaround for providers with eventual consistency. It will repeatedly check if `expectToExist` doesn't match with a delay of 1 second up to a maximum of 3 attempts.
+	 This method is primarily used as a workaround for providers with eventual consistency. It will repeatedly check if `expectToExist` doesn't match with a delay of 2 seconds up to 10 retries (11 total checks).
 	 */
 	func repeatedlyCheckForItemExistence(at cloudPath: CloudPath, expectToExist: Bool, attempt: Int = 0) -> Promise<Bool> {
 		return checkForItemExistence(at: cloudPath).then { itemExists in
-			if itemExists == expectToExist || attempt == 3 {
+			if itemExists == expectToExist || attempt == 10 {
 				return Promise(itemExists)
 			} else {
-				return Promise(()).delay(1.0).then {
+				return Promise(()).delay(2.0).then {
 					return repeatedlyCheckForItemExistence(at: cloudPath, expectToExist: expectToExist, attempt: attempt + 1)
 				}
 			}

@@ -11,6 +11,7 @@ import Foundation
 enum IntegrationTestError: Error {
 	case cloudProviderInitError
 	case missingDirectoryEnumerator
+	case consistencyTimeout
 	case oneTimeSetUpTimeout
 	case setUpTimeout
 }

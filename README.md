@@ -1,7 +1,7 @@
 [![Swift Compatibility](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fcryptomator%2Fcloud-access-swift%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/cryptomator/cloud-access-swift)
 [![Platform Compatibility](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fcryptomator%2Fcloud-access-swift%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/cryptomator/cloud-access-swift)
-[![Codacy Code Quality](https://app.codacy.com/project/badge/Grade/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift/dashboard)
-[![Codacy Coverage](https://app.codacy.com/project/badge/Coverage/35951085e6604f9aaab998fc65dd2467)](https://www.codacy.com/gh/cryptomator/cloud-access-swift/dashboard)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=cryptomator_cloud-access-swift&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=cryptomator_cloud-access-swift)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=cryptomator_cloud-access-swift&metric=coverage)](https://sonarcloud.io/summary/new_code?id=cryptomator_cloud-access-swift)
 
 # Cloud Access Swift
 
@@ -9,9 +9,15 @@ This library defines the cloud access API used by Cryptomator for iOS.
 
 The API is implemented once for each cloud. It also forms the foundation for decoration layers for the various vault formats that can be applied to get a cleartext view for cloud-stored vaults.
 
+## Special Shoutout
+
+Continuous integration hosting is provided by [MacStadium](https://www.macstadium.com/company/opensource).
+
+<a href="https://www.macstadium.com/company/opensource"><img src="https://uploads-ssl.webflow.com/5ac3c046c82724970fc60918/5c019d917bba312af7553b49_MacStadium-developerlogo.png" alt="MacStadium" height="100"></a>
+
 ## Requirements
 
-- iOS 14.0 or higher
+- iOS 16.0 or higher
 - Swift 5
 
 ## Installation
@@ -21,7 +27,7 @@ The API is implemented once for each cloud. It also forms the foundation for dec
 You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Package Manager").
 
 ```swift
-.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "2.0.0"))
+.package(url: "https://github.com/cryptomator/cloud-access-swift.git", .upToNextMinor(from: "3.0.0"))
 ```
 
 ## Usage

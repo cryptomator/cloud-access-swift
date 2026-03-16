@@ -68,7 +68,7 @@ public class S3CloudProvider: CloudProvider {
 		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration, maxPageSize: maxPageSize)
 	}
 
-	// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
+	/// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
 	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
 		CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
 		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: nil, maxKeys: 1)
@@ -420,6 +420,9 @@ public class S3CloudProvider: CloudProvider {
 	func convertStandardError(_ error: Error, mapUnknownErrorTo unknownError: Error? = nil) -> Error {
 		if error is CloudProviderError {
 			return error
+		}
+		if isNetworkConnectionError(error) {
+			return CloudProviderError.noInternetConnection
 		}
 		let nsError = error as NSError
 		switch (nsError.domain, nsError.code) {

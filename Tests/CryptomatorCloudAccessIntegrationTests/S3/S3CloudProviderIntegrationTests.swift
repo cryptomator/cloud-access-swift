@@ -7,13 +7,13 @@
 //
 
 import AWSS3
-import Promises
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
+@testable import Promises
 
 class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	override class var defaultTestSuite: XCTestSuite {
@@ -26,6 +26,14 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 		// swiftlint:disable:next force_try
 		setUpProvider = try! S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
 		super.setUp()
+		guard classSetUpError == nil else { return }
+		// Wait for Scaleway S3's eventual consistency to catch up after setUp uploaded all test fixtures.
+		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
+		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
+		guard waitForPromises(timeout: 60.0) else {
+			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
+			return
+		}
 	}
 
 	override func setUpWithError() throws {

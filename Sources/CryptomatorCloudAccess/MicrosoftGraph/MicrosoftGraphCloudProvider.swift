@@ -335,16 +335,14 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 		guard let url = URL(string: "\(requestURLString(for: item))/children?$top=\(maxPageSize)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		let request = NSMutableURLRequest(url: url)
-		return request
+		return NSMutableURLRequest(url: url)
 	}
 
 	func contentRequest(for item: MicrosoftGraphItem) throws -> NSMutableURLRequest {
 		guard let url = URL(string: "\(requestURLString(for: item))/content") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		let request = NSMutableURLRequest(url: url)
-		return request
+		return NSMutableURLRequest(url: url)
 	}
 
 	func createUploadSessionRequest(for parentItem: MicrosoftGraphItem, with name: String) throws -> NSMutableURLRequest {
@@ -624,6 +622,9 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 	}
 
 	private func convertStandardError(_ error: Error) -> Error {
+		if isNetworkConnectionError(error) {
+			return CloudProviderError.noInternetConnection
+		}
 		switch error {
 		case MicrosoftGraphAuthenticationProviderError.accountNotFound, MicrosoftGraphAuthenticationProviderError.noAccounts:
 			return CloudProviderError.unauthorized

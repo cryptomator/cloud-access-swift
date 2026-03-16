@@ -251,7 +251,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 				if attempt == maxAttempts - 1 {
 					throw lastError
 				}
-				Thread.sleep(forTimeInterval: 1.0)
+				Thread.sleep(forTimeInterval: 2.0)
 			}
 		}
 	}

@@ -22,13 +22,11 @@ class VaultFormat7BoxIntegrationTests: CloudAccessIntegrationTest {
 	private static let credential = BoxCredentialMock()
 	// swiftlint:disable:next force_try
 	private static let cloudProvider = try! BoxCloudProvider(credential: credential)
-	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7-\(runID)")
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
-			DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
-		}.then { decorator in
+		let setUpPromise = DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
 			setUpProvider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
@@ -40,6 +38,12 @@ class VaultFormat7BoxIntegrationTests: CloudAccessIntegrationTest {
 			return
 		}
 		super.setUp()
+	}
+
+	override class func tearDown() {
+		super.tearDown()
+		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
+		_ = waitForPromises(timeout: 60.0)
 	}
 
 	override func setUpWithError() throws {

@@ -22,7 +22,7 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 	}
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		setUpProvider = try? WebDAVProvider(with: client)
 		super.setUp()
 	}

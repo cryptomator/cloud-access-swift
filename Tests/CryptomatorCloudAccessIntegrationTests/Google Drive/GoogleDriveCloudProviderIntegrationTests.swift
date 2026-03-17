@@ -22,7 +22,7 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 	private var credential: GoogleDriveCredential!
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		let credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest")
 		// swiftlint:disable:next force_try
 		setUpProvider = try! GoogleDriveCloudProvider(credential: credential)

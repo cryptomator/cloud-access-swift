@@ -22,7 +22,7 @@ class BoxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentica
 	private let credential = BoxCredentialMock()
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		let credential = BoxCredentialMock()
 		// swiftlint:disable:next force_try
 		setUpProvider = try! BoxCloudProvider(credential: credential)

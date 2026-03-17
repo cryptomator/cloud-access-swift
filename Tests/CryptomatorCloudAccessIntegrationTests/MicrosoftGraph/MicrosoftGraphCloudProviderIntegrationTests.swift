@@ -22,7 +22,7 @@ class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWit
 	private static let credential = MicrosoftGraphCredentialMock() // Instantiate once because MicrosoftGraph doesn't like to get access token from refresh token frequently
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		// swiftlint:disable:next force_try
 		setUpProvider = try! MicrosoftGraphCloudProvider(credential: credential)
 		super.setUp()

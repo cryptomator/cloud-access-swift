@@ -21,13 +21,11 @@ class VaultFormat6DropboxIntegrationTests: CloudAccessIntegrationTest {
 
 	private static let credential = DropboxCredentialMock()
 	private static let cloudProvider = DropboxCloudProvider(credential: credential)
-	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6")
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat6-\(runID)")
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
-			DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
-		}.then { decorator in
+		let setUpPromise = DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
 			setUpProvider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
@@ -39,6 +37,12 @@ class VaultFormat6DropboxIntegrationTests: CloudAccessIntegrationTest {
 			return
 		}
 		super.setUp()
+	}
+
+	override class func tearDown() {
+		super.tearDown()
+		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
+		_ = waitForPromises(timeout: 60.0)
 	}
 
 	override func setUpWithError() throws {

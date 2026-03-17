@@ -23,7 +23,7 @@ class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 	private let credential = PCloudCredentialMock()
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		let credential = PCloudCredentialMock()
 		let client = PCloud.createClient(with: credential.user)
 		// swiftlint:disable:next force_try

@@ -214,16 +214,9 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	/// Uses `XCTestExpectation` with a bounded timeout instead of `async throws` + `.async()` because
-	/// the buggy path never resolves the promise; awaiting it would hang the test runner instead of
-	/// producing an actionable timeout failure.
+	/// Uses `XCTestExpectation` instead of `async + .async()` because the buggy path leaves the
+	/// promise pending; awaiting it would hang the test runner instead of producing a timeout failure.
 	func testDownloadFileDoesNotHangWhenOnTaskCreationResumesBeforeRegistration() throws {
-		// Reproducer for the race between `task.resume()` (inside `onTaskCreation`) and
-		// `addRunningDownloadTask` in `WebDAVSession.performDownloadTask`. `onTaskCreation` blocks
-		// on a semaphore signaled from the delegate's `didFinishDownloadingTo`, forcing the URLSession
-		// delegate callback to complete before the caller proceeds to register the task. On the
-		// buggy code, the registration happens after the callback already missed its dict entry,
-		// leaving the promise pending forever.
 		let (signalingProvider, delegateFired) = try makeSignalingProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -249,9 +242,8 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = expectation(description: "downloadFile resolves")
 		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
 			task?.resume()
-			// Wait until the URLSession delegate has fired its completion callback. On the buggy
-			// code path, the delegate runs against an empty dictionary and returns silently;
-			// the signal still fires so we do not deadlock, but registration happens too late.
+			// Force the delegate's transfer-completion callback to run before `onTaskCreation` returns:
+			// on the buggy ordering, registration happens after the callback already missed its dict entry.
 			_ = delegateFired.wait(timeout: .now() + 2.0)
 		}).then {
 			expectation.fulfill()
@@ -267,12 +259,8 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	/// See the rationale on `testDownloadFileDoesNotHangWhenOnTaskCreationResumesBeforeRegistration`
-	/// for why this test uses `XCTestExpectation` instead of `async throws` + `.async()`.
+	/// See the rationale on the download variant for why this test uses `XCTestExpectation`.
 	func testUploadFileDoesNotHangWhenOnTaskCreationResumesBeforeRegistration() throws {
-		// Mirror of the download reproducer for `WebDAVSession.performUploadTask`. Same race between
-		// `task.resume()` (inside `onTaskCreation`) and `addRunningDataTask`, same symptom: the
-		// promise never resolves and the Files.app spinner spins forever.
 		let (signalingProvider, delegateFired) = try makeSignalingProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -306,8 +294,7 @@ class WebDAVProviderTests: XCTestCase {
 		let expectation = expectation(description: "uploadFile resolves")
 		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
 			task?.resume()
-			// Wait until the URLSession delegate has fired its completion callback. See the download
-			// variant for the full explanation.
+			// See the download variant for why this wait is needed.
 			_ = delegateFired.wait(timeout: .now() + 2.0)
 		}).then { _ in
 			expectation.fulfill()
@@ -320,16 +307,174 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	private func makeSignalingProvider() throws -> (WebDAVProvider, DispatchSemaphore) {
-		let signal = DispatchSemaphore(value: 0)
-		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
-		let delegate = SignalingWebDAVClientURLSessionDelegate(credential: credential, signal: signal)
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-		let client = WebDAVClient(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
-		let provider = try WebDAVProvider(with: client)
-		return (provider, signal)
+	/// Same registration race that the happy-path test covers, exercised on the auth-rejection
+	/// branch of `urlSession(_:task:didReceive challenge:_:)`. See the download variant for why
+	/// this test uses `XCTestExpectation`.
+	func testDownloadFileRejectsWithUnauthorizedWhenAuthChallengeFiresAfterOnTaskCreationResumes() throws {
+		let (signalingProvider, delegateFired) = try makeSignalingProvider(urlProtocolMock: URLProtocolSequenceMock.self)
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+
+		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolSequenceMock.steps.append(.response(propfindResponse, propfindData))
+
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolSequenceMock.steps.append(.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)))
+
+		let expectation = expectation(description: "downloadFile rejects")
+		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
+			task?.resume()
+			// See the happy-path download variant; here the wait gates on the auth-rejection branch.
+			_ = delegateFired.wait(timeout: .now() + 2.0)
+		}).then {
+			XCTFail("downloadFile should have failed with unauthorized")
+			expectation.fulfill()
+		}.catch { error in
+			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 2.0)
+
+		XCTAssertTrue(URLProtocolSequenceMock.steps.isEmpty)
+	}
+
+	/// See the rationale on the download auth variant.
+	func testUploadFileRejectsWithUnauthorizedWhenAuthChallengeFiresAfterOnTaskCreationResumes() throws {
+		let (signalingProvider, delegateFired) = try makeSignalingProvider(urlProtocolMock: URLProtocolSequenceMock.self)
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolSequenceMock.steps.append(.response(propfindResponse, nil))
+
+		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolSequenceMock.steps.append(.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)))
+
+		let expectation = expectation(description: "uploadFile rejects")
+		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
+			task?.resume()
+			// See the download auth variant.
+			_ = delegateFired.wait(timeout: .now() + 2.0)
+		}).then { _ in
+			XCTFail("uploadFile should have failed with unauthorized")
+			expectation.fulfill()
+		}.catch { error in
+			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 2.0)
+
+		XCTAssertTrue(URLProtocolSequenceMock.steps.isEmpty)
+	}
+
+	/// Same registration race exercised on the transport-failure branch of `didCompleteWithError`.
+	/// See the download variant for why this test uses `XCTestExpectation`.
+	func testDownloadFileRejectsWithTransportErrorAfterOnTaskCreationResumes() throws {
+		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+
+		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
+
+		URLProtocolMock.requestHandler.append({ _ in
+			throw URLProtocolMockError.simulatedTransportFailure
+		})
+
+		let expectation = expectation(description: "downloadFile rejects")
+		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
+			task?.resume()
+			// See the happy-path download variant; here the wait gates on the transport-failure branch.
+			_ = delegateFired.wait(timeout: .now() + 2.0)
+		}).then {
+			XCTFail("downloadFile should have failed")
+			expectation.fulfill()
+		}.catch { error in
+			// Transport failures must not be silently mapped to a `CloudProviderError` — that would
+			// hide the actual failure from callers. The exact wrapping URLSession applies to the
+			// `URLProtocol`-thrown error is opaque, so we assert the regression of interest.
+			XCTAssertNil(error as? CloudProviderError, "Transport failure was unexpectedly mapped: \(error)")
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 2.0)
+
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// See the rationale on the download transport-failure variant.
+	func testUploadFileRejectsWithTransportErrorAfterOnTaskCreationResumes() throws {
+		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			return (propfindResponse, nil)
+		})
+
+		URLProtocolMock.requestHandler.append({ _ in
+			throw URLProtocolMockError.simulatedTransportFailure
+		})
+
+		let expectation = expectation(description: "uploadFile rejects")
+		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
+			task?.resume()
+			// See the download transport-failure variant.
+			_ = delegateFired.wait(timeout: .now() + 2.0)
+		}).then { _ in
+			XCTFail("uploadFile should have failed")
+			expectation.fulfill()
+		}.catch { error in
+			// See the download transport-failure variant for why we assert "not a CloudProviderError"
+			// rather than equality against `URLProtocolMockError.simulatedTransportFailure`.
+			XCTAssertNil(error as? CloudProviderError, "Transport failure was unexpectedly mapped: \(error)")
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 2.0)
+
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// Verifies the load-bearing `PROPFIND`-skip behavior in `SignalingWebDAVClientURLSessionDelegate`.
+	/// Without this guard, the regression tests above would silently turn into non-reproducers
+	/// because the transfer's `onTaskCreation` wait would consume a stale `PROPFIND` signal before
+	/// the registration race window opens.
+	func testSignalingDelegateDoesNotSignalOnPropfindCompletion() throws {
+		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+
+		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
+
+		let expectation = expectation(description: "fetchItemMetadata resolves")
+		signalingProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { _ in
+			expectation.fulfill()
+		}.catch { error in
+			XCTFail("fetchItemMetadata failed: \(error)")
+			expectation.fulfill()
+		}
+		wait(for: [expectation], timeout: 2.0)
+
+		XCTAssertEqual(.timedOut, delegateFired.wait(timeout: .now() + 0.1), "PROPFIND must not signal the semaphore")
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testDownloadFileWithNotFoundError() async throws {
@@ -872,19 +1017,26 @@ class WebDAVProviderTests: XCTestCase {
 		}
 		return try Data(contentsOf: fileURL)
 	}
+
+	private func makeSignalingProvider(urlProtocolMock: AnyClass = URLProtocolMock.self) throws -> (WebDAVProvider, DispatchSemaphore) {
+		let signal = DispatchSemaphore(value: 0)
+		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
+		let delegate = SignalingWebDAVClientURLSessionDelegate(credential: credential, signal: signal)
+		let configuration = URLSessionConfiguration.default
+		configuration.protocolClasses = [urlProtocolMock]
+		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+		let client = WebDAVClient(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
+		let provider = try WebDAVProvider(with: client)
+		return (provider, signal)
+	}
 }
 
-/// Test-only delegate that signals a semaphore after the parent's transfer-task completion callback
-/// runs. Used by the `...DoesNotHangWhenOnTaskCreationResumesBeforeRegistration` tests to gate the
-/// caller's `onTaskCreation` closure on the delegate callback, making the race deterministic.
-///
-/// Signaling is scoped to the transfer task of interest (the GET download task or the PUT upload
-/// task). Preflight `PROPFIND` data tasks that run before the transfer must NOT signal, otherwise
-/// the semaphore holds a stale signal by the time the transfer's `onTaskCreation` waits on it and
-/// the race the test is meant to reproduce is never actually entered. The type check is safe
-/// because `URLSessionUploadTask` is a distinct subclass of `URLSessionDataTask` and
-/// `URLSessionDownloadTask` inherits directly from `URLSessionTask`, so plain data tasks (used by
-/// `PROPFIND`) match neither branch.
+/// Test-only delegate that signals a semaphore after the parent's transfer-task callback runs,
+/// gating the caller's `onTaskCreation` closure on the delegate callback to make registration
+/// races deterministic. Signaling is scoped to the transfer task of interest, never the preflight
+/// `PROPFIND` — a leaked `PROPFIND` signal would be consumed by the transfer's `onTaskCreation`
+/// wait and the race could never be reproduced. `URLSessionUploadTask` is a distinct subclass of
+/// `URLSessionDataTask`, so plain `PROPFIND` data tasks do not match the upload checks below.
 private final class SignalingWebDAVClientURLSessionDelegate: WebDAVClientURLSessionDelegate {
 	let signal: DispatchSemaphore
 
@@ -893,19 +1045,28 @@ private final class SignalingWebDAVClientURLSessionDelegate: WebDAVClientURLSess
 		super.init(credential: credential)
 	}
 
+	override func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+		super.urlSession(session, task: task, didReceive: challenge, completionHandler: completionHandler)
+		// Signal the auth-rejection branch (`previousFailureCount >= 1`) for transfer tasks: the
+		// parent delegate looks up the running task here to reject its promise — same race window.
+		if challenge.previousFailureCount >= 1, task is URLSessionUploadTask || task is URLSessionDownloadTask {
+			signal.signal()
+		}
+	}
+
 	override func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
 		super.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: location)
-		// `didFinishDownloadingTo` only fires for `URLSessionDownloadTask`, so signaling here always
-		// corresponds to a transfer task — no `PROPFIND` leak possible.
 		signal.signal()
 	}
 
 	override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
 		super.urlSession(session, task: task, didCompleteWithError: error)
-		// `didCompleteWithError` fires for all tasks, including the preflight `PROPFIND` data task.
-		// Only signal for transfer tasks: upload tasks (the `PUT`), or download tasks if
-		// `didFinishDownloadingTo` was bypassed for some reason.
-		if task is URLSessionUploadTask || task is URLSessionDownloadTask {
+		// Signal successful upload completions (downloads use `didFinishDownloadingTo`) and transport
+		// failures on either transfer task (auth rejections use `didReceive challenge:`).
+		let isTransferTask = task is URLSessionUploadTask || task is URLSessionDownloadTask
+		if task is URLSessionUploadTask, error == nil {
+			signal.signal()
+		} else if isTransferTask, error != nil {
 			signal.signal()
 		}
 	}

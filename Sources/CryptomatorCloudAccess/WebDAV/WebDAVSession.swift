@@ -224,9 +224,13 @@ class WebDAVSession {
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
-		startTask(task, register: { downloadTask in
-			self.delegate?.addRunningDownloadTask(key: downloadTask, value: webDAVDownloadTask)
-		}, onTaskCreation: onTaskCreation)
+		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
+		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
+		if let onTaskCreation {
+			onTaskCreation(task)
+		} else {
+			task.resume()
+		}
 		return pendingPromise
 	}
 
@@ -237,21 +241,13 @@ class WebDAVSession {
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		startTask(task, register: { uploadTask in
-			self.delegate?.addRunningDataTask(key: uploadTask, value: webDAVDataTask)
-		}, onTaskCreation: onTaskCreation)
-		return pendingPromise
-	}
-
-	/// Registers the task with the delegate's running-tasks dictionary, then yields to `onTaskCreation`.
-	/// Registration must happen before `onTaskCreation` (which may resume the task) so the delegate can
-	/// match response callbacks without racing an empty dictionary. If the caller does not provide an
-	/// `onTaskCreation` closure, the task is resumed directly.
-	private func startTask<Task: URLSessionTask>(_ task: Task, register: (Task) -> Void, onTaskCreation: ((Task?) -> Void)?) {
-		register(task)
-		onTaskCreation?(task)
-		if onTaskCreation == nil {
+		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
+		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
+		if let onTaskCreation {
+			onTaskCreation(task)
+		} else {
 			task.resume()
 		}
+		return pendingPromise
 	}
 }

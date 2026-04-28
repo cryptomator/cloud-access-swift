@@ -10,6 +10,7 @@ import Foundation
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
+	case simulatedTransportFailure
 }
 
 class URLProtocolMock: URLProtocol {
@@ -59,6 +60,50 @@ class URLProtocolAuthenticationMock: URLProtocol, URLAuthenticationChallengeSend
 		let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
 		let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: challengeSettings.previousFailureCount, failureResponse: challengeSettings.failureResponse, error: nil, sender: self)
 		client?.urlProtocol(self, didReceive: challenge)
+	}
+
+	override class func canInit(with request: URLRequest) -> Bool {
+		return true
+	}
+
+	override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+		return request
+	}
+
+	override func stopLoading() {}
+}
+
+/// Test-only `URLProtocol` that emits a queued sequence of either HTTP responses or auth challenges
+/// in order. Used to target an auth challenge at a specific request (e.g. the transfer task) while
+/// letting earlier requests (e.g. the preflight `PROPFIND`) resolve normally.
+class URLProtocolSequenceMock: URLProtocol, URLAuthenticationChallengeSender {
+	enum Step {
+		case response(HTTPURLResponse, Data?)
+		case authChallenge(URLAuthenticationChallengeMock)
+	}
+
+	func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {}
+
+	func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {}
+
+	func cancel(_ challenge: URLAuthenticationChallenge) {}
+
+	static var steps = [Step]()
+
+	override func startLoading() {
+		let step = URLProtocolSequenceMock.steps.removeFirst()
+		switch step {
+		case let .response(response, data):
+			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+			if let data = data {
+				client?.urlProtocol(self, didLoad: data)
+			}
+			client?.urlProtocolDidFinishLoading(self)
+		case let .authChallenge(settings):
+			let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
+			let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: settings.previousFailureCount, failureResponse: settings.failureResponse, error: nil, sender: self)
+			client?.urlProtocol(self, didReceive: challenge)
+		}
 	}
 
 	override class func canInit(with request: URLRequest) -> Bool {

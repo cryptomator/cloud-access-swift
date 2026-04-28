@@ -244,7 +244,7 @@ class WebDAVProviderTests: XCTestCase {
 			task?.resume()
 			// Force the delegate's transfer-completion callback to run before `onTaskCreation` returns:
 			// on the buggy ordering, registration happens after the callback already missed its dict entry.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then {
 			expectation.fulfill()
 		}.catch { error in
@@ -295,7 +295,7 @@ class WebDAVProviderTests: XCTestCase {
 		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
 			task?.resume()
 			// See the download variant for why this wait is needed.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then { _ in
 			expectation.fulfill()
 		}.catch { error in
@@ -326,7 +326,7 @@ class WebDAVProviderTests: XCTestCase {
 		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
 			task?.resume()
 			// See the happy-path download variant; here the wait gates on the auth-rejection branch.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then {
 			XCTFail("downloadFile should have failed with unauthorized")
 			expectation.fulfill()
@@ -356,7 +356,7 @@ class WebDAVProviderTests: XCTestCase {
 		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
 			task?.resume()
 			// See the download auth variant.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then { _ in
 			XCTFail("uploadFile should have failed with unauthorized")
 			expectation.fulfill()
@@ -393,7 +393,7 @@ class WebDAVProviderTests: XCTestCase {
 		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
 			task?.resume()
 			// See the happy-path download variant; here the wait gates on the transport-failure branch.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then {
 			XCTFail("downloadFile should have failed")
 			expectation.fulfill()
@@ -432,7 +432,7 @@ class WebDAVProviderTests: XCTestCase {
 		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
 			task?.resume()
 			// See the download transport-failure variant.
-			_ = delegateFired.wait(timeout: .now() + 2.0)
+			self.assertDelegateFired(delegateFired)
 		}).then { _ in
 			XCTFail("uploadFile should have failed")
 			expectation.fulfill()
@@ -1023,11 +1023,17 @@ class WebDAVProviderTests: XCTestCase {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
 		let delegate = SignalingWebDAVClientURLSessionDelegate(credential: credential, signal: signal)
 		let configuration = URLSessionConfiguration.default
+		configuration.httpCookieStorage = HTTPCookieStorage()
+		configuration.urlCredentialStorage = nil
 		configuration.protocolClasses = [urlProtocolMock]
 		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		let client = WebDAVClient(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
 		let provider = try WebDAVProvider(with: client)
 		return (provider, signal)
+	}
+
+	private func assertDelegateFired(_ delegateFired: DispatchSemaphore, file: StaticString = #filePath, line: UInt = #line) {
+		XCTAssertEqual(.success, delegateFired.wait(timeout: .now() + 2.0), "Delegate callback did not fire before onTaskCreation returned", file: file, line: line)
 	}
 }
 

@@ -221,12 +221,14 @@ class WebDAVSession {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
-		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
+		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
 		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
-		if onTaskCreation == nil {
+		if let onTaskCreation {
+			onTaskCreation(task)
+		} else {
 			task.resume()
 		}
 		return pendingPromise
@@ -236,12 +238,14 @@ class WebDAVSession {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
-		onTaskCreation?(task)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
+		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		if onTaskCreation == nil {
+		if let onTaskCreation {
+			onTaskCreation(task)
+		} else {
 			task.resume()
 		}
 		return pendingPromise

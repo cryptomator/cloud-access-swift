@@ -22,15 +22,13 @@ class VaultFormat7S3IntegrationTests: CloudAccessIntegrationTest {
 
 	// swiftlint:disable:next force_try
 	private static let cloudProvider = try! S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
-	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7")
+	private static let vaultPath = CloudPath("/iOS-IntegrationTests-VaultFormat7-\(runID)")
 
 	override class func setUp() {
 		S3CloudProviderIntegrationTests.onetimeAWSIntegrationTestsSetup
 
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = cloudProvider.deleteFolderIfExisting(at: vaultPath).then {
-			DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
-		}.then { decorator in
+		let setUpPromise = DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
 			setUpProvider = decorator
 		}
 		guard waitForPromises(timeout: 60.0) else {
@@ -56,6 +54,12 @@ class VaultFormat7S3IntegrationTests: CloudAccessIntegrationTest {
 			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
 			return
 		}
+	}
+
+	override class func tearDown() {
+		super.tearDown()
+		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
+		_ = waitForPromises(timeout: 60.0)
 	}
 
 	override func setUpWithError() throws {

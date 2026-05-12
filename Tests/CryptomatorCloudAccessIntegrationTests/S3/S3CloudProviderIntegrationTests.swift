@@ -22,7 +22,7 @@ class S3CloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthenticat
 
 	override class func setUp() {
 		S3CloudProviderIntegrationTests.onetimeAWSIntegrationTestsSetup
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		// swiftlint:disable:next force_try
 		setUpProvider = try! S3CloudProvider(credential: IntegrationTestSecrets.s3Credential)
 		super.setUp()

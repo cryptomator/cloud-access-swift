@@ -18,6 +18,7 @@ class CloudAccessIntegrationTest: XCTestCase {
 	static let testContentForFilesInRoot = "testContent"
 	static let testContentForFilesInTestFolder = "File inside Folder Content"
 
+	static let runID = String(UUID().uuidString.prefix(8))
 	static var classSetUpError: Error?
 	static var setUpProvider: CloudProvider!
 	static var integrationTestParentCloudPath: CloudPath!
@@ -238,21 +239,31 @@ class CloudAccessIntegrationTest: XCTestCase {
 	}
 
 	/// Retries an operation that fails due to eventual consistency (e.g. S3).
-	/// During setUp, `parentFolderDoesNotExist` and `itemNotFound` indicate that a just-created parent
-	/// folder or its directory metadata hasn't propagated yet.
+	/// During setUp, `parentFolderDoesNotExist`, `itemNotFound`, and `itemAlreadyExists` indicate that
+	/// a just-created or just-deleted item's state hasn't propagated yet.
 	private static func retryOnEventualConsistencyError(maxAttempts: Int = 10, operation: () throws -> Void) throws {
-		var lastError: Error = CloudProviderError.parentFolderDoesNotExist
 		for attempt in 0 ..< maxAttempts {
 			do {
 				try operation()
 				return
-			} catch CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound {
-				lastError = CloudProviderError.parentFolderDoesNotExist
+			} catch {
+				guard isEventualConsistencyError(error) else {
+					throw error
+				}
 				if attempt == maxAttempts - 1 {
-					throw lastError
+					throw error
 				}
 				Thread.sleep(forTimeInterval: 2.0)
 			}
+		}
+	}
+
+	private static func isEventualConsistencyError(_ error: Error) -> Bool {
+		switch error {
+		case CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound, CloudProviderError.itemAlreadyExists:
+			return true
+		default:
+			return false
 		}
 	}
 

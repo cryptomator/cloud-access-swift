@@ -22,7 +22,7 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 	private let credential = DropboxCredentialMock()
 
 	override class func setUp() {
-		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain")
+		integrationTestParentCloudPath = CloudPath("/iOS-IntegrationTests-Plain-\(runID)")
 		let credential = DropboxCredentialMock()
 		setUpProvider = DropboxCloudProvider(credential: credential)
 		super.setUp()

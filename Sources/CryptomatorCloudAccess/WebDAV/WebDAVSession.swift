@@ -170,29 +170,44 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 }
 
 class WebDAVSession {
-	private let urlSession: URLSession
+	/// Session for metadata/control operations (OPTIONS, HEAD, PROPFIND, MKCOL, DELETE, MOVE). Foreground (`.default`) even in the background-session setup, because Apple's background `URLSession`s support only upload/download tasks.
+	private let dataSession: URLSession
+	/// Session for file transfers (GET downloads, PUT uploads).
+	private let transferSession: URLSession
 	private weak var delegate: WebDAVClientURLSessionDelegate?
 
-	init(urlSession: URLSession, delegate: WebDAVClientURLSessionDelegate) {
-		precondition(urlSession.delegate as? WebDAVClientURLSessionDelegate == delegate)
-		self.urlSession = urlSession
+	init(dataSession: URLSession, transferSession: URLSession, delegate: WebDAVClientURLSessionDelegate) {
+		precondition(dataSession.delegate as? WebDAVClientURLSessionDelegate == delegate)
+		precondition(transferSession.delegate as? WebDAVClientURLSessionDelegate == delegate)
+		self.dataSession = dataSession
+		self.transferSession = transferSession
 		self.delegate = delegate
 	}
 
+	convenience init(urlSession: URLSession, delegate: WebDAVClientURLSessionDelegate) {
+		self.init(dataSession: urlSession, transferSession: urlSession, delegate: delegate)
+	}
+
 	/**
-	 Use this method to conveniently create a WebDAV session with a background URL session.
+	 Use this method to conveniently create a WebDAV session with a background URL session for file transfers.
 
 	 If the `WebDAVSession` is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
 
-	 To avoid collisions in the `URLSession` Identifier between multiple targets (e.g. main app and app extension), the `BundleID` is used in addition to the Credential UID.
+	 The caller is responsible for making `sessionIdentifier` unique across targets (e.g. main app and app extension).
+
+	 Only file transfers ride the background session; metadata/control operations use a separate foreground session, because Apple's background `URLSession`s support only upload/download tasks.
 	 */
-	static func createBackgroundSession(with delegate: WebDAVClientURLSessionDelegate, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVSession {
-		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
-		configuration.httpCookieStorage = HTTPCookieStorage()
-		configuration.urlCredentialStorage = nil
-		let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-		return WebDAVSession(urlSession: session, delegate: delegate)
+	static func withBackgroundSession(with delegate: WebDAVClientURLSessionDelegate, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVSession {
+		let transferConfiguration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
+		transferConfiguration.sharedContainerIdentifier = sharedContainerIdentifier
+		transferConfiguration.httpCookieStorage = HTTPCookieStorage()
+		transferConfiguration.urlCredentialStorage = nil
+		let transferSession = URLSession(configuration: transferConfiguration, delegate: delegate, delegateQueue: nil)
+		let dataConfiguration = URLSessionConfiguration.default
+		dataConfiguration.httpCookieStorage = HTTPCookieStorage()
+		dataConfiguration.urlCredentialStorage = nil
+		let dataSession = URLSession(configuration: dataConfiguration, delegate: delegate, delegateQueue: nil)
+		return WebDAVSession(dataSession: dataSession, transferSession: transferSession, delegate: delegate)
 	}
 
 	convenience init(delegate: WebDAVClientURLSessionDelegate) {
@@ -204,12 +219,15 @@ class WebDAVSession {
 	}
 
 	deinit {
-		urlSession.invalidateAndCancel()
+		dataSession.invalidateAndCancel()
+		if transferSession !== dataSession {
+			transferSession.invalidateAndCancel()
+		}
 	}
 
 	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
 		HTTPDebugLogger.logRequest(request)
-		let task = urlSession.dataTask(with: request)
+		let task = dataSession.dataTask(with: request)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
 		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
@@ -218,9 +236,17 @@ class WebDAVSession {
 	}
 
 	func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
+		return performDownloadTask(with: request, to: localURL, onTaskCreation: onTaskCreation, on: transferSession)
+	}
+
+	func performDataDownloadTask(with request: URLRequest, to localURL: URL) -> Promise<HTTPURLResponse> {
+		return performDownloadTask(with: request, to: localURL, onTaskCreation: nil, on: dataSession)
+	}
+
+	private func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?, on session: URLSession) -> Promise<HTTPURLResponse> {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
-		let task = urlSession.downloadTask(with: request)
+		let task = session.downloadTask(with: request)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<HTTPURLResponse>.pending()
 		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
@@ -237,7 +263,7 @@ class WebDAVSession {
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
 		HTTPDebugLogger.logRequest(request)
 		let progress = Progress(totalUnitCount: 1)
-		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
+		let task = transferSession.uploadTask(with: request, fromFile: fileURL)
 		progress.addChild(task.progress, withPendingUnitCount: 1)
 		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
 		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)

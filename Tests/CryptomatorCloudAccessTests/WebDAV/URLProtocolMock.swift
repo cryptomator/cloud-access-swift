@@ -41,6 +41,45 @@ class URLProtocolMock: URLProtocol {
 	override func stopLoading() {}
 }
 
+/// Test-only `URLProtocol` that records the HTTP method of every request it handles and answers with an
+/// empty `200`. Register a distinct subclass with each session's `protocolClasses` so a test can prove
+/// which `URLSession` (data vs. transfer) a WebDAV operation was routed to; the per-subclass storage
+/// keeps the two sessions' requests apart.
+class RecordingURLProtocolMock: URLProtocol {
+	private static var recordedMethodsByClass = [ObjectIdentifier: [String]]()
+
+	static func recordedMethods(for protocolClass: URLProtocol.Type) -> [String] {
+		return recordedMethodsByClass[ObjectIdentifier(protocolClass)] ?? []
+	}
+
+	static func reset() {
+		recordedMethodsByClass.removeAll()
+	}
+
+	override func startLoading() {
+		let key = ObjectIdentifier(type(of: self))
+		RecordingURLProtocolMock.recordedMethodsByClass[key, default: []].append(request.httpMethod ?? "")
+		let response = HTTPURLResponse(url: request.url ?? URL(fileURLWithPath: "/"), statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+		client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+		client?.urlProtocol(self, didLoad: Data())
+		client?.urlProtocolDidFinishLoading(self)
+	}
+
+	override class func canInit(with request: URLRequest) -> Bool {
+		return true
+	}
+
+	override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+		return request
+	}
+
+	override func stopLoading() {}
+}
+
+final class DataSessionURLProtocolMock: RecordingURLProtocolMock {}
+
+final class TransferSessionURLProtocolMock: RecordingURLProtocolMock {}
+
 struct URLAuthenticationChallengeMock {
 	let previousFailureCount: Int
 	let failureResponse: URLResponse

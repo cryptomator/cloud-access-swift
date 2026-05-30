@@ -34,7 +34,7 @@ public class WebDAVClient {
 	 */
 	public static func withBackgroundSession(credential: WebDAVCredential, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVClient {
 		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		let session = WebDAVSession.createBackgroundSession(with: urlSessionDelegate, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+		let session = WebDAVSession.withBackgroundSession(with: urlSessionDelegate, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 		return WebDAVClient(credential: credential, session: session)
 	}
 
@@ -69,7 +69,7 @@ public class WebDAVClient {
 		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
 		""".utf8)
-		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: nil)
+		return webDAVSession.performDataDownloadTask(with: request, to: localURL)
 	}
 
 	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {

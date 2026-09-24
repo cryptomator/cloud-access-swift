@@ -13,6 +13,17 @@ fi
 
 final_status=0
 
+# SwiftLint needs sourcekitdInProc, which it can't locate on its own when the active developer dir is the Command Line Tools
+if [[ -z "$TOOLCHAIN_DIR" ]]; then
+  developer_dir=$(xcode-select -p 2>/dev/null)
+  if [[ -d "$developer_dir/Toolchains/XcodeDefault.xctoolchain" ]]; then
+    export TOOLCHAIN_DIR="$developer_dir/Toolchains/XcodeDefault.xctoolchain"
+  elif [[ -d "$developer_dir/usr/lib/sourcekitdInProc.framework" ]]; then
+    export TOOLCHAIN_DIR="$developer_dir"
+  fi
+fi
+
+
 function process_output() {
   printf '\n# Running %s\n' "$1"
   local start=$(date +%s)

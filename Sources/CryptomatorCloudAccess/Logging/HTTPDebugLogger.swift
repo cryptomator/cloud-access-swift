@@ -71,7 +71,12 @@ enum HTTPDebugLogger {
 			return
 		}
 		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(response.url?.absoluteString ?? "nil")")
-		httpResponse.allHeaderFields.reduce(into: [:]) { if let key = $1.key as? String { $0[key] = $1.value } }
+		httpResponse.allHeaderFields
+			.reduce(into: [String: Any]()) { result, header in
+				if let key = header.key as? String {
+					result[key] = header.value
+				}
+			}
 			.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
 			.filter { !isExcludedHeader($0.key) }
 			.forEach { CloudAccessDDLogDebug("\($0.key): \($0.value)") }

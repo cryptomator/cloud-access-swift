@@ -377,6 +377,15 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 	}
 
+	func testDeleteFolderWithCancellationAfterFirstRemoteChange() async throws {
+		let decorator: VaultFormat7ProviderDecorator = decorator
+		try await valueCancelledAfterFirstRemoteChange(of: provider) {
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+		}
+		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"], provider.deleted.sorted())
+		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
+	}
+
 	func testMoveFile() async throws {
 		try await decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/Directory 1/File 2"))
 		XCTAssertEqual(1, provider.moved.count)

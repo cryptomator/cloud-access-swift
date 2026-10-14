@@ -167,16 +167,26 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		let dirId: Data?
 		do {
-			let dirId = try await getDirId(cleartextCloudPath)
-			try await deleteCiphertextDir(dirId)
+			dirId = try await getDirId(cleartextCloudPath)
 		} catch CloudProviderError.itemNotFound {
-			// recover from error if `deleteCiphertextDir()` throws `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
+			// the steps below throw the precise error
+			dirId = nil
 		}
 		let folderCiphertextPath = try await getFolderCiphertextPath(cleartextCloudPath)
 		try Task.checkCancellation()
-		try await delegate.deleteFile(at: folderCiphertextPath)
-		try dirIdCache.invalidate(cleartextCloudPath)
+		try await withoutCancellation {
+			if let dirId {
+				do {
+					try await self.deleteCiphertextDir(dirId)
+				} catch CloudProviderError.itemNotFound {
+					// the directory is broken, so delete the dir file anyway
+				}
+			}
+			try await self.delegate.deleteFile(at: folderCiphertextPath)
+			try self.dirIdCache.invalidate(cleartextCloudPath)
+		}
 	}
 
 	@concurrent
@@ -317,11 +327,11 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 		return try Data(contentsOf: localURL)
 	}
 
+	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
 		let dirPath = try getDirPath(dirId)
 		var pageToken: String?
 		repeat {
-			try Task.checkCancellation()
 			let itemList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 			let subDirs = itemList.items.filter { $0.name.hasPrefix("0") }
 			let dirIds = try await allSettled(subDirs) { try await self.downloadFile(at: $0.cloudPath) }

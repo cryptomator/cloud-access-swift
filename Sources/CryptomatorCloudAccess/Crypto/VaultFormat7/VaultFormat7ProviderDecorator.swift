@@ -147,17 +147,27 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		let dirId: Data?
 		do {
-			let dirId = try await getDirId(cleartextCloudPath)
-			try await deleteCiphertextDir(dirId)
+			dirId = try await getDirId(cleartextCloudPath)
 		} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
-			// recover from error if `getDirId()` throws `CloudProviderError.itemTypeMismatch` and delete item anyway (because it's probably a symlink)
-			// recover from error if `deleteCiphertextDir()` throws `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
+			// `itemTypeMismatch`: the `.c9r` has no `dir.c9r`, e.g., it's a symlink, so delete it anyway
+			// `itemNotFound`: the steps below throw the precise error
+			dirId = nil
 		}
 		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
 		try Task.checkCancellation()
-		try await delegate.deleteFolder(at: ciphertextCloudPath)
-		try dirIdCache.invalidate(cleartextCloudPath)
+		try await withoutCancellation {
+			if let dirId {
+				do {
+					try await self.deleteCiphertextDir(dirId)
+				} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
+					// the directory is broken, so delete the `.c9r` anyway
+				}
+			}
+			try await self.delegate.deleteFolder(at: ciphertextCloudPath)
+			try self.dirIdCache.invalidate(cleartextCloudPath)
+		}
 	}
 
 	@concurrent
@@ -268,11 +278,11 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		return try Data(contentsOf: localURL)
 	}
 
+	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
 		let dirPath = try getDirPath(dirId)
 		var pageToken: String?
 		repeat {
-			try Task.checkCancellation()
 			let itemList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 			let subDirs = itemList.items.filter { $0.itemType == .folder }
 			let subDirItemLists = try await withThrowingTaskGroup(of: CloudItemList.self) { group in

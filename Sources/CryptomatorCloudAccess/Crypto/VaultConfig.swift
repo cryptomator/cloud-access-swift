@@ -92,7 +92,7 @@ public class UnverifiedVaultConfig {
 		guard let algorithm = jws.header.algorithm, supportedAlgorithms.contains(where: { $0 == algorithm }) else {
 			throw VaultConfigError.unsupportedAlgorithm
 		}
-		guard let verifier = Verifier(verifyingAlgorithm: algorithm, key: Data(rawKey)) else {
+		guard let verifier = Verifier(signatureAlgorithm: algorithm, key: Data(rawKey)) else {
 			throw VaultConfigError.signatureVerificationFailed
 		}
 		let verifiedJWS = try jws.validate(using: verifier)
@@ -155,7 +155,7 @@ public class VaultConfig {
 	public func toToken(keyId: String, rawKey: [UInt8]) throws -> Data {
 		let header = try JWSHeader(parameters: ["typ": "JWT", "alg": SignatureAlgorithm.HS256.rawValue, "kid": keyId])
 		let payload = try VaultConfigPayload(jti: id, format: format, cipherCombo: cipherCombo.rawValue, shorteningThreshold: shorteningThreshold).toJSONData()
-		guard let signer = Signer(signingAlgorithm: .HS256, key: Data(rawKey)) else {
+		guard let signer = Signer(signatureAlgorithm: .HS256, key: Data(rawKey)) else {
 			throw VaultConfigError.tokenSerializationFailed
 		}
 		let jws = try JWS(header: header, payload: Payload(payload), signer: signer)

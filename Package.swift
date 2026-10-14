@@ -46,7 +46,7 @@ let package = Package(
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git", .upToNextMinor(from: "1.3.0")),
 		.package(url: "https://github.com/tobihagemann/box-swift-sdk-gen.git", exact: "0.5.1-cryptomator"),
-		.package(url: "https://github.com/tobihagemann/JOSESwift.git", exact: "2.4.1-cryptomator")
+		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0-cryptomator.2")
 	],
 	targets: [
 		.target(

@@ -1948,10 +1948,10 @@
 		};
 		740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tobihagemann/JOSESwift.git";
+			repositoryURL = "https://github.com/cryptomator/JOSESwift.git";
 			requirement = {
 				kind = exactVersion;
-				version = "2.4.1-cryptomator";
+				version = "3.0.0-cryptomator.2";
 			};
 		};
 		746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {

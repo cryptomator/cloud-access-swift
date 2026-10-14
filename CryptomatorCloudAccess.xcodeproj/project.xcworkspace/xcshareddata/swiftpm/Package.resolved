@@ -1,5 +1,5 @@
 {
-  "originHash" : "7d40c5ee04ee0780e4da7d64e674230a6dd96d41315387a1ec44cd3b40fe3868",
+  "originHash" : "2b80639bc14c548ebea108e8757cfecf889b99e8bfb0131ffa415610d662250f",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -103,10 +103,10 @@
     {
       "identity" : "joseswift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tobihagemann/JOSESwift.git",
+      "location" : "https://github.com/cryptomator/JOSESwift.git",
       "state" : {
-        "revision" : "3544f8117908ef12ea13b1c0927e0e3c0d30ee01",
-        "version" : "2.4.1-cryptomator"
+        "revision" : "01929b53ede10cb20997c91348fcdbcee2223449",
+        "version" : "3.0.0-cryptomator.2"
       }
     },
     {

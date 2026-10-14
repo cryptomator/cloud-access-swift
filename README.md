@@ -422,7 +422,7 @@ Version 4.0.0 is async-only: every asynchronous API uses Swift concurrency. The 
 - `downloadFile` no longer fails before the transfer if an item exists at `localURL`. It throws `CloudProviderError.itemAlreadyExists` after the transfer instead.
 - All providers, the `*Setup` classes, `DropboxAuthenticator`, `GoogleDriveCredential`, `MicrosoftGraphAuthenticator`, `MicrosoftGraphDiscovery` and `PCloudAuthenticator` are `final`.
 - `DropboxClientSetup.oneTimeSetup` is `@Sendable`.
-- `BoxAuthenticator`, `DropboxAuthenticator`, `GoogleDriveAuthenticator`, `MicrosoftGraphAuthenticator`, `PCloudAuthenticator` and the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension are `@MainActor`.
+- `BoxAuthenticator`, `DropboxAuthenticator`, `GoogleDriveAuthenticator`, `MicrosoftGraphAuthenticator`, `PCloudAuthenticator` and the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension are `@MainActor`. `MicrosoftGraphCredential`'s `getUsername()` and `deauthenticate()` are `@MainActor` as well.
 - `DropboxAuthenticator.pendingAuthentication`, `processAuthentication(with:)` and `DropboxAuthenticatorError.noPendingAuthentication` are removed. Pass the redirect URL to `DropboxAuthenticator.handleRedirectURL(_:)` instead of calling `DBClientsManager.handleRedirectURL` yourself.
 - `BoxAuthenticator.authenticate(from:tokenStorage:)` throws errors that left it pending forever before, e.g., `BoxAuthenticatorError.invalidContext`. `DropboxCredential.getUsername()` throws `CloudProviderError.unauthorized` without an authorized client, instead of never returning.
 - `LocalFileSystemProvider` releases its security-scoped access to an item when the operation returns. Before, only `fetchItemMetadata(at:)` released it.

@@ -34,7 +34,7 @@ class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWit
 	}
 
 	override func deauthenticate() async throws {
-		try MicrosoftGraphCloudProviderIntegrationTests.credential.deauthenticate()
+		try await MicrosoftGraphCloudProviderIntegrationTests.credential.deauthenticate()
 	}
 
 	override func createLimitedCloudProvider() async throws -> CloudProvider {

@@ -14,7 +14,7 @@ public enum MicrosoftGraphCredentialError: Error {
 	case noUsername
 }
 
-/// `@unchecked Sendable`: all stored properties are immutable. `authProvider` is only called by the HTTP clients it is handed to, and `clientApplication` only for the account lookups of `getUsername()` and `deauthenticate()`. The class is subclassed in tests.
+/// `@unchecked Sendable`: all stored properties are immutable. `authProvider` is a `Sendable` `MicrosoftGraphAuthenticationProvider`, or a `Sendable` mock in tests. `clientApplication` is only called by `getUsername()` and `deauthenticate()`, which are isolated to the main actor because MSAL doesn't document that it may be called from any thread. The class isn't `final` because tests subclass it.
 public class MicrosoftGraphCredential: @unchecked Sendable {
 	public let identifier: String
 	public let scopes: [String]
@@ -37,6 +37,7 @@ public class MicrosoftGraphCredential: @unchecked Sendable {
 		self.clientApplication = clientApplication
 	}
 
+	@MainActor
 	public func getUsername() throws -> String {
 		let account = try clientApplication.account(forIdentifier: identifier)
 		guard let username = account.username else {
@@ -45,6 +46,7 @@ public class MicrosoftGraphCredential: @unchecked Sendable {
 		return username
 	}
 
+	@MainActor
 	public func deauthenticate() throws {
 		let account = try clientApplication.account(forIdentifier: identifier)
 		try clientApplication.remove(account)

@@ -1057,7 +1057,12 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testThrowsCancellationErrorInCancelledTask() async {
 		await assertThrowsCancellationErrorInCancelledTask(provider)
-		XCTAssertEqual(0, client.propfindRequests.count + client.getRequests.count + client.putRequests.count + client.mkcolRequests.count + client.deleteRequests.count + client.moveRequests.count)
+		XCTAssertTrue(client.propfindRequests.isEmpty)
+		XCTAssertTrue(client.getRequests.isEmpty)
+		XCTAssertTrue(client.putRequests.isEmpty)
+		XCTAssertTrue(client.mkcolRequests.isEmpty)
+		XCTAssertTrue(client.deleteRequests.isEmpty)
+		XCTAssertTrue(client.moveRequests.isEmpty)
 	}
 
 	// MARK: - Internal

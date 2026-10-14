@@ -25,22 +25,22 @@ let swiftSettings: [SwiftSetting] = [
 let package = Package(
 	name: "CryptomatorCloudAccess",
 	platforms: [
-		.iOS(.v16)
+		.iOS(.v17)
 	],
 	products: [
 		.library(name: "CryptomatorCloudAccess", targets: ["CryptomatorCloudAccess"]),
 		.library(name: "CryptomatorCloudAccessCore", targets: ["CryptomatorCloudAccessCore"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "2.9.0")),
+		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.16.0"),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.41.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "2.0.0")),
-		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.9.0")),
-		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.2.0")),
-		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "5.0.0")),
-		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "3.5.0")),
-		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.10.0")),
-		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "2.0.0")),
+		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
+		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.4.0")),
+		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "6.0.0")),
+		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "5.3.1")),
+		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.11.1")),
+		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "3.0.0")),
 		.package(url: "https://github.com/pCloud/pcloud-sdk-swift.git", .upToNextMinor(from: "3.2.0")),
 		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "7.2.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),

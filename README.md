@@ -17,7 +17,7 @@ Continuous integration hosting is provided by [MacStadium](https://www.macstadiu
 
 ## Requirements
 
-- iOS 16.0 or higher
+- iOS 17.0 or higher
 - Swift 6.2 or higher
 
 ## Installation
@@ -409,10 +409,11 @@ This provider uses `NSFileCoordinator` for its operations and supports asynchron
 
 ## Migrating to 4.0.0
 
-Version 4.0.0 is async-only: every asynchronous API uses Swift concurrency. The library is built in Swift 6 language mode and requires Swift 6.2 or higher.
+Version 4.0.0 is async-only: every asynchronous API uses Swift concurrency. The library is built in Swift 6 language mode and requires Swift 6.2 or higher and iOS 17.0 or higher.
 
 - The library no longer depends on [google/promises](https://github.com/google/promises). If your app keeps using it, add the package to your app yourself.
 - The library depends on cryptolib-swift 2.0.0. If your app also depends on cryptolib-swift, update it to 2.0.0.
+- The library depends on AppAuth 3.0.0, GTMAppAuth 6.0.0, GTMSessionFetcher 5.3.1, MSAL 2.16.0 and CocoaLumberjack 3.10.0. If your app also depends on one of them, update it accordingly. With AppAuth 3.0.0, `OIDExternalUserAgentSession.resumeExternalUserAgentFlow(with:)` is deprecated in favor of the throwing `resumeExternalUserAgentFlow(_:)`, e.g., on `GoogleDriveAuthenticator.currentAuthorizationFlow`.
 - Every API that was asynchronous before is `async throws` now, e.g., `WebDAVClient`'s HTTP methods and `getUsername()` of the Box, Dropbox and pCloud credentials. Only the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension is `async` without `throws`. Its overload that takes an `OAuthAuthorizationFlowView` is removed.
 - `CloudProvider` is `Sendable` and its methods are `@concurrent`. Your own implementations must be `Sendable` and should mark their methods `@concurrent` as well.
 - Cancelling the task that calls a `CloudProvider` method now ends the call with `CancellationError`, see [Core](#core).

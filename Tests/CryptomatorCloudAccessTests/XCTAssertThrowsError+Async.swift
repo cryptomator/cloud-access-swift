@@ -9,8 +9,8 @@
 import Foundation
 import XCTest
 
-public func XCTAssertThrowsErrorAsync<T>(
-	_ expression: @autoclosure () async throws -> T,
+public func XCTAssertThrowsErrorAsync(
+	_ expression: @autoclosure () async throws -> some Any,
 	_ message: @autoclosure () -> String = "",
 	file: StaticString = #filePath,
 	line: UInt = #line,

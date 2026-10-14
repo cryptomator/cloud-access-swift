@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-public enum MicrosoftGraphType: Codable, DatabaseValueConvertible {
+public enum MicrosoftGraphType: Codable, DatabaseValueConvertible, Sendable {
 	case oneDrive
 	case sharePoint
 

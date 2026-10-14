@@ -28,9 +28,10 @@ class WebDAVAuthenticatorTests: XCTestCase {
 	}
 
 	func testVerifyClient() async throws {
+		let baseURL: URL = baseURL
 		let optionsResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"]))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == self.baseURL.path else {
+			guard let url = request.url, url.path == baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (optionsResponse, nil)
@@ -39,13 +40,13 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		let propfindData = try getTestData(forResource: "authentication-success", withExtension: "xml")
 		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == self.baseURL.path else {
+			guard let url = request.url, url.path == baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
 
-		try await WebDAVAuthenticator.verifyClient(client: client).async()
+		try await WebDAVAuthenticator.verifyClient(client: client)
 		XCTAssertTrue(client.optionsRequests.contains(baseURL.relativePath))
 		XCTAssertEqual(.zero, client.propfindRequests[baseURL.relativePath])
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)

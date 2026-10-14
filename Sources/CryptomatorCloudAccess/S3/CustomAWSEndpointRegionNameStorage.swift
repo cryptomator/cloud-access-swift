@@ -7,22 +7,22 @@
 //
 
 import Foundation
+import os
 
-class CustomAWSEndpointRegionNameStorage {
+final class CustomAWSEndpointRegionNameStorage: Sendable {
 	static let shared = CustomAWSEndpointRegionNameStorage()
-	private let queue = DispatchQueue(label: "CustomAWSEndpointRegionNameStorage", attributes: .concurrent)
-	private var regionNames = [String: String]()
+	private let regionNames = OSAllocatedUnfairLock(initialState: [String: String]())
 
 	func getRegionName(for hostName: String) -> String? {
-		return queue.sync {
-			regionNames[hostName]
+		return regionNames.withLock {
+			$0[hostName]
 		}
 	}
 
 	func setRegionName(_ regionName: String, for hostName: String) {
-		return queue.sync {
+		return regionNames.withLock {
 			print("setRegionName: \(regionName) for hostName: \(hostName)")
-			regionNames[hostName] = regionName
+			$0[hostName] = regionName
 		}
 	}
 

@@ -11,7 +11,6 @@
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class VaultFormat6CloudProviderMockTests: XCTestCase {
@@ -28,7 +27,7 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 
 	func testVaultRootContainsFiles() async throws {
 		let provider = VaultFormat6CloudProviderMock()
-		let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).async()
+		let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil)
 		XCTAssertEqual(6, cloudItemList.items.count)
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng" }))
@@ -41,9 +40,9 @@ class VaultFormat6CloudProviderMockTests: XCTestCase {
 	func testDir1FileContainsDirId() async throws {
 		let provider = VaultFormat6CloudProviderMock()
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1")).async()
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"))
 		XCTAssertEqual(.file, metadata.itemType)
-		try await provider.downloadFile(from: metadata.cloudPath, to: localURL).async()
+		_ = try await provider.downloadFile(from: metadata.cloudPath, to: localURL)
 		let downloadedContents = try Data(contentsOf: localURL)
 		XCTAssertEqual(Data("dir1-id".utf8), downloadedContents)
 	}

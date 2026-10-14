@@ -7,15 +7,15 @@
 //
 
 import AuthenticationServices
-import BoxSdkGen
+@preconcurrency import BoxSdkGen
 import Foundation
-import Promises
 
 public enum BoxCredentialErrors: Error {
 	case noUsername
 }
 
-public class BoxCredential {
+/// `@unchecked Sendable`: `client` is immutable and each of its requests is an independent async call. The class is subclassed in tests.
+public class BoxCredential: @unchecked Sendable {
 	let client: BoxClient
 
 	init(auth: Authentication) {
@@ -28,46 +28,20 @@ public class BoxCredential {
 		self.init(auth: auth)
 	}
 
-	public func deauthenticate() -> Promise<Void> {
-		let pendingPromise = Promise<Void>.pending()
-		_Concurrency.Task {
-			do {
-				try await self.client.auth.revokeToken(networkSession: nil)
-				pendingPromise.fulfill(())
-			} catch {
-				pendingPromise.reject(error)
-			}
-		}
-		return pendingPromise
+	public func deauthenticate() async throws {
+		try await withBoxSDKCancellationShield { try await self.client.auth.revokeToken(networkSession: nil) }
 	}
 
-	public func getUsername() -> Promise<String> {
-		let pendingPromise = Promise<String>.pending()
-		_Concurrency.Task {
-			do {
-				let user = try await client.users.getUserMe()
-				if let name = user.name {
-					pendingPromise.fulfill(name)
-				} else {
-					pendingPromise.reject(BoxCredentialErrors.noUsername)
-				}
-			} catch {
-				pendingPromise.reject(error)
-			}
+	public func getUsername() async throws -> String {
+		let user = try await withBoxSDKCancellationShield { try await self.client.users.getUserMe() }
+		guard let name = user.name else {
+			throw BoxCredentialErrors.noUsername
 		}
-		return pendingPromise
+		return name
 	}
 
-	public func getUserID() -> Promise<String> {
-		let pendingPromise = Promise<String>.pending()
-		_Concurrency.Task {
-			do {
-				let user = try await client.users.getUserMe()
-				pendingPromise.fulfill(user.id)
-			} catch {
-				pendingPromise.reject(error)
-			}
-		}
-		return pendingPromise
+	public func getUserID() async throws -> String {
+		let user = try await withBoxSDKCancellationShield { try await self.client.users.getUserMe() }
+		return user.id
 	}
 }

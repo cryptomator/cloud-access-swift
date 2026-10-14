@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct CloudItemList {
+public struct CloudItemList: Sendable {
 	public let items: [CloudItemMetadata]
 	public let nextPageToken: String?
 

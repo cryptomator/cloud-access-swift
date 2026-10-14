@@ -3,6 +3,7 @@
 
 # format options
 
+--asynccapturing XCTAssertThrowsErrorAsync
 --closurevoid preserve
 --commas inline
 --ifdef no-indent
@@ -10,7 +11,7 @@
 --indent tab
 --self init-only
 --stripunusedargs closure-only
---swiftversion 5.1
+--swiftversion 6.2
 --tabwidth 4
 
 # rules

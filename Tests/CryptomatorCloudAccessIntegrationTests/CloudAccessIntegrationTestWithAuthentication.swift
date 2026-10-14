@@ -12,178 +12,118 @@ import CryptomatorCloudAccessCore
 import CryptomatorCloudAccess
 #endif
 import XCTest
-@testable import Promises
 
 class CloudAccessIntegrationTestWithAuthentication: CloudAccessIntegrationTest {
-	func deauthenticate() -> Promise<Void> {
+	func deauthenticate() async throws {
 		fatalError("Not implemented")
 	}
 
-	func testFetchItemMetadataWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized fetchItemMetadata")
+	func testFetchItemMetadataWithUnauthorizedError() async throws {
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
-		deauthenticate().then {
-			self.provider.fetchItemMetadata(at: cloudPath)
-		}.then { _ in
-			XCTFail("fetchItemMetadata fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: cloudPath), "fetchItemMetadata fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testFetchItemListWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized fetchItemList")
+	func testFetchItemListWithUnauthorizedError() async throws {
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("testFolder")
-		deauthenticate().then {
-			self.provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil)
-		}.then { _ in
-			XCTFail("fetchItemList fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil), "fetchItemList fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDownloadFileWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized downloadFile")
+	func testDownloadFileWithUnauthorizedError() async throws {
 		let cloudPath = type(of: self).integrationTestRootCloudPath.appendingPathComponent("test 0.txt")
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		deauthenticate().then {
-			self.provider.downloadFile(from: cloudPath, to: localURL)
-		}.then { _ in
-			XCTFail("downloadFile fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: cloudPath, to: localURL), "downloadFile fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testUploadFileWithUnauthorizedError() throws {
-		let expectation = XCTestExpectation(description: "unauthorized uploadFile")
+	func testUploadFileWithUnauthorizedError() async throws {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let testContent = CloudAccessIntegrationTest.testContentForFilesInTestFolder
 		try testContent.write(to: localURL, atomically: true, encoding: .utf8)
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/test 5.txt")
-		deauthenticate().then {
-			self.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false)
-		}.then { _ in
-			XCTFail("uploadFile fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false), "uploadFile fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testCreateFolderWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized createFolder")
+	func testCreateFolderWithUnauthorizedError() async throws {
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
-		deauthenticate().then {
-			self.provider.createFolder(at: cloudPath)
-		}.then { _ in
-			XCTFail("createFolder fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: cloudPath), "createFolder fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFileWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized deleteFile")
+	func testDeleteFileWithUnauthorizedError() async throws {
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
-		deauthenticate().then {
-			self.provider.deleteFile(at: cloudPath)
-		}.then { _ in
-			XCTFail("deleteFile fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: cloudPath), "deleteFile fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testDeleteFolderWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized deleteFolder")
+	func testDeleteFolderWithUnauthorizedError() async throws {
 		let cloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
-		deauthenticate().then {
-			self.provider.deleteFolder(at: cloudPath)
-		}.then { _ in
-			XCTFail("deleteFolder fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: cloudPath), "deleteFolder fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFileWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized moveFile")
+	func testMoveFileWithUnauthorizedError() async throws {
 		let sourceCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		let targetCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolderAA")
-		deauthenticate().then {
-			self.provider.moveFile(from: sourceCloudPath, to: targetCloudPath)
-		}.then { _ in
-			XCTFail("moveFile fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: sourceCloudPath, to: targetCloudPath), "moveFile fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
 	}
 
-	func testMoveFolderWithUnauthorizedError() {
-		let expectation = XCTestExpectation(description: "unauthorized moveFolder")
+	func testMoveFolderWithUnauthorizedError() async throws {
 		let sourceCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolder")
 		let targetCloudPath = CloudAccessIntegrationTest.integrationTestRootCloudPath.appendingPathComponent("testFolder/EmptySubfolder/unauthorizedFolderAA")
-		deauthenticate().then {
-			self.provider.moveFolder(from: sourceCloudPath, to: targetCloudPath)
-		}.then { _ in
-			XCTFail("moveFolder fulfilled without authentication")
-		}.catch { error in
+		try await deauthenticate()
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: sourceCloudPath, to: targetCloudPath), "moveFolder fulfilled without authentication") { error in
 			guard case CloudProviderError.unauthorized = error else {
 				XCTFail(error.localizedDescription)
 				return
 			}
-		}.always {
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 60.0)
+	}
+
+	func testOperationsInCancelledTaskThrowCancellationError() async throws {
+		try await assertOperationsThrowCancellationErrorInCancelledTask()
 	}
 }

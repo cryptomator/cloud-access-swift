@@ -6,15 +6,14 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
-import MSGraphClientModels
+@preconcurrency import MSGraphClientModels
 
 extension MSGraphDriveItem {
 	func getCloudItemType() -> CloudItemType {
-		let folder: MSGraphFolder?
-		if let remoteItem = remoteItem {
-			folder = remoteItem.folder
+		let folder: MSGraphFolder? = if let remoteItem {
+			remoteItem.folder
 		} else {
-			folder = self.folder
+			self.folder
 		}
 		if folder != nil {
 			return .folder

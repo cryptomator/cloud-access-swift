@@ -9,7 +9,6 @@
 import CommonCrypto
 import Foundation
 import GRDB
-import Promises
 
 struct VaultFormat6ShorteningResult {
 	let cloudPath: CloudPath
@@ -39,7 +38,7 @@ private extension Array {
 	}
 }
 
-class VaultFormat6ShortenedNameCache {
+final class VaultFormat6ShortenedNameCache: Sendable {
 	private static let threshold = 129
 	private static let lngSuffix = ".lng"
 
@@ -90,18 +89,17 @@ class VaultFormat6ShortenedNameCache {
 	 - Parameter lngFileName: The name of a `.lng` file, whose original name should be loaded.
 	 - Returns: Either `shortenedPath` if no shortening was applied or the original ("inflated") path.
 	 */
-	func getOriginalPath(_ shortenedPath: CloudPath, lngFileLoader loadLngFile: (_ lngFileName: String) -> Promise<Data>) -> Promise<CloudPath> {
+	func getOriginalPath(_ shortenedPath: CloudPath, lngFileLoader loadLngFile: @Sendable (_ lngFileName: String) async throws -> Data) async throws -> CloudPath {
 		precondition(shortenedPath.pathComponents.count <= ciphertextNameCompIdx + 1)
 		if shortenedPath.pathComponents.count <= ciphertextNameCompIdx {
-			return Promise(shortenedPath)
+			return shortenedPath
 		}
 		let shortenedName = shortenedPath.lastPathComponent
 		if shortenedName.hasSuffix(VaultFormat6ShortenedNameCache.lngSuffix) {
-			return inflateName(shortenedName, lngFileLoader: loadLngFile).then { originalName in
-				return self.inflatePath(shortenedPath, with: originalName)
-			}
+			let originalName = try await inflateName(shortenedName, lngFileLoader: loadLngFile)
+			return inflatePath(shortenedPath, with: originalName)
 		} else {
-			return Promise(shortenedPath)
+			return shortenedPath
 		}
 	}
 
@@ -118,15 +116,14 @@ class VaultFormat6ShortenedNameCache {
 		return originalPath.deletingLastPathComponent().appendingPathComponent(shortenedName)
 	}
 
-	private func inflateName(_ shortenedName: String, lngFileLoader loadLngFile: (_ lngFileName: String) -> Promise<Data>) -> Promise<String> {
+	private func inflateName(_ shortenedName: String, lngFileLoader loadLngFile: @Sendable (_ lngFileName: String) async throws -> Data) async throws -> String {
 		if let originalName = try? getCached(shortenedName) {
-			return Promise(originalName)
+			return originalName
 		} else {
-			return loadLngFile(shortenedName).then { data -> String in
-				let originalName = String(data: data, encoding: .utf8)!
-				try? self.addToCache(shortenedName, originalName: originalName)
-				return originalName
-			}
+			let data = try await loadLngFile(shortenedName)
+			let originalName = String(data: data, encoding: .utf8)!
+			try? addToCache(shortenedName, originalName: originalName)
+			return originalName
 		}
 	}
 

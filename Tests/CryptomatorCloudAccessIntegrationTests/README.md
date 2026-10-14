@@ -95,7 +95,7 @@ func extractMicrosoftGraphRefreshToken() {
 To get the access token for pCloud, extract it from the `PCloudCredential` after a successful login. The credential's `user` property has public access to the token and API host name. The following can be added to `CloudAuthenticator.authenticatePCloud` in the iOS app:
 
 ```swift
-// Inside the .then block, `credential` is a PCloudCredential
+// After `try await PCloudAuthenticator.authenticate(from:)` returns, `credential` is a PCloudCredential
 print("PCLOUD_ACCESS_TOKEN=\(credential.user.token)")
 print("PCLOUD_HTTP_API_HOST_NAME=\(credential.user.httpAPIHostName)")
 ```
@@ -125,9 +125,9 @@ class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTest
     super.setUp()
   }
 
-  override func setUpWithError() throws {
-    // It is very important to call super.setUpWithError(), otherwise errors from the IntegrationTest once setup will not be considered correctly.
-    try super.setUpWithError()
+  override func setUp() async throws {
+    // It is very important to call `try await super.setUp()`, otherwise errors from the one-time class setUp() are ignored.
+    try await super.setUp()
     super.provider = CloudProviderNameCloudProvider()
   }
 }
@@ -141,7 +141,7 @@ The template from above can still be used. Additionally, the following function 
 
 ```swift
 class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-  override func deauthenticate() -> Promise<Void>{
+  override func deauthenticate() async throws {
     // Invalidate or deauthenticate the credential or client used by the CloudProvider.
   }
 }

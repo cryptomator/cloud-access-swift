@@ -6,31 +6,14 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCryptoLib
 import Foundation
-@testable import CryptomatorCryptoLib
-
-class CryptoSupportMock: CryptoSupport {
-	override func createRandomBytes(size: Int) throws -> [UInt8] {
-		return [UInt8](repeating: 0xF0, count: size)
-	}
-}
-
-class ContentCryptorMock: ContentCryptor {
-	let nonceLen = 0
-	let tagLen = 0
-
-	func encrypt(_ chunk: [UInt8], key: [UInt8], nonce: [UInt8], ad: [UInt8]) throws -> [UInt8] {
-		return []
-	}
-
-	func decrypt(_ chunk: [UInt8], key: [UInt8], ad: [UInt8]) throws -> [UInt8] {
-		return []
-	}
-
-	func ad(chunkNumber: UInt64, headerNonce: [UInt8]) -> [UInt8] {
-		return []
-	}
-}
+import os
+#if canImport(CryptomatorCloudAccessCore)
+@testable import CryptomatorCloudAccessCore
+#else
+@testable import CryptomatorCloudAccess
+#endif
 
 extension Dictionary where Value: Equatable {
 	func someKey(for value: Value) -> Key? {
@@ -42,19 +25,44 @@ enum CryptorMockError: Error {
 	case notMocked
 }
 
-public class CryptorMock: Cryptor {
+/// `@unchecked Sendable`: `dirIds`, `fileNames`, `contents` and `fileHeaderSize` are immutable, everything else is protected by `hooks`. The class is subclassed by the vault format mocks.
+public class CryptorMock: VaultCryptor, @unchecked Sendable {
+	private struct Hooks {
+		var decryptFileNameError: Error?
+		var encryptContentHook: (@Sendable (_ cleartextURL: URL, _ ciphertextURL: URL) throws -> Void)?
+		var decryptContentHook: (@Sendable (_ ciphertextURL: URL, _ cleartextURL: URL) throws -> Void)?
+	}
+
 	let dirIds: [String: String]
 	let fileNames: [String: String]
 	let contents: [String: String]
+	public let fileHeaderSize = 0
+	private let hooks = OSAllocatedUnfairLock(initialState: Hooks())
 
-	init(masterkey: Masterkey, dirIds: [String: String], fileNames: [String: String], contents: [String: String]) {
+	var decryptFileNameError: Error? {
+		get { hooks.withLock { $0.decryptFileNameError } }
+		set { hooks.withLock { $0.decryptFileNameError = newValue } }
+	}
+
+	/// Runs in the calling task after the ciphertext was written.
+	var encryptContentHook: (@Sendable (_ cleartextURL: URL, _ ciphertextURL: URL) throws -> Void)? {
+		get { hooks.withLock { $0.encryptContentHook } }
+		set { hooks.withLock { $0.encryptContentHook = newValue } }
+	}
+
+	/// Runs in the calling task after the cleartext was written.
+	var decryptContentHook: (@Sendable (_ ciphertextURL: URL, _ cleartextURL: URL) throws -> Void)? {
+		get { hooks.withLock { $0.decryptContentHook } }
+		set { hooks.withLock { $0.decryptContentHook = newValue } }
+	}
+
+	init(dirIds: [String: String], fileNames: [String: String], contents: [String: String]) {
 		self.dirIds = dirIds
 		self.fileNames = fileNames
 		self.contents = contents
-		super.init(masterkey: masterkey, cryptoSupport: CryptoSupportMock(), contentCryptor: ContentCryptorMock())
 	}
 
-	override public func encryptDirId(_ dirId: Data) throws -> String {
+	public func encryptDirId(_ dirId: Data) throws -> String {
 		if let dirId = dirIds[String(data: dirId, encoding: .utf8)!] {
 			return dirId
 		} else {
@@ -62,7 +70,7 @@ public class CryptorMock: Cryptor {
 		}
 	}
 
-	override public func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws -> String {
+	public func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding) throws -> String {
 		if let ciphertextName = fileNames.someKey(for: cleartextName) {
 			return ciphertextName
 		} else {
@@ -70,7 +78,10 @@ public class CryptorMock: Cryptor {
 		}
 	}
 
-	override public func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding = .base64url) throws -> String {
+	public func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding) throws -> String {
+		if let decryptFileNameError {
+			throw decryptFileNameError
+		}
 		if let cleartextName = fileNames[ciphertextName] {
 			return cleartextName
 		} else {
@@ -78,30 +89,36 @@ public class CryptorMock: Cryptor {
 		}
 	}
 
-	override public func encryptContent(from cleartextURL: URL, to ciphertextURL: URL) throws {
+	@concurrent
+	public func encryptContent(from cleartextURL: URL, to ciphertextURL: URL, progress: Progress?) async throws {
 		let cleartext = try String(contentsOf: cleartextURL, encoding: .utf8)
 		if let ciphertext = contents.someKey(for: cleartext) {
 			try ciphertext.write(to: ciphertextURL, atomically: true, encoding: .utf8)
 		} else {
 			try "some-encrypted-content".write(to: ciphertextURL, atomically: true, encoding: .utf8)
 		}
+		progress?.completedUnitCount = progress?.totalUnitCount ?? 0
+		try encryptContentHook?(cleartextURL, ciphertextURL)
 	}
 
-	override public func decryptContent(from ciphertextURL: URL, to cleartextURL: URL) throws {
+	@concurrent
+	public func decryptContent(from ciphertextURL: URL, to cleartextURL: URL, progress: Progress?) async throws {
 		let ciphertext = try String(contentsOf: ciphertextURL, encoding: .utf8)
 		if let cleartext = contents[ciphertext] {
 			try cleartext.write(to: cleartextURL, atomically: true, encoding: .utf8)
 		} else {
 			throw CryptorMockError.notMocked
 		}
+		progress?.completedUnitCount = progress?.totalUnitCount ?? 0
+		try decryptContentHook?(ciphertextURL, cleartextURL)
 	}
 
-	override public func calculateCiphertextSize(_ cleartextSize: Int) -> Int {
+	public func calculateCiphertextSize(_ cleartextSize: Int) -> Int {
 		precondition(cleartextSize >= 0, "expected cleartextSize to be positive, but was \(cleartextSize)")
 		return 0
 	}
 
-	override public func calculateCleartextSize(_ ciphertextSize: Int) throws -> Int {
+	public func calculateCleartextSize(_ ciphertextSize: Int) throws -> Int {
 		precondition(ciphertextSize >= 0, "expected ciphertextSize to be positive, but was \(ciphertextSize)")
 		return 0
 	}

@@ -8,7 +8,6 @@
 
 import CryptomatorCryptoLib
 import Foundation
-import Promises
 
 public enum VaultProviderFactoryError: Error {
 	case unsupportedVaultConfig

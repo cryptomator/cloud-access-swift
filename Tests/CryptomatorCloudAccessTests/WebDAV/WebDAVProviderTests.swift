@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -48,7 +49,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).async()
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
 		XCTAssertEqual(.zero, client.propfindRequests["Documents/About.txt"])
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
@@ -69,7 +70,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
@@ -84,10 +85,20 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))) { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
+		}
+	}
+
+	func testFetchItemMetadataWithCancelledRequest() async throws {
+		URLProtocolMock.requestHandler.append({ _ in
+			throw URLError(.cancelled)
+		})
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))) { error in
+			XCTAssertTrue(error is CancellationError)
 		}
 	}
 
@@ -103,7 +114,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).async()
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
 		XCTAssertEqual(.zero, client.propfindRequests["Documents/About.txt"])
 		XCTAssertEqual("About.txt", metadata.name)
 		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
@@ -114,16 +125,17 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemList() async throws {
+		let baseURL: URL = baseURL
 		let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
 		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == self.baseURL.path else {
+			guard let url = request.url, url.path == baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
 		})
 
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).async()
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 		XCTAssertEqual(.one, client.propfindRequests["."])
 		XCTAssertEqual(5, itemList.items.count)
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Documents" }))
@@ -135,15 +147,16 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testFetchItemListWithNotFoundError() async throws {
+		let baseURL: URL = baseURL
 		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == self.baseURL.path else {
+			guard let url = request.url, url.path == baseURL.path else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
 			XCTAssertEqual(.one, self.client.propfindRequests["."])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
@@ -162,7 +175,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt"), withPageToken: nil).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt"), withPageToken: nil)) { error in
 			XCTAssertEqual(.one, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemTypeMismatch, error as? CloudProviderError)
@@ -176,7 +189,7 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
 			XCTAssertEqual(.one, unauthorizedClient.propfindRequests["."])
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
@@ -186,11 +199,12 @@ class WebDAVProviderTests: XCTestCase {
 	func testDownloadFile() async throws {
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let progress = Progress(totalUnitCount: 1)
 
 		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
 		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
+			guard let url = request.url, url.path == responseURL.path, request.httpMethod == "PROPFIND" else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (propfindResponse, propfindData)
@@ -199,119 +213,164 @@ class WebDAVProviderTests: XCTestCase {
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
 		let getResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
+			guard let url = request.url, url.path == responseURL.path, request.httpMethod == "GET" else {
 				throw URLProtocolMockError.unexpectedRequest
 			}
 			return (getResponse, getData)
 		})
 
-		try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()
+		let metadata = try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil)
 		XCTAssertEqual(.zero, client.propfindRequests["Documents/About.txt"])
 		XCTAssertTrue(client.getRequests.contains("Documents/About.txt"))
 		let expectedData = try getTestData(forResource: "item-data", withExtension: "txt")
 		let actualData = try Data(contentsOf: localURL)
 		XCTAssertEqual(expectedData, actualData)
+		XCTAssertEqual("About.txt", metadata.name)
+		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
+		XCTAssertEqual(.file, metadata.itemType)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
+		XCTAssertEqual(expectedData.count, metadata.size)
+		XCTAssertEqual(1, progress.fractionCompleted)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	/// Uses `XCTestExpectation` instead of `async + .async()` because the buggy path leaves the
-	/// promise pending; awaiting it would hang the test runner instead of producing a timeout failure.
-	func testDownloadFileDoesNotHangWhenOnTaskCreationResumesBeforeRegistration() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+	func testDownloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+		let provider: WebDAVProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-
-		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, propfindData)
-		})
-
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let getResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (getResponse, getData)
+		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
+		try enqueueResponse(statusCode: 200, data: getData, for: responseURL, onRequest: {
+			XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 		})
 
-		let expectation = expectation(description: "downloadFile resolves")
-		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
-			task?.resume()
-			// Force the delegate's transfer-completion callback to run before `onTaskCreation` returns:
-			// on the buggy ordering, registration happens after the callback already missed its dict entry.
-			self.assertDelegateFired(delegateFired)
-		}).then {
-			expectation.fulfill()
-		}.catch { error in
-			XCTFail("downloadFile failed: \(error)")
-			expectation.fulfill()
+		let download = Task {
+			try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: { task in
+				taskStates.withLock { $0.append(task.state) }
+				try? await Task.sleep(for: .milliseconds(100))
+				onTaskCreationReturned.withLock { $0 = true }
+			})
 		}
-		wait(for: [expectation], timeout: 2.0)
+		_ = try await value(of: download)
 
-		let expectedData = try getTestData(forResource: "item-data", withExtension: "txt")
-		let actualData = try Data(contentsOf: localURL)
-		XCTAssertEqual(expectedData, actualData)
+		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
+		XCTAssertEqual(getData, try Data(contentsOf: localURL))
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	/// See the rationale on the download variant for why this test uses `XCTestExpectation`.
-	func testUploadFileDoesNotHangWhenOnTaskCreationResumesBeforeRegistration() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+	func testUploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+		let provider: WebDAVProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
-
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, nil)
+		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+		try enqueueResponse(statusCode: 404, for: responseURL)
+		try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: {
+			XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 		})
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 
-		let putResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (putResponse, Data())
-		})
-
-		let propfindResponseAfterUpload = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponseAfterUpload, propfindDataAfterUpload)
-		})
-
-		let expectation = expectation(description: "uploadFile resolves")
-		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
-			task?.resume()
-			// See the download variant for why this wait is needed.
-			self.assertDelegateFired(delegateFired)
-		}).then { _ in
-			expectation.fulfill()
-		}.catch { error in
-			XCTFail("uploadFile failed: \(error)")
-			expectation.fulfill()
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
+				taskStates.withLock { $0.append(task.state) }
+				try? await Task.sleep(for: .milliseconds(100))
+				onTaskCreationReturned.withLock { $0 = true }
+			})
 		}
-		wait(for: [expectation], timeout: 2.0)
+		_ = try await value(of: upload)
+
+		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDownloadFileWithCancellationDuringOnTaskCreation() async throws {
+		let provider: WebDAVProvider = provider
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-data", withExtension: "txt"), for: responseURL)
+
+		let download = Task {
+			try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
+				withUnsafeCurrentTask { $0?.cancel() }
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
+			XCTAssertTrue(error is CancellationError)
+		}
+
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled download must not be resumed")
+		URLProtocolMock.requestHandler.removeAll()
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	func testUploadFileWithCancellationDuringOnTaskCreation() async throws {
+		let provider: WebDAVProvider = provider
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+		try enqueueResponse(statusCode: 404, for: responseURL)
+		try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
+
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+				withUnsafeCurrentTask { $0?.cancel() }
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
+			XCTAssertTrue(error is CancellationError)
+		}
+
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled upload must not be resumed")
+		URLProtocolMock.requestHandler.removeAll()
+	}
+
+	/// A task that is cancelled before the session resumed it terminates without the session having registered it, so the session has to complete the call itself.
+	func testDownloadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
+		let provider: WebDAVProvider = provider
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
+
+		let download = Task {
+			try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: { task in
+				task.cancel()
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
+			XCTAssertTrue(error is CancellationError)
+		}
+
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	/// See the rationale on the download variant.
+	func testUploadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
+		let provider: WebDAVProvider = provider
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+		try enqueueResponse(statusCode: 404, for: responseURL)
+
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
+				task.cancel()
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
+			XCTAssertTrue(error is CancellationError)
+		}
 
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	/// Same registration race that the happy-path test covers, exercised on the auth-rejection
-	/// branch of `urlSession(_:task:didReceive challenge:_:)`. See the download variant for why
-	/// this test uses `XCTestExpectation`.
-	func testDownloadFileRejectsWithUnauthorizedWhenAuthChallengeFiresAfterOnTaskCreationResumes() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider(urlProtocolMock: URLProtocolSequenceMock.self)
+	/// The rejected authentication challenge must not end the call: the session still uses the task until its terminal delegate call.
+	func testDownloadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
+		let (gatedProvider, delegate) = try makeGatedProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
@@ -322,26 +381,26 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolSequenceMock.steps.append(.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)))
 
-		let expectation = expectation(description: "downloadFile rejects")
-		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
-			task?.resume()
-			// See the happy-path download variant; here the wait gates on the auth-rejection branch.
-			self.assertDelegateFired(delegateFired)
-		}).then {
-			XCTFail("downloadFile should have failed with unauthorized")
-			expectation.fulfill()
-		}.catch { error in
-			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
-			expectation.fulfill()
+		let returned = XCTestExpectation(description: "downloadFile returned before the task completed")
+		returned.isInverted = true
+		let download = Task {
+			defer { returned.fulfill() }
+			return try await gatedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)
 		}
-		wait(for: [expectation], timeout: 2.0)
+		await fulfillment(of: [delegate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [returned], timeout: 0.2)
+		delegate.completionGate.signal()
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
+			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
+		}
 
 		XCTAssertTrue(URLProtocolSequenceMock.steps.isEmpty)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
 	}
 
-	/// See the rationale on the download auth variant.
-	func testUploadFileRejectsWithUnauthorizedWhenAuthChallengeFiresAfterOnTaskCreationResumes() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider(urlProtocolMock: URLProtocolSequenceMock.self)
+	/// See the rationale on the download variant.
+	func testUploadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
+		let (gatedProvider, delegate) = try makeGatedProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -352,128 +411,64 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		URLProtocolSequenceMock.steps.append(.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)))
 
-		let expectation = expectation(description: "uploadFile rejects")
-		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
-			task?.resume()
-			// See the download auth variant.
-			self.assertDelegateFired(delegateFired)
-		}).then { _ in
-			XCTFail("uploadFile should have failed with unauthorized")
-			expectation.fulfill()
-		}.catch { error in
-			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
-			expectation.fulfill()
+		let returned = XCTestExpectation(description: "uploadFile returned before the task completed")
+		returned.isInverted = true
+		let upload = Task {
+			defer { returned.fulfill() }
+			return try await gatedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)
 		}
-		wait(for: [expectation], timeout: 2.0)
+		await fulfillment(of: [delegate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [returned], timeout: 0.2)
+		delegate.completionGate.signal()
+		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
+			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
+		}
 
 		XCTAssertTrue(URLProtocolSequenceMock.steps.isEmpty)
 	}
 
-	/// Same registration race exercised on the transport-failure branch of `didCompleteWithError`.
-	/// See the download variant for why this test uses `XCTestExpectation`.
-	func testDownloadFileRejectsWithTransportErrorAfterOnTaskCreationResumes() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+	func testDownloadFileWithTransportError() async throws {
+		let provider: WebDAVProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-
-		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, propfindData)
-		})
-
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 		URLProtocolMock.requestHandler.append({ _ in
 			throw URLProtocolMockError.simulatedTransportFailure
 		})
 
-		let expectation = expectation(description: "downloadFile rejects")
-		signalingProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, onTaskCreation: { task in
-			task?.resume()
-			// See the happy-path download variant; here the wait gates on the transport-failure branch.
-			self.assertDelegateFired(delegateFired)
-		}).then {
-			XCTFail("downloadFile should have failed")
-			expectation.fulfill()
-		}.catch { error in
+		let download = Task {
+			try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
 			// Transport failures must not be silently mapped to a `CloudProviderError` — that would
 			// hide the actual failure from callers. The exact wrapping URLSession applies to the
 			// `URLProtocol`-thrown error is opaque, so we assert the regression of interest.
 			XCTAssertNil(error as? CloudProviderError, "Transport failure was unexpectedly mapped: \(error)")
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 2.0)
 
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
 	}
 
-	/// See the rationale on the download transport-failure variant.
-	func testUploadFileRejectsWithTransportErrorAfterOnTaskCreationResumes() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider()
+	func testUploadFileWithTransportError() async throws {
+		let provider: WebDAVProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
-
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, nil)
-		})
-
+		try enqueueResponse(statusCode: 404, for: responseURL)
 		URLProtocolMock.requestHandler.append({ _ in
 			throw URLProtocolMockError.simulatedTransportFailure
 		})
 
-		let expectation = expectation(description: "uploadFile rejects")
-		signalingProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, onTaskCreation: { task in
-			task?.resume()
-			// See the download transport-failure variant.
-			self.assertDelegateFired(delegateFired)
-		}).then { _ in
-			XCTFail("uploadFile should have failed")
-			expectation.fulfill()
-		}.catch { error in
-			// See the download transport-failure variant for why we assert "not a CloudProviderError"
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
+			// See the download variant for why we assert "not a CloudProviderError"
 			// rather than equality against `URLProtocolMockError.simulatedTransportFailure`.
 			XCTAssertNil(error as? CloudProviderError, "Transport failure was unexpectedly mapped: \(error)")
-			expectation.fulfill()
 		}
-		wait(for: [expectation], timeout: 2.0)
 
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// Verifies the load-bearing `PROPFIND`-skip behavior in `SignalingWebDAVClientURLSessionDelegate`.
-	/// Without this guard, the regression tests above would silently turn into non-reproducers
-	/// because the transfer's `onTaskCreation` wait would consume a stale `PROPFIND` signal before
-	/// the registration race window opens.
-	func testSignalingDelegateDoesNotSignalOnPropfindCompletion() throws {
-		let (signalingProvider, delegateFired) = try makeSignalingProvider()
-		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
-
-		let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == responseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, propfindData)
-		})
-
-		let expectation = expectation(description: "fetchItemMetadata resolves")
-		signalingProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")).then { _ in
-			expectation.fulfill()
-		}.catch { error in
-			XCTFail("fetchItemMetadata failed: \(error)")
-			expectation.fulfill()
-		}
-		wait(for: [expectation], timeout: 2.0)
-
-		XCTAssertEqual(.timedOut, delegateFired.wait(timeout: .now() + 0.1), "PROPFIND must not signal the semaphore")
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
@@ -498,12 +493,15 @@ class WebDAVProviderTests: XCTestCase {
 			return (getResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()) { error in
+		let progress = Progress(totalUnitCount: 1)
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
 		}
+		XCTAssertLessThan(progress.fractionCompleted, 1)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
 	}
 
 	func testDownloadFileWithAlreadyExistsError() async throws {
@@ -529,7 +527,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (getResponse, getData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.getRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -550,7 +548,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.getRequests.count)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -567,7 +565,7 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)) { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, unauthorizedClient.getRequests.count)
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
@@ -606,7 +604,8 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
 
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()
+		let progress = Progress(totalUnitCount: 1)
+		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 		XCTAssertEqual(.zero, client.propfindRequests["Documents/About.txt"])
 		XCTAssertTrue(client.putRequests.contains("Documents/About.txt"))
 		XCTAssertEqual("About.txt", metadata.name)
@@ -614,6 +613,54 @@ class WebDAVProviderTests: XCTestCase {
 		XCTAssertEqual(.file, metadata.itemType)
 		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
 		XCTAssertEqual(1074, metadata.size)
+		XCTAssertEqual(1, progress.fractionCompleted)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// The upload is committed once the `PUT` request was sent, so a cancellation after that must not hide its result.
+	func testUploadFileWithCancellationDuringTransfer() async throws {
+		let provider: WebDAVProvider = provider
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+		let progress = Progress(totalUnitCount: 1)
+		let putStarted = XCTestExpectation(description: "PUT request started")
+		let putGate = DispatchSemaphore(value: 0)
+		try enqueueResponse(statusCode: 404, for: responseURL)
+		try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: {
+			putStarted.fulfill()
+			_ = putGate.wait(timeout: .now() + 2.0)
+		})
+		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
+
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+		}
+		await fulfillment(of: [putStarted], timeout: 2.0)
+		XCTAssertLessThan(progress.fractionCompleted, 1)
+		upload.cancel()
+		putGate.signal()
+		let metadata = try await value(of: upload)
+
+		XCTAssertEqual("About.txt", metadata.name)
+		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
+		XCTAssertEqual(Date.date(fromRFC822: "Wed, 19 Feb 2020 10:24:12 GMT"), metadata.lastModifiedDate)
+		XCTAssertEqual(1, progress.fractionCompleted)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testUploadFileWithQuotaInsufficientError() async throws {
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+		let progress = Progress(totalUnitCount: 1)
+		try enqueueResponse(statusCode: 404, for: responseURL)
+		try enqueueResponse(statusCode: 507, for: responseURL)
+
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)) { error in
+			XCTAssertEqual(CloudProviderError.quotaInsufficient, error as? CloudProviderError)
+		}
+		XCTAssertLessThan(progress.fractionCompleted, 1)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
@@ -649,7 +696,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponseAfterUpload, propfindDataAfterUpload)
 		})
 
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).async()
+		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true)
 		XCTAssertEqual(.zero, client.propfindRequests["Documents/About.txt"])
 		XCTAssertTrue(client.putRequests.contains("Documents/About.txt"))
 		XCTAssertEqual("About.txt", metadata.name)
@@ -662,7 +709,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testUploadFileWithNotFoundError() async throws {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true)) { error in
 			XCTAssertEqual(0, self.client.propfindRequests.count)
 			XCTAssertEqual(0, self.client.putRequests.count)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -684,7 +731,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.putRequests.count)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -710,7 +757,7 @@ class WebDAVProviderTests: XCTestCase {
 			throw putError
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)) { error in
 			XCTAssertEqual(CloudProviderError.itemTypeMismatch, error as? CloudProviderError)
 		}
 	}
@@ -729,7 +776,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (propfindResponse, propfindData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, self.client.putRequests.count)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -757,7 +804,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (putResponse, nil)
 		})
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -785,7 +832,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (putResponse, nil)
 		})
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)) { error in
 			XCTAssertEqual(.zero, self.client.propfindRequests["Documents/About.txt"])
 			XCTAssertTrue(self.client.putRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
@@ -803,7 +850,7 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)) { error in
 			XCTAssertEqual(.zero, unauthorizedClient.propfindRequests["Documents/About.txt"])
 			XCTAssertEqual(0, unauthorizedClient.putRequests.count)
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
@@ -821,7 +868,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (mkcolResponse, nil)
 		})
-		try await provider.createFolder(at: CloudPath("/foo")).async()
+		try await provider.createFolder(at: CloudPath("/foo"))
 		XCTAssertTrue(client.mkcolRequests.contains("foo"))
 	}
 
@@ -835,7 +882,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (mkcolResponse, nil)
 		})
-		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo"))) { error in
 			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
@@ -852,7 +899,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (mkcolResponse, nil)
 		})
-		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo"))) { error in
 			XCTAssertTrue(self.client.mkcolRequests.contains("foo"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.parentFolderDoesNotExist, error as? CloudProviderError)
@@ -867,7 +914,7 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.createFolder(at: CloudPath("/foo")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.createFolder(at: CloudPath("/foo"))) { error in
 			XCTAssertTrue(unauthorizedClient.mkcolRequests.contains("foo"))
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
@@ -884,7 +931,7 @@ class WebDAVProviderTests: XCTestCase {
 			}
 			return (deleteResponse, nil)
 		})
-		try await provider.deleteFile(at: CloudPath("/Documents/About.txt")).async()
+		try await provider.deleteFile(at: CloudPath("/Documents/About.txt"))
 		XCTAssertTrue(client.deleteRequests.contains("Documents/About.txt"))
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
@@ -900,7 +947,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (deleteResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/Documents/About.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/Documents/About.txt"))) { error in
 			XCTAssertTrue(self.client.deleteRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
@@ -915,7 +962,7 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.deleteFile(at: CloudPath("/Documents/About.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.deleteFile(at: CloudPath("/Documents/About.txt"))) { error in
 			XCTAssertTrue(unauthorizedClient.deleteRequests.contains("Documents/About.txt"))
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
@@ -933,7 +980,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (moveResponse, nil)
 		})
 
-		try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()
+		try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))
 		XCTAssertEqual("Documents/Foobar.txt", client.moveRequests["Documents/About.txt"])
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
@@ -949,7 +996,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (moveResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
@@ -968,7 +1015,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (moveResponse, moveData)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
@@ -986,7 +1033,7 @@ class WebDAVProviderTests: XCTestCase {
 			return (moveResponse, nil)
 		})
 
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
 			XCTAssertEqual("Documents/Foobar.txt", self.client.moveRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 			XCTAssertEqual(CloudProviderError.parentFolderDoesNotExist, error as? CloudProviderError)
@@ -1001,11 +1048,16 @@ class WebDAVProviderTests: XCTestCase {
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 		URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
-		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await unauthorizedProvider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
 			XCTAssertEqual("Documents/Foobar.txt", unauthorizedClient.moveRequests["Documents/About.txt"])
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
+	}
+
+	func testThrowsCancellationErrorInCancelledTask() async {
+		await assertThrowsCancellationErrorInCancelledTask(provider)
+		XCTAssertEqual(0, client.propfindRequests.count + client.getRequests.count + client.putRequests.count + client.mkcolRequests.count + client.deleteRequests.count + client.moveRequests.count)
 	}
 
 	// MARK: - Internal
@@ -1018,62 +1070,50 @@ class WebDAVProviderTests: XCTestCase {
 		return try Data(contentsOf: fileURL)
 	}
 
-	private func makeSignalingProvider(urlProtocolMock: AnyClass = URLProtocolMock.self) throws -> (WebDAVProvider, DispatchSemaphore) {
-		let signal = DispatchSemaphore(value: 0)
+	private func enqueueResponse(statusCode: Int, data: Data? = nil, for responseURL: URL, onRequest: @escaping @Sendable () -> Void = {}) throws {
+		let response = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			onRequest()
+			return (response, data)
+		})
+	}
+
+	private func makeGatedProvider() throws -> (WebDAVProvider, GatedWebDAVClientURLSessionDelegate) {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
-		let delegate = SignalingWebDAVClientURLSessionDelegate(credential: credential, signal: signal)
+		let delegate = GatedWebDAVClientURLSessionDelegate(credential: credential)
 		let configuration = URLSessionConfiguration.default
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		configuration.urlCredentialStorage = nil
-		configuration.protocolClasses = [urlProtocolMock]
+		configuration.protocolClasses = [URLProtocolSequenceMock.self]
 		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 		let client = WebDAVClient(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
 		let provider = try WebDAVProvider(with: client)
-		return (provider, signal)
-	}
-
-	private func assertDelegateFired(_ delegateFired: DispatchSemaphore, file: StaticString = #filePath, line: UInt = #line) {
-		XCTAssertEqual(.success, delegateFired.wait(timeout: .now() + 2.0), "Delegate callback did not fire before onTaskCreation returned", file: file, line: line)
+		return (provider, delegate)
 	}
 }
 
-/// Test-only delegate that signals a semaphore after the parent's transfer-task callback runs,
-/// gating the caller's `onTaskCreation` closure on the delegate callback to make registration
-/// races deterministic. Signaling is scoped to the transfer task of interest, never the preflight
-/// `PROPFIND` — a leaked `PROPFIND` signal would be consumed by the transfer's `onTaskCreation`
-/// wait and the race could never be reproduced. `URLSessionUploadTask` is a distinct subclass of
-/// `URLSessionDataTask`, so plain `PROPFIND` data tasks do not match the upload checks below.
-private final class SignalingWebDAVClientURLSessionDelegate: WebDAVClientURLSessionDelegate {
-	let signal: DispatchSemaphore
-
-	init(credential: WebDAVCredential, signal: DispatchSemaphore) {
-		self.signal = signal
-		super.init(credential: credential)
-	}
+/// Holds back the terminal delegate call of a transfer task until the test opens the gate, so that a test can observe whether a call already returned while its task is still running.
+/// The plain `PROPFIND` data tasks pass the gate, because `URLSessionUploadTask` is a distinct subclass of `URLSessionDataTask`.
+///
+/// `@unchecked Sendable`: restates the conformance of `WebDAVClientURLSessionDelegate`; the added state is immutable and `Sendable`.
+private final class GatedWebDAVClientURLSessionDelegate: WebDAVClientURLSessionDelegate, @unchecked Sendable {
+	let challengeRejected = XCTestExpectation(description: "authentication challenge rejected")
+	let completionGate = DispatchSemaphore(value: 0)
 
 	override func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
 		super.urlSession(session, task: task, didReceive: challenge, completionHandler: completionHandler)
-		// Signal the auth-rejection branch (`previousFailureCount >= 1`) for transfer tasks: the
-		// parent delegate looks up the running task here to reject its promise — same race window.
 		if challenge.previousFailureCount >= 1, task is URLSessionUploadTask || task is URLSessionDownloadTask {
-			signal.signal()
+			challengeRejected.fulfill()
 		}
-	}
-
-	override func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		super.urlSession(session, downloadTask: downloadTask, didFinishDownloadingTo: location)
-		signal.signal()
 	}
 
 	override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-		super.urlSession(session, task: task, didCompleteWithError: error)
-		// Signal successful upload completions (downloads use `didFinishDownloadingTo`) and transport
-		// failures on either transfer task (auth rejections use `didReceive challenge:`).
-		let isTransferTask = task is URLSessionUploadTask || task is URLSessionDownloadTask
-		if task is URLSessionUploadTask, error == nil {
-			signal.signal()
-		} else if isTransferTask, error != nil {
-			signal.signal()
+		if task is URLSessionUploadTask || task is URLSessionDownloadTask {
+			_ = completionGate.wait(timeout: .now() + 2.0)
 		}
+		super.urlSession(session, task: task, didCompleteWithError: error)
 	}
 }

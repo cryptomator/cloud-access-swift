@@ -7,59 +7,41 @@
 //
 
 import Foundation
-import MSGraphClientModels
-import MSGraphClientSDK
-import Promises
+@preconcurrency import MSGraphClientModels
+@preconcurrency import MSGraphClientSDK
 
-public class MicrosoftGraphDiscovery {
+/// Safe to share across threads, because the requests of the HTTP client are issued on the main actor.
+public final class MicrosoftGraphDiscovery: Sendable {
 	private let client: MSHTTPClient
 
 	public init(credential: MicrosoftGraphCredential) {
 		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: .default)
 	}
 
-	public func fetchSharePointSite(for siteURL: URL) -> Promise<MicrosoftGraphSite> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointSiteRequest(for: siteURL)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphSite in
-			let site = try MSGraphSite(data: data)
-			return MicrosoftGraphSite(identifier: site.entityId, displayName: site.displayName)
-		}
+	public func fetchSharePointSite(for siteURL: URL) async throws -> MicrosoftGraphSite {
+		let request = try sharePointSiteRequest(for: siteURL)
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let site = try MSGraphSite(data: data)
+		return MicrosoftGraphSite(identifier: site.entityId, displayName: site.displayName)
 	}
 
-	public func fetchSharePointDrives(for siteID: String) -> Promise<[MicrosoftGraphDrive]> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointDrivesRequest(for: siteID)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> [MicrosoftGraphDrive] in
-			let collection = try MSCollection(data: data)
-			return collection.value.compactMap { item in
-				guard let drive = MSGraphDrive(dictionary: item as? [AnyHashable: Any]) else {
-					return nil
-				}
-				return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
+	public func fetchSharePointDrives(for siteID: String) async throws -> [MicrosoftGraphDrive] {
+		let request = try sharePointDrivesRequest(for: siteID)
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let collection = try MSCollection(data: data)
+		return collection.value.compactMap { item in
+			guard let drive = MSGraphDrive(dictionary: item as? [AnyHashable: Any]) else {
+				return nil
 			}
-		}
-	}
-
-	public func fetchDrive(for driveID: String) -> Promise<MicrosoftGraphDrive> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointDriveRequest(for: driveID)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphDrive in
-			let drive = try MSGraphDrive(data: data)
 			return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
 		}
+	}
+
+	public func fetchDrive(for driveID: String) async throws -> MicrosoftGraphDrive {
+		let request = try sharePointDriveRequest(for: driveID)
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let drive = try MSGraphDrive(data: data)
+		return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
 	}
 
 	// MARK: - Requests
@@ -92,41 +74,38 @@ public class MicrosoftGraphDiscovery {
 
 	// MARK: - Execution
 
-	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data?, URLResponse?)> {
-		HTTPDebugLogger.logRequest(request as URLRequest)
-		return Promise<(Data?, URLResponse?)> { fulfill, reject in
-			let task = MSURLSessionDataTask(request: request, client: self.client) { data, response, error in
-				if let response = response {
+	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) async throws -> (Data?, URLResponse?) {
+		let urlRequest = request as URLRequest
+		HTTPDebugLogger.logRequest(urlRequest)
+		return try await withMainActorSDKContinuation { resumer in
+			let task = MSURLSessionDataTask(request: (urlRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest, client: self.client) { data, response, error in
+				if let response {
 					HTTPDebugLogger.logResponse(response, with: data, or: nil)
 				}
-				if let error = error {
-					reject(error)
+				if let error {
+					resumer.resume(throwing: self.convertStandardError(error))
 				} else {
-					fulfill((data, response))
+					resumer.resume(returning: (data, response))
 				}
 			}
 			task?.execute()
-		}.recover { error -> (Data?, URLResponse?) in
-			throw self.convertStandardError(error)
 		}
 	}
 
-	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data, HTTPURLResponse)> {
-		return executeRawMSURLSessionDataTask(with: request).then { data, response -> (Data, HTTPURLResponse) in
-			guard let data = data, let response = response as? HTTPURLResponse else {
-				throw MicrosoftGraphError.unexpectedResult
-			}
-			return (data, response)
+	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) async throws -> (Data, HTTPURLResponse) {
+		let (data, response) = try await executeRawMSURLSessionDataTask(with: request)
+		guard let data, let response = response as? HTTPURLResponse else {
+			throw MicrosoftGraphError.unexpectedResult
 		}
+		return (data, response)
 	}
 
-	private func executeMSURLSessionDataTaskWithErrorMapping(with request: NSMutableURLRequest) -> Promise<Data> {
-		return executeMSURLSessionDataTask(with: request).then { data, httpResponse -> Data in
-			guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
-				throw (self.mapStatusCodeToError(httpResponse.statusCode))
-			}
-			return data
+	private func executeMSURLSessionDataTaskWithErrorMapping(with request: NSMutableURLRequest) async throws -> Data {
+		let (data, httpResponse) = try await executeMSURLSessionDataTask(with: request)
+		guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
+			throw mapStatusCodeToError(httpResponse.statusCode)
 		}
+		return data
 	}
 
 	// MARK: - Helpers
@@ -145,8 +124,11 @@ public class MicrosoftGraphDiscovery {
 	}
 
 	private func convertStandardError(_ error: Error) -> Error {
+		if isCancellationError(error) {
+			return CancellationError()
+		}
 		switch error {
-		case MicrosoftGraphAuthenticationProviderError.accountNotFound, MicrosoftGraphAuthenticationProviderError.noAccounts:
+		case MicrosoftGraphAuthenticationProviderError.accountNotFound:
 			return CloudProviderError.unauthorized
 		default:
 			return error

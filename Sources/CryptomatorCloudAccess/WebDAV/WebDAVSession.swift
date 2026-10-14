@@ -7,27 +7,91 @@
 //
 
 import Foundation
-import Promises
+
+public enum URLSessionError: Error {
+	case httpError(_ error: Error?, statusCode: Int)
+	case unexpectedResponse
+}
+
+private struct WebDAVDataTask {
+	let resumer: Resumer<(HTTPURLResponse, Data?)>
+	var accumulatedData = Data()
+	var failure: Error?
+
+	func complete(with response: URLResponse?, error: Error?) {
+		if let httpResponse = response as? HTTPURLResponse {
+			HTTPDebugLogger.logResponse(httpResponse, with: accumulatedData, or: nil)
+		}
+		do {
+			try resumer.resume(returning: (successfulResponse(response, error: error, failure: failure), accumulatedData))
+		} catch {
+			resumer.resume(throwing: error)
+		}
+	}
+}
 
 private struct WebDAVDownloadTask {
-	let promise: Promise<HTTPURLResponse>
+	let resumer: Resumer<HTTPURLResponse>
 	let localURL: URL
-}
+	var isDownloadMoved = false
+	var failure: Error?
 
-private class WebDAVDataTask {
-	let promise: Promise<(HTTPURLResponse, Data?)>
-	lazy var accumulatedData: Data = .init()
-
-	init(promise: Promise<(HTTPURLResponse, Data?)>) {
-		self.promise = promise
+	mutating func moveDownload(from location: URL) {
+		do {
+			try FileManager.default.moveItem(at: location, to: localURL)
+			isDownloadMoved = true
+		} catch {
+			failure = error
+		}
 	}
 
-	func fulfillPromise(with response: HTTPURLResponse) {
-		promise.fulfill((response, accumulatedData))
+	func complete(with response: URLResponse?, error: Error?) {
+		if let httpResponse = response as? HTTPURLResponse {
+			HTTPDebugLogger.logResponse(httpResponse, with: nil, or: localURL)
+		}
+		do {
+			let httpResponse = try successfulResponse(response, error: error, failure: failure)
+			guard isDownloadMoved else {
+				throw URLSessionError.unexpectedResponse
+			}
+			resumer.resume(returning: httpResponse)
+		} catch {
+			resumer.resume(throwing: error)
+		}
 	}
 }
 
-class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate, URLSessionDownloadDelegate {
+/// Returns the response of a terminated task if it succeeded. A failure that was recorded while the task was running takes precedence over the error that the task terminated with.
+private func successfulResponse(_ response: URLResponse?, error: Error?, failure: Error?) throws -> HTTPURLResponse {
+	if let failure {
+		throw failure
+	}
+	switch (response, error) {
+	case let (_, .some(error)) where isCancellationError(error):
+		throw CancellationError()
+	case let (httpResponse as HTTPURLResponse, .some(error)):
+		throw URLSessionError.httpError(error, statusCode: httpResponse.statusCode)
+	case let (_, .some(error)):
+		throw error
+	case let (httpResponse as HTTPURLResponse, nil):
+		guard (200 ... 299).contains(httpResponse.statusCode) else {
+			throw URLSessionError.httpError(nil, statusCode: httpResponse.statusCode)
+		}
+		return httpResponse
+	default:
+		throw URLSessionError.unexpectedResponse
+	}
+}
+
+private extension URLSessionTask {
+	/// Whether the task was cancelled or completed before the session resumed it, i.e., while `onTaskCreation` ran. Its terminal delegate call may have found nothing registered then.
+	var isTerminated: Bool {
+		return state == .canceling || state == .completed || error != nil
+	}
+}
+
+/// `@unchecked Sendable`: `runningDataTasks` and `runningDownloadTasks` are only accessed on `queue`, everything else is immutable. The class is subclassed in tests.
+class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate, URLSessionDownloadDelegate, @unchecked Sendable {
 	private let queue: DispatchQueue
 	fileprivate let credential: WebDAVCredential
 	private var runningDataTasks = [URLSessionDataTask: WebDAVDataTask]()
@@ -58,46 +122,20 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		if challenge.previousFailureCount < 1 {
 			completionHandler(.useCredential, URLCredential(user: credential.username, password: credential.password, persistence: .forSession))
 		} else {
-			switch task {
-			case let dataTask as URLSessionDataTask:
-				let runningDataTask = removeRunningDataTask(forKey: dataTask)
-				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
-			case let downloadTask as URLSessionDownloadTask:
-				let runningDownloadTaskPromise = removeRunningDownloadTask(forKey: downloadTask)
-				runningDownloadTaskPromise?.promise.reject(URLSessionError.httpError(nil, statusCode: 401))
-			default:
-				break
-			}
+			// The task terminates with a cancellation error after this, which must not replace the actual failure.
+			recordFailure(URLSessionError.httpError(nil, statusCode: 401), for: task)
 			completionHandler(.cancelAuthenticationChallenge, nil)
 		}
 	}
 
 	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-		switch (task, task.response, error) {
-		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, nil):
-			let runningDataTask = removeRunningDataTask(forKey: dataTask)
-			HTTPDebugLogger.logResponse(httpResponse, with: runningDataTask?.accumulatedData, or: nil)
-			guard (200 ... 299).contains(httpResponse.statusCode) else {
-				runningDataTask?.promise.reject(URLSessionError.httpError(nil, statusCode: httpResponse.statusCode))
-				return
-			}
-			runningDataTask?.fulfillPromise(with: httpResponse)
-		case let (dataTask as URLSessionDataTask, httpResponse as HTTPURLResponse, .some(error)):
-			let runningDataTask = removeRunningDataTask(forKey: dataTask)
-			HTTPDebugLogger.logResponse(httpResponse, with: runningDataTask?.accumulatedData, or: nil)
-			runningDataTask?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
-		case let (dataTask as URLSessionDataTask, _, .some(error)):
-			let runningDataTask = removeRunningDataTask(forKey: dataTask)
-			runningDataTask?.promise.reject(error)
-		case let (downloadTask as URLSessionDownloadTask, httpResponse as HTTPURLResponse, .some(error)):
-			let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask)
-			HTTPDebugLogger.logResponse(httpResponse, with: nil, or: runningDownloadTask?.localURL)
-			runningDownloadTask?.promise.reject(URLSessionError.httpError(error, statusCode: httpResponse.statusCode))
-		case let (downloadTask as URLSessionDownloadTask, _, .some(error)):
-			let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask)
-			runningDownloadTask?.promise.reject(error)
+		switch task {
+		case let dataTask as URLSessionDataTask:
+			removeRunningDataTask(forKey: dataTask)?.complete(with: task.response, error: error)
+		case let downloadTask as URLSessionDownloadTask:
+			removeRunningDownloadTask(forKey: downloadTask)?.complete(with: task.response, error: error)
 		default:
-			return
+			break
 		}
 	}
 
@@ -105,31 +143,18 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 
 	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
 		queue.sync {
-			let runningDataTask = runningDataTasks[dataTask]
-			runningDataTask?.accumulatedData.append(data)
+			runningDataTasks[dataTask]?.accumulatedData.append(data)
 		}
 	}
 
 	// MARK: - URLSessionDownloadDelegate
 
 	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		guard let runningDownloadTask = removeRunningDownloadTask(forKey: downloadTask) else {
+		guard let response = downloadTask.response as? HTTPURLResponse, (200 ... 299).contains(response.statusCode) else {
 			return
 		}
-		if let response = downloadTask.response as? HTTPURLResponse {
-			HTTPDebugLogger.logResponse(response, with: nil, or: runningDownloadTask.localURL)
-			guard (200 ... 299).contains(response.statusCode) else {
-				runningDownloadTask.promise.reject(URLSessionError.httpError(nil, statusCode: response.statusCode))
-				return
-			}
-			do {
-				try FileManager.default.moveItem(at: location, to: runningDownloadTask.localURL)
-				runningDownloadTask.promise.fulfill(response)
-			} catch {
-				runningDownloadTask.promise.reject(error)
-			}
-		} else {
-			runningDownloadTask.promise.reject(URLSessionError.unexpectedResponse)
+		queue.sync {
+			runningDownloadTasks[downloadTask]?.moveDownload(from: location)
 		}
 	}
 
@@ -150,7 +175,7 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		}
 	}
 
-	private func removeRunningDataTask(forKey key: URLSessionDataTask) -> WebDAVDataTask? {
+	fileprivate func removeRunningDataTask(forKey key: URLSessionDataTask) -> WebDAVDataTask? {
 		return queue.sync {
 			runningDataTasks.removeValue(forKey: key)
 		}
@@ -162,16 +187,29 @@ class WebDAVClientURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessi
 		}
 	}
 
-	private func removeRunningDownloadTask(forKey key: URLSessionDownloadTask) -> WebDAVDownloadTask? {
+	fileprivate func removeRunningDownloadTask(forKey key: URLSessionDownloadTask) -> WebDAVDownloadTask? {
 		return queue.sync {
 			runningDownloadTasks.removeValue(forKey: key)
 		}
 	}
+
+	private func recordFailure(_ failure: Error, for task: URLSessionTask) {
+		queue.sync {
+			switch task {
+			case let dataTask as URLSessionDataTask:
+				runningDataTasks[dataTask]?.failure = failure
+			case let downloadTask as URLSessionDownloadTask:
+				runningDownloadTasks[downloadTask]?.failure = failure
+			default:
+				break
+			}
+		}
+	}
 }
 
-class WebDAVSession {
+final class WebDAVSession: Sendable {
 	private let urlSession: URLSession
-	private weak var delegate: WebDAVClientURLSessionDelegate?
+	private let delegate: WebDAVClientURLSessionDelegate
 
 	init(urlSession: URLSession, delegate: WebDAVClientURLSessionDelegate) {
 		precondition(urlSession.delegate as? WebDAVClientURLSessionDelegate == delegate)
@@ -207,47 +245,50 @@ class WebDAVSession {
 		urlSession.invalidateAndCancel()
 	}
 
-	func performDataTask(with request: URLRequest) -> Promise<(HTTPURLResponse, Data?)> {
+	func performDataTask(with request: URLRequest) async throws -> (HTTPURLResponse, Data?) {
 		HTTPDebugLogger.logRequest(request)
 		let task = urlSession.dataTask(with: request)
-		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
-		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		task.resume()
-		return pendingPromise
+		return try await withSDKContinuation { resumer in
+			delegate.addRunningDataTask(key: task, value: WebDAVDataTask(resumer: resumer))
+			task.resume()
+		}
 	}
 
-	func performDownloadTask(with request: URLRequest, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
+	func performDownloadTask(with request: URLRequest, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
 		HTTPDebugLogger.logRequest(request)
-		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.downloadTask(with: request)
-		progress.addChild(task.progress, withPendingUnitCount: 1)
-		let pendingPromise = Promise<HTTPURLResponse>.pending()
-		let webDAVDownloadTask = WebDAVDownloadTask(promise: pendingPromise, localURL: localURL)
-		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
-		delegate?.addRunningDownloadTask(key: task, value: webDAVDownloadTask)
-		if let onTaskCreation {
-			onTaskCreation(task)
-		} else {
-			task.resume()
+		progress?.addChild(task.progress, withPendingUnitCount: 1)
+		await onTaskCreation?(task)
+		guard !Task.isCancelled else {
+			task.cancel()
+			throw CancellationError()
 		}
-		return pendingPromise
+		return try await withSDKContinuation { resumer in
+			delegate.addRunningDownloadTask(key: task, value: WebDAVDownloadTask(resumer: resumer, localURL: localURL))
+			if task.isTerminated {
+				delegate.removeRunningDownloadTask(forKey: task)?.complete(with: task.response, error: task.error ?? URLError(.cancelled))
+			} else {
+				task.resume()
+			}
+		}
 	}
 
-	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
+	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data?) {
 		HTTPDebugLogger.logRequest(request)
-		let progress = Progress(totalUnitCount: 1)
 		let task = urlSession.uploadTask(with: request, fromFile: fileURL)
-		progress.addChild(task.progress, withPendingUnitCount: 1)
-		let pendingPromise = Promise<(HTTPURLResponse, Data?)>.pending()
-		let webDAVDataTask = WebDAVDataTask(promise: pendingPromise)
-		// Register before invoking `onTaskCreation` so a synchronous resume cannot race the delegate's lookup.
-		delegate?.addRunningDataTask(key: task, value: webDAVDataTask)
-		if let onTaskCreation {
-			onTaskCreation(task)
-		} else {
-			task.resume()
+		progress?.addChild(task.progress, withPendingUnitCount: 1)
+		await onTaskCreation?(task)
+		guard !Task.isCancelled else {
+			task.cancel()
+			throw CancellationError()
 		}
-		return pendingPromise
+		return try await withSDKContinuation { resumer in
+			delegate.addRunningDataTask(key: task, value: WebDAVDataTask(resumer: resumer))
+			if task.isTerminated {
+				delegate.removeRunningDataTask(forKey: task)?.complete(with: task.response, error: task.error ?? URLError(.cancelled))
+			} else {
+				task.resume()
+			}
+		}
 	}
 }

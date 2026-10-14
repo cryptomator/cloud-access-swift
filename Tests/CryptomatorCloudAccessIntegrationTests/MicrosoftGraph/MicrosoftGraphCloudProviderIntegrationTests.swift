@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
@@ -28,22 +27,17 @@ class MicrosoftGraphCloudProviderIntegrationTests: CloudAccessIntegrationTestWit
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		MicrosoftGraphCloudProviderIntegrationTests.credential.resetAccessTokenOverride()
 		provider = try MicrosoftGraphCloudProvider(credential: MicrosoftGraphCloudProviderIntegrationTests.credential)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
-		do {
-			try MicrosoftGraphCloudProviderIntegrationTests.credential.deauthenticate()
-			return Promise(())
-		} catch {
-			return Promise(error)
-		}
+	override func deauthenticate() async throws {
+		try MicrosoftGraphCloudProviderIntegrationTests.credential.deauthenticate()
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return try MicrosoftGraphCloudProvider(credential: MicrosoftGraphCloudProviderIntegrationTests.credential,
 		                                       maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}

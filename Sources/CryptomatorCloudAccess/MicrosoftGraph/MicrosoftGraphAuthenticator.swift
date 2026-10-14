@@ -9,8 +9,7 @@
 #if canImport(CryptomatorCloudAccessCore)
 import CryptomatorCloudAccessCore
 #endif
-import MSAL
-import Promises
+@preconcurrency import MSAL
 import UIKit
 
 public enum MicrosoftGraphAuthenticatorError: Error {
@@ -18,17 +17,19 @@ public enum MicrosoftGraphAuthenticatorError: Error {
 	case serverDeclinedScopes
 }
 
-public class MicrosoftGraphAuthenticator {
-	public static func authenticate(from viewController: UIViewController, with scopes: [String]) -> Promise<MicrosoftGraphCredential> {
+@MainActor
+public final class MicrosoftGraphAuthenticator {
+	public static func authenticate(from viewController: UIViewController, with scopes: [String]) async throws -> MicrosoftGraphCredential {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
 		let interactiveParameters = MSALInteractiveTokenParameters(scopes: scopes, webviewParameters: webviewParameters)
 		interactiveParameters.promptType = .login
-		return MicrosoftGraphSetup.constants.clientApplication.acquireToken(with: interactiveParameters).then { result -> MicrosoftGraphCredential in
+		do {
+			let result = try await MicrosoftGraphSetup.constants.clientApplication.acquireToken(with: interactiveParameters)
 			guard let identifier = result.account.identifier else {
 				throw MicrosoftGraphAuthenticatorError.missingAccountIdentifier
 			}
 			return MicrosoftGraphCredential(identifier: identifier, scopes: scopes)
-		}.recover { error -> MicrosoftGraphCredential in
+		} catch {
 			if let error = error as NSError?, error.domain == MSALErrorDomain {
 				if error.code == MSALError.serverDeclinedScopes.rawValue {
 					throw MicrosoftGraphAuthenticatorError.serverDeclinedScopes
@@ -40,24 +41,7 @@ public class MicrosoftGraphAuthenticator {
 		}
 	}
 
-	public static func authenticate(from viewController: UIViewController, for type: MicrosoftGraphType) -> Promise<MicrosoftGraphCredential> {
-		return authenticate(from: viewController, with: type.scopes)
-	}
-}
-
-private extension MSALPublicClientApplication {
-	func acquireToken(with interactiveParameters: MSALInteractiveTokenParameters) -> Promise<MSALResult> {
-		return Promise<MSALResult> { fulfill, reject in
-			self.acquireToken(with: interactiveParameters) { result, error in
-				switch (result, error) {
-				case let (.some(result), nil):
-					fulfill(result)
-				case let (_, .some(error)):
-					reject(error)
-				default:
-					reject(MicrosoftGraphError.unexpectedResult)
-				}
-			}
-		}
+	public static func authenticate(from viewController: UIViewController, for type: MicrosoftGraphType) async throws -> MicrosoftGraphCredential {
+		return try await authenticate(from: viewController, with: type.scopes)
 	}
 }

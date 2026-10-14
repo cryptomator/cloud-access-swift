@@ -8,7 +8,7 @@
 
 import Foundation
 import GRDB
-import MSGraphClientModels
+@preconcurrency import MSGraphClientModels
 
 struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	static let databaseTableName = "CachedEntries"

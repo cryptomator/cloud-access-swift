@@ -6,11 +6,11 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CryptomatorCryptoLib
 import Foundation
 
-public class VaultFormat7CryptorMock: CryptorMock {
-	convenience init(masterkey: Masterkey) {
+/// `@unchecked Sendable`: restates the conformance of `CryptorMock`; this subclass adds no state.
+public class VaultFormat7CryptorMock: CryptorMock, @unchecked Sendable {
+	convenience init() {
 		let dirIds = [
 			"": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 			"dir1-id": "11BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
@@ -38,6 +38,6 @@ public class VaultFormat7CryptorMock: CryptorMock {
 			"ciphertext5": "cleartext5",
 			"ciphertext6": "cleartext6"
 		]
-		self.init(masterkey: masterkey, dirIds: dirIds, fileNames: fileNames, contents: contents)
+		self.init(dirIds: dirIds, fileNames: fileNames, contents: contents)
 	}
 }

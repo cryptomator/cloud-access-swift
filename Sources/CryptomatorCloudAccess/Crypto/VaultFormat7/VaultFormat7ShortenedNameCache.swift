@@ -9,7 +9,6 @@
 import CommonCrypto
 import Foundation
 import GRDB
-import Promises
 
 struct C9SDir {
 	let cloudPath: CloudPath
@@ -96,7 +95,7 @@ private extension CloudPath {
 	}
 }
 
-class VaultFormat7ShortenedNameCache {
+final class VaultFormat7ShortenedNameCache: Sendable {
 	private static let c9sSuffix = ".c9s"
 
 	private let vaultPath: CloudPath
@@ -149,19 +148,18 @@ class VaultFormat7ShortenedNameCache {
 	 - Parameter c9sDirPath: The path of a `.c9s` directory, whose original name should be loaded.
 	 - Returns: Either `shortenedPath` if no shortening was applied or the original ("inflated") path.
 	 */
-	func getOriginalPath(_ shortenedPath: CloudPath, nameC9SLoader loadNameC9S: (_ c9sDirPath: CloudPath) -> Promise<Data>) -> Promise<CloudPath> {
+	func getOriginalPath(_ shortenedPath: CloudPath, nameC9SLoader loadNameC9S: @Sendable (_ c9sDirPath: CloudPath) async throws -> Data) async throws -> CloudPath {
 		if shortenedPath.pathComponents.count <= ciphertextNameCompIdx {
-			return Promise(shortenedPath)
+			return shortenedPath
 		}
 		let shortenedName = shortenedPath.pathComponents[ciphertextNameCompIdx]
 		if shortenedName.hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
 			let cutOff = shortenedPath.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirPath = shortenedPath.deletingLastPathComponents(cutOff)
-			return inflateName(shortenedName, c9sDirPath: c9sDirPath, nameC9SLoader: loadNameC9S).then { originalName in
-				return self.inflatePath(shortenedPath, with: originalName)
-			}
+			let originalName = try await inflateName(shortenedName, c9sDirPath: c9sDirPath, nameC9SLoader: loadNameC9S)
+			return inflatePath(shortenedPath, with: originalName)
 		} else {
-			return Promise(shortenedPath)
+			return shortenedPath
 		}
 	}
 
@@ -178,15 +176,14 @@ class VaultFormat7ShortenedNameCache {
 		return originalPath.replacingPathComponent(at: ciphertextNameCompIdx, with: shortenedName)
 	}
 
-	private func inflateName(_ shortenedName: String, c9sDirPath: CloudPath, nameC9SLoader loadNameC9S: (_ c9sDirPath: CloudPath) -> Promise<Data>) -> Promise<String> {
+	private func inflateName(_ shortenedName: String, c9sDirPath: CloudPath, nameC9SLoader loadNameC9S: @Sendable (_ c9sDirPath: CloudPath) async throws -> Data) async throws -> String {
 		if let originalName = try? getCached(shortenedName) {
-			return Promise(originalName)
+			return originalName
 		} else {
-			return loadNameC9S(c9sDirPath).then { data -> String in
-				let originalName = String(data: data, encoding: .utf8)!
-				try? self.addToCache(shortenedName, originalName: originalName)
-				return originalName
-			}
+			let data = try await loadNameC9S(c9sDirPath)
+			let originalName = String(data: data, encoding: .utf8)!
+			try? addToCache(shortenedName, originalName: originalName)
+			return originalName
 		}
 	}
 

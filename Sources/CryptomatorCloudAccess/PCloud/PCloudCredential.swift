@@ -7,10 +7,10 @@
 //
 
 import Foundation
-import PCloudSDKSwift
-import Promises
+@preconcurrency import PCloudSDKSwift
 
-public class PCloudCredential {
+/// `@unchecked Sendable`: all stored properties are immutable, and `client` only builds tasks that guard their own state. The class is subclassed in tests.
+public class PCloudCredential: @unchecked Sendable {
 	public let user: OAuth.User
 	public var userID: String {
 		return String(user.id)
@@ -23,10 +23,9 @@ public class PCloudCredential {
 		self.client = PCloud.createClient(with: user)
 	}
 
-	public func getUsername() -> Promise<String> {
-		return client.fetchUserInfo().execute().then { metadata in
-			return metadata.emailAddress
-		}
+	public func getUsername() async throws -> String {
+		let metadata = try await client.fetchUserInfo().execute()
+		return metadata.emailAddress
 	}
 }
 

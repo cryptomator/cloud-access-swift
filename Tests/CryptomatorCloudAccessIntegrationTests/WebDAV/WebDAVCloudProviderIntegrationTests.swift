@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
@@ -27,21 +26,28 @@ class WebDAVCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		let client = WebDAVCloudProviderIntegrationTests.client
 		provider = try WebDAVProvider(with: client)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
+	override func deauthenticate() async throws {
 		let correctCredential = IntegrationTestSecrets.webDAVCredential
 		let invalidCredential = WebDAVCredential(baseURL: correctCredential.baseURL, username: correctCredential.username, password: correctCredential.password + "Foo", allowedCertificate: correctCredential.allowedCertificate)
 		let client = WebDAVClient(credential: invalidCredential)
-		provider = try? WebDAVProvider(with: client)
-		return Promise(())
+		provider = try WebDAVProvider(with: client)
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	func testTLSCertificateValidatorReturnsServerCertificate() async throws {
+		let baseURL = IntegrationTestSecrets.webDAVCredential.baseURL
+		try XCTSkipUnless(baseURL.scheme == "https", "The WebDAV server is not reached via TLS")
+		let certificate = try await TLSCertificateValidator(baseURL: baseURL).validate()
+		XCTAssertFalse(certificate.data.isEmpty)
+		XCTAssertEqual(32, certificate.fingerprint.split(separator: " ").count)
+	}
+
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return try WebDAVProvider(with: WebDAVCloudProviderIntegrationTests.client, maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

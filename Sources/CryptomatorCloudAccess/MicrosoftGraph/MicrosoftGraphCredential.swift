@@ -7,15 +7,15 @@
 //
 
 import Foundation
-import MSAL
-import MSGraphClientSDK
-import Promises
+@preconcurrency import MSAL
+@preconcurrency import MSGraphClientSDK
 
 public enum MicrosoftGraphCredentialError: Error {
 	case noUsername
 }
 
-public class MicrosoftGraphCredential {
+/// `@unchecked Sendable`: all stored properties are immutable. `authProvider` is only called by the HTTP clients it is handed to, and `clientApplication` only for the account lookups of `getUsername()` and `deauthenticate()`. The class is subclassed in tests.
+public class MicrosoftGraphCredential: @unchecked Sendable {
 	public let identifier: String
 	public let scopes: [String]
 	let authProvider: MSAuthenticationProvider

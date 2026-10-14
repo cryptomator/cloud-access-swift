@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
@@ -28,18 +27,17 @@ class DropboxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthen
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		credential.setAuthorizedClient()
 		provider = DropboxCloudProvider(credential: credential)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
+	override func deauthenticate() async throws {
 		credential.deauthenticate()
-		return Promise(())
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return DropboxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

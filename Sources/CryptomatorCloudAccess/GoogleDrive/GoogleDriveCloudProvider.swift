@@ -6,28 +6,23 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import AppAuthCore
+@preconcurrency import AppAuthCore
 import Foundation
-import GoogleAPIClientForREST_Drive
+@preconcurrency import GoogleAPIClientForREST_Drive
 import GRDB
-import GTMSessionFetcherCore
-import Promises
+@preconcurrency import GTMSessionFetcherCore
 
-public class GoogleDriveCloudProvider: CloudProvider {
+/// Safe to share across threads, because `GTLRDriveService` and its fetchers may be used from any thread and the provider only configures the service during initialization.
+public final class GoogleDriveCloudProvider: CloudProvider {
 	private static let maximumUploadFetcherChunkSize: UInt = 3 * 1024 * 1024 // 3MiB per chunk as GTMSessionFetcher loads the chunk to the memory and the FileProviderExtension has a total memory limit of 15MB
 
 	private let driveService: GTLRDriveService
 	private let identifierCache: GoogleDriveIdentifierCache
-
-	private var runningTickets: [GTLRServiceTicket]
-	private var runningFetchers: [GTMSessionFetcher]
 	private let maxPageSize: Int
 
 	init(credential: GoogleDriveCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
 		self.driveService = credential.driveService
 		self.identifierCache = try GoogleDriveIdentifierCache()
-		self.runningTickets = [GTLRServiceTicket]()
-		self.runningFetchers = [GTMSessionFetcher]()
 		let maxAllowedItemLimit = 1000
 		self.maxPageSize = min(max(1, maxPageSize), maxAllowedItemLimit)
 		try setupDriveService(credential: credential, configuration: urlSessionConfiguration)
@@ -81,112 +76,108 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		driveService.fetcherService.reuseSession = true
 	}
 
-	deinit {
-		for ticket in runningTickets {
-			ticket.cancel()
-		}
-		for fetcher in runningFetchers {
-			fetcher.stopFetching()
-		}
+	@concurrent
+	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		return try await fetchItemMetadata(for: item)
 	}
 
-	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.fetchItemMetadata(for: item)
-		}
+	@concurrent
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		return try await fetchItemList(for: item, pageToken: pageToken)
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.fetchItemList(for: item, pageToken: pageToken)
-		}
-	}
-
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		if FileManager.default.fileExists(atPath: localURL.path) {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		}
-		let progress = Progress(totalUnitCount: 1)
-		return resolvePath(forItemAt: cloudPath).then { item -> Promise<Void> in
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let downloadPromise = self.downloadFile(for: item, to: localURL)
-			progress.resignCurrent()
-			return downloadPromise
-		}
+		try Task.checkCancellation()
+		let phases = Progress.phases(of: progress, 999)
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		let metadata = try await downloadFile(for: item, to: localURL, progress: phases[0])
+		phases.completeTransfer()
+		return metadata
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		var isDirectory: ObjCBool = false
 		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
 		if !fileExists {
-			return Promise(CloudProviderError.itemNotFound)
+			throw CloudProviderError.itemNotFound
 		}
 		if isDirectory.boolValue {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
-		let progress = Progress(totalUnitCount: 1)
-		return resolveParentPath(forItemAt: cloudPath).then { parentItem in
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let uploadPromise = self.uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting)
-			progress.resignCurrent()
-			return uploadPromise
+		let phases = Progress.phases(of: progress, 999)
+		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
+		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0])
+		phases.completeTransfer()
+		return metadata
+	}
+
+	@concurrent
+	public func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		if try await checkForItemExistence(at: cloudPath) {
+			throw CloudProviderError.itemAlreadyExists
 		}
+		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 	}
 
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: cloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then {
-			self.resolveParentPath(forItemAt: cloudPath)
-		}.then { parentItem in
-			return self.createFolder(for: parentItem, with: cloudPath.lastPathComponent)
+	@concurrent
+	public func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
+	}
+
+	@concurrent
+	public func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
+	}
+
+	private func deleteItem(at cloudPath: CloudPath) async throws {
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		try await deleteItem(for: item)
+	}
+
+	@concurrent
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	@concurrent
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		if try await checkForItemExistence(at: targetCloudPath) {
+			throw CloudProviderError.itemAlreadyExists
 		}
-	}
-
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
-	}
-
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
-	}
-
-	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.deleteItem(for: item)
-		}
-	}
-
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: targetCloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then {
-			return self.resolvePath(forItemAt: sourceCloudPath)
-		}.then { item in
-			return self.moveItem(for: item, from: sourceCloudPath, to: targetCloudPath)
-		}
+		let item = try await resolvePath(forItemAt: sourceCloudPath)
+		try await moveItem(for: item, from: sourceCloudPath, to: targetCloudPath)
 	}
 
 	// MARK: - Operations
 
-	private func fetchItemMetadata(for item: GoogleDriveItem) -> Promise<CloudItemMetadata> {
+	private func fetchItemMetadata(for item: GoogleDriveItem) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemMetadata(for: \(item.identifier)) called")
 		let query = fetchItemMetadataQuery(for: item)
-		return executeQuery(query).then { result -> CloudItemMetadata in
+		return try await executeQuery(query) { result -> CloudItemMetadata in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemMetadata(for: \(item.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
@@ -196,39 +187,46 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) -> Promise<CloudItemList> {
+	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) async throws -> CloudItemList {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil")) called")
 		guard item.itemType == .folder || (item.itemType == .symlink && item.shortcut?.targetItemType == .folder) else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
 		let query = fetchItemListQuery(for: item, pageToken: pageToken)
-		return executeQuery(query).then(on: .global()) { result -> CloudItemList in
-			CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil")) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
-			guard let fileList = result as? GTLRDrive_FileList else {
-				throw GoogleDriveError.unexpectedResultType
+		do {
+			let (children, nextPageToken) = try await executeQuery(query) { result -> ([(item: GoogleDriveItem, metadata: CloudItemMetadata)], String?) in
+				CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil")) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
+				guard let fileList = result as? GTLRDrive_FileList else {
+					throw GoogleDriveError.unexpectedResultType
+				}
+				var children = [(item: GoogleDriveItem, metadata: CloudItemMetadata)]()
+				for file in fileList.files ?? [GTLRDrive_File]() {
+					guard let name = file.name else {
+						throw GoogleDriveError.missingItemName
+					}
+					let cloudPath = item.cloudPath.appendingPathComponent(name)
+					try children.append((GoogleDriveItem(cloudPath: cloudPath, file: file), self.convertToCloudItemMetadata(file, at: cloudPath)))
+				}
+				return (children, fileList.nextPageToken)
 			}
 			var items = [CloudItemMetadata]()
-			guard let files = fileList.files else {
-				return CloudItemList(items: items)
-			}
-			for file in files {
-				guard let name = file.name else {
-					throw GoogleDriveError.missingItemName
+			for child in children {
+				try identifierCache.addOrUpdate(child.item)
+				guard let shortcut = child.item.shortcut else {
+					items.append(child.metadata)
+					continue
 				}
-				let cloudPath = item.cloudPath.appendingPathComponent(name)
-				let item = try GoogleDriveItem(cloudPath: cloudPath, file: file)
-				try self.identifierCache.addOrUpdate(item)
-				let resolvedFile: GTLRDrive_File
+				try Task.checkCancellation()
 				do {
-					resolvedFile = try awaitPromise(self.resolveFile(file, with: item))
+					try await items.append(resolveShortcut(shortcut, at: child.item.cloudPath))
+				} catch let error as CancellationError {
+					throw error
 				} catch {
 					continue
 				}
-				let itemMetadata = self.convertToCloudItemMetadata(resolvedFile, at: cloudPath)
-				items.append(itemMetadata)
 			}
-			return CloudItemList(items: items, nextPageToken: fileList.nextPageToken)
-		}.recover { error -> CloudItemList in
+			return CloudItemList(items: items, nextPageToken: nextPageToken)
+		} catch {
 			if let error = error as NSError?, error.domain == kGTLRErrorObjectDomain, error.code == 400 {
 				throw CloudProviderError.pageTokenInvalid
 			}
@@ -236,33 +234,36 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func downloadFile(for item: GoogleDriveItem, to localURL: URL) -> Promise<Void> {
+	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, progress: Progress?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
 		guard item.itemType == .file || (item.itemType == .symlink && item.shortcut?.targetItemType == .file) else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
-		let query = downloadFileQuery(for: item)
-		let request = driveService.request(for: query)
-		let fetcher = driveService.fetcherService.fetcher(with: request as URLRequest)
-		fetcher.destinationFileURL = localURL
-		let progress = Progress(totalUnitCount: -1)
-		fetcher.downloadProgressBlock = { _, totalBytesWritten, totalBytesExpectedToWrite in
-			progress.totalUnitCount = totalBytesExpectedToWrite // Unnecessary to set several times
-			progress.completedUnitCount = totalBytesWritten
-		}
-		return executeFetcher(fetcher)
+		let remoteMetadata = try await fetchItemMetadata(for: item)
+		try Task.checkCancellation()
+		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+			let query = downloadFileQuery(for: item)
+			let request = await driveService.request(for: query)
+			let fetcher = driveService.fetcherService.fetcher(with: request as URLRequest)
+			fetcher.destinationFileURL = stagedFile
+			fetcher.downloadProgressBlock = { _, totalBytesWritten, totalBytesExpectedToWrite in
+				progress?.totalUnitCount = totalBytesExpectedToWrite // Unnecessary to set several times
+				progress?.completedUnitCount = totalBytesWritten
+			}
+			try await executeFetcher(fetcher)
+			return remoteMetadata
+		})
 	}
 
-	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<CloudItemMetadata> {
+	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) called")
-		let progress = Progress(totalUnitCount: -1)
-		return uploadFileQuery(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting).then { query -> Promise<Any> in
-			query.executionParameters.uploadProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
-				progress.totalUnitCount = Int64(totalBytesExpectedToUpload)
-				progress.completedUnitCount = Int64(totalBytesUploaded)
-			}
-			return self.executeQuery(query)
-		}.then { result -> CloudItemMetadata in
+		let query = try await uploadFileQuery(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting)
+		query.executionParameters.uploadProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
+			progress?.totalUnitCount = Int64(totalBytesExpectedToUpload)
+			progress?.completedUnitCount = Int64(totalBytesUploaded)
+		}
+		try Task.checkCancellation()
+		return try await executeQuery(query) { result -> CloudItemMetadata in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard let uploadedFile = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
@@ -273,10 +274,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func createFolder(for parentItem: GoogleDriveItem, with name: String) -> Promise<Void> {
+	private func createFolder(for parentItem: GoogleDriveItem, with name: String) async throws {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) called")
 		let query = createFolderQuery(for: parentItem, with: name)
-		return executeQuery(query).then { result -> Void in
+		try await executeQuery(query) { result -> Void in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard let folder = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
@@ -287,10 +288,10 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func deleteItem(for item: GoogleDriveItem) -> Promise<Void> {
+	private func deleteItem(for item: GoogleDriveItem) async throws {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: deleteItem(for: \(item.identifier)) called")
 		let query = deleteItemQuery(for: item)
-		return executeQuery(query).then { result -> Void in
+		try await executeQuery(query) { result -> Void in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: deleteItem(for: \(item.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard result is Void else {
 				throw GoogleDriveError.unexpectedResultType
@@ -299,11 +300,11 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func moveItem(for sourceItem: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	private func moveItem(for sourceItem: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: moveItem(for: \(sourceItem.identifier), from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
-		return moveItemQuery(for: sourceItem, from: sourceCloudPath, to: targetCloudPath).then { query in
-			self.executeQuery(query)
-		}.then { result -> Void in
+		let query = try await moveItemQuery(for: sourceItem, from: sourceCloudPath, to: targetCloudPath)
+		try Task.checkCancellation()
+		try await executeQuery(query) { result -> Void in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: moveItem(for: \(sourceItem.identifier), from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
@@ -316,7 +317,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Resolve Path
 
-	private func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<GoogleDriveItem> {
+	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> GoogleDriveItem {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolvePath(forItemAt: \(cloudPath.path)) called")
 		var pathToCheckForCache = cloudPath
 		var cachedItem = identifierCache.get(pathToCheckForCache)
@@ -325,23 +326,21 @@ public class GoogleDriveCloudProvider: CloudProvider {
 			cachedItem = identifierCache.get(pathToCheckForCache)
 		}
 		guard let item = cachedItem else {
-			return Promise(GoogleDriveError.inconsistentCache)
+			throw GoogleDriveError.inconsistentCache
 		}
 		if pathToCheckForCache != cloudPath {
-			return traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
+			return try await traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
 		}
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolvePath(forItemAt: \(cloudPath.path)) finished with item: \(item.identifier)")
-		return Promise(item)
+		return item
 	}
 
-	private func resolveParentPath(forItemAt cloudPath: CloudPath) -> Promise<GoogleDriveItem> {
+	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> GoogleDriveItem {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		return resolvePath(forItemAt: parentCloudPath).recover { error -> GoogleDriveItem in
-			if case CloudProviderError.itemNotFound = error {
-				throw CloudProviderError.parentFolderDoesNotExist
-			} else {
-				throw error
-			}
+		do {
+			return try await resolvePath(forItemAt: parentCloudPath)
+		} catch CloudProviderError.itemNotFound {
+			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}
 
@@ -357,23 +356,20 @@ public class GoogleDriveCloudProvider: CloudProvider {
 	 - Parameter startCloudPath: The cloud path of the folder from which the traversal is started.
 	 - Parameter endCloudPath: The cloud path of the item, which is the actual target and from which the Google Drive item is returned at the end.
 	 - Parameter startItem: The Google Drive item to which `startCloudPath` points.
-	 - Returns: Promise is fulfilled with the Google Drive item that belongs to `endCloudPath`.
+	 - Returns: The Google Drive item that belongs to `endCloudPath`.
 	 */
-	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: GoogleDriveItem) -> Promise<GoogleDriveItem> {
+	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: GoogleDriveItem) async throws -> GoogleDriveItem {
 		assert(startCloudPath.pathComponents.count < endCloudPath.pathComponents.count)
 		let startIndex = startCloudPath.pathComponents.count
 		let endIndex = endCloudPath.pathComponents.count
-		var currentPath = startCloudPath
 		var parentItem = startItem
-		return Promise(on: .global()) { fulfill, _ in
-			for i in startIndex ..< endIndex {
-				let name = endCloudPath.pathComponents[i]
-				currentPath = currentPath.appendingPathComponent(name)
-				parentItem = try awaitPromise(self.getGoogleDriveItem(name: name, parentItem: parentItem))
-				try self.identifierCache.addOrUpdate(parentItem)
-			}
-			fulfill(parentItem)
+		for i in startIndex ..< endIndex {
+			let name = endCloudPath.pathComponents[i]
+			try Task.checkCancellation()
+			parentItem = try await getGoogleDriveItem(name: name, parentItem: parentItem)
+			try identifierCache.addOrUpdate(parentItem)
 		}
+		return parentItem
 	}
 
 	/**
@@ -385,7 +381,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
-	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) -> Promise<GoogleDriveItem> {
+	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) async throws -> GoogleDriveItem {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) called")
 		let resolvedParentItemIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let query = GTLRDriveQuery_FilesList.query()
@@ -393,7 +389,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		query.includeItemsFromAllDrives = true
 		query.q = "'\(resolvedParentItemIdentifier)' in parents and name contains '\(escapedQueryValue(name))' and trashed = false"
 		query.fields = "files(id,name,mimeType,shortcutDetails)"
-		return executeQuery(query).then { result -> GoogleDriveItem in
+		return try await executeQuery(query) { result -> GoogleDriveItem in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			if let fileList = result as? GTLRDrive_FileList {
 				for file in fileList.files ?? [GTLRDrive_File]() where file.name == name {
@@ -408,25 +404,17 @@ public class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Resolve Shortcut
 
-	private func resolveFile(_ file: GTLRDrive_File, with item: GoogleDriveItem) -> Promise<GTLRDrive_File> {
-		if let shortcut = item.shortcut {
-			return resolveShortcut(shortcut, at: item.cloudPath)
-		} else {
-			return Promise(file)
-		}
-	}
-
-	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) -> Promise<GTLRDrive_File> {
+	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolveShortcut(\(shortcut.targetIdentifier), at: \(cloudPath.path)) called")
 		let query = GTLRDriveQuery_FilesGet.query(withFileId: shortcut.targetIdentifier)
 		query.supportsAllDrives = true
 		query.fields = "modifiedTime,size,mimeType"
-		return executeQuery(query).then { result -> GTLRDrive_File in
+		return try await executeQuery(query) { result -> CloudItemMetadata in
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolveShortcut(\(shortcut.targetIdentifier), at: \(cloudPath.path)) received result: \((result as? GTLRObject)?.jsonString() ?? result)")
 			guard let file = result as? GTLRDrive_File else {
 				throw GoogleDriveError.unexpectedResultType
 			}
-			return file
+			return self.convertToCloudItemMetadata(file, at: cloudPath)
 		}
 	}
 
@@ -459,30 +447,28 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		return query
 	}
 
-	private func uploadFileQuery(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<GTLRDriveQuery> {
+	private func uploadFileQuery(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) async throws -> GTLRDriveQuery {
 		let resolvedParentIdentifier = parentItem.shortcut?.targetIdentifier ?? parentItem.identifier
 		let metadata = GTLRDrive_File()
 		metadata.name = cloudPath.lastPathComponent
 		let uploadParameters = GTLRUploadParameters(fileURL: localURL, mimeType: "application/octet-stream")
-		return resolvePath(forItemAt: cloudPath).then { item -> GTLRDriveQuery in
+		let uploadQuery: GTLRDriveQuery
+		do {
+			let item = try await resolvePath(forItemAt: cloudPath)
 			if !replaceExisting || (replaceExisting && item.itemType == .folder) {
 				throw CloudProviderError.itemAlreadyExists
 			}
 			let query = GTLRDriveQuery_FilesUpdate.query(withObject: metadata, fileId: item.identifier, uploadParameters: uploadParameters)
 			query.supportsAllDrives = true
-			return query
-		}.recover { error -> GTLRDriveQuery in
-			guard case CloudProviderError.itemNotFound = error else {
-				throw error
-			}
+			uploadQuery = query
+		} catch CloudProviderError.itemNotFound {
 			metadata.parents = [resolvedParentIdentifier]
 			let query = GTLRDriveQuery_FilesCreate.query(withObject: metadata, uploadParameters: uploadParameters)
 			query.supportsAllDrives = true
-			return query
-		}.then { query -> GTLRDriveQuery in
-			query.fields = "id,name,modifiedTime,size,mimeType"
-			return query
+			uploadQuery = query
 		}
+		uploadQuery.fields = "id,name,modifiedTime,size,mimeType"
+		return uploadQuery
 	}
 
 	private func createFolderQuery(for parentItem: GoogleDriveItem, with name: String) -> GTLRDriveQuery {
@@ -503,7 +489,7 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		return query
 	}
 
-	private func moveItemQuery(for item: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<GTLRDriveQuery> {
+	private func moveItemQuery(for item: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws -> GTLRDriveQuery {
 		// do not resolve the source to the shortcut's target since the shortcut itself should be moved
 		let metadata = GTLRDrive_File()
 		metadata.name = targetCloudPath.lastPathComponent
@@ -511,69 +497,46 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		query.supportsAllDrives = true
 		query.fields = "id,modifiedTime"
 		if onlyItemNameChangedBetween(sourceCloudPath, and: targetCloudPath) {
-			return Promise(query)
+			return query
 		} else {
-			return all(resolveParentPath(forItemAt: sourceCloudPath), resolveParentPath(forItemAt: targetCloudPath)).then { oldParentItem, newParentItem -> GTLRDriveQuery_FilesUpdate in
-				// but resolve the target's parent if it is a shortcut
-				let resolvedNewParentIdentifier = newParentItem.shortcut?.targetIdentifier ?? newParentItem.identifier
-				query.addParents = resolvedNewParentIdentifier
-				query.removeParents = oldParentItem.identifier
-				return query
-			}
+			let oldParentItem = try await resolveParentPath(forItemAt: sourceCloudPath)
+			let newParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
+			// but resolve the target's parent if it is a shortcut
+			let resolvedNewParentIdentifier = newParentItem.shortcut?.targetIdentifier ?? newParentItem.identifier
+			query.addParents = resolvedNewParentIdentifier
+			query.removeParents = oldParentItem.identifier
+			return query
 		}
 	}
 
 	// MARK: - Execution
 
-	private func executeQuery(_ query: GTLRDriveQuery) -> Promise<Any> {
-		return Promise<Any> { fulfill, reject in
-			let ticket = self.driveService.executeQuery(query) { ticket, result, error in
-				self.runningTickets.removeAll { $0 == ticket }
+	private func executeQuery<Value: Sendable>(_ query: GTLRDriveQuery, convert: @escaping (Any) throws -> Value) async throws -> Value {
+		return try await withSDKContinuation { resumer in
+			driveService.executeQuery(query) { _, result, error in
 				if let error = error as NSError? {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeQuery(\(query.requestID)) failed with error: \(error)")
-					if isNetworkConnectionError(error) {
-						reject(CloudProviderError.noInternetConnection)
-					} else if (error.domain == kGTLRErrorObjectDomain && (error.code == 401 || error.code == 403)) || (error.domain == OIDOAuthTokenErrorDomain && error.code == OIDErrorCodeOAuth.invalidGrant.rawValue) {
-						reject(CloudProviderError.unauthorized)
-					} else if error.domain == kGTLRErrorObjectDomain, error.code == 404 {
-						reject(CloudProviderError.itemNotFound)
-					} else if error.domain == kGTLRErrorObjectDomain, error.code == 507 {
-						// This has never been verified and Google Drive API documentation is sparse.
-						reject(CloudProviderError.quotaInsufficient)
-					} else {
-						reject(error)
-					}
+					resumer.resume(throwing: self.convertQueryError(error))
 					return
 				}
-				if let result = result {
-					fulfill(result)
-				} else {
-					fulfill(())
+				do {
+					try resumer.resume(returning: convert(result ?? ()))
+				} catch {
+					resumer.resume(throwing: error)
 				}
 			}
-			self.runningTickets.append(ticket)
 		}
 	}
 
-	private func executeFetcher(_ fetcher: GTMSessionFetcher) -> Promise<Void> {
-		return Promise<Void> { fulfill, reject in
-			self.runningFetchers.append(fetcher)
+	private func executeFetcher(_ fetcher: GTMSessionFetcher) async throws {
+		try await withSDKContinuation { (resumer: Resumer<Void>) in
 			fetcher.beginFetch { _, error in
-				self.runningFetchers.removeAll { $0 == fetcher }
 				if let error = error as NSError? {
 					CloudAccessDDLogDebug("GoogleDriveCloudProvider: executeFetcher(\(fetcher.request?.description ?? "nil")) failed with error: \(error)")
-					if isNetworkConnectionError(error) {
-						reject(CloudProviderError.noInternetConnection)
-					} else if error.domain == kGTMSessionFetcherStatusDomain && (error.code == 401 || error.code == 403) {
-						reject(CloudProviderError.unauthorized)
-					} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 404 {
-						reject(CloudProviderError.itemNotFound)
-					} else {
-						reject(error)
-					}
+					resumer.resume(throwing: self.convertFetcherError(error))
 					return
 				}
-				fulfill(())
+				resumer.resume()
 			}
 		}
 	}
@@ -586,6 +549,37 @@ public class GoogleDriveCloudProvider: CloudProvider {
 		let lastModifiedDate = file.modifiedTime?.date
 		let size = file.size?.intValue
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+	}
+
+	func convertQueryError(_ error: NSError) -> Error {
+		if isCancellationError(error) {
+			return CancellationError()
+		} else if isNetworkConnectionError(error) {
+			return CloudProviderError.noInternetConnection
+		} else if (error.domain == kGTLRErrorObjectDomain && (error.code == 401 || error.code == 403)) || (error.domain == OIDOAuthTokenErrorDomain && error.code == OIDErrorCodeOAuth.invalidGrant.rawValue) {
+			return CloudProviderError.unauthorized
+		} else if error.domain == kGTLRErrorObjectDomain, error.code == 404 {
+			return CloudProviderError.itemNotFound
+		} else if error.domain == kGTLRErrorObjectDomain, error.code == 507 {
+			// This has never been verified and Google Drive API documentation is sparse.
+			return CloudProviderError.quotaInsufficient
+		} else {
+			return error
+		}
+	}
+
+	func convertFetcherError(_ error: NSError) -> Error {
+		if isCancellationError(error) {
+			return CancellationError()
+		} else if isNetworkConnectionError(error) {
+			return CloudProviderError.noInternetConnection
+		} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 401 || error.code == 403 {
+			return CloudProviderError.unauthorized
+		} else if error.domain == kGTMSessionFetcherStatusDomain, error.code == 404 {
+			return CloudProviderError.itemNotFound
+		} else {
+			return error
+		}
 	}
 
 	func onlyItemNameChangedBetween(_ lhs: CloudPath, and rhs: CloudPath) -> Bool {

@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-public enum CloudItemType: String, Codable, DatabaseValueConvertible {
+public enum CloudItemType: String, Codable, DatabaseValueConvertible, Sendable {
 	case file
 	case folder
 	case symlink

@@ -12,66 +12,79 @@
 @testable import CryptomatorCloudAccess
 #endif
 import Foundation
-import Promises
+import os
 import XCTest
 
 enum CloudProviderFolderMockError: Error {
 	case notMocked
 }
 
-private class CloudProviderFolderMock: CloudProvider {
-	var existingFolders = [CloudPath]()
-	var createdFolders = [CloudPath]()
-	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+private final class CloudProviderFolderMock: CloudProvider {
+	let existingFolders: [CloudPath]
+	private let lockedCreatedFolders = OSAllocatedUnfairLock(initialState: [CloudPath]())
+	var createdFolders: [CloudPath] {
+		lockedCreatedFolders.withLock { $0 }
 	}
 
-	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	init(existingFolders: [CloudPath] = []) {
+		self.existingFolders = existingFolders
 	}
 
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		throw CloudProviderFolderMockError.notMocked
 	}
 
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		throw CloudProviderFolderMockError.notMocked
 	}
 
-	func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		guard createdFolders.filter({ $0 == cloudPath }).isEmpty, existingFolders.filter({ $0 == cloudPath }).isEmpty else {
-			return Promise(CloudProviderError.itemAlreadyExists)
+	@concurrent
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		throw CloudProviderFolderMockError.notMocked
+	}
+
+	@concurrent
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		throw CloudProviderFolderMockError.notMocked
+	}
+
+	@concurrent
+	func createFolder(at cloudPath: CloudPath) async throws {
+		try lockedCreatedFolders.withLock { createdFolders in
+			guard !createdFolders.contains(cloudPath), !existingFolders.contains(cloudPath) else {
+				throw CloudProviderError.itemAlreadyExists
+			}
+			createdFolders.append(cloudPath)
 		}
-		createdFolders.append(cloudPath)
-		return Promise(())
 	}
 
-	func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func deleteFile(at cloudPath: CloudPath) async throws {
+		throw CloudProviderFolderMockError.notMocked
 	}
 
-	func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func deleteFolder(at cloudPath: CloudPath) async throws {
+		throw CloudProviderFolderMockError.notMocked
 	}
 
-	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		throw CloudProviderFolderMockError.notMocked
 	}
 
-	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderFolderMockError.notMocked)
+	@concurrent
+	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		throw CloudProviderFolderMockError.notMocked
 	}
 }
 
 class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
-	private var provider: CloudProviderFolderMock!
-
-	override func setUpWithError() throws {
-		provider = CloudProviderFolderMock()
-	}
-
 	func testDoesNotCreateAnyFolderForRootPath() async throws {
-		try await provider.createFolderWithIntermediates(for: CloudPath("/")).async()
+		let provider = CloudProviderFolderMock()
+		try await provider.createFolderWithIntermediates(for: CloudPath("/"))
 		guard provider.createdFolders.isEmpty else {
 			XCTFail("Provider created at least one folder")
 			return
@@ -79,8 +92,9 @@ class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
 	}
 
 	func testCreateFolderWithIntermediates() async throws {
+		let provider = CloudProviderFolderMock()
 		let path = CloudPath("/Foo/Bar")
-		try await provider.createFolderWithIntermediates(for: path).async()
+		try await provider.createFolderWithIntermediates(for: path)
 		guard provider.createdFolders.count == 2 else {
 			XCTFail("Provider created not exactly two folders")
 			return
@@ -90,9 +104,9 @@ class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
 	}
 
 	func testCreateFolderWithIntermediatesIfAFolderAlreadyExists() async throws {
+		let provider = CloudProviderFolderMock(existingFolders: [CloudPath("/Foo")])
 		let path = CloudPath("/Foo/Bar")
-		provider.existingFolders.append(CloudPath("/Foo"))
-		try await provider.createFolderWithIntermediates(for: path).async()
+		try await provider.createFolderWithIntermediates(for: path)
 		guard provider.createdFolders.count == 1 else {
 			XCTFail("Provider created not exactly two folders")
 			return

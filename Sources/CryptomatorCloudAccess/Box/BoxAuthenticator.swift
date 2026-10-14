@@ -27,8 +27,7 @@ public enum BoxAuthenticator {
 		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
 		let oauth = BoxOAuth(config: config)
 		do {
-			// Awaited in a task that doesn't inherit cancellation, because the Box SDK would otherwise return before its request has terminated.
-			try await _Concurrency.Task { _ = try await oauth.runLoginFlow(options: .init(), context: context) }.value // access token is implicitly saved in token storage
+			_ = try await oauth.runLoginFlow(options: .init(), context: context) // access token is implicitly saved in token storage
 		} catch {
 			throw convertLoginFlowError(error)
 		}

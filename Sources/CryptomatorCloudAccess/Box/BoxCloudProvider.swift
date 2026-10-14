@@ -7,6 +7,7 @@
 //
 
 @preconcurrency import BoxSdkGen
+import CryptoKit
 import Foundation
 
 /// Safe to share across threads, because `BoxClient` is immutable and each of its requests is an independent async call.
@@ -16,7 +17,7 @@ public final class BoxCloudProvider: CloudProvider {
 	private let maxPageSize: Int
 
 	public init(credential: BoxCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
-		let networkSession = NetworkSession(configuration: urlSessionConfiguration)
+		let networkSession = NetworkSession(networkClient: BoxURLSessionNetworkClient(configuration: urlSessionConfiguration))
 		self.client = BoxClient(auth: credential.client.auth, networkSession: networkSession)
 		self.identifierCache = try BoxIdentifierCache()
 		self.maxPageSize = max(1, min(maxPageSize, 1000))
@@ -196,7 +197,10 @@ public final class BoxCloudProvider: CloudProvider {
 		try _Concurrency.Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			do {
-				let url = try await withBoxSDKCancellationShield { try await self.client.downloads.downloadFile(fileId: item.identifier, downloadDestinationURL: stagedFile) }
+				// The download returns no URL if the file isn't ready for download yet.
+				guard let url = try await withBoxSDKCancellationShield({ try await self.client.downloads.downloadFile(fileId: item.identifier, downloadDestinationUrl: stagedFile) }) else {
+					throw BoxSDKError(message: "File is not ready for download")
+				}
 				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) finished downloading to: \(url)")
 			} catch {
 				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
@@ -239,12 +243,12 @@ public final class BoxCloudProvider: CloudProvider {
 
 	private func uploadSmallNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = UploadFileRequestBody(
+			let requestBody = try UploadFileRequestBody(
 				attributes: UploadFileRequestBodyAttributesField(
 					name: cloudPath.lastPathComponent,
 					parent: UploadFileRequestBodyAttributesParentField(id: parentItem.identifier)
 				),
-				fileURL: localURL
+				file: createInputStream(for: localURL)
 			)
 			let files = try await withBoxSDKCancellationShield { try await self.client.uploads.uploadFile(requestBody: requestBody) }
 			guard let file = files.entries?.first else {
@@ -260,9 +264,9 @@ public final class BoxCloudProvider: CloudProvider {
 
 	private func uploadSmallExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = UploadFileVersionRequestBody(
+			let requestBody = try UploadFileVersionRequestBody(
 				attributes: UploadFileVersionRequestBodyAttributesField(name: cloudPath.lastPathComponent),
-				fileURL: localURL
+				file: createInputStream(for: localURL)
 			)
 			let files = try await withBoxSDKCancellationShield { try await self.client.uploads.uploadFileVersion(fileId: existingItem.identifier, requestBody: requestBody) }
 			guard let file = files.entries?.first else {
@@ -302,23 +306,30 @@ public final class BoxCloudProvider: CloudProvider {
 		guard let uploadPartUrl = uploadSession.sessionEndpoints?.uploadPart, let commitUrl = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize else {
 			throw BoxSDKError(message: "Failed to retrieve upload session data")
 		}
-		let fileHash = Hash(algorithm: .sha1)
-		var results = PartAccumulator(lastIndex: -1, parts: [], fileSize: Int64(fileSize), uploadPartUrl: uploadPartUrl, fileHash: fileHash)
-		for chunk in Utils.iterateChunks(fileURL: localURL, chunkSize: partSize, fileSize: Int64(fileSize)) {
-			do {
-				try _Concurrency.Task.checkCancellation()
-				results = try await withBoxSDKCancellationShield { [results] in try await self.client.chunkedUploads.reducer(acc: results, chunk: chunk) }
-			} catch {
-				// The chunk iterator only deletes the file of a chunk when it advances to the next one.
-				try? FileManager.default.removeItem(at: chunk)
-				throw error
-			}
+		// Parts are uploaded one by one instead of through the SDK's reducer, which would keep a second copy of each part in memory.
+		var fileHash = Insecure.SHA1()
+		var parts = [UploadPart]()
+		var offset: Int64 = 0
+		let fileHandle = try FileHandle(forReadingFrom: localURL)
+		defer {
+			try? fileHandle.close()
 		}
-		let sha1 = await fileHash.digestHash(encoding: "base64")
-		let digest = "\("sha=")\(sha1)"
+		while let chunk = try fileHandle.read(upToCount: Int(partSize)), !chunk.isEmpty {
+			try _Concurrency.Task.checkCancellation()
+			let digest = "sha=\(Data(Insecure.SHA1.hash(data: chunk)).base64EncodedString())"
+			let contentRange = "bytes \(offset)-\(offset + Int64(chunk.count) - 1)/\(fileSize)"
+			let uploadedPart = try await withBoxSDKCancellationShield { try await self.client.chunkedUploads.uploadFilePartByUrl(url: uploadPartUrl, requestBody: InputStream(data: chunk), headers: UploadFilePartByUrlHeaders(digest: digest, contentRange: contentRange)) }
+			guard let part = uploadedPart.part else {
+				throw BoxSDKError(message: "Failed to retrieve uploaded part")
+			}
+			parts.append(part)
+			fileHash.update(data: chunk)
+			offset += Int64(chunk.count)
+		}
+		let digest = "sha=\(Data(fileHash.finalize()).base64EncodedString())"
 		try _Concurrency.Task.checkCancellation()
-		let committedSession = try await withBoxSDKCancellationShield { [results] in try await self.client.chunkedUploads.createFileUploadSessionCommitByUrl(url: commitUrl, requestBody: CreateFileUploadSessionCommitByUrlRequestBody(parts: results.parts), headers: CreateFileUploadSessionCommitByUrlHeaders(digest: digest)) }
-		guard let file = committedSession.entries?.first else {
+		let committedSession = try await withBoxSDKCancellationShield { [parts] in try await self.client.chunkedUploads.createFileUploadSessionCommitByUrl(url: commitUrl, requestBody: CreateFileUploadSessionCommitByUrlRequestBody(parts: parts), headers: CreateFileUploadSessionCommitByUrlHeaders(digest: digest)) }
+		guard let file = committedSession?.entries?.first else {
 			throw CloudProviderError.itemNotFound
 		}
 		CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeFile(for: \(uploadSession), to: \(cloudPath), fileSize: \(fileSize)) received file: \((try? file.serializeToString()) ?? file)")
@@ -493,6 +504,13 @@ public final class BoxCloudProvider: CloudProvider {
 	}
 
 	// MARK: - Helpers
+
+	private func createInputStream(for localURL: URL) throws -> InputStream {
+		guard let inputStream = InputStream(url: localURL) else {
+			throw CloudProviderError.itemNotFound
+		}
+		return inputStream
+	}
 
 	private func convertToCloudItemMetadata(_ file: File, at cloudPath: CloudPath) -> CloudItemMetadata {
 		let name = file.name ?? ""

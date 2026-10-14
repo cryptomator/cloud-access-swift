@@ -24,6 +24,7 @@
 		761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */; };
 		FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */; };
 		A24B06589C535B534CD7BD69 /* BoxCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2D031BBA94F13E30DE041C /* BoxCloudProviderTests.swift */; };
+		353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51F06FB3D822AB529843FC0 /* BoxURLSessionNetworkClientTests.swift */; };
 		1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */; };
 		7AC1892CD04F8134D4B15675 /* DropboxCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */; };
 		4B9F207CE2FEAC3274ED81CE /* DropboxAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D378CAB03E8037B104DB86 /* DropboxAuthenticatorTests.swift */; };
@@ -218,8 +219,9 @@
 		B3D513922BA9A32200DE0D36 /* BoxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D5138E2BA9A32200DE0D36 /* BoxCredential.swift */; };
 		B3D513932BA9A32200DE0D36 /* BoxSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */; };
 		B3D513972BA9A44000DE0D36 /* BoxCloudProviderIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3D513952BA9A3BB00DE0D36 /* BoxCloudProviderIntegrationTests.swift */; };
-		B3D620D22BFC7B2E007301C1 /* BoxSdkGen in Frameworks */ = {isa = PBXBuildFile; productRef = B3D620D12BFC7B2E007301C1 /* BoxSdkGen */; };
+		B3D620D22BFC7B2E007301C1 /* BoxSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B3D620D12BFC7B2E007301C1 /* BoxSDK */; };
 		B3A1C0DF2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0DE2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift */; };
+		B3A1C0E12E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0E02E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift */; };
 		B3FC94A62BA9AA4400D1ECFD /* BoxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A52BA9AA4400D1ECFD /* BoxCloudProvider.swift */; };
 		B3FC94A82BA9AEEC00D1ECFD /* BoxIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A72BA9AEEC00D1ECFD /* BoxIdentifierCache.swift */; };
 		B3FC94AA2BA9AEFC00D1ECFD /* BoxItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC94A92BA9AEFC00D1ECFD /* BoxItem.swift */; };
@@ -253,6 +255,7 @@
 		6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOperationTests.swift; sourceTree = "<group>"; };
 		396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSettledTests.swift; sourceTree = "<group>"; };
 		BC2D031BBA94F13E30DE041C /* BoxCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxCloudProviderTests.swift; sourceTree = "<group>"; };
+		F51F06FB3D822AB529843FC0 /* BoxURLSessionNetworkClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxURLSessionNetworkClientTests.swift; sourceTree = "<group>"; };
 		F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxAuthenticatorTests.swift; sourceTree = "<group>"; };
 		7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProviderTests.swift; sourceTree = "<group>"; };
 		06D378CAB03E8037B104DB86 /* DropboxAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxAuthenticatorTests.swift; sourceTree = "<group>"; };
@@ -444,6 +447,7 @@
 		B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BoxSetup.swift; sourceTree = "<group>"; };
 		B3D513952BA9A3BB00DE0D36 /* BoxCloudProviderIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxCloudProviderIntegrationTests.swift; sourceTree = "<group>"; };
 		B3A1C0DE2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxSDKCancellationShield.swift; sourceTree = "<group>"; };
+		B3A1C0E02E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxURLSessionNetworkClient.swift; sourceTree = "<group>"; };
 		B3FC94A52BA9AA4400D1ECFD /* BoxCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxCloudProvider.swift; sourceTree = "<group>"; };
 		B3FC94A72BA9AEEC00D1ECFD /* BoxIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxIdentifierCache.swift; sourceTree = "<group>"; };
 		B3FC94A92BA9AEFC00D1ECFD /* BoxItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxItem.swift; sourceTree = "<group>"; };
@@ -468,7 +472,7 @@
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
-				B3D620D22BFC7B2E007301C1 /* BoxSdkGen in Frameworks */,
+				B3D620D22BFC7B2E007301C1 /* BoxSDK in Frameworks */,
 				4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -674,6 +678,7 @@
 			children = (
 				F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */,
 				BC2D031BBA94F13E30DE041C /* BoxCloudProviderTests.swift */,
+				F51F06FB3D822AB529843FC0 /* BoxURLSessionNetworkClientTests.swift */,
 			);
 			path = Box;
 			sourceTree = "<group>";
@@ -1088,6 +1093,7 @@
 				B3FC94A92BA9AEFC00D1ECFD /* BoxItem.swift */,
 				B3A1C0DE2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift */,
 				B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */,
+				B3A1C0E02E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift */,
 			);
 			name = Box;
 			path = Sources/CryptomatorCloudAccess/Box;
@@ -1148,7 +1154,7 @@
 				4A75E1C628806FA100952FE6 /* MSGraphClientSDK */,
 				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
 				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
-				B3D620D12BFC7B2E007301C1 /* BoxSdkGen */,
+				B3D620D12BFC7B2E007301C1 /* BoxSDK */,
 			);
 			productName = CloudAccess;
 			productReference = 4A058FF124519FFC008831F9 /* CryptomatorCloudAccess.framework */;
@@ -1238,7 +1244,7 @@
 				4A75E1C528806FA100952FE6 /* XCRemoteSwiftPackageReference "msgraph-sdk-objc-spm" */,
 				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
 				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
-				B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */,
+				B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-ios-sdk" */,
 			);
 			productRefGroup = 4A058FF224519FFC008831F9 /* Products */;
 			projectDirPath = "";
@@ -1385,6 +1391,7 @@
 				7484608729795421009933D8 /* VaultConfigHelper.swift in Sources */,
 				B3FC94A62BA9AA4400D1ECFD /* BoxCloudProvider.swift in Sources */,
 				B3A1C0DF2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift in Sources */,
+				B3A1C0E12E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift in Sources */,
 				74073D1927C9406000A86C9A /* CallTask+Async.swift in Sources */,
 				4A1A1194262EC46E00DAF62F /* MicrosoftGraphIdentifierCache.swift in Sources */,
 				749D50872D23FD1300427353 /* MicrosoftGraphSite.swift in Sources */,
@@ -1482,6 +1489,7 @@
 				761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */,
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
 				A24B06589C535B534CD7BD69 /* BoxCloudProviderTests.swift in Sources */,
+				353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */,
 				1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */,
 				7AC1892CD04F8134D4B15675 /* DropboxCloudProviderTests.swift in Sources */,
 				4B9F207CE2FEAC3274ED81CE /* DropboxAuthenticatorTests.swift in Sources */,
@@ -1986,12 +1994,12 @@
 				minimumVersion = 7.11.1;
 			};
 		};
-		B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */ = {
+		B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tobihagemann/box-swift-sdk-gen.git";
+			repositoryURL = "https://github.com/box/box-ios-sdk.git";
 			requirement = {
-				kind = exactVersion;
-				version = "0.5.1-cryptomator";
+				kind = upToNextMinorVersion;
+				minimumVersion = 10.17.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -2067,10 +2075,10 @@
 			package = 74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;
 		};
-		B3D620D12BFC7B2E007301C1 /* BoxSdkGen */ = {
+		B3D620D12BFC7B2E007301C1 /* BoxSDK */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-swift-sdk-gen" */;
-			productName = BoxSdkGen;
+			package = B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-ios-sdk" */;
+			productName = BoxSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -10,9 +10,7 @@
 import Foundation
 
 /**
- Awaits a Box SDK call in a task that doesn't inherit the cancellation of the current task.
-
- The Box SDK reacts to task cancellation itself and then returns before its `URLSessionTask` has terminated. Shielded from it, the call returns only after the SDK's work has finished.
+ Awaits a Box SDK call in a task that doesn't inherit the cancellation of the current task. Otherwise, cancellation would end the call during the retry delay of its network client, before the SDK's work has finished.
 
  - Throws: `CancellationError` if the SDK reports that its request was cancelled, e.g., because its session was invalidated.
  */

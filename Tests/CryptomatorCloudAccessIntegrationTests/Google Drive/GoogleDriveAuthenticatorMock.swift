@@ -6,10 +6,10 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import AppAuth
+@preconcurrency import AppAuth
 import Foundation
-import GoogleAPIClientForREST_Drive
-import GTMAppAuth
+@preconcurrency import GoogleAPIClientForREST_Drive
+@preconcurrency import GTMAppAuth
 #if canImport(CryptomatorCloudAccessCore)
 import CryptomatorCloudAccessCore
 #else

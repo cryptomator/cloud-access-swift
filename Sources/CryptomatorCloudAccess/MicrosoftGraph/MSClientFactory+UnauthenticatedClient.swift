@@ -6,7 +6,7 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-import MSGraphClientSDK
+@preconcurrency import MSGraphClientSDK
 
 extension MSClientFactory {
 	static func createUnauthenticatedHTTPClient(with urlSessionConfiguration: URLSessionConfiguration) -> MSHTTPClient {

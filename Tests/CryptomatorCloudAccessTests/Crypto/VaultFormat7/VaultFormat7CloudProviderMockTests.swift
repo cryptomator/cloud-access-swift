@@ -6,7 +6,6 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -28,7 +27,7 @@ class VaultFormat7CloudProviderMockTests: XCTestCase {
 
 	func testVaultRootContainsFiles() async throws {
 		let provider = VaultFormat7CloudProviderMock()
-		let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil).async()
+		let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil)
 		XCTAssertEqual(6, cloudItemList.items.count)
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "dir1.c9r" }))
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s" }))
@@ -41,9 +40,9 @@ class VaultFormat7CloudProviderMockTests: XCTestCase {
 	func testDir1FileContainsDirId() async throws {
 		let provider = VaultFormat7CloudProviderMock()
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r")).async()
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"))
 		XCTAssertEqual(.file, metadata.itemType)
-		try await provider.downloadFile(from: metadata.cloudPath, to: localURL).async()
+		_ = try await provider.downloadFile(from: metadata.cloudPath, to: localURL)
 		let downloadedContents = try Data(contentsOf: localURL)
 		XCTAssertEqual(Data("dir1-id".utf8), downloadedContents)
 	}

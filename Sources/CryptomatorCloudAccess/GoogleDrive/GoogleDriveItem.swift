@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import GoogleAPIClientForREST_Drive
+@preconcurrency import GoogleAPIClientForREST_Drive
 import GRDB
 
 struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {

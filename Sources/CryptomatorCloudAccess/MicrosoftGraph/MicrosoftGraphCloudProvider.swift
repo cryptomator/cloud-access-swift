@@ -7,11 +7,11 @@
 //
 
 import Foundation
-import MSGraphClientModels
-import MSGraphClientSDK
-import Promises
+@preconcurrency import MSGraphClientModels
+@preconcurrency import MSGraphClientSDK
 
-public class MicrosoftGraphCloudProvider: CloudProvider {
+/// Safe to share across threads, because the requests of both HTTP clients are issued on the main actor.
+public final class MicrosoftGraphCloudProvider: CloudProvider {
 	private static let maxUploadFileChunkLength = 16 * 320 * 1024 // 5MiB
 
 	private let client: MSHTTPClient
@@ -47,142 +47,149 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 		try? FileManager.default.removeItem(at: tmpDirURL)
 	}
 
-	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.fetchItemMetadata(for: item)
-		}
+	@concurrent
+	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		return try await fetchItemMetadata(for: item)
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	@concurrent
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
 		if let urlString = pageToken {
-			return fetchItemList(forFolderAt: cloudPath, with: urlString)
+			return try await fetchItemList(forFolderAt: cloudPath, with: urlString)
 		}
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.fetchItemList(for: item)
-		}
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		return try await fetchItemList(for: item)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		if FileManager.default.fileExists(atPath: localURL.path) {
-			return Promise(CloudProviderError.itemAlreadyExists)
-		}
-		return resolvePath(forItemAt: cloudPath).then { item in
-			self.downloadFile(for: item, to: localURL)
-		}
+		try Task.checkCancellation()
+		let phases = Progress.phases(of: progress, 999)
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		let metadata = try await downloadFile(for: item, to: localURL)
+		phases.completeTransfer()
+		return metadata
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		let attributes: [FileAttributeKey: Any]
 		do {
 			attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
 		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch {
-			return Promise(error)
+			throw CloudProviderError.itemNotFound
 		}
 		let localItemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 		guard localItemType == .file else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
 		guard let fileSize = attributes[FileAttributeKey.size] as? Int else {
-			return Promise(MicrosoftGraphError.missingFileSize)
+			throw MicrosoftGraphError.missingFileSize
 		}
-		return fetchItemMetadata(at: cloudPath).then { metadata -> Void in
+		let phases = Progress.phases(of: progress, 999)
+		do {
+			let metadata = try await fetchItemMetadata(at: cloudPath)
 			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
 				throw CloudProviderError.itemAlreadyExists
 			}
-		}.recover { error -> Void in
-			guard case CloudProviderError.itemNotFound = error else {
-				throw error
-			}
-		}.then { _ -> Promise<MicrosoftGraphItem> in
-			return self.resolveParentPath(forItemAt: cloudPath)
-		}.then { item in
-			return self.uploadFile(for: item, from: localURL, to: cloudPath, fileSize: fileSize)
+		} catch CloudProviderError.itemNotFound {
+			// no-op
 		}
+		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
+		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize)
+		phases.completeTransfer()
+		return metadata
 	}
 
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: cloudPath).then { itemExists -> Void in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then {
-			self.resolveParentPath(forItemAt: cloudPath)
-		}.then { parentItem in
-			return self.createFolder(for: parentItem, with: cloudPath.lastPathComponent)
+	@concurrent
+	public func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		if try await checkForItemExistence(at: cloudPath) {
+			throw CloudProviderError.itemAlreadyExists
 		}
+		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 	}
 
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
 	}
 
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
 	}
 
-	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		return resolvePath(forItemAt: cloudPath).then { item in
-			return self.deleteItem(for: item)
+	private func deleteItem(at cloudPath: CloudPath) async throws {
+		let item = try await resolvePath(forItemAt: cloudPath)
+		try Task.checkCancellation()
+		try await deleteItem(for: item)
+	}
+
+	@concurrent
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	@concurrent
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		if try await checkForItemExistence(at: targetCloudPath) {
+			throw CloudProviderError.itemAlreadyExists
 		}
-	}
-
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return checkForItemExistence(at: targetCloudPath).then { itemExists in
-			if itemExists {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		}.then { _ -> Promise<(MicrosoftGraphItem, MicrosoftGraphItem)> in
-			return all(self.resolvePath(forItemAt: sourceCloudPath), self.resolveParentPath(forItemAt: targetCloudPath))
-		}.then { item, targetParentItem in
-			self.moveItem(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
-		}
+		let item = try await resolvePath(forItemAt: sourceCloudPath)
+		let targetParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
+		try Task.checkCancellation()
+		try await moveItem(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 	}
 
 	// MARK: - Operations
 
-	private func fetchItemMetadata(for item: MicrosoftGraphItem) -> Promise<CloudItemMetadata> {
+	private func fetchItemMetadata(for item: MicrosoftGraphItem) async throws -> CloudItemMetadata {
 		guard let url = URL(string: requestURLString(for: item)) else {
-			return Promise(MicrosoftGraphError.invalidURL)
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> CloudItemMetadata in
-			try self.identifierCache.addOrUpdate(item)
-			let driveItem = try MSGraphDriveItem(data: data)
-			return try self.convertToCloudItemMetadata(driveItem, at: item.cloudPath)
-		}
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		try identifierCache.addOrUpdate(item)
+		let driveItem = try MSGraphDriveItem(data: data)
+		return try convertToCloudItemMetadata(driveItem, at: item.cloudPath)
 	}
 
-	private func fetchItemList(for item: MicrosoftGraphItem) -> Promise<CloudItemList> {
+	private func fetchItemList(for item: MicrosoftGraphItem) async throws -> CloudItemList {
 		guard item.itemType == .folder else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
-		let request: NSMutableURLRequest
-		do {
-			request = try childrenRequest(for: item)
-		} catch {
-			return Promise(error)
-		}
-		return fetchItemList(forFolderAt: item.cloudPath, with: request)
+		let request = try childrenRequest(for: item)
+		return try await fetchItemList(forFolderAt: item.cloudPath, with: request)
 	}
 
-	private func fetchItemList(forFolderAt cloudPath: CloudPath, with urlString: String) -> Promise<CloudItemList> {
+	private func fetchItemList(forFolderAt cloudPath: CloudPath, with urlString: String) async throws -> CloudItemList {
 		guard let url = URL(string: urlString) else {
-			return Promise(CloudProviderError.pageTokenInvalid)
+			throw CloudProviderError.pageTokenInvalid
 		}
 		let request = NSMutableURLRequest(url: url)
-		return fetchItemList(forFolderAt: cloudPath, with: request).recover { error -> CloudItemList in
+		do {
+			return try await fetchItemList(forFolderAt: cloudPath, with: request)
+		} catch {
 			if let error = error as NSError? {
 				if error.domain == NSURLErrorDomain, error.code == NSURLErrorUnsupportedURL {
 					throw CloudProviderError.pageTokenInvalid
@@ -192,133 +199,105 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 	}
 
-	private func fetchItemList(forFolderAt cloudPath: CloudPath, with request: NSMutableURLRequest) -> Promise<CloudItemList> {
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> CloudItemList in
-			let collection = try MSCollection(data: data)
-			for case let item as [AnyHashable: Any] in collection.value {
-				guard let driveItem = MSGraphDriveItem(dictionary: item) else {
-					continue
-				}
-				guard let name = driveItem.name else {
-					continue
-				}
-				let childCloudPath = cloudPath.appendingPathComponent(name)
-				let childItem = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
-				try self.identifierCache.addOrUpdate(childItem)
+	private func fetchItemList(forFolderAt cloudPath: CloudPath, with request: NSMutableURLRequest) async throws -> CloudItemList {
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let collection = try MSCollection(data: data)
+		for case let item as [AnyHashable: Any] in collection.value {
+			guard let driveItem = MSGraphDriveItem(dictionary: item) else {
+				continue
 			}
-			return try self.convertToCloudItemList(collection, at: cloudPath)
+			guard let name = driveItem.name else {
+				continue
+			}
+			let childCloudPath = cloudPath.appendingPathComponent(name)
+			let childItem = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
+			try identifierCache.addOrUpdate(childItem)
 		}
+		return try convertToCloudItemList(collection, at: cloudPath)
 	}
 
-	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL) -> Promise<Void> {
+	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL) async throws -> CloudItemMetadata {
 		guard item.itemType == .file else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
-		let request: NSMutableURLRequest
-		do {
-			request = try contentRequest(for: item)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLDownloadTask(with: request, to: localURL)
+		let request = try contentRequest(for: item)
+		let remoteMetadata = try await fetchItemMetadata(for: item)
+		try Task.checkCancellation()
+		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+			try await executeMSURLDownloadTask(with: request, to: stagedFile)
+			return remoteMetadata
+		})
 	}
 
-	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) -> Promise<CloudItemMetadata> {
-		return createUploadSession(for: parentItem, with: cloudPath.lastPathComponent).then { uploadURL in
-			self.uploadFileChunk(from: localURL, to: uploadURL, offset: 0, totalFileSize: fileSize)
-		}.then { driveItem -> CloudItemMetadata in
-			let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
-			try self.identifierCache.addOrUpdate(item)
-			return try self.convertToCloudItemMetadata(driveItem, at: cloudPath)
-		}
+	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		let uploadURL = try await createUploadSession(for: parentItem, with: cloudPath.lastPathComponent)
+		let driveItem = try await uploadFileChunks(from: localURL, to: uploadURL, totalFileSize: fileSize)
+		let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
+		try identifierCache.addOrUpdate(item)
+		return try convertToCloudItemMetadata(driveItem, at: cloudPath)
 	}
 
-	private func createUploadSession(for parentItem: MicrosoftGraphItem, with filename: String) -> Promise<URL> {
-		let request: NSMutableURLRequest
-		do {
-			request = try createUploadSessionRequest(for: parentItem, with: filename)
-		} catch {
-			return Promise(error)
+	private func createUploadSession(for parentItem: MicrosoftGraphItem, with filename: String) async throws -> URL {
+		let request = try createUploadSessionRequest(for: parentItem, with: filename)
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let uploadSession = try MSGraphUploadSession(data: data)
+		guard let uploadSessionURLString = uploadSession.uploadUrl, let uploadSessionURL = URL(string: uploadSessionURLString) else {
+			throw MicrosoftGraphError.invalidURL
 		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> URL in
-			let uploadSession = try MSGraphUploadSession(data: data)
-			guard let uploadSessionURLString = uploadSession.uploadUrl, let uploadSessionURL = URL(string: uploadSessionURLString) else {
-				throw MicrosoftGraphError.invalidURL
+		return uploadSessionURL
+	}
+
+	private func uploadFileChunks(from localURL: URL, to uploadURL: URL, totalFileSize: Int) async throws -> MSGraphDriveItem {
+		var offset = 0
+		while true {
+			try Task.checkCancellation()
+			let localFileChunkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			defer {
+				try? FileManager.default.removeItem(at: localFileChunkURL)
 			}
-			return uploadSessionURL
-		}
-	}
-
-	private func uploadFileChunk(from localURL: URL, to uploadURL: URL, offset: Int, totalFileSize: Int) -> Promise<MSGraphDriveItem> {
-		let localFileChunkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let chunkLength: Int
-		do {
-			chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: MicrosoftGraphCloudProvider.maxUploadFileChunkLength)
-		} catch {
-			return Promise(error)
-		}
-		let request = fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: Int(offset), totalLength: totalFileSize)
-		return executeMSURLSessionUploadTask(with: request, localURL: localFileChunkURL).then { data, response in
+			let chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: MicrosoftGraphCloudProvider.maxUploadFileChunkLength)
+			let request = fileCunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: offset, totalLength: totalFileSize)
+			let (data, response) = try await executeMSURLSessionUploadTask(with: request, localURL: localFileChunkURL)
 			switch response.statusCode {
 			case MSExpectedResponseCodes.accepted.rawValue:
-				return self.uploadFileChunk(from: localURL, to: uploadURL, offset: offset + chunkLength, totalFileSize: totalFileSize)
+				offset += chunkLength
 			case MSExpectedResponseCodes.OK.rawValue, MSExpectedResponseCodes.created.rawValue:
-				let driveItem = try MSGraphDriveItem(data: data)
-				return Promise(driveItem)
+				return try MSGraphDriveItem(data: data)
 			default:
-				return Promise(self.mapStatusCodeToError(response.statusCode))
+				throw mapStatusCodeToError(response.statusCode)
 			}
-		}.always {
-			try? FileManager.default.removeItem(at: localFileChunkURL)
 		}
 	}
 
-	private func createFolder(for parentItem: MicrosoftGraphItem, with name: String) -> Promise<Void> {
-		let request: NSMutableURLRequest
-		do {
-			request = try createFolderRequest(for: parentItem, with: name)
-		} catch {
-			return Promise(error)
+	private func createFolder(for parentItem: MicrosoftGraphItem, with name: String) async throws {
+		let request = try createFolderRequest(for: parentItem, with: name)
+		let (data, response) = try await executeMSURLSessionDataTask(with: request)
+		guard response.statusCode == MSExpectedResponseCodes.created.rawValue || response.statusCode == MSExpectedResponseCodes.OK.rawValue else {
+			throw mapStatusCodeToError(response.statusCode)
 		}
-		return executeMSURLSessionDataTask(with: request).then { data, response -> Void in
-			guard response.statusCode == MSExpectedResponseCodes.created.rawValue || response.statusCode == MSExpectedResponseCodes.OK.rawValue else {
-				throw self.mapStatusCodeToError(response.statusCode)
-			}
-			let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
-			let driveItem = try MSGraphDriveItem(data: data)
-			let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
-			try self.identifierCache.addOrUpdate(item)
-		}
+		let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
+		let driveItem = try MSGraphDriveItem(data: data)
+		let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
+		try identifierCache.addOrUpdate(item)
 	}
 
-	private func deleteItem(for item: MicrosoftGraphItem) -> Promise<Void> {
-		let request: NSMutableURLRequest
-		do {
-			request = try deleteItemRequest(for: item)
-		} catch {
-			return Promise(error)
+	private func deleteItem(for item: MicrosoftGraphItem) async throws {
+		let request = try deleteItemRequest(for: item)
+		let response = try await executeMSURLSessionDataTaskWithoutData(with: request)
+		guard response.statusCode == 204 else {
+			throw mapStatusCodeToError(response.statusCode)
 		}
-		return executeMSURLSessionDataTaskWithoutData(with: request).then { response -> Void in
-			guard response.statusCode == 204 else {
-				throw self.mapStatusCodeToError(response.statusCode)
-			}
-			try self.identifierCache.invalidate(item)
-		}
+		try identifierCache.invalidate(item)
 	}
 
-	private func moveItem(from sourceItem: MicrosoftGraphItem, toParent targetParentItem: MicrosoftGraphItem, targetCloudPath: CloudPath) -> Promise<Void> {
-		let request: NSMutableURLRequest
-		do {
-			request = try moveItemRequest(for: sourceItem, with: targetParentItem, targetCloudPath: targetCloudPath)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> Void in
-			try self.identifierCache.invalidate(sourceItem)
-			let driveItem = try MSGraphDriveItem(data: data)
-			let targetItem = MicrosoftGraphItem(cloudPath: targetCloudPath, driveItem: driveItem)
-			try self.identifierCache.addOrUpdate(targetItem)
-		}
+	private func moveItem(from sourceItem: MicrosoftGraphItem, toParent targetParentItem: MicrosoftGraphItem, targetCloudPath: CloudPath) async throws {
+		let request = try moveItemRequest(for: sourceItem, with: targetParentItem, targetCloudPath: targetCloudPath)
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		try identifierCache.invalidate(sourceItem)
+		let driveItem = try MSGraphDriveItem(data: data)
+		let targetItem = MicrosoftGraphItem(cloudPath: targetCloudPath, driveItem: driveItem)
+		try identifierCache.addOrUpdate(targetItem)
 	}
 
 	// MARK: - Requests
@@ -407,110 +386,104 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Execution
 
-	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data?, URLResponse?)> {
-		HTTPDebugLogger.logRequest(request as URLRequest)
-		return Promise<(Data?, URLResponse?)> { fulfill, reject in
-			let task = MSURLSessionDataTask(request: request, client: self.client) { data, response, error in
-				if let response = response {
+	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) async throws -> (Data?, URLResponse?) {
+		let urlRequest = request as URLRequest
+		HTTPDebugLogger.logRequest(urlRequest)
+		return try await withMainActorSDKContinuation { resumer in
+			let task = MSURLSessionDataTask(request: (urlRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest, client: self.client) { data, response, error in
+				if let response {
 					HTTPDebugLogger.logResponse(response, with: data, or: nil)
 				}
-				if let error = error {
-					reject(error)
+				if let error {
+					resumer.resume(throwing: self.convertStandardError(error))
 				} else {
-					fulfill((data, response))
+					resumer.resume(returning: (data, response))
 				}
 			}
 			task?.execute()
-		}.recover { error -> (Data?, URLResponse?) in
-			throw self.convertStandardError(error)
 		}
 	}
 
-	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data, HTTPURLResponse)> {
-		return executeRawMSURLSessionDataTask(with: request).then { data, response -> (Data, HTTPURLResponse) in
-			guard let data = data, let response = response as? HTTPURLResponse else {
-				throw MicrosoftGraphError.unexpectedResult
-			}
-			return (data, response)
+	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) async throws -> (Data, HTTPURLResponse) {
+		let (data, response) = try await executeRawMSURLSessionDataTask(with: request)
+		guard let data, let response = response as? HTTPURLResponse else {
+			throw MicrosoftGraphError.unexpectedResult
 		}
+		return (data, response)
 	}
 
-	private func executeMSURLSessionDataTaskWithErrorMapping(with request: NSMutableURLRequest) -> Promise<Data> {
-		return executeMSURLSessionDataTask(with: request).then { data, httpResponse -> Data in
-			guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
-				throw (self.mapStatusCodeToError(httpResponse.statusCode))
-			}
-			return data
+	private func executeMSURLSessionDataTaskWithErrorMapping(with request: NSMutableURLRequest) async throws -> Data {
+		let (data, httpResponse) = try await executeMSURLSessionDataTask(with: request)
+		guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
+			throw mapStatusCodeToError(httpResponse.statusCode)
 		}
+		return data
 	}
 
-	private func executeMSURLSessionDataTaskWithoutData(with request: NSMutableURLRequest) -> Promise<HTTPURLResponse> {
-		return executeRawMSURLSessionDataTask(with: request).then { _, response -> HTTPURLResponse in
-			guard let response = response as? HTTPURLResponse else {
-				throw MicrosoftGraphError.unexpectedResult
-			}
-			return response
+	private func executeMSURLSessionDataTaskWithoutData(with request: NSMutableURLRequest) async throws -> HTTPURLResponse {
+		let (_, response) = try await executeRawMSURLSessionDataTask(with: request)
+		guard let response = response as? HTTPURLResponse else {
+			throw MicrosoftGraphError.unexpectedResult
 		}
+		return response
 	}
 
-	private func executeMSURLDownloadTask(with request: NSMutableURLRequest, to localURL: URL) -> Promise<Void> {
-		HTTPDebugLogger.logRequest(request as URLRequest)
-		return Promise<Void> { fulfill, reject in
-			let task = MSURLSessionDownloadTask(request: request, client: self.client) { tempLocalURL, response, error in
-				if let response = response {
+	private func executeMSURLDownloadTask(with request: NSMutableURLRequest, to localURL: URL) async throws {
+		let urlRequest = request as URLRequest
+		HTTPDebugLogger.logRequest(urlRequest)
+		try await withMainActorSDKContinuation { (resumer: Resumer<Void>) in
+			let task = MSURLSessionDownloadTask(request: (urlRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest, client: self.client) { tempLocalURL, response, error in
+				if let response {
 					HTTPDebugLogger.logResponse(response, with: nil, or: tempLocalURL)
 				}
 				switch (tempLocalURL, response, error) {
 				case let (.some(tempLocalURL), httpResponse as HTTPURLResponse, nil):
 					guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
-						reject(self.mapStatusCodeToError(httpResponse.statusCode))
+						resumer.resume(throwing: self.mapStatusCodeToError(httpResponse.statusCode))
 						return
 					}
 					do {
 						try FileManager.default.moveItem(at: tempLocalURL, to: localURL)
-						fulfill(())
+						resumer.resume()
 					} catch {
-						reject(error)
+						resumer.resume(throwing: error)
 					}
 				case let (_, _, .some(error)):
-					reject(error)
+					resumer.resume(throwing: self.convertStandardError(error))
 				default:
-					reject(MicrosoftGraphError.unexpectedResult)
+					resumer.resume(throwing: MicrosoftGraphError.unexpectedResult)
 				}
 			}
 			task?.execute()
-		}.recover { error -> Void in
-			throw self.convertStandardError(error)
 		}
 	}
 
-	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, localURL: URL) -> Promise<(Data, HTTPURLResponse)> {
-		HTTPDebugLogger.logRequest(request as URLRequest)
-		return Promise<(Data, HTTPURLResponse)> { fulfill, reject in
+	private func executeMSURLSessionUploadTask(with request: NSMutableURLRequest, localURL: URL) async throws -> (Data, HTTPURLResponse) {
+		let urlRequest = request as URLRequest
+		HTTPDebugLogger.logRequest(urlRequest)
+		return try await withMainActorSDKContinuation { resumer in
 			// We have to use an unauthenticated client, because the PUT request shouldn't contain an Authorization header.
 			// https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#remarks
-			let task = MSURLSessionUploadTask(request: request, fromFile: localURL, client: self.unauthenticatedClient) { data, response, error in
-				if let response = response {
+			let task = MSURLSessionUploadTask(request: (urlRequest as NSURLRequest).mutableCopy() as? NSMutableURLRequest, fromFile: localURL, client: self.unauthenticatedClient) { data, response, error in
+				if let response {
 					HTTPDebugLogger.logResponse(response, with: data, or: nil)
 				}
 				switch (data, response, error) {
 				case let (.some(data), httpResponse as HTTPURLResponse, nil):
-					fulfill((data, httpResponse))
+					resumer.resume(returning: (data, httpResponse))
 				case let (_, _, .some(error)):
-					reject(error)
+					resumer.resume(throwing: self.convertStandardError(error))
 				default:
-					reject(MicrosoftGraphError.unexpectedResult)
+					resumer.resume(throwing: MicrosoftGraphError.unexpectedResult)
 				}
 			}
 			task?.execute()
-		}.recover { error -> (Data, HTTPURLResponse) in
-			throw self.convertStandardError(error)
 		}
 	}
 
 	// MARK: - Resolve Path
 
-	private func resolvePath(forItemAt cloudPath: CloudPath) -> Promise<MicrosoftGraphItem> {
+	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
 		var pathToCheckForCache = cloudPath
 		var cachedItem = identifierCache.get(pathToCheckForCache)
 		while cachedItem == nil, !pathToCheckForCache.pathComponents.isEmpty {
@@ -518,51 +491,45 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 			cachedItem = identifierCache.get(pathToCheckForCache)
 		}
 		guard let item = cachedItem else {
-			return Promise(MicrosoftGraphError.inconsistentCache)
+			throw MicrosoftGraphError.inconsistentCache
 		}
 		if pathToCheckForCache != cloudPath {
-			return traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
+			return try await traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
 		}
-		return Promise(item)
+		return item
 	}
 
-	private func resolveParentPath(forItemAt cloudPath: CloudPath) -> Promise<MicrosoftGraphItem> {
+	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		return resolvePath(forItemAt: parentCloudPath).recover { error -> MicrosoftGraphItem in
-			if case CloudProviderError.itemNotFound = error {
-				throw CloudProviderError.parentFolderDoesNotExist
-			} else {
-				throw error
-			}
+		do {
+			return try await resolvePath(forItemAt: parentCloudPath)
+		} catch CloudProviderError.itemNotFound {
+			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}
 
-	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: MicrosoftGraphItem) -> Promise<MicrosoftGraphItem> {
+	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem {
 		assert(startCloudPath.pathComponents.count < endCloudPath.pathComponents.count)
 		let startIndex = startCloudPath.pathComponents.count
 		let endIndex = endCloudPath.pathComponents.count
-		var currentPath = startCloudPath
 		var parentItem = startItem
-		return Promise(on: .global()) { fulfill, _ in
-			for i in startIndex ..< endIndex {
-				let itemName = endCloudPath.pathComponents[i]
-				currentPath = currentPath.appendingPathComponent(itemName)
-				parentItem = try awaitPromise(self.getMicrosoftGraphItem(for: itemName, withParentItem: parentItem))
-				try self.identifierCache.addOrUpdate(parentItem)
-			}
-			fulfill(parentItem)
+		for i in startIndex ..< endIndex {
+			let itemName = endCloudPath.pathComponents[i]
+			try Task.checkCancellation()
+			parentItem = try await getMicrosoftGraphItem(for: itemName, withParentItem: parentItem)
+			try identifierCache.addOrUpdate(parentItem)
 		}
+		return parentItem
 	}
 
-	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) -> Promise<MicrosoftGraphItem> {
+	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem {
 		guard let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed), let url = URL(string: "\(requestURLString(for: parentItem)):/\(encodedName):") else {
-			return Promise(MicrosoftGraphError.invalidURL)
+			throw MicrosoftGraphError.invalidURL
 		}
 		let request = NSMutableURLRequest(url: url)
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphItem in
-			let driveItem = try MSGraphDriveItem(data: data)
-			return MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
-		}
+		let data = try await executeMSURLSessionDataTaskWithErrorMapping(with: request)
+		let driveItem = try MSGraphDriveItem(data: data)
+		return MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
 	}
 
 	// MARK: - Helpers
@@ -621,12 +588,15 @@ public class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 	}
 
-	private func convertStandardError(_ error: Error) -> Error {
+	func convertStandardError(_ error: Error) -> Error {
+		if isCancellationError(error) {
+			return CancellationError()
+		}
 		if isNetworkConnectionError(error) {
 			return CloudProviderError.noInternetConnection
 		}
 		switch error {
-		case MicrosoftGraphAuthenticationProviderError.accountNotFound, MicrosoftGraphAuthenticationProviderError.noAccounts:
+		case MicrosoftGraphAuthenticationProviderError.accountNotFound:
 			return CloudProviderError.unauthorized
 		default:
 			return error

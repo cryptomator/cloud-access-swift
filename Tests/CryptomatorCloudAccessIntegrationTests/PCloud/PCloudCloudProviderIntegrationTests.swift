@@ -11,9 +11,8 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import PCloudSDKSwift
+@preconcurrency import PCloudSDKSwift
 import XCTest
-@testable import Promises
 
 class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
 	override class var defaultTestSuite: XCTestSuite {
@@ -32,28 +31,22 @@ class PCloudCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthent
 		guard classSetUpError == nil else { return }
 		// Wait for pCloud's eventual consistency to catch up after setUp uploaded all test fixtures.
 		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
-		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
+		waitForConsistencyOfSetUp(expectedItemCount: expectedItemCount)
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		let client = PCloud.createClient(with: credential.user)
 		provider = try PCloudCloudProvider(client: client)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
+	override func deauthenticate() async throws {
 		let invalidCredential = PCloudInvalidCredentialMock()
 		let client = PCloud.createClient(with: invalidCredential.user)
-		// swiftlint:disable:next force_try
-		provider = try! PCloudCloudProvider(client: client)
-		return Promise(())
+		provider = try PCloudCloudProvider(client: client)
 	}
 
-	override func testFetchItemListPagination() throws {
+	override func testFetchItemListPagination() async throws {
 		throw XCTSkip("pCloud does not support pagination")
 	}
 }

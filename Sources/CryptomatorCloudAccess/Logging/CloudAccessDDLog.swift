@@ -8,9 +8,15 @@
 
 import CocoaLumberjackSwift
 import Foundation
+import os
+
+private let lockedDynamicCloudAccessLogLevel = OSAllocatedUnfairLock(initialState: DDLogLevel.all)
 
 /// The log level that can dynamically limit log messages (vs. the static DDDefaultLogLevel). This log level will only be checked, if the message passes the `DDDefaultLogLevel`.
-public var dynamicCloudAccessLogLevel = DDLogLevel.all
+public var dynamicCloudAccessLogLevel: DDLogLevel {
+	get { lockedDynamicCloudAccessLogLevel.withLock { $0 } }
+	set { lockedDynamicCloudAccessLogLevel.withLock { $0 = newValue } }
+}
 
 @inlinable
 // swiftlint:disable:next identifier_name
@@ -82,7 +88,8 @@ public func CloudAccessDDLogError(_ message: @autoclosure () -> DDLogMessageForm
 	_DDLogMessage(message(), level: level, flag: .error, context: context, file: file, function: function, line: line, tag: tag, asynchronous: async, ddlog: ddlog)
 }
 
-public class CloudAccessDDLog: DDLog {
+/// `@unchecked Sendable`: restates the conformance of `DDLog`; this subclass adds no state.
+public class CloudAccessDDLog: DDLog, @unchecked Sendable {
 	public static let shared = CloudAccessDDLog()
 	override public static func add(_ logger: DDLogger) {
 		shared.add(logger)

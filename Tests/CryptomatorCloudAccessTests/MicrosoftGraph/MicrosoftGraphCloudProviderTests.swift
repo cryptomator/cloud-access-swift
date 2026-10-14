@@ -7,8 +7,8 @@
 //
 
 import Foundation
-import MSAL
-import MSGraphClientSDK
+@preconcurrency import MSAL
+@preconcurrency import MSGraphClientSDK
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -22,6 +22,18 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 	override func setUpWithError() throws {
 		let credential = MicrosoftGraphCredential(identifier: "Test", scopes: ["TestScope"], authProvider: MSAuthenticationProviderMock(), clientApplication: MSALPublicClientApplication())
 		provider = try MicrosoftGraphCloudProvider(credential: credential, maxPageSize: maxPageSize)
+	}
+
+	func testThrowsCancellationErrorInCancelledTask() async {
+		await assertThrowsCancellationErrorInCancelledTask(provider)
+	}
+
+	func testConvertStandardError() {
+		let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
+		XCTAssertTrue(provider.convertStandardError(cancellationError) is CancellationError)
+		XCTAssertTrue(provider.convertStandardError(NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])) is CancellationError)
+		XCTAssertEqual(.noInternetConnection, provider.convertStandardError(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)) as? CloudProviderError)
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(MicrosoftGraphAuthenticationProviderError.accountNotFound) as? CloudProviderError)
 	}
 
 	func testChildrenRequest() throws {

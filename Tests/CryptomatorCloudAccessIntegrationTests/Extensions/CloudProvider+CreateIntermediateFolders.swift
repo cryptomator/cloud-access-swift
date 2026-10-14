@@ -12,28 +12,17 @@ import CryptomatorCloudAccessCore
 import CryptomatorCloudAccess
 #endif
 import Foundation
-import Promises
 
 extension CloudProvider {
-	func createFolderWithIntermediates(for cloudPath: CloudPath) -> Promise<Void> {
+	func createFolderWithIntermediates(for cloudPath: CloudPath) async throws {
 		guard cloudPath != CloudPath("/") else {
-			return Promise(())
+			return
 		}
 		var path = CloudPath("/")
 		let pathComponents = cloudPath.pathComponents.dropFirst()
-		return Promise(on: .global()) { fulfill, reject in
-			for component in pathComponents {
-				path = path.appendingPathComponent(component)
-				do {
-					try awaitPromise(self.createFolder(at: path))
-				} catch {
-					guard case CloudProviderError.itemAlreadyExists = error else {
-						reject(error)
-						return
-					}
-				}
-			}
-			fulfill(())
+		for component in pathComponents {
+			path = path.appendingPathComponent(component)
+			try await createFolderIfMissing(at: path)
 		}
 	}
 }

@@ -6,19 +6,23 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-import AWSS3
+@preconcurrency import AWSS3
 import Foundation
+import os
 
 extension AWSS3TransferUtility {
-	private static let queue = DispatchQueue(label: "AWSS3TransferUtility-Swizzle")
-	private static var sessions = [ObjectIdentifier: URLSession]()
-	/// Contains the object identifiers of the AWSS3TransferUtilities which should use a foreground `URLSession`
-	private static var foregroundUtilities = NSHashTable<AWSS3TransferUtility>(options: .weakMemory)
+	private struct ForegroundSessionState {
+		var sessions = [ObjectIdentifier: URLSession]()
+		/// Contains the object identifiers of the AWSS3TransferUtilities which should use a foreground `URLSession`
+		let foregroundUtilities = NSHashTable<AWSS3TransferUtility>(options: .weakMemory)
+	}
+
+	private static let state = OSAllocatedUnfairLock(uncheckedState: ForegroundSessionState())
 
 	static func useForegroundURLSession(for utility: AWSS3TransferUtility) {
 		allowOptionalForegroundURLSession
-		queue.sync {
-			foregroundUtilities.add(utility)
+		state.withLockUnchecked {
+			$0.foregroundUtilities.add(utility)
 		}
 	}
 
@@ -32,17 +36,17 @@ extension AWSS3TransferUtility {
 	}()
 
 	@objc var foregroundURLSession: URLSession {
-		return AWSS3TransferUtility.queue.sync {
-			guard AWSS3TransferUtility.foregroundUtilities.contains(self) else {
+		return AWSS3TransferUtility.state.withLockUnchecked { state in
+			guard state.foregroundUtilities.contains(self) else {
 				print("called background URLSession")
 				return self.foregroundURLSession
 			}
 			print("called foregroundURLSession")
-			if let session = AWSS3TransferUtility.sessions[ObjectIdentifier(self)] {
+			if let session = state.sessions[ObjectIdentifier(self)] {
 				return session
 			} else {
 				let session = URLSession(configuration: .default, delegate: self as? URLSessionDelegate, delegateQueue: nil)
-				AWSS3TransferUtility.sessions[ObjectIdentifier(self)] = session
+				state.sessions[ObjectIdentifier(self)] = session
 				return session
 			}
 		}

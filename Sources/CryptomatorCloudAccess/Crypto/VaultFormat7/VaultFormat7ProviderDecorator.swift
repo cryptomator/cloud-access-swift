@@ -6,9 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CryptomatorCryptoLib
 import Foundation
-import Promises
 
 private extension CloudPath {
 	func appendingDirFileComponent() -> CloudPath {
@@ -22,16 +20,18 @@ private extension CloudPath {
  With this decorator, you can call the cloud provider methods with cleartext paths (relative to `vaultPath`) and the decorator passes ciphertext paths (absolute) to the delegate. It transparently encrypts/decrypts filenames and file contents according to vault format 7, see the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/).
 
  Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 7, pass an instance of `VaultFormat7ShorteningProviderDecorator` (shortening decorator) as the delegate.
+
+ `@unchecked Sendable`: all stored properties are immutable and `Sendable`. The class is subclassed by `VaultFormat8ProviderDecorator`.
  */
-class VaultFormat7ProviderDecorator: CloudProvider {
+class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let vaultPath: CloudPath
-	let cryptor: Cryptor
+	let cryptor: VaultCryptor
 	let dirIdCache: DirectoryIdCache
 	let tmpDirURL: URL
 
-	init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: Cryptor) throws {
+	init(delegate: CloudProvider, vaultPath: CloudPath, cryptor: VaultCryptor) throws {
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
@@ -46,183 +46,177 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - CloudProvider API
 
-	func fetchItemMetadata(at cleartextCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
-		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
-		let ciphertextMetadataPromise = parentDirIdPromise.then { parentDirId in
-			return try self.getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
-		}.then { ciphertextCloudPath in
-			return self.delegate.fetchItemMetadata(at: ciphertextCloudPath)
-		}
-		return all(ciphertextMetadataPromise, parentDirIdPromise).then { ciphertextMetadata, parentDirId in
-			try self.toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
-		}
+	@concurrent
+	func fetchItemMetadata(at cleartextCloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		let parentDirId = try await getParentDirId(cleartextCloudPath)
+		let ciphertextCloudPath = try getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
+		try Task.checkCancellation()
+		let ciphertextMetadata = try await delegate.fetchItemMetadata(at: ciphertextCloudPath)
+		return try toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
 	}
 
-	func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let dirIdPromise = getDirId(cleartextCloudPath)
-		let ciphertextListPromise = dirIdPromise.then { dirId in
-			return try self.getDirPath(dirId)
-		}.then { dirPath in
-			return self.delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
-		}
-		return all(ciphertextListPromise, dirIdPromise).then { ciphertextList, dirId in
-			try self.toCleartextList(ciphertextList, cleartextParentPath: cleartextCloudPath, parentDirId: dirId)
-		}
+	@concurrent
+	func fetchItemList(forFolderAt cleartextCloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
+		let dirId = try await getDirId(cleartextCloudPath)
+		let dirPath = try getDirPath(dirId)
+		try Task.checkCancellation()
+		let ciphertextList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
+		return try toCleartextList(ciphertextList, cleartextParentPath: cleartextCloudPath, parentDirId: dirId)
 	}
 
-	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(cleartextLocalURL.isFileURL)
-		let overallProgress = Progress(totalUnitCount: 5)
+		try Task.checkCancellation()
+		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return getC9RPath(cleartextCloudPath).then { ciphertextCloudPath in
-			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let downloadFilePromise = self.delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL, onTaskCreation: onTaskCreation)
-			overallProgress.resignCurrent()
-			return downloadFilePromise
-		}.then {
-			guard !FileManager.default.fileExists(atPath: cleartextLocalURL.path) else {
-				throw CloudProviderError.itemAlreadyExists
-			}
-			overallProgress.becomeCurrent(withPendingUnitCount: 1)
-			try self.cryptor.decryptContent(from: ciphertextLocalURL, to: cleartextLocalURL)
-			overallProgress.resignCurrent()
-		}.always {
+		defer {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
+		let parentDirId = try await getParentDirId(cleartextCloudPath)
+		let ciphertextCloudPath = try getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
+		try Task.checkCancellation()
+		let ciphertextMetadata = try await delegate.downloadFile(from: ciphertextCloudPath, to: ciphertextLocalURL, progress: phases[0], onTaskCreation: onTaskCreation)
+		let cleartextMetadata = try await DownloadOperation.download(to: cleartextLocalURL, transfer: { stagedFile in
+			try await cryptor.decryptContent(from: ciphertextLocalURL, to: stagedFile, progress: phases[1])
+			return try toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
+		})
+		phases.completeTransfer()
+		return cleartextMetadata
 	}
 
-	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(cleartextLocalURL.isFileURL)
-		let overallProgress = Progress(totalUnitCount: 5)
+		try Task.checkCancellation()
+		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let parentDirIdPromise = getParentDirId(cleartextCloudPath)
-		let uploadFilePromise = parentDirIdPromise.then { parentDirId in
-			return try self.getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
-		}.then { ciphertextCloudPath -> Promise<CloudItemMetadata> in
-			overallProgress.becomeCurrent(withPendingUnitCount: 1)
-			try self.cryptor.encryptContent(from: cleartextLocalURL, to: ciphertextLocalURL)
-			overallProgress.resignCurrent()
-			overallProgress.becomeCurrent(withPendingUnitCount: 4)
-			let uploadFilePromise = self.delegate.uploadFile(from: ciphertextLocalURL, to: ciphertextCloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
-			overallProgress.resignCurrent()
-			return uploadFilePromise
-		}.recover { error -> CloudItemMetadata in
-			switch error {
-			case CocoaError.fileReadNoSuchFile:
-				throw CloudProviderError.itemNotFound
-			case POSIXError.EISDIR:
-				throw CloudProviderError.itemTypeMismatch
-			default:
-				throw error
-			}
-		}.always {
+		defer {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
-		return all(uploadFilePromise, parentDirIdPromise).then { ciphertextMetadata, parentDirId in
-			return try self.toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
+		let parentDirId = try await getParentDirId(cleartextCloudPath)
+		let ciphertextCloudPath = try getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
+		let ciphertextMetadata: CloudItemMetadata
+		do {
+			try await cryptor.encryptContent(from: cleartextLocalURL, to: ciphertextLocalURL, progress: phases[1])
+			try Task.checkCancellation()
+			ciphertextMetadata = try await delegate.uploadFile(from: ciphertextLocalURL, to: ciphertextCloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+		} catch CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
+			throw CloudProviderError.itemNotFound
+		} catch POSIXError.EISDIR {
+			throw CloudProviderError.itemTypeMismatch
 		}
+		let cleartextMetadata = try toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
+		phases.completeTransfer()
+		return cleartextMetadata
 	}
 
-	func createFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func createFolder(at cleartextCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let dirId = UUID().uuidString.data(using: .utf8)!
 		let localDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let dirPath: CloudPath
-		do {
-			try dirId.write(to: localDirFileURL)
-			dirPath = try getDirPath(dirId)
-		} catch {
-			return Promise(error)
-		}
-		let ciphertextCloudPathPromise = getC9RPath(cleartextCloudPath)
-		return ciphertextCloudPathPromise.then { ciphertextCloudPath in
-			return self.delegate.createFolder(at: ciphertextCloudPath)
-		}.then { ciphertextCloudPathPromise }.then { ciphertextCloudPath -> Promise<CloudItemMetadata> in
-			let dirFileCloudPath = ciphertextCloudPath.appendingDirFileComponent()
-			return self.delegate.uploadFile(from: localDirFileURL, to: dirFileCloudPath, replaceExisting: false)
-		}.then { _ -> Promise<Void> in
-			let parentDirPath = dirPath.deletingLastPathComponent()
-			return self.delegate.createFolderIfMissing(at: parentDirPath)
-		}.then { () -> Promise<Void> in
-			return self.delegate.createFolder(at: dirPath)
-		}.then {
-			try self.dirIdCache.addOrUpdate(cleartextCloudPath, dirId: dirId)
-		}.always {
+		defer {
 			try? FileManager.default.removeItem(at: localDirFileURL)
 		}
-	}
-
-	func deleteFile(at cleartextCloudPath: CloudPath) -> Promise<Void> {
-		return getC9RPath(cleartextCloudPath).then { ciphertextCloudPath in
-			return self.delegate.deleteFile(at: ciphertextCloudPath)
+		try dirId.write(to: localDirFileURL)
+		let dirPath = try getDirPath(dirId)
+		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
+		try Task.checkCancellation()
+		try await withoutCancellation {
+			try await self.delegate.createFolder(at: ciphertextCloudPath)
+			let dirFileCloudPath = ciphertextCloudPath.appendingDirFileComponent()
+			_ = try await self.delegate.uploadFile(from: localDirFileURL, to: dirFileCloudPath, replaceExisting: false)
+			let parentDirPath = dirPath.deletingLastPathComponent()
+			try await self.delegate.createFolderIfMissing(at: parentDirPath)
+			try await self.delegate.createFolder(at: dirPath)
+			try self.dirIdCache.addOrUpdate(cleartextCloudPath, dirId: dirId)
 		}
 	}
 
-	func deleteFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
-		return getDirId(cleartextCloudPath).then { dirId in
-			return self.deleteCiphertextDir(dirId)
-		}.recover { error -> Void in
-			// recover from error if `getDirId()` rejects with `CloudProviderError.itemTypeMismatch` and delete item anyway (because it's probably a symlink)
-			// recover from error if `deleteCiphertextDir()` rejects with `CloudProviderError.itemNotFound` and delete item anyway (because the directory is broken anyway)
-			switch error {
-			case CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch:
-				return
-			default:
-				throw error
+	@concurrent
+	func deleteFile(at cleartextCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
+		try Task.checkCancellation()
+		try await delegate.deleteFile(at: ciphertextCloudPath)
+	}
+
+	@concurrent
+	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		let dirId: Data?
+		do {
+			dirId = try await getDirId(cleartextCloudPath)
+		} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
+			// `itemTypeMismatch`: the `.c9r` has no `dir.c9r`, e.g., it's a symlink, so delete it anyway
+			// `itemNotFound`: the steps below throw the precise error
+			dirId = nil
+		}
+		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
+		try Task.checkCancellation()
+		try await withoutCancellation {
+			if let dirId {
+				do {
+					try await self.deleteCiphertextDir(dirId)
+				} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
+					// the directory is broken, so delete the `.c9r` anyway
+				}
 			}
-		}.then {
-			return self.getC9RPath(cleartextCloudPath)
-		}.then { ciphertextCloudPath in
-			return self.delegate.deleteFolder(at: ciphertextCloudPath)
-		}.then {
+			try await self.delegate.deleteFolder(at: ciphertextCloudPath)
 			try self.dirIdCache.invalidate(cleartextCloudPath)
 		}
 	}
 
-	func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
-		return all(getC9RPath(cleartextSourceCloudPath), getC9RPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
-			return self.delegate.moveFile(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
-		}
+	@concurrent
+	func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		let ciphertextSourceCloudPath = try await getC9RPath(cleartextSourceCloudPath)
+		let ciphertextTargetCloudPath = try await getC9RPath(cleartextTargetCloudPath)
+		try Task.checkCancellation()
+		try await delegate.moveFile(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
 	}
 
-	func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) -> Promise<Void> {
-		return all(getC9RPath(cleartextSourceCloudPath), getC9RPath(cleartextTargetCloudPath)).then { ciphertextSourceCloudPath, ciphertextTargetCloudPath in
-			return self.delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
-		}.then {
-			if let dirId = try self.dirIdCache.get(cleartextSourceCloudPath) {
-				try self.dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
-			}
-			try self.dirIdCache.invalidate(cleartextSourceCloudPath)
+	@concurrent
+	func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		let ciphertextSourceCloudPath = try await getC9RPath(cleartextSourceCloudPath)
+		let ciphertextTargetCloudPath = try await getC9RPath(cleartextTargetCloudPath)
+		try Task.checkCancellation()
+		try await delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
+		if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
+			try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
 		}
+		try dirIdCache.invalidate(cleartextSourceCloudPath)
 	}
 
 	// MARK: - Encryption
 
-	private func getDirId(_ cleartextPath: CloudPath) -> Promise<Data> {
-		return dirIdCache.get(cleartextPath, onMiss: { cacheMissPath, parentDirId in
+	private func getDirId(_ cleartextPath: CloudPath) async throws -> Data {
+		return try await dirIdCache.get(cleartextPath, onMiss: { cacheMissPath, parentDirId in
 			let c9rPath = try self.getC9RPath(cacheMissPath, parentDirId: parentDirId)
 			let dirFilePath = c9rPath.appendingDirFileComponent()
-			return self.downloadFile(at: dirFilePath).recover { error -> Promise<Data> in
-				guard case CloudProviderError.itemNotFound = error else {
-					return Promise(error)
-				}
-				return self.delegate.checkForItemExistence(at: c9rPath).then { c9rItemExists in
-					if c9rItemExists {
-						// `*.c9r` exists but `*.c9r/dir.c9r` does not, so it's not a directory as expected
-						throw CloudProviderError.itemTypeMismatch
-					} else {
-						throw CloudProviderError.itemNotFound
-					}
+			do {
+				return try await self.downloadFile(at: dirFilePath)
+			} catch CloudProviderError.itemNotFound {
+				try Task.checkCancellation()
+				if try await self.delegate.checkForItemExistence(at: c9rPath) {
+					// `*.c9r` exists but `*.c9r/dir.c9r` does not, so it's not a directory as expected
+					throw CloudProviderError.itemTypeMismatch
+				} else {
+					throw CloudProviderError.itemNotFound
 				}
 			}
 		})
 	}
 
-	private func getParentDirId(_ cleartextPath: CloudPath) -> Promise<Data> {
+	private func getParentDirId(_ cleartextPath: CloudPath) async throws -> Data {
 		let cleartextParentPath = cleartextPath.deletingLastPathComponent()
-		return getDirId(cleartextParentPath).recover { error -> Data in
-			guard case CloudProviderError.itemNotFound = error else {
-				throw error
-			}
+		do {
+			return try await getDirId(cleartextParentPath)
+		} catch CloudProviderError.itemNotFound {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}
@@ -233,22 +227,15 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 		return vaultPath.appendingPathComponent("d/\(digest[..<i])/\(digest[i...])")
 	}
 
-	private func getDirPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
-		return getDirId(cleartextPath).then { dirId in
-			return try self.getDirPath(dirId)
-		}
-	}
-
 	private func getC9RPath(_ cleartextPath: CloudPath, parentDirId: Data) throws -> CloudPath {
 		let ciphertextBaseName = try cryptor.encryptFileName(cleartextPath.lastPathComponent, dirId: parentDirId)
 		let ciphertextName = "\(ciphertextBaseName).c9r"
 		return try getDirPath(parentDirId).appendingPathComponent(ciphertextName)
 	}
 
-	func getC9RPath(_ cleartextPath: CloudPath) -> Promise<CloudPath> {
-		return getParentDirId(cleartextPath).then { parentDirId in
-			return try self.getC9RPath(cleartextPath, parentDirId: parentDirId)
-		}
+	func getC9RPath(_ cleartextPath: CloudPath) async throws -> CloudPath {
+		let parentDirId = try await getParentDirId(cleartextPath)
+		return try getC9RPath(cleartextPath, parentDirId: parentDirId)
 	}
 
 	// MARK: - Decryption
@@ -265,7 +252,7 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 	}
 
 	private func toCleartextSize(_ ciphertextSize: Int?, itemType: CloudItemType) throws -> Int? {
-		guard let ciphertextSize = ciphertextSize else {
+		guard let ciphertextSize else {
 			return nil
 		}
 		if itemType == .file, ciphertextSize >= cryptor.fileHeaderSize {
@@ -282,48 +269,42 @@ class VaultFormat7ProviderDecorator: CloudProvider {
 
 	// MARK: - Convenience
 
-	private func downloadFile(at cloudPath: CloudPath) -> Promise<Data> {
+	private func downloadFile(at cloudPath: CloudPath) async throws -> Data {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: cloudPath, to: localURL).then {
-			return try Data(contentsOf: localURL)
-		}.always {
+		defer {
 			try? FileManager.default.removeItem(at: localURL)
 		}
+		_ = try await delegate.downloadFile(from: cloudPath, to: localURL)
+		return try Data(contentsOf: localURL)
 	}
 
-	private func deleteCiphertextDir(_ dirId: Data, pageToken: String? = nil) -> Promise<Void> {
-		let dirPath: CloudPath
-		do {
-			dirPath = try getDirPath(dirId)
-		} catch {
-			return Promise(error)
-		}
-		let itemListPromise = delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
-		let nextPageTokenPromise = itemListPromise.then { $0.nextPageToken }
-		return itemListPromise.then { itemList in
+	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
+	private func deleteCiphertextDir(_ dirId: Data) async throws {
+		let dirPath = try getDirPath(dirId)
+		var pageToken: String?
+		repeat {
+			let itemList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
 			let subDirs = itemList.items.filter { $0.itemType == .folder }
-			let subDirItemListPromises = subDirs.map { self.delegate.fetchItemListExhaustively(forFolderAt: $0.cloudPath) }
-			return all(subDirItemListPromises).then { subDirItemLists -> Promise<[Maybe<Data>]> in
-				// find subdirectories
-				let allDirFiles = subDirItemLists.flatMap { $0.items }.filter { $0.name == "dir.c9r" }
-				let dirIdPromises = allDirFiles.map { self.downloadFile(at: $0.cloudPath) }
-				return any(dirIdPromises)
-			}.then { dirIds -> Promise<[Maybe<Void>]> in
-				// delete subdirectories recursively
-				let recursiveDeleteOperations = dirIds.filter { $0.value != nil }.map { self.deleteCiphertextDir($0.value!) }
-				return any(recursiveDeleteOperations)
-			}.then { _ in
-				return nextPageTokenPromise
-			}.then { nextPageToken -> Promise<Void> in
-				if nextPageToken != nil {
-					return self.deleteCiphertextDir(dirId, pageToken: nextPageToken)
-				} else {
-					return Promise(())
+			let subDirItemLists = try await withThrowingTaskGroup(of: CloudItemList.self) { group in
+				for subDir in subDirs {
+					group.addTask {
+						try await self.delegate.fetchItemListExhaustively(forFolderAt: subDir.cloudPath)
+					}
 				}
-			}.then { _ in
-				// delete self
-				return self.delegate.deleteFolder(at: dirPath)
+				var subDirItemLists = [CloudItemList]()
+				for try await subDirItemList in group {
+					subDirItemLists.append(subDirItemList)
+				}
+				return subDirItemLists
 			}
-		}
+			// find subdirectories
+			let allDirFiles = subDirItemLists.flatMap(\.items).filter { $0.name == "dir.c9r" }
+			let dirIds = try await allSettled(allDirFiles) { try await self.downloadFile(at: $0.cloudPath) }
+			// delete subdirectories recursively
+			_ = try await allSettled(dirIds) { try await self.deleteCiphertextDir($0) }
+			pageToken = itemList.nextPageToken
+		} while pageToken != nil
+		// delete self
+		try await delegate.deleteFolder(at: dirPath)
 	}
 }

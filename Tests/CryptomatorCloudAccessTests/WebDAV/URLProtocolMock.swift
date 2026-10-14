@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
@@ -14,14 +15,19 @@ enum URLProtocolMockError: Error {
 }
 
 class URLProtocolMock: URLProtocol {
-	static var requestHandler = [(URLRequest) throws -> (HTTPURLResponse, Data?)]()
+	private static let requestHandlerStorage = OSAllocatedUnfairLock(initialState: [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)]())
+
+	static var requestHandler: [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+		get { requestHandlerStorage.withLock { $0 } }
+		set { requestHandlerStorage.withLock { $0 = newValue } }
+	}
 
 	override func startLoading() {
-		let handler = URLProtocolMock.requestHandler.removeFirst()
+		let handler = URLProtocolMock.requestHandlerStorage.withLock { $0.removeFirst() }
 		do {
 			let (response, data) = try handler(request)
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-			if let data = data {
+			if let data {
 				client?.urlProtocol(self, didLoad: data)
 			}
 			client?.urlProtocolDidFinishLoading(self)
@@ -46,19 +52,27 @@ struct URLAuthenticationChallengeMock {
 	let failureResponse: URLResponse
 }
 
-class URLProtocolAuthenticationMock: URLProtocol, URLAuthenticationChallengeSender {
+/// The sender of the challenges that the mocks emit. A `URLProtocol` can't be the sender itself, because the sender has to be `Sendable`.
+final class URLAuthenticationChallengeSenderMock: NSObject, URLAuthenticationChallengeSender {
 	func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {}
 
 	func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {}
 
 	func cancel(_ challenge: URLAuthenticationChallenge) {}
+}
 
-	static var authenticationChallenges = [URLAuthenticationChallengeMock]()
+class URLProtocolAuthenticationMock: URLProtocol {
+	private static let authenticationChallengesStorage = OSAllocatedUnfairLock(initialState: [URLAuthenticationChallengeMock]())
+
+	static var authenticationChallenges: [URLAuthenticationChallengeMock] {
+		get { authenticationChallengesStorage.withLock { $0 } }
+		set { authenticationChallengesStorage.withLock { $0 = newValue } }
+	}
 
 	override func startLoading() {
-		let challengeSettings = URLProtocolAuthenticationMock.authenticationChallenges.removeFirst()
+		let challengeSettings = URLProtocolAuthenticationMock.authenticationChallengesStorage.withLock { $0.removeFirst() }
 		let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
-		let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: challengeSettings.previousFailureCount, failureResponse: challengeSettings.failureResponse, error: nil, sender: self)
+		let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: challengeSettings.previousFailureCount, failureResponse: challengeSettings.failureResponse, error: nil, sender: URLAuthenticationChallengeSenderMock())
 		client?.urlProtocol(self, didReceive: challenge)
 	}
 
@@ -76,32 +90,31 @@ class URLProtocolAuthenticationMock: URLProtocol, URLAuthenticationChallengeSend
 /// Test-only `URLProtocol` that emits a queued sequence of either HTTP responses or auth challenges
 /// in order. Used to target an auth challenge at a specific request (e.g. the transfer task) while
 /// letting earlier requests (e.g. the preflight `PROPFIND`) resolve normally.
-class URLProtocolSequenceMock: URLProtocol, URLAuthenticationChallengeSender {
+class URLProtocolSequenceMock: URLProtocol {
 	enum Step {
 		case response(HTTPURLResponse, Data?)
 		case authChallenge(URLAuthenticationChallengeMock)
 	}
 
-	func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {}
+	private static let stepsStorage = OSAllocatedUnfairLock(initialState: [Step]())
 
-	func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {}
-
-	func cancel(_ challenge: URLAuthenticationChallenge) {}
-
-	static var steps = [Step]()
+	static var steps: [Step] {
+		get { stepsStorage.withLock { $0 } }
+		set { stepsStorage.withLock { $0 = newValue } }
+	}
 
 	override func startLoading() {
-		let step = URLProtocolSequenceMock.steps.removeFirst()
+		let step = URLProtocolSequenceMock.stepsStorage.withLock { $0.removeFirst() }
 		switch step {
 		case let .response(response, data):
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-			if let data = data {
+			if let data {
 				client?.urlProtocol(self, didLoad: data)
 			}
 			client?.urlProtocolDidFinishLoading(self)
 		case let .authChallenge(settings):
 			let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
-			let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: settings.previousFailureCount, failureResponse: settings.failureResponse, error: nil, sender: self)
+			let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: settings.previousFailureCount, failureResponse: settings.failureResponse, error: nil, sender: URLAuthenticationChallengeSenderMock())
 			client?.urlProtocol(self, didReceive: challenge)
 		}
 	}

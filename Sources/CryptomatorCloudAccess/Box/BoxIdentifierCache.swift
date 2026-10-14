@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-class BoxIdentifierCache {
+final class BoxIdentifierCache: Sendable {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {

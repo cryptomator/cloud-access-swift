@@ -18,7 +18,7 @@ Continuous integration hosting is provided by [MacStadium](https://www.macstadiu
 ## Requirements
 
 - iOS 16.0 or higher
-- Swift 5
+- Swift 6.2 or higher
 
 ## Installation
 
@@ -34,19 +34,30 @@ You can use [Swift Package Manager](https://swift.org/package-manager/ "Swift Pa
 
 ### Core
 
-The core package contains several protocols, structs, and enums that build the foundation of this library. Asynchronous calls are implemented using the [Promises](https://github.com/google/promises/) library. `CloudProvider` is the main protocol that defines the cloud access:
+The core package contains several protocols, structs, and enums that build the foundation of this library. Asynchronous calls are implemented using Swift concurrency. `CloudProvider` is the main protocol that defines the cloud access:
 
 ```swift
-func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata>
-func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList>
-func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void>
-func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata>
-func createFolder(at cloudPath: CloudPath) -> Promise<Void>
-func deleteFile(at cloudPath: CloudPath) -> Promise<Void>
-func deleteFolder(at cloudPath: CloudPath) -> Promise<Void>
-func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void>
-func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void>
+func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata
+func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList
+func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata
+func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata
+func createFolder(at cloudPath: CloudPath) async throws
+func deleteFile(at cloudPath: CloudPath) async throws
+func deleteFolder(at cloudPath: CloudPath) async throws
+func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws
+func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws
 ```
+
+`CloudProvider` is `Sendable`, so a provider can be shared between tasks. Its methods are `@concurrent`, so they don't run on the caller's actor. `downloadFile` and `uploadFile` can also be called without `progress` and `onTaskCreation`.
+
+- **Cancellation:** Cancellation is cooperative and has no latency guarantee. Every method checks whether its task is cancelled before it starts and again between its steps, and throws `CancellationError` if it is. A request or transfer that is already running is not interrupted. After its commit point, a method no longer checks:
+  - A download commits when it creates the file at `localURL`.
+  - An upload, folder creation, deletion or move commits with its first remote change after which stopping would break the item, e.g., leave it unreadable or impossible to create again. Without such a change, it commits with its last remote change. From its commit point on, it finishes its remaining remote changes even if the task is cancelled.
+
+  Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
+- **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
+- **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, only the WebDAV provider does, also when a vault provider wraps it. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -89,12 +100,13 @@ BoxSetup.constants = BoxSetup(clientId: clientId, clientSecret: clientSecret, sh
 Begin the authentication flow:
 
 ```swift
-let tokenStore = BoxTokenStore()
-let credential = BoxCredential(tokenStore: tokenStore)
-let viewController = ... // the presenting `UIViewController`
-BoxAuthenticator.authenticate(credential: credential, from: viewController).then { 
-  // authentication successful
-}.catch { error in
+let tokenStorage = ... // a `TokenStorage` from the Box SDK, e.g. `KeychainTokenStorage`
+let viewController = ... // the presenting `UIViewController`, it must conform to `ASWebAuthenticationPresentationContextProviding`
+do {
+  let credential = try await BoxAuthenticator.authenticate(from: viewController, tokenStorage: tokenStorage)
+  // do something with `BoxCredential`
+  // you can re-create the credential later with `BoxCredential(tokenStorage: tokenStorage)`
+} catch {
   // error handling
 }
 ```
@@ -102,14 +114,14 @@ BoxAuthenticator.authenticate(credential: credential, from: viewController).then
 You can then use the credential to create a Box provider:
 
 ```swift
-let provider = BoxCloudProvider(credential: credential)
+let provider = try BoxCloudProvider(credential: credential)
 ```
 
 Or create a Box provider using a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let provider = BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let provider = try BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### Dropbox
@@ -129,10 +141,11 @@ Begin the authentication flow:
 ```swift
 let dropboxAuthenticator = DropboxAuthenticator()
 let viewController = ... // the presenting `UIViewController`
-dropboxAuthenticator.authenticate(from: viewController).then { credential in
+do {
+  let credential = try await dropboxAuthenticator.authenticate(from: viewController)
   // do something with `DropboxCredential`
   // you probably want to save `credential.tokenUID` to re-create the credential later
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -141,23 +154,11 @@ Handle redirection once the authentication flow is complete in your app delegate
 
 ```swift
 func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-  let canHandle = DBClientsManager.handleRedirectURL(url) { authResult in
-    guard let authResult = authResult else {
-      return
-    }
-    if authResult.isSuccess() {
-      let tokenUID = authResult.accessToken.uid
-      let credential = DropboxCredential(tokenUID: tokenUID)
-      DropboxAuthenticator.pendingAuthentication?.fulfill(credential)
-      } else if authResult.isCancel() {
-        DropboxAuthenticator.pendingAuthentication?.reject(CocoaError(.userCancelled))
-      } else if authResult.isError() {
-        DropboxAuthenticator.pendingAuthentication?.reject(authResult.nsError)
-      }
-    }
-  return canHandle
+  return DropboxAuthenticator.handleRedirectURL(url)
 }
 ```
+
+This completes the pending `authenticate(from:)` call. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`.
 
 Create a Dropbox provider with a credential:
 
@@ -181,12 +182,13 @@ GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: r
 Begin the authentication flow:
 
 ```swift
-let tokenUID = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
-let credential = GoogleDriveCredential(tokenUID: tokenUID)
+let userID = ... // optional: the result of `credential.getAccountID()` from an earlier authentication to restore that credential
+let credential = GoogleDriveCredential(userID: userID)
 let viewController = ... // the presenting `UIViewController`
-GoogleDriveAuthenticator.authenticate(credential: credential, from: viewController).then { 
+do {
+  try await GoogleDriveAuthenticator.authenticate(credential: credential, from: viewController)
   // authentication successful
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -194,14 +196,14 @@ GoogleDriveAuthenticator.authenticate(credential: credential, from: viewControll
 You can then use the credential to create a Google Drive provider:
 
 ```swift
-let provider = GoogleDriveCloudProvider(credential: credential)
+let provider = try GoogleDriveCloudProvider(credential: credential)
 ```
 
 Or create a Google Drive provider using a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let provider = GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let provider = try GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### Microsoft Graph
@@ -222,10 +224,11 @@ Begin the authentication flow:
 
 ```swift
 let viewController = ... // the presenting `UIViewController`
-MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive).then { credential in
+do {
+  let credential = try await MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive)
   // do something with `MicrosoftGraphCredential`
   // you probably want to save `credential.identifier` to re-create the credential later
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -233,14 +236,14 @@ MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive).t
 You can then use the credential to create a Microsoft Graph provider:
 
 ```swift
-let provider = MicrosoftGraphCloudProvider(credential: credential)
+let provider = try MicrosoftGraphCloudProvider(credential: credential)
 ```
 
 Or create a Microsoft Graph provider using a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let provider = MicrosoftGraphCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let provider = try MicrosoftGraphCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 For SharePoint, it could be useful to do some discovery first:
@@ -248,12 +251,12 @@ For SharePoint, it could be useful to do some discovery first:
 ```swift
 let discovery = MicrosoftGraphDiscovery(credential: credential)
 let siteURL = ... // the URL of the SharePoint site
-discovery.fetchSharePointSite(for: siteURL).then { site in
+do {
+  let site = try await discovery.fetchSharePointSite(for: siteURL)
   // do something with `MicrosoftGraphSite`, e.g.:
-  return discovery.fetchSharePointDrives(for: site.identifier)
-}.then { drives in
+  let drives = try await discovery.fetchSharePointDrives(for: site.identifier)
   // do something with `[MicrosoftGraphDrive]`
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -272,10 +275,11 @@ Begin the authentication flow:
 
 ```swift
 let viewController = ... // the presenting `UIViewController`
-PCloudAuthenticator.authenticate(from: viewController).then { credential in
+do {
+  let credential = try await PCloudAuthenticator.authenticate(from: viewController)
   // do something with `PCloudCredential`
   // you probably want to save `credential.user` to re-create the credential later
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -284,7 +288,7 @@ You can then use the credential to create a pCloud provider with a pCloud client
 
 ```swift
 let client = PCloud.createClient(with: credential.user)
-let provider = PCloudCloudProvider(client: client)
+let provider = try PCloudCloudProvider(client: client)
 ```
 
 Or create a pCloud provider with a pCloud client using a background URLSession:
@@ -292,7 +296,7 @@ Or create a pCloud provider with a pCloud client using a background URLSession:
 ```swift
 let sessionIdentifier = ...
 let client = PCloud.createBackgroundClient(with: credential.user, sessionIdentifier: sessionIdentifier)
-let provider = PCloudCloudProvider(client: client)
+let provider = try PCloudCloudProvider(client: client)
 ```
 
 ### S3
@@ -312,7 +316,7 @@ let credential = S3Credential(accessKey: accessKey, secretKey: secretKey, url: u
 You can then use the credential to create a S3 provider:
 
 ```swift
-let provider = try S3Provider(credential: credential)
+let provider = try S3CloudProvider(credential: credential)
 ```
 
 Or create a S3 provider using a background URLSession:
@@ -326,9 +330,10 @@ In theory, you could use the provider without further checks. However, you shoul
 
 ```swift
 let credential = ...
-S3Authenticator.verifyCredential(credential).then {
+do {
+  try await S3Authenticator.verifyCredential(credential)
   // credential validation successful
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -350,7 +355,7 @@ You can then use the credential to create a WebDAV provider with a WebDAV client
 
 ```swift
 let client = WebDAVClient(credential: credential)
-let provider = WebDAVProvider(with: client)
+let provider = try WebDAVProvider(with: client)
 ```
 
 Or create a WebDAV provider with a WebDAV client using a background URLSession:
@@ -359,16 +364,17 @@ Or create a WebDAV provider with a WebDAV client using a background URLSession:
 let sessionIdentifier = ...
 let sharedContainerIdentifier = ... // optional: only needed if you want to create a `WebDAVProvider` in an app extension 
 let client = WebDAVClient.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
-let provider = WebDAVProvider(with: client)
+let provider = try WebDAVProvider(with: client)
 ```
 
 In theory, you could use the provider without further checks. However, you should verify the WebDAV client and its credential using the WebDAV authenticator:
 
 ```swift
 let client = ...
-WebDAVAuthenticator.verifyClient(client: client).then {
+do {
+  try await WebDAVAuthenticator.verifyClient(client: client)
   // client validation successful
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -378,9 +384,10 @@ Furthermore, for allowlisting a certificate, you can use the TLS certificate val
 ```swift
 let baseURL = ...
 let validator = TLSCertificateValidator(baseURL: baseURL)
-validator.validate().then { certificate in
+do {
+  let certificate = try await validator.validate()
   // certificate of type `TLSCertificate` contains several properties for further handling
-}.catch { error in
+} catch {
   // error handling
 }
 ```
@@ -393,12 +400,33 @@ Create a local file system provider with a root URL:
 
 ```swift
 let rootURL = ... // rootURL.isFileURL must be `true`
-let provider = LocalFileSystemProvider(rootURL: rootURL)
+let provider = try LocalFileSystemProvider(rootURL: rootURL)
 ```
 
 When calling the functions of this provider, the cloud paths should be provided relative to the root URL.
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
+
+## Migrating to 4.0.0
+
+Version 4.0.0 is async-only: every asynchronous API uses Swift concurrency. The library is built in Swift 6 language mode and requires Swift 6.2 or higher.
+
+- The library no longer depends on [google/promises](https://github.com/google/promises). If your app keeps using it, add the package to your app yourself.
+- The library depends on cryptolib-swift 2.0.0. If your app also depends on cryptolib-swift, update it to 2.0.0.
+- Every API that was asynchronous before is `async throws` now, e.g., `WebDAVClient`'s HTTP methods and `getUsername()` of the Box, Dropbox and pCloud credentials. Only the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension is `async` without `throws`. Its overload that takes an `OAuthAuthorizationFlowView` is removed.
+- `CloudProvider` is `Sendable` and its methods are `@concurrent`. Your own implementations must be `Sendable` and should mark their methods `@concurrent` as well.
+- Cancelling the task that calls a `CloudProvider` method now ends the call with `CancellationError`, see [Core](#core).
+- `downloadFile` returns the `CloudItemMetadata` of the downloaded file.
+- `downloadFile` and `uploadFile` take a `progress:` parameter. It replaces the implicit progress composition via `becomeCurrent(withPendingUnitCount:)`, which no longer reports anything.
+- `onTaskCreation` closures are `async` and get a non-optional task. They are no longer called with `nil` if there is no such task. They must not resume the task anymore, because the provider does it.
+- `downloadFile` no longer fails before the transfer if an item exists at `localURL`. It throws `CloudProviderError.itemAlreadyExists` after the transfer instead.
+- All providers, the `*Setup` classes, `DropboxAuthenticator`, `GoogleDriveCredential`, `MicrosoftGraphAuthenticator`, `MicrosoftGraphDiscovery` and `PCloudAuthenticator` are `final`.
+- `DropboxClientSetup.oneTimeSetup` is `@Sendable`.
+- `BoxAuthenticator`, `DropboxAuthenticator`, `GoogleDriveAuthenticator`, `MicrosoftGraphAuthenticator`, `PCloudAuthenticator` and the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension are `@MainActor`. `MicrosoftGraphCredential`'s `getUsername()` and `deauthenticate()` are `@MainActor` as well.
+- `DropboxAuthenticator.pendingAuthentication`, `processAuthentication(with:)` and `DropboxAuthenticatorError.noPendingAuthentication` are removed. Pass the redirect URL to `DropboxAuthenticator.handleRedirectURL(_:)` instead of calling `DBClientsManager.handleRedirectURL` yourself.
+- `BoxAuthenticator.authenticate(from:tokenStorage:)` throws errors that left it pending forever before, e.g., `BoxAuthenticatorError.invalidContext`. `DropboxCredential.getUsername()` throws `CloudProviderError.unauthorized` without an authorized client, instead of never returning.
+- `LocalFileSystemProvider` releases its security-scoped access to an item when the operation returns. Before, only `fetchItemMetadata(at:)` released it.
+- `S3CloudProvider.downloadFile` no longer reports success if the transfer of an existing remote file failed.
 
 ## Logging
 

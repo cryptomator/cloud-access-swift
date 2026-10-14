@@ -25,9 +25,9 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "403-status", withExtension: "xml")
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
-		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
-		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
-		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map { $0.index }
+		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map(\.element)
+		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map(\.folderEnumerationPath)
+		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map(\.index)
 		XCTAssertEqual([
 			CloudItemMetadata(name: "Gelöschte Dateien", cloudPath: .init("/Gelöschte Dateien"), itemType: .folder, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), size: 0)
 		], savedMetadata)
@@ -48,9 +48,9 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "file-and-folder", withExtension: "xml")
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
-		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
-		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
-		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map { $0.index }
+		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map(\.element)
+		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map(\.folderEnumerationPath)
+		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map(\.index)
 		XCTAssertEqual([
 			CloudItemMetadata(name: "0.txt", cloudPath: .init("/0.txt"), itemType: .file, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), size: 54175),
 			CloudItemMetadata(name: "1.txt", cloudPath: .init("/1.txt"), itemType: .file, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), size: 54175),
@@ -65,9 +65,9 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "malformatted-date", withExtension: "xml")
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
-		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
-		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
-		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map { $0.index }
+		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map(\.element)
+		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map(\.folderEnumerationPath)
+		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map(\.index)
 		XCTAssertEqual([
 			CloudItemMetadata(name: "0.txt", cloudPath: .init("/0.txt"), itemType: .file, lastModifiedDate: nil, size: 54175),
 			CloudItemMetadata(name: "Gelöschte Dateien", cloudPath: .init("/Gelöschte Dateien"), itemType: .folder, lastModifiedDate: nil, size: 0)
@@ -99,9 +99,9 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "partial-404-status", withExtension: "xml")
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, folderEnumerationPath: .root)
 		try parser.fillCache()
-		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map { $0.element }
-		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map { $0.folderEnumerationPath }
-		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map { $0.index }
+		let savedMetadata = cacheMock.saveForIndexReceivedInvocations.map(\.element)
+		let savedFolderEnumerationPaths = cacheMock.saveForIndexReceivedInvocations.map(\.folderEnumerationPath)
+		let savedCacheIndices = cacheMock.saveForIndexReceivedInvocations.map(\.index)
 		XCTAssertEqual([
 			CloudItemMetadata(name: "0.txt", cloudPath: .init("/0.txt"), itemType: .file, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), size: 54175),
 			CloudItemMetadata(name: "Gelöschte Dateien", cloudPath: .init("/Gelöschte Dateien"), itemType: .folder, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), size: nil)

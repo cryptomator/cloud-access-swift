@@ -21,7 +21,7 @@ public enum VaultConfigHelper {
 	}
 }
 
-public enum VaultConfigType {
+public enum VaultConfigType: Sendable {
 	case masterkeyFile
 	case hub
 	case unknown

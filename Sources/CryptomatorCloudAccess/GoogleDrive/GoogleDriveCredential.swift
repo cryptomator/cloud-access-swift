@@ -6,11 +6,11 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import AppAuthCore
+@preconcurrency import AppAuthCore
 import Foundation
-import GoogleAPIClientForREST_Drive
-import GTMAppAuth
-import Promises
+@preconcurrency import GoogleAPIClientForREST_Drive
+@preconcurrency import GTMAppAuth
+import os
 
 public enum GoogleDriveCredentialError: Error {
 	case notAuthenticated
@@ -18,30 +18,37 @@ public enum GoogleDriveCredentialError: Error {
 	case noAccountID
 }
 
-public class GoogleDriveCredential {
+/// Safe to share across threads, because `driveService` may be used from any thread and its authorizer is only replaced together with `authSession` under a lock.
+public final class GoogleDriveCredential: Sendable {
 	public let driveService: GTLRDriveService
 	public var isAuthorized: Bool {
 		authSession?.canAuthorize ?? false
 	}
 
-	var authSession: AuthSession?
+	var authSession: AuthSession? {
+		lockedAuthSession.withLock { $0 }
+	}
+
+	private let lockedAuthSession: OSAllocatedUnfairLock<AuthSession?>
 	private static let keychainItemPrefix = "GoogleDriveAuth"
 
 	public init(userID: String? = nil) {
-		if let userID = userID {
+		let authSession: AuthSession?
+		if let userID {
 			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
-			self.authSession = try? KeychainStore(itemName: keychainItemName).retrieveAuthSession()
+			authSession = try? KeychainStore(itemName: keychainItemName).retrieveAuthSession()
 		} else {
-			self.authSession = nil
+			authSession = nil
 		}
+		self.lockedAuthSession = OSAllocatedUnfairLock(initialState: authSession)
 		self.driveService = GTLRDriveService()
 		driveService.authorizer = authSession
 	}
 
 	public func save(authState: OIDAuthState) throws {
-		authSession = AuthSession(authState: authState)
-		driveService.authorizer = authSession
-		if let authSession = authSession, let userID = authSession.userID {
+		let authSession = AuthSession(authState: authState)
+		setAuthSession(authSession)
+		if let userID = authSession.userID {
 			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
 			try KeychainStore(itemName: keychainItemName).save(authSession: authSession)
 		}
@@ -68,13 +75,19 @@ public class GoogleDriveCredential {
 	}
 
 	public func deauthenticate() {
-		if let authSession = authSession, let userID = authSession.userID {
+		if let authSession, let userID = authSession.userID {
 			let keychainItemName = GoogleDriveCredential.getKeychainName(forUserID: userID)
 			try? KeychainStore(itemName: keychainItemName).removeAuthSession()
 		}
 		driveService.fetcherService.resetSession()
-		authSession = nil
-		driveService.authorizer = nil
+		setAuthSession(nil)
+	}
+
+	private func setAuthSession(_ authSession: AuthSession?) {
+		lockedAuthSession.withLock { lockedAuthSession in
+			lockedAuthSession = authSession
+			driveService.authorizer = authSession
+		}
 	}
 
 	private static func getKeychainName(forUserID userID: String) -> String {

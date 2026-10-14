@@ -7,14 +7,15 @@
 //
 
 import Foundation
-import ObjectiveDropboxOfficial
+@preconcurrency import ObjectiveDropboxOfficial
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
 
-class DropboxCredentialMock: DropboxCredential {
+/// `@unchecked Sendable`: restates the conformance of `DropboxCredential`; this subclass adds no state.
+class DropboxCredentialMock: DropboxCredential, @unchecked Sendable {
 	init() {
 		DropboxSetup.constants = DropboxSetup(appKey: "", sharedContainerIdentifier: "", keychainService: "", forceForegroundSession: true)
 		super.init(tokenUID: "IntegrationTest")

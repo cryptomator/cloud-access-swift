@@ -7,6 +7,6 @@
 //
 
 import Foundation
-import MSAL
+@preconcurrency import MSAL
 
 class MSALPublicClientApplicationStub: MSALPublicClientApplication {}

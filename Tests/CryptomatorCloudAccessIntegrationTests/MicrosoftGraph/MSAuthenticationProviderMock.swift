@@ -7,7 +7,8 @@
 //
 
 import Foundation
-import MSGraphClientSDK
+@preconcurrency import MSGraphClientSDK
+import os
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
@@ -18,31 +19,41 @@ enum MSAuthenticationProviderMockError: Error {
 	case invalidRefreshToken
 }
 
-class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider {
-	var overrideAccessToken: String?
-	var accessToken: String?
+final class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider, Sendable {
+	private let lockedOverrideAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
+	var overrideAccessToken: String? {
+		get { lockedOverrideAccessToken.withLock { $0 } }
+		set { lockedOverrideAccessToken.withLock { $0 = newValue } }
+	}
 
-	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: ((String?, Error?) -> Void)!) {
+	private let lockedAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
+	var accessToken: String? {
+		get { lockedAccessToken.withLock { $0 } }
+		set { lockedAccessToken.withLock { $0 = newValue } }
+	}
+
+	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: (@Sendable (String?, Error?) -> Void)!) {
 		if let accessToken = overrideAccessToken {
 			completion(accessToken, nil)
 			return
-		} else if let accessToken = accessToken {
+		} else if let accessToken {
 			completion(accessToken, nil)
 			return
 		}
 		let request = getAccessTokenRequest()
-		URLSession.shared.performDataTask(with: request).then { response, data -> String in
-			guard response.statusCode == 200, let data = data else {
-				throw MSAuthenticationProviderMockError.invalidRefreshToken
+		Task {
+			do {
+				let (data, response) = try await URLSession.shared.data(for: request)
+				guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+					throw MSAuthenticationProviderMockError.invalidRefreshToken
+				}
+				let accessTokenResponse = try self.getAccessTokenResponse(from: data)
+				self.overrideAccessToken = accessTokenResponse.accessToken
+				self.accessToken = accessTokenResponse.accessToken
+				completion(accessTokenResponse.accessToken, nil)
+			} catch {
+				completion(nil, error)
 			}
-			let accessTokenResponse = try self.getAccessTokenResponse(from: data)
-			return accessTokenResponse.accessToken
-		}.then { accessToken in
-			self.overrideAccessToken = accessToken
-			self.accessToken = accessToken
-			completion(accessToken, nil)
-		}.catch { error in
-			completion(nil, error)
 		}
 	}
 

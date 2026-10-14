@@ -22,6 +22,19 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		provider = try GoogleDriveCloudProvider(credential: credential)
 	}
 
+	func testThrowsCancellationErrorInCancelledTask() async {
+		await assertThrowsCancellationErrorInCancelledTask(provider)
+	}
+
+	func testConvertErrorWithCancelledRequest() {
+		let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
+		let wrappedCancellationError = NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])
+		XCTAssertTrue(provider.convertQueryError(cancellationError) is CancellationError)
+		XCTAssertTrue(provider.convertQueryError(wrappedCancellationError) is CancellationError)
+		XCTAssertTrue(provider.convertFetcherError(cancellationError) is CancellationError)
+		XCTAssertTrue(provider.convertFetcherError(wrappedCancellationError) is CancellationError)
+	}
+
 	func testOnlyItemNameChangedWorksWithFolders() {
 		let oldCloudPath = CloudPath("/AAAAAA/BBBBBBB")
 		let newCloudPathOnlyFolderNameChanged = CloudPath("/AAAAAA/CCCCCCC")

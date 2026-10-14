@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct MicrosoftGraphDrive: Codable {
+public struct MicrosoftGraphDrive: Codable, Sendable {
 	public let identifier: String
 	public let name: String?
 }

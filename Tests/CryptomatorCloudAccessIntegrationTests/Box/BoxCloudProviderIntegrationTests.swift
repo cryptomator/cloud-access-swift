@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class BoxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
@@ -29,19 +28,17 @@ class BoxCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentica
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		provider = try BoxCloudProvider(credential: credential)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
+	override func deauthenticate() async throws {
 		let invalidCredential = BoxInvalidCredentialMock()
-		// swiftlint:disable:next force_try
-		provider = try! BoxCloudProvider(credential: invalidCredential)
-		return Promise(())
+		provider = try BoxCloudProvider(credential: invalidCredential)
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return try BoxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}
 }

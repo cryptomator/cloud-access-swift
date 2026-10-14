@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import Promises
 
 private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
 	static let databaseTableName = "entries"
@@ -25,7 +24,7 @@ extension CachedEntry: PersistableRecord {
 	}
 }
 
-class DirectoryIdCache {
+final class DirectoryIdCache: Sendable {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {
@@ -39,21 +38,14 @@ class DirectoryIdCache {
 		}
 	}
 
-	func get(_ cleartextPath: CloudPath, onMiss: @escaping (_ cleartextPath: CloudPath, _ parentDirId: Data) throws -> Promise<Data>) -> Promise<Data> {
-		do {
-			if let cached = try get(cleartextPath) {
-				return Promise(cached)
-			} else {
-				return get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss).then { parentDirId in
-					return try onMiss(cleartextPath, parentDirId)
-				}.then { dirId -> Data in
-					try self.addOrUpdate(cleartextPath, dirId: dirId)
-					return dirId
-				}
-			}
-		} catch {
-			return Promise(error)
+	func get(_ cleartextPath: CloudPath, onMiss: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data) async throws -> Data {
+		if let cached = try get(cleartextPath) {
+			return cached
 		}
+		let parentDirId = try await get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss)
+		let dirId = try await onMiss(cleartextPath, parentDirId)
+		try addOrUpdate(cleartextPath, dirId: dirId)
+		return dirId
 	}
 
 	func get(_ cleartextPath: CloudPath) throws -> Data? {

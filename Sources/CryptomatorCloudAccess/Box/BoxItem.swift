@@ -6,7 +6,7 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-import BoxSdkGen
+@preconcurrency import BoxSdkGen
 import Foundation
 import GRDB
 

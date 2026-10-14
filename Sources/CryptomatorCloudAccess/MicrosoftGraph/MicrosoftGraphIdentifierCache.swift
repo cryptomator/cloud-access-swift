@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-class MicrosoftGraphIdentifierCache {
+final class MicrosoftGraphIdentifierCache: Sendable {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {

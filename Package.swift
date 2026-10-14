@@ -1,4 +1,4 @@
-// swift-tools-version:5.7
+// swift-tools-version:6.2
 
 //
 //  Package.swift
@@ -18,6 +18,10 @@ let appExtensionUnsafeSources = [
 	"Box/BoxAuthenticator.swift"
 ]
 
+let swiftSettings: [SwiftSetting] = [
+	.enableUpcomingFeature("NonisolatedNonsendingByDefault")
+]
+
 let package = Package(
 	name: "CryptomatorCloudAccess",
 	platforms: [
@@ -30,19 +34,18 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", .upToNextMinor(from: "2.9.0")),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.41.0")),
-		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "1.1.0")),
+		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "2.0.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.9.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.2.0")),
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "5.0.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "3.5.0")),
-		.package(url: "https://github.com/google/promises.git", .upToNextMinor(from: "2.3.0")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.10.0")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "2.0.0")),
 		.package(url: "https://github.com/pCloud/pcloud-sdk-swift.git", .upToNextMinor(from: "3.2.0")),
 		.package(url: "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git", .upToNextMinor(from: "7.2.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-spm.git", .upToNextMinor(from: "1.0.0")),
 		.package(url: "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git", .upToNextMinor(from: "1.3.0")),
-		.package(url: "https://github.com/tobihagemann/box-swift-sdk-gen.git", exact: "0.5.0-cryptomator"),
+		.package(url: "https://github.com/tobihagemann/box-swift-sdk-gen.git", exact: "0.5.1-cryptomator"),
 		.package(url: "https://github.com/tobihagemann/JOSESwift.git", exact: "2.4.1-cryptomator")
 	],
 	targets: [
@@ -60,24 +63,26 @@ let package = Package(
 				.product(name: "GTMSessionFetcher", package: "gtm-session-fetcher"),
 				.product(name: "JOSESwift", package: "JOSESwift"),
 				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
-				.product(name: "MSGraphClientModels", package: "msgraph-sdk-objc-spm"),
-				.product(name: "MSGraphClientSDK", package: "msgraph-sdk-objc-models-spm"),
+				.product(name: "MSGraphClientModels", package: "msgraph-sdk-objc-models-spm"),
+				.product(name: "MSGraphClientSDK", package: "msgraph-sdk-objc-spm"),
 				.product(name: "ObjectiveDropboxOfficial", package: "dropbox-sdk-obj-c-spm"),
-				.product(name: "PCloudSDKSwift", package: "pcloud-sdk-swift"),
-				.product(name: "Promises", package: "promises")
+				.product(name: "PCloudSDKSwift", package: "pcloud-sdk-swift")
 			],
 			path: "Sources/CryptomatorCloudAccess",
-			exclude: appExtensionUnsafeSources
+			exclude: appExtensionUnsafeSources,
+			swiftSettings: swiftSettings
 		),
 		.target(
 			name: "CryptomatorCloudAccess",
 			dependencies: ["CryptomatorCloudAccessCore", .product(name: "AppAuth", package: "AppAuth-iOS")],
-			sources: appExtensionUnsafeSources
+			sources: appExtensionUnsafeSources,
+			swiftSettings: swiftSettings
 		),
 		.testTarget(
 			name: "CryptomatorCloudAccessTests",
-			dependencies: ["CryptomatorCloudAccess"]
+			dependencies: ["CryptomatorCloudAccess"],
+			swiftSettings: swiftSettings
 		)
 	],
-	swiftLanguageVersions: [.v5]
+	swiftLanguageModes: [.v6]
 )

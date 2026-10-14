@@ -6,14 +6,13 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-import PCloudSDKSwift
+@preconcurrency import PCloudSDKSwift
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import Promises
 
 class VaultFormat6PCloudIntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
@@ -28,14 +27,11 @@ class VaultFormat6PCloudIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
-			setUpProvider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
-		if let error = setUpPromise.error {
+		do {
+			setUpProvider = try blockingAwait(timeout: 60.0) {
+				try await DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
+			}
+		} catch {
 			classSetUpError = error
 			return
 		}
@@ -43,33 +39,22 @@ class VaultFormat6PCloudIntegrationTests: CloudAccessIntegrationTest {
 		guard classSetUpError == nil else { return }
 		// Wait for pCloud's eventual consistency to catch up after setUp uploaded all test fixtures.
 		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
-		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
+		waitForConsistencyOfSetUp(expectedItemCount: expectedItemCount)
 	}
 
 	override class func tearDown() {
 		super.tearDown()
-		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
-		_ = waitForPromises(timeout: 60.0)
-	}
-
-	override func setUpWithError() throws {
-		try super.setUpWithError()
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6PCloudIntegrationTests.cloudProvider, vaultPath: VaultFormat6PCloudIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
+		try? blockingAwait(timeout: 60.0) {
+			try await cloudProvider.deleteFolderIfExisting(at: vaultPath)
 		}
 	}
 
-	override func testFetchItemListPagination() throws {
+	override func setUp() async throws {
+		try await super.setUp()
+		provider = try await DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6PCloudIntegrationTests.cloudProvider, vaultPath: VaultFormat6PCloudIntegrationTests.vaultPath, password: "IntegrationTest")
+	}
+
+	override func testFetchItemListPagination() async throws {
 		throw XCTSkip("pCloud does not support pagination")
 	}
 }

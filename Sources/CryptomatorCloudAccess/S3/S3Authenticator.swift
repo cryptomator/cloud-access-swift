@@ -7,18 +7,10 @@
 //
 
 import Foundation
-import Promises
 
 public enum S3Authenticator {
-	public static func verifyCredential(_ credential: S3Credential) -> Promise<Void> {
-		let provider: S3CloudProvider
-		do {
-			provider = try S3CloudProvider(credential: credential)
-		} catch {
-			return Promise(error)
-		}
-		return provider.fetchItemList(forFolderAt: .root, withPageToken: nil).then { _ in
-			// no-op
-		}
+	public static func verifyCredential(_ credential: S3Credential) async throws {
+		let provider = try S3CloudProvider(credential: credential)
+		_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
 	}
 }

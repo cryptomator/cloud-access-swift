@@ -33,7 +33,7 @@ struct VaultConfigPayload: Equatable, Codable {
 	}
 }
 
-public struct HubConfig: Equatable, Codable {
+public struct HubConfig: Equatable, Codable, Sendable {
 	public let clientId: String
 	public let authEndpoint: String
 	public let tokenEndpoint: String

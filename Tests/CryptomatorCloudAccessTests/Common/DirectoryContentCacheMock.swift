@@ -14,7 +14,8 @@ import Foundation
 #endif
 
 // swiftlint:disable all
-final class DirectoryContentCacheMock: DirectoryContentCache {
+/// `@unchecked Sendable`: only used by the synchronous parser tests, which call it from a single thread.
+final class DirectoryContentCacheMock: DirectoryContentCache, @unchecked Sendable {
 	// MARK: - save
 
 	var saveForIndexThrowableError: Error?

@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import Promises
 
 /**
  Cloud provider decorator for Cryptomator vaults in vault format 6 (only name shortening).
@@ -16,7 +15,7 @@ import Promises
 
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat6ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath`.
  */
-class VaultFormat6ShorteningProviderDecorator: CloudProvider {
+final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let vaultPath: CloudPath
@@ -37,115 +36,126 @@ class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 
 	// MARK: - CloudProvider API
 
-	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	@concurrent
+	func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
-			return delegate.fetchItemMetadata(at: shortened.cloudPath).then { shortenedMetadata in
-				return self.getOriginalMetadata(shortenedMetadata)
-			}
+			let shortenedMetadata = try await delegate.fetchItemMetadata(at: shortened.cloudPath)
+			return try await getOriginalMetadata(shortenedMetadata)
 		} else {
-			return delegate.fetchItemMetadata(at: shortened.cloudPath)
+			return try await delegate.fetchItemMetadata(at: shortened.cloudPath)
 		}
 	}
 
-	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	@concurrent
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		return delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken).then { itemList -> Promise<CloudItemList> in
-			let originalItemPromises = itemList.items.map { self.getOriginalMetadata($0) }
-			return any(originalItemPromises).then { maybeOriginalItems -> CloudItemList in
-				let originalItems = maybeOriginalItems.filter { $0.value != nil }.map { $0.value! }
-				return CloudItemList(items: originalItems, nextPageToken: itemList.nextPageToken)
-			}
-		}
+		let itemList = try await delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken)
+		let originalItems = try await allSettled(itemList.items) { try await self.getOriginalMetadata($0) }
+		return CloudItemList(items: originalItems, nextPageToken: itemList.nextPageToken)
 	}
 
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		return delegate.downloadFile(from: shortened.cloudPath, to: localURL, onTaskCreation: onTaskCreation)
+		let shortenedMetadata = try await delegate.downloadFile(from: shortened.cloudPath, to: localURL, progress: progress, onTaskCreation: onTaskCreation)
+		if shortened.pointsToLNG {
+			return getOriginalMetadata(shortenedMetadata, originalPath: cloudPath)
+		} else {
+			return shortenedMetadata
+		}
 	}
 
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
-			return uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent).then {
-				return self.delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
-			}.then { shortenedMetadata in
-				return self.getOriginalMetadata(shortenedMetadata)
-			}
+			try await uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent)
+			let shortenedMetadata = try await delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
+			return getOriginalMetadata(shortenedMetadata, originalPath: cloudPath)
 		} else {
-			return delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, onTaskCreation: onTaskCreation)
+			return try await delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
 		}
 	}
 
-	func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToLNG {
-			return uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent).then {
-				return self.delegate.createFolder(at: shortened.cloudPath)
-			}
-		} else {
-			return delegate.createFolder(at: shortened.cloudPath)
+			try await uploadNameFile(shortened.cloudPath.lastPathComponent, originalName: cloudPath.lastPathComponent)
 		}
+		try await delegate.createFolder(at: shortened.cloudPath)
 	}
 
-	func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		return delegate.deleteFile(at: shortened.cloudPath)
+		try await delegate.deleteFile(at: shortened.cloudPath)
 	}
 
-	func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		return delegate.deleteFolder(at: shortened.cloudPath)
+		try await delegate.deleteFolder(at: shortened.cloudPath)
 	}
 
-	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 		if shortenedTarget.pointsToLNG {
-			return uploadNameFile(shortenedTarget.cloudPath.lastPathComponent, originalName: targetCloudPath.lastPathComponent).then {
-				return self.delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-			}
-		} else {
-			return delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+			try await uploadNameFile(shortenedTarget.cloudPath.lastPathComponent, originalName: targetCloudPath.lastPathComponent)
 		}
+		try await delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 	}
 
-	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
 		if shortenedTarget.pointsToLNG {
-			return uploadNameFile(shortenedTarget.cloudPath.lastPathComponent, originalName: targetCloudPath.lastPathComponent).then {
-				return self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-			}
-		} else {
-			return delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+			try await uploadNameFile(shortenedTarget.cloudPath.lastPathComponent, originalName: targetCloudPath.lastPathComponent)
 		}
+		try await delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 	}
 
 	// MARK: - Internal
 
-	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) -> Promise<CloudItemMetadata> {
-		return shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: downloadNameFile).then { originalPath in
-			let shortened = self.shortenedNameCache.getShortenedPath(originalPath)
-			if shortened.pointsToLNG {
-				let originalItemType = self.guessItemTypeByFileName(originalPath.lastPathComponent)
-				return Promise(CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size))
-			} else {
-				return Promise(CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size))
-			}
+	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
+		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
+		return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
+	}
+
+	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.
+	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata, originalPath: CloudPath) -> CloudItemMetadata {
+		let shortened = shortenedNameCache.getShortenedPath(originalPath)
+		if shortened.pointsToLNG {
+			let originalItemType = guessItemTypeByFileName(originalPath.lastPathComponent)
+			return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
+		} else {
+			return CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
 		}
 	}
 
-	private func downloadNameFile(_ lngFileName: String) -> Promise<Data> {
+	private func downloadNameFile(_ lngFileName: String) async throws -> Data {
 		let nameFileCloudPath = getNameFileCloudPath(lngFileName)
 		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		return delegate.downloadFile(from: nameFileCloudPath, to: localNameFileURL).then {
-			return try Data(contentsOf: localNameFileURL)
-		}.always {
+		defer {
 			try? FileManager.default.removeItem(at: localNameFileURL)
 		}
+		_ = try await delegate.downloadFile(from: nameFileCloudPath, to: localNameFileURL)
+		return try Data(contentsOf: localNameFileURL)
 	}
 
 	private func getNameFileCloudPath(_ lngFileName: String) -> CloudPath {
@@ -167,23 +177,19 @@ class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		}
 	}
 
-	private func uploadNameFile(_ lngFileName: String, originalName: String) -> Promise<Void> {
+	private func uploadNameFile(_ lngFileName: String, originalName: String) async throws {
 		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		do {
-			try originalName.write(to: localNameFileURL, atomically: true, encoding: .utf8)
-		} catch {
-			return Promise(error)
+		defer {
+			try? FileManager.default.removeItem(at: localNameFileURL)
 		}
+		try originalName.write(to: localNameFileURL, atomically: true, encoding: .utf8)
 		let nameFileCloudPath = getNameFileCloudPath(lngFileName)
 		let lvl2Path = nameFileCloudPath.deletingLastPathComponent()
 		let lvl1Path = lvl2Path.deletingLastPathComponent()
 		let mPath = lvl1Path.deletingLastPathComponent()
-		return delegate.createFolderIfMissing(at: mPath).then {
-			return self.delegate.createFolderIfMissing(at: lvl1Path)
-		}.then {
-			return self.delegate.createFolderIfMissing(at: lvl2Path)
-		}.then {
-			return self.delegate.uploadFile(from: localNameFileURL, to: nameFileCloudPath, replaceExisting: true).then { _ in () }
-		}
+		try await delegate.createFolderIfMissing(at: mPath)
+		try await delegate.createFolderIfMissing(at: lvl1Path)
+		try await delegate.createFolderIfMissing(at: lvl2Path)
+		_ = try await delegate.uploadFile(from: localNameFileURL, to: nameFileCloudPath, replaceExisting: true)
 	}
 }

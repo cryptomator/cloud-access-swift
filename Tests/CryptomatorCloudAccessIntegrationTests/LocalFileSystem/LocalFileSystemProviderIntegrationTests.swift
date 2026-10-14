@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
@@ -38,12 +37,16 @@ class LocalFileSystemProviderIntegrationTests: CloudAccessIntegrationTest {
 		try? FileManager.default.removeItem(at: rootURL)
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		provider = try LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL)
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return try LocalFileSystemProvider(rootURL: LocalFileSystemProviderIntegrationTests.rootURL, maxPageSize: maxPageSizeForLimitedCloudProvider)
+	}
+
+	func testOperationsInCancelledTaskThrowCancellationError() async throws {
+		try await assertOperationsThrowCancellationErrorInCancelledTask()
 	}
 }

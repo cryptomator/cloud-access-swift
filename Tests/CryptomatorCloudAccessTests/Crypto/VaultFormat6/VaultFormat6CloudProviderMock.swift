@@ -7,8 +7,6 @@
 //
 
 import Foundation
-import Promises
-@testable import CryptomatorCloudAccess
 
 /**
  ```
@@ -24,8 +22,10 @@ import Promises
  ├─ File 4 (Long)
  └─ File 5 (Long)
  ```
+
+ `@unchecked Sendable`: restates the conformance of `CloudProviderMock`; this subclass adds no state.
  */
-public class VaultFormat6CloudProviderMock: CloudProviderMock {
+public class VaultFormat6CloudProviderMock: CloudProviderMock, @unchecked Sendable {
 	convenience init() {
 		let folders: Set = [
 			"pathToVault",

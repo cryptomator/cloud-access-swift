@@ -7,14 +7,14 @@
 //
 
 import Foundation
-import Promises
 
-public enum PropfindDepth: String {
+public enum PropfindDepth: String, Sendable {
 	case zero = "0"
 	case one = "1"
 }
 
-public class WebDAVClient {
+/// `@unchecked Sendable`: `baseURL` and the `Sendable` `webDAVSession` are immutable. The class is subclassed in tests.
+public class WebDAVClient: @unchecked Sendable {
 	public let baseURL: URL
 	private let webDAVSession: WebDAVSession
 
@@ -49,19 +49,19 @@ public class WebDAVClient {
 
 	// MARK: - HTTP Methods for WebDAV
 
-	public func OPTIONS(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func OPTIONS(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "OPTIONS"
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
-	public func HEAD(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func HEAD(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "HEAD"
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
-	public func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) -> Promise<HTTPURLResponse> {
+	public func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) async throws -> HTTPURLResponse {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PROPFIND"
 		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
@@ -69,10 +69,10 @@ public class WebDAVClient {
 		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
 		""".utf8)
-		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: nil)
+		return try await webDAVSession.performDownloadTask(with: request, to: localURL, progress: nil, onTaskCreation: nil)
 	}
 
-	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) -> Promise<(HTTPURLResponse, Data?)> {
+	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PROPFIND"
 		request.setValue(depth.rawValue, forHTTPHeaderField: "Depth")
@@ -80,45 +80,45 @@ public class WebDAVClient {
 		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
 		""".utf8)
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
-	public func GET(from url: URL, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<HTTPURLResponse> {
+	public func GET(from url: URL, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
 		var request = URLRequest(url: url)
 		request.httpMethod = "GET"
-		return webDAVSession.performDownloadTask(with: request, to: localURL, onTaskCreation: onTaskCreation)
+		return try await webDAVSession.performDownloadTask(with: request, to: localURL, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
-	public func PUT(url: URL, fileURL: URL, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<(HTTPURLResponse, Data?)> {
+	public func PUT(url: URL, fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
-		return webDAVSession.performUploadTask(with: request, fromFile: fileURL, onTaskCreation: onTaskCreation)
+		return try await webDAVSession.performUploadTask(with: request, fromFile: fileURL, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
-	public func MKCOL(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func MKCOL(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "MKCOL"
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
-	public func DELETE(url: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func DELETE(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "DELETE"
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
-	public func MOVE(sourceURL: URL, destinationURL: URL) -> Promise<(HTTPURLResponse, Data?)> {
+	public func MOVE(sourceURL: URL, destinationURL: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: sourceURL)
 		request.httpMethod = "MOVE"
 		request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
 		request.setValue("F", forHTTPHeaderField: "Overwrite")
-		return webDAVSession.performDataTask(with: request)
+		return try await webDAVSession.performDataTask(with: request)
 	}
 
 	// MARK: - Internal
 
 	private func propfindPropElementsAsXML(with propertyNames: [String]?) -> String {
-		if let propertyNames = propertyNames {
+		if let propertyNames {
 			return "<d:prop>\(propertyNames.map { "<d:\($0)/>" }.joined())</d:prop>"
 		} else {
 			return "<d:allprop/>"

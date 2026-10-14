@@ -1,5 +1,5 @@
 {
-  "originHash" : "cf9d809d865a7b217b20bf9a88dfb2d502cf96ef228caff1cc99b3e2f1262a66",
+  "originHash" : "064cf27b7e0cefbbcee3ea9384897cbd7c5d17e25cf10562b87ccfe684c9e32e",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -116,24 +116,6 @@
       "state" : {
         "revision" : "8dfe5bf41fe10e6d2afed62a72c4232adbef20f4",
         "version" : "2.16.0"
-      }
-    },
-    {
-      "identity" : "msgraph-sdk-objc-models-spm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/phil1995/msgraph-sdk-objc-models-spm.git",
-      "state" : {
-        "revision" : "172b07fe8a7da6072149e2fd92051a510b25035e",
-        "version" : "1.3.0"
-      }
-    },
-    {
-      "identity" : "msgraph-sdk-objc-spm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/phil1995/msgraph-sdk-objc-spm.git",
-      "state" : {
-        "revision" : "0320c6a99207b53288970382afcf5054852f9724",
-        "version" : "1.0.0"
       }
     },
     {

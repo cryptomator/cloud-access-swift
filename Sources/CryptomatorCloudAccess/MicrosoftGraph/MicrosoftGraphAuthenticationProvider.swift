@@ -8,13 +8,8 @@
 
 import Foundation
 @preconcurrency import MSAL
-@preconcurrency import MSGraphClientSDK
 
-enum MicrosoftGraphAuthenticationProviderError: Error {
-	case accountNotFound
-}
-
-final class MicrosoftGraphAuthenticationProvider: NSObject, MSAuthenticationProvider, Sendable {
+final class MicrosoftGraphAuthenticationProvider: MicrosoftGraphAccessTokenProvider {
 	private let identifier: String
 	private let clientApplication: MSALPublicClientApplication
 	private let scopes: [String]
@@ -25,28 +20,18 @@ final class MicrosoftGraphAuthenticationProvider: NSObject, MSAuthenticationProv
 		self.scopes = scopes
 	}
 
-	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: (@Sendable (String?, Error?) -> Void)!) {
-		let scopes: [String] = if let authProviderOptions {
-			authProviderOptions.scopesArray
-		} else {
-			self.scopes
-		}
-
-		// MSAL is called on the main actor, because it doesn't document that it may be called from any thread.
-		Task { @MainActor in
-			do {
-				let parameters = MSALAccountEnumerationParameters(identifier: identifier)
-				guard let account = try await clientApplication.accountsFromDevice(for: parameters).first else {
-					throw MicrosoftGraphAuthenticationProviderError.accountNotFound
-				}
-				let tokenParameters = MSALSilentTokenParameters(scopes: scopes, account: account)
-				let result = try await clientApplication.acquireTokenSilent(with: tokenParameters)
-				completion(result.accessToken, nil)
-			} catch let error as NSError where error.domain == MSALErrorDomain && error.code == MSALError.interactionRequired.rawValue {
-				completion(nil, CloudProviderError.unauthorized)
-			} catch {
-				completion(nil, error)
+	/// MSAL is called on the main actor, because it doesn't document that it may be called from any thread.
+	@MainActor
+	func getAccessToken() async throws -> String {
+		do {
+			let parameters = MSALAccountEnumerationParameters(identifier: identifier)
+			guard let account = try await clientApplication.accountsFromDevice(for: parameters).first else {
+				throw CloudProviderError.unauthorized
 			}
+			let tokenParameters = MSALSilentTokenParameters(scopes: scopes, account: account)
+			return try await clientApplication.acquireTokenSilent(with: tokenParameters).accessToken
+		} catch let error as NSError where error.domain == MSALErrorDomain && error.code == MSALError.interactionRequired.rawValue {
+			throw CloudProviderError.unauthorized
 		}
 	}
 }

@@ -1,5 +1,5 @@
 //
-//  MSAuthenticationProviderMock.swift
+//  MicrosoftGraphAccessTokenProviderMock.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Tobias Hagemann on 20.05.21.
@@ -7,7 +7,6 @@
 //
 
 import Foundation
-@preconcurrency import MSGraphClientSDK
 import os
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -15,11 +14,11 @@ import os
 @testable import CryptomatorCloudAccess
 #endif
 
-enum MSAuthenticationProviderMockError: Error {
+enum MicrosoftGraphAccessTokenProviderMockError: Error {
 	case invalidRefreshToken
 }
 
-final class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider, Sendable {
+final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProvider {
 	private let lockedOverrideAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
 	var overrideAccessToken: String? {
 		get { lockedOverrideAccessToken.withLock { $0 } }
@@ -32,29 +31,18 @@ final class MSAuthenticationProviderMock: NSObject, MSAuthenticationProvider, Se
 		set { lockedAccessToken.withLock { $0 = newValue } }
 	}
 
-	func getAccessToken(for authProviderOptions: MSAuthenticationProviderOptions!, andCompletion completion: (@Sendable (String?, Error?) -> Void)!) {
-		if let accessToken = overrideAccessToken {
-			completion(accessToken, nil)
-			return
-		} else if let accessToken {
-			completion(accessToken, nil)
-			return
+	func getAccessToken() async throws -> String {
+		if let accessToken = overrideAccessToken ?? accessToken {
+			return accessToken
 		}
-		let request = getAccessTokenRequest()
-		Task {
-			do {
-				let (data, response) = try await URLSession.shared.data(for: request)
-				guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-					throw MSAuthenticationProviderMockError.invalidRefreshToken
-				}
-				let accessTokenResponse = try self.getAccessTokenResponse(from: data)
-				self.overrideAccessToken = accessTokenResponse.accessToken
-				self.accessToken = accessTokenResponse.accessToken
-				completion(accessTokenResponse.accessToken, nil)
-			} catch {
-				completion(nil, error)
-			}
+		let (data, response) = try await URLSession.shared.data(for: getAccessTokenRequest())
+		guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+			throw MicrosoftGraphAccessTokenProviderMockError.invalidRefreshToken
 		}
+		let accessTokenResponse = try getAccessTokenResponse(from: data)
+		overrideAccessToken = accessTokenResponse.accessToken
+		accessToken = accessTokenResponse.accessToken
+		return accessTokenResponse.accessToken
 	}
 
 	private func getAccessTokenRequest() -> URLRequest {

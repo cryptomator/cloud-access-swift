@@ -8,7 +8,6 @@
 
 @preconcurrency import BoxSdkGen
 import Foundation
-import os
 
 private struct BoxTaskResult {
 	let response: HTTPURLResponse
@@ -17,90 +16,10 @@ private struct BoxTaskResult {
 	let downloadDestinationURL: URL?
 }
 
-private struct BoxRunningTask {
-	let resumer: Resumer<BoxTaskResult>
-	let downloadDestinationURL: URL?
-	var accumulatedData = Data()
-	var isDownloadMoved = false
-	var failure: Error?
-
-	/// Moves the body of a 2xx download to its destination. Any other body becomes the response data instead, so that an error response never ends up at the destination.
-	mutating func finishDownload(from location: URL, response: URLResponse?) {
-		guard let downloadDestinationURL else {
-			return
-		}
-		do {
-			if let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) {
-				try? FileManager.default.removeItem(at: downloadDestinationURL)
-				try FileManager.default.moveItem(at: location, to: downloadDestinationURL)
-				isDownloadMoved = true
-			} else {
-				accumulatedData = try Data(contentsOf: location)
-			}
-		} catch {
-			failure = error
-		}
-	}
-
-	func complete(with response: URLResponse?, error: Error?) {
-		let movedDownloadURL = isDownloadMoved ? downloadDestinationURL : nil
-		if let httpResponse = response as? HTTPURLResponse {
-			HTTPDebugLogger.logResponse(httpResponse, with: accumulatedData, or: movedDownloadURL)
-		}
-		if let failure {
-			resumer.resume(throwing: failure)
-		} else if let error {
-			resumer.resume(throwing: error)
-		} else if let httpResponse = response as? HTTPURLResponse {
-			resumer.resume(returning: BoxTaskResult(response: httpResponse, data: accumulatedData, downloadDestinationURL: movedDownloadURL))
-		} else {
-			resumer.resume(throwing: URLError(.badServerResponse))
-		}
-	}
-}
-
-private final class BoxURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessionDownloadDelegate, Sendable {
-	private let runningTasks = OSAllocatedUnfairLock(initialState: [URLSessionTask: BoxRunningTask]())
-
-	func addRunningTask(key: URLSessionTask, value: BoxRunningTask) {
-		runningTasks.withLock {
-			$0[key] = value
-		}
-	}
-
-	// MARK: - URLSessionTaskDelegate
-
-	func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-		let runningTask = runningTasks.withLock {
-			$0.removeValue(forKey: task)
-		}
-		runningTask?.complete(with: task.response, error: error)
-	}
-
-	// MARK: - URLSessionDataDelegate
-
-	func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-		runningTasks.withLock {
-			$0[dataTask]?.accumulatedData.append(data)
-		}
-	}
-
-	// MARK: - URLSessionDownloadDelegate
-
-	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		let response = downloadTask.response
-		runningTasks.withLock {
-			$0[downloadTask]?.finishDownload(from: location, response: response)
-		}
-	}
-}
-
 /**
- Network client of the Box SDK that also works with a background `URLSession`.
+ Network client of the Box SDK that also works with a background `URLSession`, see `SplitURLSession`.
 
- Downloads and uploads run on a session with the given configuration, as download and upload tasks. Uploads are sent from a file, which is the only kind of upload a background session supports. Other requests run as data tasks on a foreground session, because a background session doesn't support them.
-
- Task cancellation is not forwarded to a request, so a request returns only after its `URLSessionTask` has terminated. Cancellation only cuts short the delay before a retry. Redirects are always followed, and transport errors are not retried.
+ Cancellation only cuts short the delay before a retry. Redirects are always followed, and transport errors are not retried.
  */
 final class BoxURLSessionNetworkClient: NetworkClient, Sendable {
 	private struct BodyFile {
@@ -110,26 +29,10 @@ final class BoxURLSessionNetworkClient: NetworkClient, Sendable {
 
 	private static let bufferLength = 64 * 1024
 
-	private let transferSession: URLSession
-	private let metadataSession: URLSession
-	private let delegate: BoxURLSessionDelegate
+	private let session: SplitURLSession
 
 	init(configuration: URLSessionConfiguration) {
-		let delegate = BoxURLSessionDelegate()
-		self.delegate = delegate
-		self.transferSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-		if configuration.identifier != nil {
-			self.metadataSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-		} else {
-			self.metadataSession = transferSession
-		}
-	}
-
-	deinit {
-		transferSession.invalidateAndCancel()
-		if metadataSession !== transferSession {
-			metadataSession.invalidateAndCancel()
-		}
+		self.session = SplitURLSession(configuration: configuration)
 	}
 
 	func fetch(options: FetchOptions) async throws -> FetchResponse {
@@ -213,22 +116,15 @@ final class BoxURLSessionNetworkClient: NetworkClient, Sendable {
 	}
 
 	private func perform(_ request: URLRequest, for options: FetchOptions, bodyFile: BodyFile?) async throws -> BoxTaskResult {
-		HTTPDebugLogger.logRequest(request)
-		let task: URLSessionTask
-		let downloadDestinationURL: URL?
 		if let destinationURL = options.downloadDestinationUrl, options.responseFormat == .binary {
-			task = transferSession.downloadTask(with: request)
-			downloadDestinationURL = destinationURL
+			let (response, data) = try await session.download(request, to: destinationURL)
+			return BoxTaskResult(response: response, data: data, downloadDestinationURL: (200 ... 299).contains(response.statusCode) ? destinationURL : nil)
 		} else if let bodyFile {
-			task = transferSession.uploadTask(with: request, fromFile: bodyFile.url)
-			downloadDestinationURL = nil
+			let (response, data) = try await session.upload(request, fromFile: bodyFile.url)
+			return BoxTaskResult(response: response, data: data, downloadDestinationURL: nil)
 		} else {
-			task = metadataSession.dataTask(with: request)
-			downloadDestinationURL = nil
-		}
-		return try await withSDKContinuation { resumer in
-			delegate.addRunningTask(key: task, value: BoxRunningTask(resumer: resumer, downloadDestinationURL: downloadDestinationURL))
-			task.resume()
+			let (response, data) = try await session.data(for: request)
+			return BoxTaskResult(response: response, data: data, downloadDestinationURL: nil)
 		}
 	}
 

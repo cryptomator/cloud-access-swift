@@ -27,6 +27,7 @@
 		353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51F06FB3D822AB529843FC0 /* BoxURLSessionNetworkClientTests.swift */; };
 		1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */; };
 		7AC1892CD04F8134D4B15675 /* DropboxCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */; };
+		B3A1C0EF2E9D4F7A00B0C5D1 /* DropboxKeychainStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0EE2E9D4F7A00B0C5D1 /* DropboxKeychainStorageTests.swift */; };
 		4B9F207CE2FEAC3274ED81CE /* DropboxAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D378CAB03E8037B104DB86 /* DropboxAuthenticatorTests.swift */; };
 		8385F95793F804DF2307ABC3 /* PCloudCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4FC771EB47751E5B943856D /* PCloudCloudProviderTests.swift */; };
 		C3BD4CFF0C1C4FFEBAC71B93 /* SDKContinuationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45CB69A938F046EDACD40378 /* SDKContinuationTests.swift */; };
@@ -59,6 +60,7 @@
 		4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */; };
 		4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */; };
 		4A567B102615C6F3002C4D82 /* DropboxError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0F2615C6F3002C4D82 /* DropboxError.swift */; };
+		B3A1C0ED2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0EC2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift */; };
 		4A567B142615C8B8002C4D82 /* GoogleDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */; };
 		4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B192615C917002C4D82 /* GTMAppAuth */; };
 		4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */; };
@@ -74,7 +76,7 @@
 		4A6E5DED252DC9480091E76D /* WebDAVSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6E5DEC252DC9480091E76D /* WebDAVSession.swift */; };
 		4A741FF2287C69AE00489C23 /* DirectoryContentCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF1287C69AE00489C23 /* DirectoryContentCacheTests.swift */; };
 		4A741FF5287C98F300489C23 /* DirectoryContentCacheMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */; };
-		4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */; };
+		4A75E1CA28806FF000952FE6 /* SwiftyDropbox in Frameworks */ = {isa = PBXBuildFile; productRef = 4A75E1C928806FF000952FE6 /* SwiftyDropbox */; };
 		4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A765CA22878596000794440 /* DirectoryContentCache.swift */; };
 		4A77390D286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A77390C286DB5A00006B3C3 /* AWSS3TransferUtility+ForegroundSession.swift */; };
 		4A7C214D245305BB00DE81E6 /* CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7C214C245305BB00DE81E6 /* CloudItemType.swift */; };
@@ -259,6 +261,7 @@
 		F51F06FB3D822AB529843FC0 /* BoxURLSessionNetworkClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxURLSessionNetworkClientTests.swift; sourceTree = "<group>"; };
 		F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxAuthenticatorTests.swift; sourceTree = "<group>"; };
 		7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProviderTests.swift; sourceTree = "<group>"; };
+		B3A1C0EE2E9D4F7A00B0C5D1 /* DropboxKeychainStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxKeychainStorageTests.swift; sourceTree = "<group>"; };
 		06D378CAB03E8037B104DB86 /* DropboxAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxAuthenticatorTests.swift; sourceTree = "<group>"; };
 		E4FC771EB47751E5B943856D /* PCloudCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudCloudProviderTests.swift; sourceTree = "<group>"; };
 		45CB69A938F046EDACD40378 /* SDKContinuationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDKContinuationTests.swift; sourceTree = "<group>"; };
@@ -300,6 +303,7 @@
 		4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProvider.swift; sourceTree = "<group>"; };
 		4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCredential.swift; sourceTree = "<group>"; };
 		4A567B0F2615C6F3002C4D82 /* DropboxError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxError.swift; sourceTree = "<group>"; };
+		B3A1C0EC2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxKeychainStorage.swift; sourceTree = "<group>"; };
 		4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveAuthenticator.swift; sourceTree = "<group>"; };
 		4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveIdentifierCache.swift; sourceTree = "<group>"; };
 		4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCloudProvider.swift; sourceTree = "<group>"; };
@@ -470,7 +474,7 @@
 				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
-				4A75E1CA28806FF000952FE6 /* ObjectiveDropboxOfficial in Frameworks */,
+				4A75E1CA28806FF000952FE6 /* SwiftyDropbox in Frameworks */,
 				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
@@ -621,6 +625,7 @@
 			children = (
 				4A3A39682615F96900F16B26 /* DropboxExponentialBackOffTests.swift */,
 				7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */,
+				B3A1C0EE2E9D4F7A00B0C5D1 /* DropboxKeychainStorageTests.swift */,
 				06D378CAB03E8037B104DB86 /* DropboxAuthenticatorTests.swift */,
 			);
 			path = Dropbox;
@@ -643,6 +648,7 @@
 				4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */,
 				4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */,
 				4A567B0F2615C6F3002C4D82 /* DropboxError.swift */,
+				B3A1C0EC2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift */,
 				4A567B702615D946002C4D82 /* DropboxSetup.swift */,
 			);
 			path = Dropbox;
@@ -1155,7 +1161,7 @@
 				746BE0AA26579D4A00FB674E /* MSAL */,
 				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
 				4AF0AA7B2844DDD200C20B75 /* AWSS3 */,
-				4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */,
+				4A75E1C928806FF000952FE6 /* SwiftyDropbox */,
 				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
 				B3D620D12BFC7B2E007301C1 /* BoxSDK */,
 			);
@@ -1243,7 +1249,7 @@
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
 				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
 				4AF0AA7A2844DDD200C20B75 /* XCRemoteSwiftPackageReference "aws-sdk-ios-spm" */,
-				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */,
+				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "SwiftyDropbox" */,
 				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
 				B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-ios-sdk" */,
 			);
@@ -1377,6 +1383,7 @@
 				B3FC94AA2BA9AEFC00D1ECFD /* BoxItem.swift in Sources */,
 				4A0421822642B9260033144A /* VaultProviderFactory.swift in Sources */,
 				4A567B102615C6F3002C4D82 /* DropboxError.swift in Sources */,
+				B3A1C0ED2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift in Sources */,
 				4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */,
 				748A42B624AA231000DEB6D0 /* WebDAVProvider.swift in Sources */,
 				748A42BA24AA34F300DEB6D0 /* WebDAVCredential.swift in Sources */,
@@ -1494,6 +1501,7 @@
 				353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */,
 				1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */,
 				7AC1892CD04F8134D4B15675 /* DropboxCloudProviderTests.swift in Sources */,
+				B3A1C0EF2E9D4F7A00B0C5D1 /* DropboxKeychainStorageTests.swift in Sources */,
 				4B9F207CE2FEAC3274ED81CE /* DropboxAuthenticatorTests.swift in Sources */,
 				8385F95793F804DF2307ABC3 /* PCloudCloudProviderTests.swift in Sources */,
 				7494505F24BC5C3300149816 /* PropfindResponseParserTests.swift in Sources */,
@@ -1918,12 +1926,12 @@
 				minimumVersion = 3.0.0;
 			};
 		};
-		4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */ = {
+		4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "SwiftyDropbox" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git";
+			repositoryURL = "https://github.com/dropbox/SwiftyDropbox.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 7.2.0;
+				minimumVersion = 10.2.4;
 			};
 		};
 		4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */ = {
@@ -2013,10 +2021,10 @@
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;
 			productName = AppAuth;
 		};
-		4A75E1C928806FF000952FE6 /* ObjectiveDropboxOfficial */ = {
+		4A75E1C928806FF000952FE6 /* SwiftyDropbox */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "dropbox-sdk-obj-c-spm" */;
-			productName = ObjectiveDropboxOfficial;
+			package = 4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "SwiftyDropbox" */;
+			productName = SwiftyDropbox;
 		};
 		4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */ = {
 			isa = XCSwiftPackageProductDependency;

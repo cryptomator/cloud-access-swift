@@ -153,7 +153,7 @@ The respective `CloudProvider` is tested here very generally for the specificati
 
 ### Dropbox
 
-- Correct use of `batchUpload` (file size >= 150mb).
+- Correct use of the upload session (file size >= 150 MiB).
 
 ### Google Drive
 

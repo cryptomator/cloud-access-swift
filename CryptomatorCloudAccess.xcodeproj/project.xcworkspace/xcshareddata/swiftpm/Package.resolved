@@ -1,5 +1,5 @@
 {
-  "originHash" : "064cf27b7e0cefbbcee3ea9384897cbd7c5d17e25cf10562b87ccfe684c9e32e",
+  "originHash" : "2c121b83d227e907cc0ca31e65f013a27c9aeddcc024f577bf236582f8523442",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -53,15 +53,6 @@
       "state" : {
         "revision" : "b339c9ba84f7737377ef187a78900f9cc384cb12",
         "version" : "2.0.0"
-      }
-    },
-    {
-      "identity" : "dropbox-sdk-obj-c-spm",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/phil1995/dropbox-sdk-obj-c-spm.git",
-      "state" : {
-        "revision" : "87c1fcf96622ab90a956bdf89331ddb4164f4855",
-        "version" : "7.2.0"
       }
     },
     {
@@ -134,6 +125,15 @@
       "state" : {
         "revision" : "4038b6a4f74a1426f47eb1dd5b4bb5628a15d597",
         "version" : "1.16.1"
+      }
+    },
+    {
+      "identity" : "swiftydropbox",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/dropbox/SwiftyDropbox.git",
+      "state" : {
+        "revision" : "e315e0b14edb83f022134aef389deb4e8bee6bbf",
+        "version" : "10.2.4"
       }
     }
   ],

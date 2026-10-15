@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@preconcurrency import ObjectiveDropboxOfficial
+@preconcurrency import SwiftyDropbox
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
@@ -22,8 +22,7 @@ class DropboxCredentialMock: DropboxCredential, @unchecked Sendable {
 	}
 
 	override func setAuthorizedClient() {
-		let config = DBTransportDefaultConfig(appKey: "", appSecret: nil, userAgent: nil, asMemberId: nil, delegateQueue: nil, forceForegroundSession: true, sharedContainerIdentifier: nil, keychainService: nil)
-		authorizedClient = DBUserClient(accessToken: IntegrationTestSecrets.dropboxAccessToken, transport: config)
+		authorizedClient = DropboxAuthorizedClient(accessTokenProvider: LongLivedAccessTokenProvider(accessToken: IntegrationTestSecrets.dropboxAccessToken))
 	}
 
 	override func deauthenticate() {

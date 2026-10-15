@@ -10,8 +10,9 @@
 import CryptomatorCloudAccessCore
 #endif
 import Foundation
-@preconcurrency import ObjectiveDropboxOfficial
 import os
+@preconcurrency import SwiftyDropbox
+import UIKit
 
 public enum DropboxAuthenticatorError: Error {
 	case authenticationFailed
@@ -21,7 +22,7 @@ public enum DropboxAuthenticatorError: Error {
 public final class DropboxAuthenticator {
 	private nonisolated static let pendingAuthentication = OSAllocatedUnfairLock<(id: UUID, continuation: CheckedContinuation<DropboxCredential, any Error>)?>(initialState: nil)
 	private static let scopes = ["files.metadata.read", "files.metadata.write", "files.content.read", "files.content.write", "account_info.read"]
-	private static let scopeRequest = DBScopeRequest(scopeType: DBScopeType.user, scopes: scopes, includeGrantedScopes: false)
+	private static let scopeRequest = ScopeRequest(scopeType: .user, scopes: scopes, includeGrantedScopes: false)
 	public init() {
 		DropboxClientSetup.oneTimeSetup()
 	}
@@ -46,7 +47,7 @@ public final class DropboxAuthenticator {
 					DropboxAuthenticator.takePendingAuthentication(withID: id)?.resume(throwing: CancellationError())
 					return
 				}
-				DBClientsManager.authorize(fromControllerV2: .shared, controller: viewController, loadingStatusDelegate: nil, openURL: { url in
+				DropboxClientsManager.authorizeFromControllerV2(.shared, controller: viewController, loadingStatusDelegate: nil, openURL: { url in
 					UIApplication.shared.open(url, options: [:], completionHandler: nil)
 				}, scopeRequest: DropboxAuthenticator.scopeRequest)
 			}
@@ -61,16 +62,17 @@ public final class DropboxAuthenticator {
 	 - Returns: Whether the redirect URL was handled by the Dropbox SDK.
 	 */
 	public static func handleRedirectURL(_ url: URL) -> Bool {
-		return DBClientsManager.handleRedirectURL(url) { @Sendable authResult in
-			guard let authResult else {
-				return
-			}
-			if authResult.isSuccess() {
-				takePendingAuthentication()?.resume(returning: DropboxCredential(tokenUID: authResult.accessToken.uid))
-			} else if authResult.isCancel() {
+		DropboxClientSetup.oneTimeSetup()
+		return DropboxOAuthManager.sharedOAuthManager.handleRedirectURL(url) { @Sendable authResult in
+			switch authResult {
+			case let .success(accessToken):
+				takePendingAuthentication()?.resume(returning: DropboxCredential(tokenUID: accessToken.uid))
+			case .cancel:
 				takePendingAuthentication()?.resume(throwing: CocoaError(.userCancelled))
-			} else if authResult.isError() {
-				takePendingAuthentication()?.resume(throwing: authResult.nsError)
+			case let .error(error, _):
+				takePendingAuthentication()?.resume(throwing: error)
+			case nil:
+				return
 			}
 		}
 	}

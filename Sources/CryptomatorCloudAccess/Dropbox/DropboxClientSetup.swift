@@ -7,13 +7,13 @@
 //
 
 import Foundation
-@preconcurrency import ObjectiveDropboxOfficial
 import os
+@preconcurrency import SwiftyDropbox
 
 public enum DropboxClientSetup {
+	static let keychainStorage = DropboxKeychainStorage(keychainService: DropboxSetup.constants.keychainService ?? Bundle.main.bundleIdentifier ?? "")
 	private static let lockedOneTimeSetup: OSAllocatedUnfairLock<@Sendable () -> Void> = {
-		let config = DBTransportDefaultConfig(appKey: DropboxSetup.constants.appKey, appSecret: nil, userAgent: nil, asMemberId: nil, delegateQueue: nil, forceForegroundSession: DropboxSetup.constants.forceForegroundSession, sharedContainerIdentifier: DropboxSetup.constants.sharedContainerIdentifier, keychainService: DropboxSetup.constants.keychainService)
-		DBClientsManager.setup(withTransport: config)
+		DropboxClientsManager.setupWithAppKeyMultiUser(DropboxSetup.constants.appKey, tokenUid: nil, secureStorageAccess: keychainStorage)
 		return OSAllocatedUnfairLock(initialState: {})
 	}()
 

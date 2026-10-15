@@ -6,7 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import ObjectiveDropboxOfficial
+@preconcurrency import SwiftyDropbox
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -27,9 +27,9 @@ class DropboxCloudProviderTests: XCTestCase {
 		await assertThrowsCancellationErrorInCancelledTask(provider)
 	}
 
-	func testConvertRequestErrorWithCancelledRequest() {
-		let requestError = DBRequestError(asClientError: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
-		XCTAssertTrue(provider.convertRequestError(requestError) is CancellationError)
+	func testConvertCallErrorWithCancelledRequest() {
+		let callError = CallError<Void>.clientError(.urlSessionError(URLError(.cancelled)))
+		XCTAssertTrue(callError.converted() is CancellationError)
 	}
 
 	func testTransferProgressStartsOverForRetry() {
@@ -37,14 +37,14 @@ class DropboxCloudProviderTests: XCTestCase {
 		let phases = Progress.phases(of: progress, 999)
 		let transferProgress = TransferProgress(phases[0])
 		let firstAttempt = transferProgress.startAttempt()
-		firstAttempt(100, 100, 100)
+		firstAttempt(100, 100)
 		let secondAttempt = transferProgress.startAttempt()
 		XCTAssertEqual(0, progress.fractionCompleted)
-		firstAttempt(100, 100, 100)
+		firstAttempt(100, 100)
 		XCTAssertEqual(0, progress.fractionCompleted)
-		secondAttempt(50, 50, 100)
+		secondAttempt(50, 100)
 		XCTAssertEqual(0.999 * 50 / 101, progress.fractionCompleted, accuracy: 0.0001)
-		secondAttempt(50, 100, 100)
+		secondAttempt(100, 100)
 		XCTAssertEqual(0.999 * 100 / 101, progress.fractionCompleted, accuracy: 0.0001)
 		XCTAssertFalse(progress.isFinished)
 		phases.completeTransfer()
@@ -57,10 +57,10 @@ class DropboxCloudProviderTests: XCTestCase {
 		let phases = Progress.phases(of: progress, 999)
 		let transferChild = try XCTUnwrap(phases[0])
 		let reportBytes = TransferProgress(transferChild).startAttempt()
-		reportBytes(150, 150, 100)
+		reportBytes(150, 100)
 		XCTAssertFalse(transferChild.isFinished)
 		XCTAssertEqual(0.999 * 100 / 101, progress.fractionCompleted, accuracy: 0.0001)
-		reportBytes(10, 10, -1)
+		reportBytes(10, -1)
 		XCTAssertFalse(transferChild.isFinished)
 	}
 }

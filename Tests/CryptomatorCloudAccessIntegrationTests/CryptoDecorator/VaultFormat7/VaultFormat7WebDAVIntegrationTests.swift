@@ -12,7 +12,6 @@ import XCTest
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import Promises
 
 class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
@@ -26,14 +25,11 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
-			setUpProvider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
-		if let error = setUpPromise.error {
+		do {
+			setUpProvider = try blockingAwait(timeout: 60.0) {
+				try await DecoratorFactory.createNewVaultFormat7(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
+			}
+		} catch {
 			classSetUpError = error
 			return
 		}
@@ -42,34 +38,18 @@ class VaultFormat7WebDAVIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func tearDown() {
 		super.tearDown()
-		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
-		_ = waitForPromises(timeout: 60.0)
-	}
-
-	override func setUpWithError() throws {
-		try super.setUpWithError()
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7WebDAVIntegrationTests.cloudProvider, vaultPath: VaultFormat7WebDAVIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
+		try? blockingAwait(timeout: 60.0) {
+			try await cloudProvider.deleteFolderIfExisting(at: vaultPath)
 		}
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func setUp() async throws {
+		try await super.setUp()
+		provider = try await DecoratorFactory.createFromExistingVaultFormat7(delegate: VaultFormat7WebDAVIntegrationTests.cloudProvider, vaultPath: VaultFormat7WebDAVIntegrationTests.vaultPath, password: "IntegrationTest")
+	}
+
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		let limitedWebDAVCloudProvider = try WebDAVProvider(with: VaultFormat7WebDAVIntegrationTests.client, maxPageSize: maxPageSizeForLimitedCloudProvider)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedWebDAVCloudProvider, vaultPath: VaultFormat7WebDAVIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
-		}
-		return try XCTUnwrap(setUpPromise.value)
+		return try await DecoratorFactory.createFromExistingVaultFormat7(delegate: limitedWebDAVCloudProvider, vaultPath: VaultFormat7WebDAVIntegrationTests.vaultPath, password: "IntegrationTest")
 	}
 }

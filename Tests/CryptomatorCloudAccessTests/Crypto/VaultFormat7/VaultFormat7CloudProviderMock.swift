@@ -22,8 +22,10 @@ import Foundation
  ├─ File 4 (Long)
  └─ File 5 (Long)
  ```
+
+ `@unchecked Sendable`: restates the conformance of `CloudProviderMock`; this subclass adds no state.
  */
-public class VaultFormat7CloudProviderMock: CloudProviderMock {
+public class VaultFormat7CloudProviderMock: CloudProviderMock, @unchecked Sendable {
 	convenience init() {
 		let folders: Set = [
 			"pathToVault",

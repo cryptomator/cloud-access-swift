@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import Promises
 
 public enum WebDAVAuthenticatorError: Error {
 	case unsupportedProtocol
@@ -15,32 +14,28 @@ public enum WebDAVAuthenticatorError: Error {
 }
 
 public enum WebDAVAuthenticator {
-	public static func verifyClient(client: WebDAVClient) -> Promise<Void> {
-		return checkServerCompatibility(client: client).then {
-			return self.tryAuthenticatedRequest(client: client)
-		}.recover { error -> Promise<Void> in
+	public static func verifyClient(client: WebDAVClient) async throws {
+		do {
+			try await checkServerCompatibility(client: client)
+			try await tryAuthenticatedRequest(client: client)
+		} catch {
 			let nsError = error as NSError
 			if nsError.domain == NSURLErrorDomain, nsError.code == NSURLErrorServerCertificateUntrusted {
-				return Promise(WebDAVAuthenticatorError.untrustedCertificate)
+				throw WebDAVAuthenticatorError.untrustedCertificate
 			} else {
-				return Promise(error)
+				throw error
 			}
 		}
 	}
 
-	private static func checkServerCompatibility(client: WebDAVClient) -> Promise<Void> {
-		return client.OPTIONS(url: client.baseURL).then { httpResponse, _ in
-			if httpResponse.value(forHTTPHeaderField: "DAV") != nil {
-				return Promise(())
-			} else {
-				return Promise(WebDAVAuthenticatorError.unsupportedProtocol)
-			}
+	private static func checkServerCompatibility(client: WebDAVClient) async throws {
+		let (httpResponse, _) = try await client.OPTIONS(url: client.baseURL)
+		if httpResponse.value(forHTTPHeaderField: "DAV") == nil {
+			throw WebDAVAuthenticatorError.unsupportedProtocol
 		}
 	}
 
-	private static func tryAuthenticatedRequest(client: WebDAVClient) -> Promise<Void> {
-		return client.PROPFIND(url: client.baseURL, depth: .zero).then { _, _ in
-			return Promise(())
-		}
+	private static func tryAuthenticatedRequest(client: WebDAVClient) async throws {
+		_ = try await client.PROPFIND(url: client.baseURL, depth: .zero)
 	}
 }

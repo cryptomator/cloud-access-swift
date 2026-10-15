@@ -13,22 +13,23 @@ import Foundation
 @testable import CryptomatorCloudAccess
 #endif
 
-class MicrosoftGraphCredentialMock: MicrosoftGraphCredential {
+/// `@unchecked Sendable`: restates the conformance of `MicrosoftGraphCredential`; this subclass adds no state.
+class MicrosoftGraphCredentialMock: MicrosoftGraphCredential, @unchecked Sendable {
 	init() {
-		let authProvider = MSAuthenticationProviderMock()
+		let accessTokenProvider = MicrosoftGraphAccessTokenProviderMock()
 		let clientApplication = MSALPublicClientApplicationStub()
-		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, authProvider: authProvider, clientApplication: clientApplication)
+		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, accessTokenProvider: accessTokenProvider, clientApplication: clientApplication)
 	}
 
 	func resetAccessTokenOverride() {
 		// swiftlint:disable:next force_cast
-		let authProvider = self.authProvider as! MSAuthenticationProviderMock
-		authProvider.overrideAccessToken = nil
+		let accessTokenProvider = accessTokenProvider as! MicrosoftGraphAccessTokenProviderMock
+		accessTokenProvider.overrideAccessToken = nil
 	}
 
 	override func deauthenticate() throws {
 		// swiftlint:disable:next force_cast
-		let authProvider = self.authProvider as! MSAuthenticationProviderMock
-		authProvider.overrideAccessToken = "InvalidToken"
+		let accessTokenProvider = accessTokenProvider as! MicrosoftGraphAccessTokenProviderMock
+		accessTokenProvider.overrideAccessToken = "InvalidToken"
 	}
 }

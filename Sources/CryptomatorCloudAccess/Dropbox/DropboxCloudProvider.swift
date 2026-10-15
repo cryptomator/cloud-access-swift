@@ -7,17 +7,18 @@
 //
 
 import Foundation
-import ObjectiveDropboxOfficial
-import Promises
+import os
+@preconcurrency import SwiftyDropbox
 
-public class DropboxCloudProvider: CloudProvider {
+public final class DropboxCloudProvider: CloudProvider {
+	/// Dropbox accepts at most 150 MiB in a single upload.
+	private static let uploadSessionThreshold = 150 * 1024 * 1024
+	private static let uploadSessionChunkLength = 8 * 1024 * 1024
+
 	private let credential: DropboxCredential
-
-	private var runningTasks: [DBTask]
-	private var runningBatchUploadTasks: [DBBatchUploadTask]
 	private let maxPageSize: Int
 
-	let shouldRetryForError: (Error) -> Bool = { error in
+	let shouldRetryForError: @Sendable (Error) -> Bool = { error in
 		guard let dropboxError = error as? DropboxError else {
 			return false
 		}
@@ -31,600 +32,439 @@ public class DropboxCloudProvider: CloudProvider {
 
 	public init(credential: DropboxCredential, maxPageSize: Int = .max) {
 		self.credential = credential
-		self.runningTasks = [DBTask]()
-		self.runningBatchUploadTasks = [DBBatchUploadTask]()
 		self.maxPageSize = max(1, min(maxPageSize, 2000))
 	}
 
-	deinit {
-		for task in runningTasks {
-			task.cancel()
-		}
-		for task in runningBatchUploadTasks {
-			task.cancel()
-		}
-	}
-
-	public func fetchItemMetadata(at path: CloudPath) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.fetchItemMetadata(at: path, with: authorizedClient)
+		return try await retryWithExponentialBackoff({
+			try await fetchItemMetadata(at: cloudPath, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	@concurrent
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.fetchItemList(at: cloudPath, withPageToken: pageToken, with: authorizedClient)
+		return try await retryWithExponentialBackoff({
+			try await fetchItemList(at: cloudPath, withPageToken: pageToken, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		let progress = Progress(totalUnitCount: 1)
-		return retryWithExponentialBackoff({
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let downloadPromise = self.downloadFile(from: cloudPath, to: localURL, with: authorizedClient)
-			progress.resignCurrent()
-			return downloadPromise
-		}, condition: shouldRetryForError)
+		let phases = Progress.phases(of: progress, 999)
+		let transferProgress = TransferProgress(phases[0])
+		let metadata = try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+			try await retryWithExponentialBackoff({
+				try await downloadFile(from: cloudPath, to: stagedFile, transferProgress: transferProgress, with: authorizedClient.transferClient)
+			}, condition: shouldRetryForError)
+		})
+		phases.completeTransfer()
+		return metadata
 	}
 
 	/**
 	 - Warning: This function is not atomic, because the existence of the parent folder is checked first, otherwise Dropbox creates the missing folders automatically.
 	 */
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
 		let attributes: [FileAttributeKey: Any]
 		do {
 			attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
 		} catch CocoaError.fileReadNoSuchFile {
-			return Promise(CloudProviderError.itemNotFound)
-		} catch {
-			return Promise(error)
+			throw CloudProviderError.itemNotFound
 		}
 		let localItemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 		guard localItemType == .file else {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
-		let progress = Progress(totalUnitCount: 1)
-		let mode = replaceExisting ? DBFILESWriteMode(overwrite: ()) : nil
-		let fileSize = attributes[FileAttributeKey.size] as? Int ?? 157_286_400
-		// Dropbox recommends uploading files over 150mb with a batchUpload.
-		if fileSize >= 157_286_400 {
-			return retryWithExponentialBackoff({
-				progress.becomeCurrent(withPendingUnitCount: 1)
-				let uploadPromise = self.uploadLargeFile(from: localURL, to: cloudPath, mode: mode, with: authorizedClient)
-				progress.resignCurrent()
-				return uploadPromise
-			}, condition: shouldRetryForError)
+		let phases = Progress.phases(of: progress, 999)
+		let transferProgress = TransferProgress(phases[0])
+		let mode: Files.WriteMode = replaceExisting ? .overwrite : .add
+		let fileSize = attributes[FileAttributeKey.size] as? Int ?? DropboxCloudProvider.uploadSessionThreshold
+		let metadata = if fileSize >= DropboxCloudProvider.uploadSessionThreshold {
+			try await uploadLargeFile(from: localURL, to: cloudPath, mode: mode, transferProgress: transferProgress, with: authorizedClient.client)
 		} else {
-			return retryWithExponentialBackoff({
-				progress.becomeCurrent(withPendingUnitCount: 1)
-				let uploadPromise = self.uploadSmallFile(from: localURL, to: cloudPath, mode: mode, with: authorizedClient)
-				progress.resignCurrent()
-				return uploadPromise
+			try await retryWithExponentialBackoff({
+				try await uploadSmallFile(from: localURL, to: cloudPath, mode: mode, transferProgress: transferProgress, with: authorizedClient.transferClient)
 			}, condition: shouldRetryForError)
 		}
+		phases.completeTransfer()
+		return metadata
 	}
 
 	/**
 	 - Warning: This function is not atomic, because the existence of the parent folder is checked first, otherwise Dropbox creates the missing folders automatically.
 	 */
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.createFolder(at: cloudPath, with: authorizedClient)
+		try await retryWithExponentialBackoff({
+			try await createFolder(at: cloudPath, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.deleteItem(at: cloudPath, with: authorizedClient)
+		try await retryWithExponentialBackoff({
+			try await deleteItem(at: cloudPath, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.deleteItem(at: cloudPath, with: authorizedClient)
-		}, condition: shouldRetryForError)
-	}
-
-	/**
-	 - Warning: This function is not atomic, because the existence of the parentFolder of the target must be checked, otherwise Dropbox creates the missing folders automatically.
-	 */
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
-		}
-		return retryWithExponentialBackoff({
-			self.moveItem(from: sourceCloudPath, to: targetCloudPath, with: authorizedClient)
+		try await retryWithExponentialBackoff({
+			try await deleteItem(at: cloudPath, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
 	/**
 	 - Warning: This function is not atomic, because the existence of the parentFolder of the target must be checked, otherwise Dropbox creates the missing folders automatically.
 	 */
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		guard let authorizedClient = credential.authorizedClient else {
-			return Promise(CloudProviderError.unauthorized)
+			throw CloudProviderError.unauthorized
 		}
-		return retryWithExponentialBackoff({
-			self.moveItem(from: sourceCloudPath, to: targetCloudPath, with: authorizedClient)
+		try await retryWithExponentialBackoff({
+			try await moveItem(from: sourceCloudPath, to: targetCloudPath, with: authorizedClient.client)
+		}, condition: shouldRetryForError)
+	}
+
+	/**
+	 - Warning: This function is not atomic, because the existence of the parentFolder of the target must be checked, otherwise Dropbox creates the missing folders automatically.
+	 */
+	@concurrent
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		guard let authorizedClient = credential.authorizedClient else {
+			throw CloudProviderError.unauthorized
+		}
+		try await retryWithExponentialBackoff({
+			try await moveItem(from: sourceCloudPath, to: targetCloudPath, with: authorizedClient.client)
 		}, condition: shouldRetryForError)
 	}
 
 	// MARK: - Dropbox Operations
 
-	private func fetchItemMetadata(at cloudPath: CloudPath, with client: DBUserClient) -> Promise<CloudItemMetadata> {
-		return Promise<CloudItemMetadata> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
-			let task = client.filesRoutes.getMetadata(cloudPath.path)
-			self.runningTasks.append(task)
-			task.setResponseBlock { result, routeError, networkError in
-				self.runningTasks.removeAll { $0 == task }
-				if let routeError = routeError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with routeError: \(routeError)")
-					if routeError.isPath(), routeError.path.isNotFound() {
-						reject(CloudProviderError.itemNotFound)
-					} else {
-						reject(DropboxError.unexpectedRouteError)
-					}
-					return
-				}
-				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestError(networkError))
-					return
-				}
-				guard let result = result else {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with missingResult")
-					reject(DropboxError.missingResult)
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received result: \(DBFILESMetadata.serialize(result) ?? [:])")
-				do {
-					try fulfill(self.convertDBFILESMetadataToCloudItemMetadata(result, at: cloudPath))
-				} catch {
-					reject(error)
-				}
+	private func fetchItemMetadata(at cloudPath: CloudPath, with client: DropboxClient) async throws -> CloudItemMetadata {
+		return try await send("fetchItemMetadata(at: \(cloudPath.path))", {
+			client.files.getMetadata(path: cloudPath.path)
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(lookupError):
+				return self.convertLookupError(lookupError)
 			}
-		}
+		}, convertResult: { result in
+			try self.convertMetadataToCloudItemMetadata(result, at: cloudPath)
+		})
 	}
 
-	private func fetchItemList(at cloudPath: CloudPath, withPageToken pageToken: String?, with client: DBUserClient) -> Promise<CloudItemList> {
-		if let pageToken = pageToken {
-			return fetchItemListContinue(at: cloudPath, withPageToken: pageToken, with: client)
+	private func fetchItemList(at cloudPath: CloudPath, withPageToken pageToken: String?, with client: DropboxClient) async throws -> CloudItemList {
+		if let pageToken {
+			return try await fetchItemListContinue(at: cloudPath, withPageToken: pageToken, with: client)
 		} else {
-			return fetchItemList(at: cloudPath, with: client)
+			return try await fetchItemList(at: cloudPath, with: client)
 		}
 	}
 
-	private func fetchItemList(at cloudPath: CloudPath, with client: DBUserClient) -> Promise<CloudItemList> {
-		return Promise<CloudItemList> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) called")
-			// Dropbox differs from the filesystem hierarchy standard and accepts instead of "/" only a "".
-			// Therefore, `cloudPath` must be checked for the root path and adjusted if necessary.
-			let cleanedPath = (cloudPath == CloudPath("/")) ? "" : cloudPath.path
-			let task = client.filesRoutes.listFolder(cleanedPath, recursive: nil, includeMediaInfo: nil, includeDeleted: nil, includeHasExplicitSharedMembers: nil, includeMountedFolders: nil, limit: NSNumber(value: self.maxPageSize), sharedLink: nil, includePropertyGroups: nil, includeNonDownloadableFiles: nil)
-			self.runningTasks.append(task)
-			task.setResponseBlock { result, routeError, networkError in
-				self.runningTasks.removeAll { $0 == task }
-				if let routeError = routeError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) failed with routeError: \(routeError)")
-					if routeError.isPath(), routeError.path.isNotFound() {
-						reject(CloudProviderError.itemNotFound)
-					} else if routeError.isPath(), routeError.path.isNotFolder() {
-						reject(CloudProviderError.itemTypeMismatch)
-					} else {
-						reject(DropboxError.unexpectedRouteError)
-					}
+	private func fetchItemList(at cloudPath: CloudPath, with client: DropboxClient) async throws -> CloudItemList {
+		// Dropbox differs from the filesystem hierarchy standard and accepts instead of "/" only a "".
+		// Therefore, `cloudPath` must be checked for the root path and adjusted if necessary.
+		let cleanedPath = (cloudPath == CloudPath("/")) ? "" : cloudPath.path
+		return try await send("fetchItemList(at: \(cloudPath.path))", {
+			client.files.listFolder(path: cleanedPath, limit: UInt32(self.maxPageSize))
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(lookupError):
+				return self.convertLookupError(lookupError)
+			default:
+				return nil
+			}
+		}, convertResult: { result in
+			try self.convertListFolderResultToCloudItemList(result, at: cloudPath)
+		})
+	}
+
+	private func fetchItemListContinue(at cloudPath: CloudPath, withPageToken pageToken: String, with client: DropboxClient) async throws -> CloudItemList {
+		return try await send("fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken))", {
+			client.files.listFolderContinue(cursor: pageToken)
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(lookupError):
+				return self.convertLookupError(lookupError)
+			case .reset:
+				return CloudProviderError.pageTokenInvalid
+			default:
+				return nil
+			}
+		}, convertResult: { result in
+			try self.convertListFolderResultToCloudItemList(result, at: cloudPath)
+		})
+	}
+
+	private func downloadFile(from cloudPath: CloudPath, to localURL: URL, transferProgress: TransferProgress, with client: DropboxClient) async throws -> CloudItemMetadata {
+		return try await send("downloadFile(from: \(cloudPath.path), to: \(localURL))", {
+			let reportProgress = transferProgress.startAttempt()
+			return client.files.download(path: cloudPath.path, overwrite: true, destination: localURL).progress { progress in
+				reportProgress(progress.completedUnitCount, progress.totalUnitCount)
+			}
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(lookupError):
+				return self.convertLookupError(lookupError)
+			default:
+				return nil
+			}
+		}, convertResult: { result in
+			let (fileMetadata, _) = result
+			return self.convertFileMetadataToCloudItemMetadata(fileMetadata, at: cloudPath)
+		})
+	}
+
+	private func uploadLargeFile(from localURL: URL, to cloudPath: CloudPath, mode: Files.WriteMode, transferProgress: TransferProgress, with client: DropboxClient) async throws -> CloudItemMetadata {
+		try await ensureParentFolderExists(for: cloudPath)
+		try Task.checkCancellation()
+		CloudAccessDDLogDebug("DropboxCloudProvider: uploadLargeFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode)) called")
+		let fileHandle = try FileHandle(forReadingFrom: localURL)
+		defer {
+			try? fileHandle.close()
+		}
+		let fileSize = try fileHandle.seekToEnd()
+		try fileHandle.seek(toOffset: 0)
+		let reportProgress = transferProgress.startAttempt()
+		let sessionID = try await retryWithExponentialBackoff({
+			try await startUploadSession(with: client)
+		}, condition: shouldRetryForError)
+		var offset: UInt64 = 0
+		while let chunk = try fileHandle.read(upToCount: DropboxCloudProvider.uploadSessionChunkLength), !chunk.isEmpty {
+			try Task.checkCancellation()
+			let cursor = Files.UploadSessionCursor(sessionId: sessionID, offset: offset)
+			try await retryWithExponentialBackoff({
+				try await appendToUploadSession(at: cursor, chunk: chunk, with: client)
+			}, condition: shouldRetryForError)
+			offset += UInt64(chunk.count)
+			reportProgress(Int64(offset), Int64(fileSize))
+		}
+		try Task.checkCancellation()
+		let cursor = Files.UploadSessionCursor(sessionId: sessionID, offset: offset)
+		let commit = Files.CommitInfo(path: cloudPath.path, mode: mode, strictConflict: true)
+		return try await retryWithExponentialBackoff({
+			try await finishUploadSession(at: cursor, commit: commit, to: cloudPath, with: client)
+		}, condition: shouldRetryForError)
+	}
+
+	private func startUploadSession(with client: DropboxClient) async throws -> String {
+		return try await send("startUploadSession()", {
+			client.files.uploadSessionStart(input: Data())
+		}, convertResult: { result in
+			result.sessionId
+		})
+	}
+
+	private func appendToUploadSession(at cursor: Files.UploadSessionCursor, chunk: Data, with client: DropboxClient) async throws {
+		try await send("appendToUploadSession(at: \(cursor))", {
+			client.files.uploadSessionAppendV2(cursor: cursor, input: chunk)
+		}, convertResult: { _ in })
+	}
+
+	private func finishUploadSession(at cursor: Files.UploadSessionCursor, commit: Files.CommitInfo, to cloudPath: CloudPath, with client: DropboxClient) async throws -> CloudItemMetadata {
+		return try await send("finishUploadSession(at: \(cursor), to: \(cloudPath.path))", {
+			client.files.uploadSessionFinish(cursor: cursor, commit: commit, input: Data())
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(writeError):
+				return self.convertWriteError(writeError)
+			case .tooManyWriteOperations:
+				return DropboxError.tooManyWriteOperations
+			default:
+				return nil
+			}
+		}, convertResult: { result in
+			self.convertFileMetadataToCloudItemMetadata(result, at: cloudPath)
+		})
+	}
+
+	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: Files.WriteMode, transferProgress: TransferProgress, with client: DropboxClient) async throws -> CloudItemMetadata {
+		try await ensureParentFolderExists(for: cloudPath)
+		try Task.checkCancellation()
+		return try await send("uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode))", {
+			let reportProgress = transferProgress.startAttempt()
+			return client.files.upload(path: cloudPath.path, mode: mode, strictConflict: true, input: localURL).progress { progress in
+				reportProgress(progress.completedUnitCount, progress.totalUnitCount)
+			}
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(uploadWriteFailed):
+				return self.convertWriteError(uploadWriteFailed.reason)
+			default:
+				return nil
+			}
+		}, convertResult: { result in
+			self.convertFileMetadataToCloudItemMetadata(result, at: cloudPath)
+		})
+	}
+
+	private func createFolder(at cloudPath: CloudPath, with client: DropboxClient) async throws {
+		try await ensureParentFolderExists(for: cloudPath)
+		try Task.checkCancellation()
+		try await send("createFolder(at: \(cloudPath.path))", {
+			client.files.createFolderV2(path: cloudPath.path)
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .path(writeError):
+				return self.convertWriteError(writeError)
+			}
+		}, convertResult: { _ in })
+	}
+
+	private func deleteItem(at cloudPath: CloudPath, with client: DropboxClient) async throws {
+		try await send("deleteItem(at: \(cloudPath.path))", {
+			client.files.deleteV2(path: cloudPath.path)
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .pathLookup(lookupError):
+				return self.convertLookupError(lookupError)
+			case let .pathWrite(writeError):
+				return self.convertWriteError(writeError)
+			case .tooManyWriteOperations:
+				return DropboxError.tooManyWriteOperations
+			default:
+				return nil
+			}
+		}, convertResult: { _ in })
+	}
+
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, with client: DropboxClient) async throws {
+		try await ensureParentFolderExists(for: targetCloudPath)
+		try Task.checkCancellation()
+		try await send("moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))", {
+			client.files.moveV2(fromPath: sourceCloudPath.path, toPath: targetCloudPath.path)
+		}, convertRouteError: { routeError in
+			switch routeError {
+			case let .fromLookup(lookupError):
+				return self.convertLookupError(lookupError)
+			case let .fromWrite(writeError), let .to(writeError):
+				return self.convertWriteError(writeError)
+			default:
+				return nil
+			}
+		}, convertResult: { _ in })
+	}
+
+	/// Issues the request on the main actor and converts its result, or its error with `convertRouteError` for the route errors that it can map.
+	private func send<Request: HasRequestResponse & SendableMetatype, Value: Sendable>(_ operation: String, _ makeRequest: @escaping @Sendable () -> Request, convertRouteError: @escaping @Sendable (Request.ESerial.ValueType) -> Error? = { _ in nil }, convertResult: @escaping @Sendable (Request.ValueType) throws -> Value) async throws -> Value {
+		CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) called")
+		return try await withMainActorSDKContinuation { resumer in
+			makeRequest().response(queue: nil) { result, error in
+				if let error {
+					CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) failed with error: \(error)")
+					resumer.resume(throwing: error.converted(convertRouteError: convertRouteError))
 					return
 				}
-				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestError(networkError))
+				guard let result else {
+					CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) failed with missingResult")
+					resumer.resume(throwing: DropboxError.missingResult)
 					return
 				}
-				guard let result = result else {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) failed with missingResult")
-					reject(DropboxError.missingResult)
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemList(at: \(cloudPath.path)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
+				CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) received result: \(result)")
 				do {
-					try fulfill(self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
+					try resumer.resume(returning: convertResult(result))
 				} catch {
-					reject(error)
+					resumer.resume(throwing: error)
 				}
 			}
 		}
 	}
 
-	private func fetchItemListContinue(at cloudPath: CloudPath, withPageToken pageToken: String, with client: DBUserClient) -> Promise<CloudItemList> {
-		return Promise<CloudItemList> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) called")
-			let task = client.filesRoutes.listFolderContinue(pageToken)
-			self.runningTasks.append(task)
-			task.setResponseBlock { result, routeError, networkError in
-				self.runningTasks.removeAll { $0 == task }
-				if let routeError = routeError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) failed with routeError: \(routeError)")
-					if routeError.isPath(), routeError.path.isNotFound() {
-						reject(CloudProviderError.itemNotFound)
-					} else if routeError.isPath(), routeError.path.isNotFolder() {
-						reject(CloudProviderError.itemTypeMismatch)
-					} else if routeError.isReset() {
-						reject(CloudProviderError.pageTokenInvalid)
-					} else {
-						reject(DropboxError.unexpectedRouteError)
-					}
-					return
-				}
-				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) failed with networkError: \(networkError)")
-					if networkError.isBadInputError(), let errorContent = networkError.errorContent, errorContent.contains("invalidPageToken") {
-						reject(CloudProviderError.pageTokenInvalid)
-					} else {
-						reject(self.convertRequestError(networkError))
-					}
-					return
-				}
-				guard let result = result else {
-					CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) failed with missingResult")
-					reject(DropboxError.missingResult)
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: fetchItemListContinue(at: \(cloudPath.path), withPageToken: \(pageToken)) received result: \(DBFILESListFolderResult.serialize(result) ?? [:])")
-				do {
-					try fulfill(self.convertDBFILESListFolderResultToCloudItemList(result, at: cloudPath))
-				} catch {
-					reject(error)
-				}
-			}
-		}
-	}
-
-	private func downloadFile(from cloudPath: CloudPath, to localURL: URL, with client: DBUserClient) -> Promise<Void> {
-		let progress = Progress(totalUnitCount: -1)
-		return Promise<Void> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) called")
-			let task = client.filesRoutes.downloadUrl(cloudPath.path, overwrite: false, destination: localURL)
-			self.runningTasks.append(task)
-			task.setProgressBlock { _, totalBytesWritten, totalBytesExpectedToWrite in
-				progress.totalUnitCount = totalBytesExpectedToWrite
-				progress.completedUnitCount = totalBytesWritten
-			}
-			task.setResponseBlock { _, routeError, networkError, _ in
-				self.runningTasks.removeAll { $0 == task }
-				if let routeError = routeError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) failed with routeError: \(routeError)")
-					if routeError.isPath(), routeError.path.isNotFound() {
-						reject(CloudProviderError.itemNotFound)
-					} else if routeError.isPath(), routeError.path.isNotFile() {
-						reject(CloudProviderError.itemTypeMismatch)
-					} else {
-						reject(DropboxError.unexpectedRouteError)
-					}
-					return
-				}
-				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) failed with networkError: \(networkError)")
-					if networkError.isClientError(), case CocoaError.fileWriteFileExists = networkError.asClientError().nsError {
-						reject(CloudProviderError.itemAlreadyExists)
-					} else {
-						reject(self.convertRequestError(networkError))
-					}
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) finished")
-				fulfill(())
-			}
-		}
-	}
-
-	private func uploadLargeFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
-		let progress = Progress(totalUnitCount: 1)
-		return ensureParentFolderExists(for: cloudPath).then {
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let uploadPromise = self.batchUploadSingleFile(from: localURL, to: cloudPath, mode: mode, with: client)
-			progress.resignCurrent()
-			return uploadPromise
-		}
-	}
-
-	private func batchUploadSingleFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
-		let progress = Progress(totalUnitCount: -1)
-		return Promise<CloudItemMetadata> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil") called")
-			let commitInfo = DBFILESCommitInfo(path: cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true)
-			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
-				progress.totalUnitCount = totalBytesExpectedToUpload
-				progress.completedUnitCount = totalBytesUploaded
-			}
-			var task: DBBatchUploadTask!
-			task = client.filesRoutes.batchUploadFiles([localURL: commitInfo], queue: nil, progressBlock: uploadProgress) { fileUrlsToBatchResultEntries, finishBatchRouteError, finishBatchRequestError, fileUrlsToRequestErrors in
-				self.runningBatchUploadTasks.removeAll { $0 == task }
-				guard let result = fileUrlsToBatchResultEntries?[localURL] else {
-					reject(self.handleBatchUploadMissingResult(for: localURL, fileUrlsToRequestErrors, finishBatchRouteError, finishBatchRequestError))
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: batchUploadSingleFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) received result: \(DBFILESUploadSessionFinishBatchResultEntry.serialize(result) ?? [:])")
-				if result.isFailure() {
-					let failure = result.failure
-					if failure.isPath(), failure.path.isConflict() {
-						reject(CloudProviderError.itemAlreadyExists)
-					} else if failure.isPath(), failure.path.isInsufficientSpace() {
-						reject(CloudProviderError.quotaInsufficient)
-					} else if failure.isTooManyWriteOperations() {
-						reject(DropboxError.tooManyWriteOperations)
-					} else {
-						reject(DropboxError.unexpectedResult)
-					}
-				} else if result.isSuccess() {
-					fulfill(self.convertDBFILESFileMetadataToCloudItemMetadata(result.success, at: cloudPath))
-				} else {
-					reject(DropboxError.unexpectedResult)
-				}
-			}
-			self.runningBatchUploadTasks.append(task)
-		}
-	}
-
-	func handleBatchUploadMissingResult(for localURL: URL, _ fileUrlsToRequestErrors: [URL: DBRequestError], _ finishBatchRouteError: DBASYNCPollError?, _ finishBatchRequestError: DBRequestError?) -> Error {
-		if !fileUrlsToRequestErrors.isEmpty {
-			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with fileUrlsToRequestErrors: \(fileUrlsToRequestErrors)")
-			guard let requestError = fileUrlsToRequestErrors[localURL] else {
-				return DropboxError.unexpectedError
-			}
-			return convertRequestError(requestError)
-		} else if let finishBatchRouteError = finishBatchRouteError {
-			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with finishBatchRouteError: \(finishBatchRouteError)")
-			return DropboxError.asyncPollError
-		} else if let finishBatchRequestError = finishBatchRequestError {
-			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with finishBatchRequestError: \(finishBatchRequestError)")
-			return convertRequestError(finishBatchRequestError)
-		} else {
-			CloudAccessDDLogDebug("DropboxCloudProvider: handleBatchUploadMissingResult(for: \(localURL)) failed with missingResult")
-			return DropboxError.missingResult
-		}
-	}
-
-	private func uploadSmallFile(from localURL: URL, to cloudPath: CloudPath, mode: DBFILESWriteMode?, with client: DBUserClient) -> Promise<CloudItemMetadata> {
-		let progress = Progress(totalUnitCount: -1)
-		return ensureParentFolderExists(for: cloudPath).then { _ -> Promise<CloudItemMetadata> in
-			CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) called")
-			let task = client.filesRoutes.uploadUrl(cloudPath.path, mode: mode, autorename: nil, clientModified: nil, mute: nil, propertyGroups: nil, strictConflict: true, contentHash: nil, inputUrl: localURL.path)
-			self.runningTasks.append(task)
-			let uploadProgress: DBProgressBlock = { _, totalBytesUploaded, totalBytesExpectedToUpload in
-				progress.totalUnitCount = totalBytesExpectedToUpload
-				progress.completedUnitCount = totalBytesUploaded
-			}
-			task.setProgressBlock(uploadProgress)
-			return Promise<CloudItemMetadata> { fulfill, reject in
-				task.setResponseBlock { result, routeError, networkError in
-					self.runningTasks.removeAll { $0 == task }
-					if let routeError = routeError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with routeError: \(routeError)")
-						if routeError.isPath(), routeError.path.reason.isConflict() {
-							reject(CloudProviderError.itemAlreadyExists)
-						} else if routeError.isPath(), routeError.path.reason.isInsufficientSpace() {
-							reject(CloudProviderError.quotaInsufficient)
-						} else if routeError.isPath(), routeError.path.reason.isTooManyWriteOperations() {
-							reject(DropboxError.tooManyWriteOperations)
-						} else {
-							reject(DropboxError.unexpectedRouteError)
-						}
-						return
-					}
-					if let networkError = networkError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with networkError: \(networkError)")
-						reject(self.convertRequestError(networkError))
-						return
-					}
-					guard let result = result else {
-						CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) failed with missingResult")
-						reject(DropboxError.missingResult)
-						return
-					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: uploadSmallFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode?.description() ?? "nil")) received result: \(DBFILESFileMetadata.serialize(result) ?? [:])")
-					fulfill(self.convertDBFILESFileMetadataToCloudItemMetadata(result, at: cloudPath))
-				}
-			}
-		}
-	}
-
-	private func createFolder(at cloudPath: CloudPath, with client: DBUserClient) -> Promise<Void> {
-		return ensureParentFolderExists(for: cloudPath).then {
-			return Promise<Void> { fulfill, reject in
-				CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) called")
-				let task = client.filesRoutes.createFolderV2(cloudPath.path)
-				self.runningTasks.append(task)
-				task.setResponseBlock { result, routeError, networkError in
-					self.runningTasks.removeAll { $0 == task }
-					if let routeError = routeError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) failed with routeError: \(routeError)")
-						if routeError.isPath(), routeError.path.isConflict() {
-							reject(CloudProviderError.itemAlreadyExists)
-						} else if routeError.isPath(), routeError.path.isInsufficientSpace() {
-							reject(CloudProviderError.quotaInsufficient)
-						} else {
-							reject(DropboxError.unexpectedRouteError)
-						}
-						return
-					}
-					if let networkError = networkError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-						reject(self.convertRequestError(networkError))
-						return
-					}
-					guard let result = result else {
-						CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) failed with missingResult")
-						reject(DropboxError.missingResult)
-						return
-					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: createFolder(at: \(cloudPath.path)) received result: \(DBFILESCreateFolderResult.serialize(result) ?? [:])")
-					fulfill(())
-				}
-			}
-		}
-	}
-
-	private func deleteItem(at cloudPath: CloudPath, with client: DBUserClient) -> Promise<Void> {
-		return Promise<Void> { fulfill, reject in
-			CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) called")
-			let task = client.filesRoutes.delete_V2(cloudPath.path)
-			self.runningTasks.append(task)
-			task.setResponseBlock { result, routeError, networkError in
-				self.runningTasks.removeAll { $0 == task }
-				if let routeError = routeError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) failed with routeError: \(routeError)")
-					if routeError.isPathLookup(), routeError.pathLookup.isNotFound() {
-						reject(CloudProviderError.itemNotFound)
-					} else {
-						reject(DropboxError.unexpectedRouteError)
-					}
-					return
-				}
-				if let networkError = networkError {
-					CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) failed with networkError: \(networkError)")
-					reject(self.convertRequestError(networkError))
-					return
-				}
-				guard let result = result else {
-					CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) failed with missingResult")
-					reject(DropboxError.missingResult)
-					return
-				}
-				CloudAccessDDLogDebug("DropboxCloudProvider: deleteItem(at: \(cloudPath.path)) received result: \(DBFILESDeleteResult.serialize(result) ?? [:])")
-				fulfill(())
-			}
-		}
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, with client: DBUserClient) -> Promise<Void> {
-		return ensureParentFolderExists(for: targetCloudPath).then {
-			return Promise<Void> { fulfill, reject in
-				CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
-				let task = client.filesRoutes.moveV2(sourceCloudPath.path, toPath: targetCloudPath.path)
-				self.runningTasks.append(task)
-				task.setResponseBlock { result, routeError, networkError in
-					self.runningTasks.removeAll { $0 == task }
-					if let routeError = routeError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with routeError: \(routeError)")
-						if routeError.isFromLookup(), routeError.fromLookup.isNotFound() {
-							reject(CloudProviderError.itemNotFound)
-						} else if routeError.isTo(), routeError.to.isConflict() {
-							reject(CloudProviderError.itemAlreadyExists)
-						} else if routeError.isTo(), routeError.to.isInsufficientSpace() {
-							reject(CloudProviderError.quotaInsufficient)
-						} else if routeError.isFromWrite(), routeError.fromWrite.isTooManyWriteOperations() {
-							reject(DropboxError.tooManyWriteOperations)
-						} else {
-							reject(DropboxError.unexpectedRouteError)
-						}
-						return
-					}
-					if let networkError = networkError {
-						CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with networkError: \(networkError)")
-						reject(self.convertRequestError(networkError))
-						return
-					}
-					guard let result = result else {
-						CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with missingResult")
-						reject(DropboxError.missingResult)
-						return
-					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) received result: \(DBFILESRelocationResult.serialize(result) ?? [:])")
-					fulfill(())
-				}
-			}
-		}
-	}
-
-	func ensureParentFolderExists(for cloudPath: CloudPath) -> Promise<Void> {
+	func ensureParentFolderExists(for cloudPath: CloudPath) async throws {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
 		if parentCloudPath == CloudPath("/") {
-			return Promise(())
+			return
 		}
-		return checkForItemExistence(at: parentCloudPath).then { itemExists -> Void in
-			guard itemExists else {
-				throw CloudProviderError.parentFolderDoesNotExist
-			}
+		guard try await checkForItemExistence(at: parentCloudPath) else {
+			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}
 
-	func retryWithExponentialBackoff<Value>(_ work: @escaping () throws -> Promise<Value>, condition: (Error) -> Bool) -> Promise<Value> {
-		let queue = DispatchQueue(label: "retryWithExponentialBackoff-Dropbox", qos: .userInitiated)
+	func retryWithExponentialBackoff<Value>(_ work: () async throws -> Value, condition: (Error) -> Bool) async throws -> Value {
 		let attempts = 5
 		let exponentialBackoffBase: UInt = 2
 		let exponentialBackoffScale = 0.5
-		return retry(
-			on: queue,
-			attempts: attempts,
-			delay: 0.01,
-			condition: { remainingAttempts, error in
-				let condition = self.shouldRetryForError(error)
-				if condition {
-					let jitter = Double.random(in: 0 ..< 0.5)
-					let sleepTime: Double
-					if let dropboxError = error as? DropboxError, case let .rateLimitError(retryAfter) = dropboxError {
-						sleepTime = Double(retryAfter) + jitter
-					} else {
-						let retryCount = attempts - remainingAttempts
-						sleepTime = pow(Double(exponentialBackoffBase), Double(retryCount)) * exponentialBackoffScale + jitter
-					}
-					CloudAccessDDLogDebug("DropboxCloudProvider: retryWithExponentialBackoff() sleep for \(sleepTime) after error: \(error)")
-					Thread.sleep(forTimeInterval: sleepTime)
+		var retryCount = 0
+		while true {
+			do {
+				return try await work()
+			} catch {
+				guard retryCount < attempts, condition(error) else {
+					throw error
 				}
-				return condition
-			},
-			work
-		)
+				let jitter = Double.random(in: 0 ..< 0.5)
+				let sleepTime: Double = if let dropboxError = error as? DropboxError, case let .rateLimitError(retryAfter) = dropboxError {
+					Double(retryAfter) + jitter
+				} else {
+					pow(Double(exponentialBackoffBase), Double(retryCount)) * exponentialBackoffScale + jitter
+				}
+				CloudAccessDDLogDebug("DropboxCloudProvider: retryWithExponentialBackoff() sleep for \(sleepTime) after error: \(error)")
+				try await Task.sleep(for: .seconds(sleepTime))
+				retryCount += 1
+			}
+		}
 	}
 
 	// MARK: - Helpers
 
-	func convertDBFILESMetadataToCloudItemMetadata(_ metadata: DBFILESMetadata, at cloudPath: CloudPath) throws -> CloudItemMetadata {
-		if metadata is DBFILESFolderMetadata {
+	func convertMetadataToCloudItemMetadata(_ metadata: Files.Metadata, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+		if metadata is Files.FolderMetadata {
 			return CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		}
-		guard let fileMetadata = metadata as? DBFILESFileMetadata else {
+		guard let fileMetadata = metadata as? Files.FileMetadata else {
 			throw DropboxError.unexpectedResult
 		}
-		return convertDBFILESFileMetadataToCloudItemMetadata(fileMetadata, at: cloudPath)
+		return convertFileMetadataToCloudItemMetadata(fileMetadata, at: cloudPath)
 	}
 
-	func convertDBFILESFileMetadataToCloudItemMetadata(_ metadata: DBFILESFileMetadata, at cloudPath: CloudPath) -> CloudItemMetadata {
-		return CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.serverModified, size: metadata.size.intValue)
+	func convertFileMetadataToCloudItemMetadata(_ metadata: Files.FileMetadata, at cloudPath: CloudPath) -> CloudItemMetadata {
+		return CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.serverModified, size: Int(metadata.size))
 	}
 
-	func convertDBFILESListFolderResultToCloudItemList(_ folderResult: DBFILESListFolderResult, at cloudPath: CloudPath) throws -> CloudItemList {
+	func convertListFolderResultToCloudItemList(_ folderResult: Files.ListFolderResult, at cloudPath: CloudPath) throws -> CloudItemList {
 		var items = [CloudItemMetadata]()
 		for metadata in folderResult.entries {
 			let itemCloudPath = cloudPath.appendingPathComponent(metadata.name)
-			let itemMetadata = try convertDBFILESMetadataToCloudItemMetadata(metadata, at: itemCloudPath)
+			let itemMetadata = try convertMetadataToCloudItemMetadata(metadata, at: itemCloudPath)
 			items.append(itemMetadata)
 		}
-		let nextPageToken = folderResult.hasMore.boolValue ? folderResult.cursor : nil
+		let nextPageToken = folderResult.hasMore ? folderResult.cursor : nil
 		return CloudItemList(items: items, nextPageToken: nextPageToken)
 	}
 
@@ -642,29 +482,88 @@ public class DropboxCloudProvider: CloudProvider {
 		}
 	}
 
-	func convertRequestError(_ error: DBRequestError) -> Error {
-		if error.isHttpError() {
+	func convertLookupError(_ error: Files.LookupError) -> Error? {
+		switch error {
+		case .notFound:
+			return CloudProviderError.itemNotFound
+		case .notFile, .notFolder:
+			return CloudProviderError.itemTypeMismatch
+		default:
+			return nil
+		}
+	}
+
+	func convertWriteError(_ error: Files.WriteError) -> Error? {
+		switch error {
+		case .conflict:
+			return CloudProviderError.itemAlreadyExists
+		case .insufficientSpace:
+			return CloudProviderError.quotaInsufficient
+		case .tooManyWriteOperations:
+			return DropboxError.tooManyWriteOperations
+		default:
+			return nil
+		}
+	}
+}
+
+extension CallError {
+	/// Converts the error, using `convertRouteError` for the route errors that it can map. A route error that it returns `nil` for becomes `DropboxError.unexpectedRouteError`.
+	// swiftlint:disable:next cyclomatic_complexity
+	func converted(convertRouteError: (EType) -> Error? = { _ in nil }) -> Error {
+		switch self {
+		case let .routeError(routeError, _, _, _):
+			return convertRouteError(routeError.unboxed) ?? DropboxError.unexpectedRouteError
+		case .httpError:
 			return DropboxError.httpError
-		} else if error.isBadInputError() {
+		case let .badInputError(message?, _) where message.contains("invalidPageToken"):
+			return CloudProviderError.pageTokenInvalid
+		case .badInputError:
 			return DropboxError.badInputError
-		} else if error.isAuthError() {
+		case .authError:
 			return CloudProviderError.unauthorized
-		} else if error.isAccessError() {
+		case .accessError:
 			return DropboxError.accessError
-		} else if error.isPathRootError() {
-			return DropboxError.pathRootError
-		} else if error.isRateLimitError() {
-			let rateLimitError = error.asRateLimitError()
-			return DropboxError.rateLimitError(retryAfter: rateLimitError.backoff.intValue)
-		} else if error.isInternalServerError() {
+		case let .rateLimitError(rateLimitError, _, _, _):
+			return DropboxError.rateLimitError(retryAfter: Int(rateLimitError.retryAfter))
+		case .internalServerError:
 			return DropboxError.internalServerError
-		} else if error.isClientError() {
-			if isNetworkConnectionError(error.asClientError().nsError) {
-				return CloudProviderError.noInternetConnection
-			}
+		case let .clientError(.urlSessionError(error)) where isCancellationError(error):
+			return CancellationError()
+		case let .clientError(.urlSessionError(error)) where isNetworkConnectionError(error):
+			return CloudProviderError.noInternetConnection
+		case .clientError:
 			return DropboxError.clientError
-		} else {
+		case .serializationError, .reconnectionError:
 			return DropboxError.unexpectedError
+		}
+	}
+}
+
+/// Writes the byte counts of a transfer's current attempt to its progress, so that a retry starts over and late callbacks of an earlier attempt are ignored.
+struct TransferProgress: Sendable {
+	private let progress: Progress?
+	private let currentAttempt = OSAllocatedUnfairLock(initialState: 0)
+
+	init(_ progress: Progress?) {
+		self.progress = progress
+	}
+
+	func startAttempt() -> @Sendable (_ totalBytesTransferred: Int64, _ totalBytesExpectedToTransfer: Int64) -> Void {
+		let attempt = currentAttempt.withLock { currentAttempt in
+			currentAttempt += 1
+			progress?.completedUnitCount = 0
+			return currentAttempt
+		}
+		return { totalBytesTransferred, totalBytesExpectedToTransfer in
+			currentAttempt.withLock { currentAttempt in
+				guard currentAttempt == attempt else {
+					return
+				}
+				// One unit more than the bytes, because a progress that finished can't be reset for a retry
+				progress?.totalUnitCount = totalBytesExpectedToTransfer + 1
+				progress?.completedUnitCount = min(totalBytesTransferred, totalBytesExpectedToTransfer)
+			}
 		}
 	}
 }

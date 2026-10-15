@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import Promises
 
 private extension CloudPath {
 	func appendingDirFileComponent() -> CloudPath {
@@ -20,13 +19,13 @@ private extension CloudPath {
 }
 
 private extension CloudProvider {
-	func silentlyUploadFileAndCleanUp(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) -> Promise<Void> {
-		return uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting).then { _ in
-			// ignore result
-		}.recover { _ in
+	func silentlyUploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) async throws {
+		do {
+			_ = try await uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
+		} catch let error as CancellationError {
+			throw error
+		} catch {
 			// ignore error
-		}.always {
-			try? FileManager.default.removeItem(at: localURL)
 		}
 	}
 }
@@ -39,45 +38,37 @@ private extension CloudProvider {
  Use the factory methods to create a new crypto decorator. In order to be fully compatible with vault format 8, pass an instance of `VaultFormat8ShorteningProviderDecorator` (shortening decorator) as the delegate.
 
  The implementation of this decorator is identical to vault format 7 since the new format "only" introduced a new vault configuration file.
+
+ `@unchecked Sendable`: restates the conformance of `VaultFormat7ProviderDecorator`; this subclass adds no state.
  */
-class VaultFormat8ProviderDecorator: VaultFormat7ProviderDecorator {
-	override func createFolder(at cleartextCloudPath: CloudPath) -> Promise<Void> {
+final class VaultFormat8ProviderDecorator: VaultFormat7ProviderDecorator, @unchecked Sendable {
+	@concurrent
+	override func createFolder(at cleartextCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
 		let dirId = UUID().uuidString.data(using: .utf8)!
 		let localCleartextDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let dirPath: CloudPath
-		do {
-			try dirId.write(to: localCleartextDirFileURL)
-			dirPath = try getDirPath(dirId)
-		} catch {
-			return Promise(error)
+		let localCiphertextDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		defer {
+			try? FileManager.default.removeItem(at: localCleartextDirFileURL)
+			try? FileManager.default.removeItem(at: localCiphertextDirFileURL)
 		}
-		let ciphertextCloudPathPromise = getC9RPath(cleartextCloudPath)
-		return ciphertextCloudPathPromise.then { ciphertextCloudPath in
-			return self.delegate.createFolder(at: ciphertextCloudPath)
-		}.then { ciphertextCloudPathPromise }.then { ciphertextCloudPath -> Promise<CloudItemMetadata> in
+		try dirId.write(to: localCleartextDirFileURL)
+		try await cryptor.encryptContent(from: localCleartextDirFileURL, to: localCiphertextDirFileURL)
+		let dirPath = try getDirPath(dirId)
+		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
+		try Task.checkCancellation()
+		try await withoutCancellation {
+			try await self.delegate.createFolder(at: ciphertextCloudPath)
 			let dirFileCloudPath = ciphertextCloudPath.appendingDirFileComponent()
-			return self.delegate.uploadFile(from: localCleartextDirFileURL, to: dirFileCloudPath, replaceExisting: false)
-		}.then { _ -> Promise<Void> in
+			_ = try await self.delegate.uploadFile(from: localCleartextDirFileURL, to: dirFileCloudPath, replaceExisting: false)
 			let parentDirPath = dirPath.deletingLastPathComponent()
-			return self.delegate.createFolderIfMissing(at: parentDirPath)
-		}.then { () -> Promise<Void> in
-			return self.delegate.createFolder(at: dirPath)
-		}.then { () -> Promise<Void> in
+			try await self.delegate.createFolderIfMissing(at: parentDirPath)
+			try await self.delegate.createFolder(at: dirPath)
 			// This step is optional and will create a `dirid.c9r` file for recovery purposes.
 			// See: https://github.com/cryptomator/cloud-access-swift/issues/10
-			let localCiphertextDirFileURL = try self.encryptDirFile(localCleartextDirFileURL)
 			let ciphertextDirFileCloudPath = dirPath.appendingDirIdFileComponent()
-			return self.delegate.silentlyUploadFileAndCleanUp(from: localCiphertextDirFileURL, to: ciphertextDirFileCloudPath, replaceExisting: false)
-		}.then { _ -> Void in
+			try await self.delegate.silentlyUploadFile(from: localCiphertextDirFileURL, to: ciphertextDirFileCloudPath, replaceExisting: false)
 			try self.dirIdCache.addOrUpdate(cleartextCloudPath, dirId: dirId)
-		}.always {
-			try? FileManager.default.removeItem(at: localCleartextDirFileURL)
 		}
-	}
-
-	private func encryptDirFile(_ cleartextDirFileURL: URL) throws -> URL {
-		let ciphertextDirFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try cryptor.encryptContent(from: cleartextDirFileURL, to: ciphertextDirFileURL)
-		return ciphertextDirFileURL
 	}
 }

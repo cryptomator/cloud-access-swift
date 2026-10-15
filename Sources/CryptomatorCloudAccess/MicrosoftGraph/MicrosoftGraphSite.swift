@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct MicrosoftGraphSite: Codable {
+public struct MicrosoftGraphSite: Codable, Sendable {
 	public let identifier: String
 	public let displayName: String?
 }

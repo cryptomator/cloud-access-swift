@@ -7,9 +7,14 @@
 //
 
 import Foundation
+import os
 
-public class GoogleDriveSetup {
-	public static var constants: GoogleDriveSetup!
+public final class GoogleDriveSetup: Sendable {
+	private static let lockedConstants = OSAllocatedUnfairLock<GoogleDriveSetup?>(initialState: nil)
+	public static var constants: GoogleDriveSetup! {
+		get { lockedConstants.withLock { $0 } }
+		set { lockedConstants.withLock { $0 = newValue } }
+	}
 
 	public let clientId: String
 	public let redirectURL: URL

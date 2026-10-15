@@ -6,7 +6,7 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-import AWSS3
+@preconcurrency import AWSS3
 import Foundation
 
 extension AWSEndpoint {

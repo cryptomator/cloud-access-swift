@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import Promises
 
 public enum PropfindResponseParserError: Error {
 	case parsingAborted
@@ -45,7 +44,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 	// MARK: - XMLParserDelegate
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
+		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
 		switch elementName {
@@ -65,13 +64,13 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
+		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
 		autoreleasepool {
 			switch elementName {
 			case "propstat":
-				if let statusCode = statusCode, statusCode == "200" {
+				if let statusCode, statusCode == "200" {
 					parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
 				}
 				parser.delegate = parentDelegate
@@ -92,7 +91,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 	// MARK: - Internal
 
 	private func getStatusCode(_ status: String?) -> String? {
-		guard let status = status else {
+		guard let status else {
 			return nil
 		}
 		let statusSubsequences = status.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ")
@@ -124,7 +123,7 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 	// MARK: - XMLParserDelegate
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
+		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
 		switch elementName {
@@ -143,13 +142,13 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
+		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
 		autoreleasepool {
 			switch elementName {
 			case "response":
-				if let depth = depth, let url = url, let elementProperties = elementProperties {
+				if let depth, let url, let elementProperties {
 					let element = PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength)
 					parentDelegate?.receivedElement(element)
 				}
@@ -195,7 +194,7 @@ private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate, Propf
 	// MARK: - XMLParserDelegate
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		guard let namespaceURI = namespaceURI, namespaceURI == "DAV:" else {
+		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
 		if elementName == "response" {

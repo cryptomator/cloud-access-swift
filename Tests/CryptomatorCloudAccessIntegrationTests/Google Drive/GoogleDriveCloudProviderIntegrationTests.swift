@@ -11,7 +11,6 @@ import CryptomatorCloudAccessCore
 #else
 import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
@@ -29,18 +28,17 @@ class GoogleDriveCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAu
 		super.setUp()
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		credential = GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: UUID().uuidString)
 		provider = try GoogleDriveCloudProvider(credential: credential)
 	}
 
-	override func deauthenticate() -> Promise<Void> {
+	override func deauthenticate() async throws {
 		credential.deauthenticate()
-		return Promise(())
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		return try GoogleDriveCloudProvider(credential: credential,
 		                                    maxPageSize: maxPageSizeForLimitedCloudProvider)
 	}

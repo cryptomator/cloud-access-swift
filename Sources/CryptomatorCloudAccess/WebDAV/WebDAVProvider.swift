@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import Promises
 
 public enum WebDAVProviderError: Error {
 	case resolvingURLFailed
@@ -28,7 +27,7 @@ extension CloudItemMetadata {
 /**
  Cloud provider for WebDAV.
  */
-public class WebDAVProvider: CloudProvider {
+public final class WebDAVProvider: CloudProvider {
 	private static let defaultPropertyNames = ["getlastmodified", "getcontentlength", "resourcetype"]
 
 	private let client: WebDAVClient
@@ -49,12 +48,20 @@ public class WebDAVProvider: CloudProvider {
 
 	// MARK: - CloudProvider API
 
-	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		return try await getItemMetadata(at: cloudPath)
+	}
+
+	/// Doesn't check for cancellation, so that an upload can still fetch the metadata to return after its remote change.
+	private func getItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			throw WebDAVProviderError.resolvingURLFailed
 		}
-		return client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames).then { response, data -> CloudItemMetadata in
-			guard let data = data else {
+		do {
+			let (response, data) = try await client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames)
+			guard let data else {
 				throw WebDAVProviderError.invalidResponse
 			}
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
@@ -62,54 +69,48 @@ public class WebDAVProvider: CloudProvider {
 				throw WebDAVProviderError.invalidResponse
 			}
 			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
-		}.recover { error -> Promise<CloudItemMetadata> in
-			if case URLSessionError.httpError(_, statusCode: 405) = error {
-				// Workaround for: https://github.com/nextcloud/server/issues/34574
-				return Promise(CloudProviderError.itemNotFound)
-			} else {
-				return self.convertStandardError(error)
-			}
-		}
-	}
-
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let initialPromise: Promise<Void>
-		if pageToken != nil {
-			initialPromise = Promise(())
-		} else {
-			initialPromise = updatePropfindResponseCache(forFolderAt: cloudPath)
-		}
-		return initialPromise.then { _ -> CloudItemList in
-			try self.getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
-		}.recover { error -> Promise<CloudItemList> in
-			if case URLSessionError.httpError(_, statusCode: 405) = error {
-				// Workaround for: https://github.com/nextcloud/server/issues/34574
-				return Promise(CloudProviderError.itemNotFound)
-			} else {
-				return self.convertStandardError(error)
-			}
-		}
-	}
-
-	private func updatePropfindResponseCache(forFolderAt cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
-		}
-		do {
-			try directoryContentCache.clearCache(for: cloudPath)
+		} catch URLSessionError.httpError(_, statusCode: 405) {
+			// Workaround for: https://github.com/nextcloud/server/issues/34574
+			throw CloudProviderError.itemNotFound
 		} catch {
-			return Promise(error)
+			throw convertStandardError(error)
 		}
-		let tmpFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
-		return client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVProvider.defaultPropertyNames).then { response -> Void in
-			let responseURL = response.url ?? url
-			guard let inputStream = InputStream(url: tmpFileURL) else {
-				throw WebDAVProviderError.invalidResponse
+	}
+
+	@concurrent
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
+		do {
+			if pageToken == nil {
+				try await updatePropfindResponseCache(forFolderAt: cloudPath)
 			}
-			let parser = CachePropfindResponseParser(XMLParser(stream: inputStream), responseURL: responseURL, cache: self.directoryContentCache, folderEnumerationPath: cloudPath)
-			try parser.fillCache()
-			inputStream.close()
+			return try getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
+		} catch URLSessionError.httpError(_, statusCode: 405) {
+			// Workaround for: https://github.com/nextcloud/server/issues/34574
+			throw CloudProviderError.itemNotFound
+		} catch {
+			throw convertStandardError(error)
 		}
+	}
+
+	private func updatePropfindResponseCache(forFolderAt cloudPath: CloudPath) async throws {
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
+			throw WebDAVProviderError.resolvingURLFailed
+		}
+		try directoryContentCache.clearCache(for: cloudPath)
+		let tmpFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		defer {
+			try? FileManager.default.removeItem(at: tmpFileURL)
+		}
+		let response = try await client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVProvider.defaultPropertyNames)
+		try Task.checkCancellation()
+		let responseURL = response.url ?? url
+		guard let inputStream = InputStream(url: tmpFileURL) else {
+			throw WebDAVProviderError.invalidResponse
+		}
+		let parser = CachePropfindResponseParser(XMLParser(stream: inputStream), responseURL: responseURL, cache: directoryContentCache, folderEnumerationPath: cloudPath)
+		try parser.fillCache()
+		inputStream.close()
 	}
 
 	private func getCachedCloudItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) throws -> CloudItemList {
@@ -117,179 +118,175 @@ public class WebDAVProvider: CloudProvider {
 		return CloudItemList(items: response.elements, nextPageToken: response.nextPageToken)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			throw WebDAVProviderError.resolvingURLFailed
 		}
-		let progress = Progress(totalUnitCount: 1)
-		// GET requests on collections are possible so that it doesn't respond with an error as needed
-		// therefore a fetchItemMetadata() is called first to ensure that it's actually a file on remote
-		return fetchItemMetadata(at: cloudPath).then { metadata -> Promise<HTTPURLResponse> in
-			guard metadata.itemType == .file else {
+		let phases = Progress.phases(of: progress, 999)
+		do {
+			// A GET request on a collection doesn't fail, so the metadata is fetched first to ensure that the item is a file.
+			let remoteMetadata = try await getItemMetadata(at: cloudPath)
+			guard remoteMetadata.itemType == .file else {
 				throw CloudProviderError.itemTypeMismatch
 			}
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let getPromise = self.client.GET(from: url, to: localURL, onTaskCreation: onTaskCreation)
-			progress.resignCurrent()
-			return getPromise
-		}.then { _ -> Void in
-			// no-op
-		}.recover { error -> Promise<Void> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.itemNotFound)
-			case CocoaError.fileWriteFileExists:
-				return Promise(CloudProviderError.itemAlreadyExists)
-			default:
-				if isNetworkConnectionError(error) {
-					return Promise(CloudProviderError.noInternetConnection)
-				}
-				return Promise(error)
-			}
+			try Task.checkCancellation()
+			let metadata = try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+				_ = try await client.GET(from: url, to: stagedFile, progress: phases[0], onTaskCreation: onTaskCreation)
+				return remoteMetadata
+			})
+			phases.completeTransfer()
+			return metadata
+		} catch {
+			throw convertStandardError(error)
 		}
 	}
 
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		var isDirectory: ObjCBool = false
 		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
 		if !fileExists {
-			return Promise(CloudProviderError.itemNotFound)
+			throw CloudProviderError.itemNotFound
 		}
 		if isDirectory.boolValue {
-			return Promise(CloudProviderError.itemTypeMismatch)
+			throw CloudProviderError.itemTypeMismatch
 		}
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			throw WebDAVProviderError.resolvingURLFailed
 		}
-		let progress = Progress(totalUnitCount: 1)
-		// PUT requests on existing non-collections are possible and there is no way to differentiate it for replaceExisting
-		// therefore a fetchItemMetadata() is called first to make that distinction
-		return fetchItemMetadata(at: cloudPath).then { metadata -> Void in
-			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
-				throw CloudProviderError.itemAlreadyExists
+		let phases = Progress.phases(of: progress, 999)
+		do {
+			// A PUT request on an existing file succeeds regardless of `replaceExisting`, so the metadata is fetched first to make that distinction.
+			do {
+				let metadata = try await getItemMetadata(at: cloudPath)
+				if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
+					throw CloudProviderError.itemAlreadyExists
+				}
+			} catch CloudProviderError.itemNotFound {
+				// no-op
 			}
-		}.recover { error -> Void in
-			guard case CloudProviderError.itemNotFound = error else {
+			try Task.checkCancellation()
+			_ = try await client.PUT(url: url, fileURL: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
+		} catch {
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
+				throw CloudProviderError.parentFolderDoesNotExist
+			case URLSessionError.httpError(_, statusCode: 507):
+				throw CloudProviderError.quotaInsufficient
+			default:
+				throw convertStandardError(error)
+			}
+		}
+		let metadata = try await getItemMetadata(at: cloudPath)
+		phases.completeTransfer()
+		return metadata
+	}
+
+	@concurrent
+	public func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
+			throw WebDAVProviderError.resolvingURLFailed
+		}
+		do {
+			_ = try await client.MKCOL(url: url)
+		} catch {
+			switch error {
+			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
+				throw CloudProviderError.unauthorized
+			case URLSessionError.httpError(_, statusCode: 405):
+				throw CloudProviderError.itemAlreadyExists
+			case URLSessionError.httpError(_, statusCode: 409):
+				throw CloudProviderError.parentFolderDoesNotExist
+			case URLSessionError.httpError(_, statusCode: 507):
+				throw CloudProviderError.quotaInsufficient
+			default:
+				if isNetworkConnectionError(error) {
+					throw CloudProviderError.noInternetConnection
+				}
 				throw error
 			}
-		}.then { _ -> Promise<(HTTPURLResponse, Data?)> in
-			progress.becomeCurrent(withPendingUnitCount: 1)
-			let putPromise = self.client.PUT(url: url, fileURL: localURL, onTaskCreation: onTaskCreation)
-			progress.resignCurrent()
-			return putPromise
-		}.recover { error -> Promise<(HTTPURLResponse, Data?)> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.parentFolderDoesNotExist)
-			case URLSessionError.httpError(_, statusCode: 507):
-				return Promise(CloudProviderError.quotaInsufficient)
-			default:
-				if isNetworkConnectionError(error) {
-					return Promise(CloudProviderError.noInternetConnection)
-				}
-				return Promise(error)
-			}
-		}.then { _, _ -> Promise<CloudItemMetadata> in
-			return self.fetchItemMetadata(at: cloudPath)
 		}
 	}
 
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
+	}
+
+	@concurrent
+	public func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
+	}
+
+	private func deleteItem(at cloudPath: CloudPath) async throws {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			throw WebDAVProviderError.resolvingURLFailed
 		}
-		return client.MKCOL(url: url).then { _, _ -> Void in
-			// no-op
-		}.recover { error -> Promise<Void> in
-			switch error {
-			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
-				return Promise(CloudProviderError.unauthorized)
-			case URLSessionError.httpError(_, statusCode: 405):
-				return Promise(CloudProviderError.itemAlreadyExists)
-			case URLSessionError.httpError(_, statusCode: 409):
-				return Promise(CloudProviderError.parentFolderDoesNotExist)
-			case URLSessionError.httpError(_, statusCode: 507):
-				return Promise(CloudProviderError.quotaInsufficient)
-			default:
-				if isNetworkConnectionError(error) {
-					return Promise(CloudProviderError.noInternetConnection)
-				}
-				return Promise(error)
-			}
+		do {
+			_ = try await client.DELETE(url: url)
+		} catch {
+			throw convertStandardError(error)
 		}
 	}
 
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
 	}
 
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
 	}
 
-	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
-		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
-		}
-		return client.DELETE(url: url).then { _, _ -> Void in
-			// no-op
-		}.recover { error -> Promise<Void> in
-			return self.convertStandardError(error)
-		}
-	}
-
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: client.baseURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: client.baseURL) else {
-			return Promise(WebDAVProviderError.resolvingURLFailed)
+			throw WebDAVProviderError.resolvingURLFailed
 		}
-		return client.MOVE(sourceURL: sourceURL, destinationURL: targetURL).then { _, _ -> Void in
-			// no-op
-		}.recover { error -> Promise<Void> in
+		do {
+			_ = try await client.MOVE(sourceURL: sourceURL, destinationURL: targetURL)
+		} catch {
 			switch error {
 			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
-				return Promise(CloudProviderError.unauthorized)
+				throw CloudProviderError.unauthorized
 			case URLSessionError.httpError(_, statusCode: 404):
-				return Promise(CloudProviderError.itemNotFound)
+				throw CloudProviderError.itemNotFound
 			case URLSessionError.httpError(_, statusCode: 409):
-				return Promise(CloudProviderError.parentFolderDoesNotExist)
+				throw CloudProviderError.parentFolderDoesNotExist
 			case URLSessionError.httpError(_, statusCode: 412):
-				return Promise(CloudProviderError.itemAlreadyExists)
+				throw CloudProviderError.itemAlreadyExists
 			case URLSessionError.httpError(_, statusCode: 507):
-				return Promise(CloudProviderError.quotaInsufficient)
+				throw CloudProviderError.quotaInsufficient
 			default:
 				if isNetworkConnectionError(error) {
-					return Promise(CloudProviderError.noInternetConnection)
+					throw CloudProviderError.noInternetConnection
 				}
-				return Promise(error)
+				throw error
 			}
 		}
 	}
 
-	func convertStandardError<T>(_ error: Error) -> Promise<T> {
+	func convertStandardError(_ error: Error) -> Error {
 		switch error {
 		case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
-			return Promise(CloudProviderError.unauthorized)
+			return CloudProviderError.unauthorized
 		case URLSessionError.httpError(_, statusCode: 404):
-			return Promise(CloudProviderError.itemNotFound)
+			return CloudProviderError.itemNotFound
 		default:
 			if isNetworkConnectionError(error) {
-				return Promise(CloudProviderError.noInternetConnection)
+				return CloudProviderError.noInternetConnection
 			}
-			return Promise(error)
+			return error
 		}
 	}
 }

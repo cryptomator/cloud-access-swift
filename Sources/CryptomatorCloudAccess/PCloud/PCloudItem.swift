@@ -8,7 +8,7 @@
 
 import Foundation
 import GRDB
-import PCloudSDKSwift
+@preconcurrency import PCloudSDKSwift
 
 struct PCloudItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	static let databaseTableName = "CachedEntries"

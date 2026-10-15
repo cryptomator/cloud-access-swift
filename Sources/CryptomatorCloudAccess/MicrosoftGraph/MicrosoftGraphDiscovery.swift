@@ -7,137 +7,87 @@
 //
 
 import Foundation
-import MSGraphClientModels
-import MSGraphClientSDK
-import Promises
 
-public class MicrosoftGraphDiscovery {
-	private let client: MSHTTPClient
+public final class MicrosoftGraphDiscovery: Sendable {
+	private let client: MicrosoftGraphHTTPClient
 
 	public init(credential: MicrosoftGraphCredential) {
-		self.client = MSClientFactory.createHTTPClient(with: credential.authProvider, andSessionConfiguration: .default)
+		self.client = MicrosoftGraphHTTPClient(accessTokenProvider: credential.accessTokenProvider, configuration: .default)
 	}
 
-	public func fetchSharePointSite(for siteURL: URL) -> Promise<MicrosoftGraphSite> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointSiteRequest(for: siteURL)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphSite in
-			let site = try MSGraphSite(data: data)
-			return MicrosoftGraphSite(identifier: site.entityId, displayName: site.displayName)
-		}
+	public func fetchSharePointSite(for siteURL: URL) async throws -> MicrosoftGraphSite {
+		let request = try sharePointSiteRequest(for: siteURL)
+		let data = try await sendExpectingOK(request)
+		let site = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.Site.self, from: data)
+		return MicrosoftGraphSite(identifier: site.id, displayName: site.displayName)
 	}
 
-	public func fetchSharePointDrives(for siteID: String) -> Promise<[MicrosoftGraphDrive]> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointDrivesRequest(for: siteID)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> [MicrosoftGraphDrive] in
-			let collection = try MSCollection(data: data)
-			return collection.value.compactMap { item in
-				guard let drive = MSGraphDrive(dictionary: item as? [AnyHashable: Any]) else {
-					return nil
-				}
-				return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
-			}
-		}
+	public func fetchSharePointDrives(for siteID: String) async throws -> [MicrosoftGraphDrive] {
+		let request = try sharePointDrivesRequest(for: siteID)
+		let data = try await sendExpectingOK(request)
+		let collection = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.Collection<MicrosoftGraphAPI.Drive>.self, from: data)
+		return collection.value.map { MicrosoftGraphDrive(identifier: $0.id, name: $0.name) }
 	}
 
-	public func fetchDrive(for driveID: String) -> Promise<MicrosoftGraphDrive> {
-		let request: NSMutableURLRequest
-		do {
-			request = try sharePointDriveRequest(for: driveID)
-		} catch {
-			return Promise(error)
-		}
-		return executeMSURLSessionDataTaskWithErrorMapping(with: request).then { data -> MicrosoftGraphDrive in
-			let drive = try MSGraphDrive(data: data)
-			return MicrosoftGraphDrive(identifier: drive.entityId, name: drive.name)
-		}
+	public func fetchDrive(for driveID: String) async throws -> MicrosoftGraphDrive {
+		let request = try sharePointDriveRequest(for: driveID)
+		let data = try await sendExpectingOK(request)
+		let drive = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.Drive.self, from: data)
+		return MicrosoftGraphDrive(identifier: drive.id, name: drive.name)
 	}
 
 	// MARK: - Requests
 
-	func sharePointSiteRequest(for siteURL: URL) throws -> NSMutableURLRequest {
+	func sharePointSiteRequest(for siteURL: URL) throws -> URLRequest {
 		try siteURL.validateForSharePoint()
 		guard let hostName = siteURL.host else {
 			throw MicrosoftGraphError.invalidURL
 		}
 		let serverRelativePath = siteURL.relativePath
-		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(hostName):\(serverRelativePath)") else {
+		guard let url = URL(string: "\(MicrosoftGraphAPI.baseURL)/sites/\(hostName):\(serverRelativePath)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		return NSMutableURLRequest(url: url)
+		return URLRequest(url: url)
 	}
 
-	func sharePointDrivesRequest(for siteID: String) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(MSGraphBaseURL)/sites/\(siteID)/drives") else {
+	func sharePointDrivesRequest(for siteID: String) throws -> URLRequest {
+		guard let url = URL(string: "\(MicrosoftGraphAPI.baseURL)/sites/\(siteID)/drives") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		return NSMutableURLRequest(url: url)
+		return URLRequest(url: url)
 	}
 
-	func sharePointDriveRequest(for driveID: String) throws -> NSMutableURLRequest {
-		guard let url = URL(string: "\(MSGraphBaseURL)/drives/\(driveID)") else {
+	func sharePointDriveRequest(for driveID: String) throws -> URLRequest {
+		guard let url = URL(string: "\(MicrosoftGraphAPI.baseURL)/drives/\(driveID)") else {
 			throw MicrosoftGraphError.invalidURL
 		}
-		return NSMutableURLRequest(url: url)
+		return URLRequest(url: url)
 	}
 
 	// MARK: - Execution
 
-	private func executeRawMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data?, URLResponse?)> {
-		HTTPDebugLogger.logRequest(request as URLRequest)
-		return Promise<(Data?, URLResponse?)> { fulfill, reject in
-			let task = MSURLSessionDataTask(request: request, client: self.client) { data, response, error in
-				if let response = response {
-					HTTPDebugLogger.logResponse(response, with: data, or: nil)
-				}
-				if let error = error {
-					reject(error)
-				} else {
-					fulfill((data, response))
-				}
-			}
-			task?.execute()
-		}.recover { error -> (Data?, URLResponse?) in
-			throw self.convertStandardError(error)
+	private func sendExpectingOK(_ request: URLRequest) async throws -> Data {
+		let (response, data): (HTTPURLResponse, Data)
+		do {
+			(response, data) = try await client.data(for: request)
+		} catch {
+			throw convertStandardError(error)
 		}
-	}
-
-	private func executeMSURLSessionDataTask(with request: NSMutableURLRequest) -> Promise<(Data, HTTPURLResponse)> {
-		return executeRawMSURLSessionDataTask(with: request).then { data, response -> (Data, HTTPURLResponse) in
-			guard let data = data, let response = response as? HTTPURLResponse else {
-				throw MicrosoftGraphError.unexpectedResult
-			}
-			return (data, response)
+		guard response.statusCode == 200 else {
+			throw mapStatusCodeToError(response.statusCode)
 		}
-	}
-
-	private func executeMSURLSessionDataTaskWithErrorMapping(with request: NSMutableURLRequest) -> Promise<Data> {
-		return executeMSURLSessionDataTask(with: request).then { data, httpResponse -> Data in
-			guard httpResponse.statusCode == MSExpectedResponseCodes.OK.rawValue else {
-				throw (self.mapStatusCodeToError(httpResponse.statusCode))
-			}
-			return data
-		}
+		return data
 	}
 
 	// MARK: - Helpers
 
 	private func mapStatusCodeToError(_ statusCode: Int) -> Error {
 		switch statusCode {
-		case MSClientErrorCode.MSClientErrorCodeNotFound.rawValue:
+		case 404:
 			return CloudProviderError.itemNotFound
-		case MSClientErrorCode.MSClientErrorCodeUnauthorized.rawValue:
+		case 401:
 			return CloudProviderError.unauthorized
-		case MSClientErrorCode.MSClientErrorCodeInsufficientStorage.rawValue:
+		case 507:
 			return CloudProviderError.quotaInsufficient
 		default:
 			return MicrosoftGraphError.unexpectedHTTPStatusCode(code: statusCode)
@@ -145,11 +95,9 @@ public class MicrosoftGraphDiscovery {
 	}
 
 	private func convertStandardError(_ error: Error) -> Error {
-		switch error {
-		case MicrosoftGraphAuthenticationProviderError.accountNotFound, MicrosoftGraphAuthenticationProviderError.noAccounts:
-			return CloudProviderError.unauthorized
-		default:
-			return error
+		if isCancellationError(error) {
+			return CancellationError()
 		}
+		return error
 	}
 }

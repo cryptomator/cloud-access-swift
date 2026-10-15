@@ -7,14 +7,19 @@
 //
 
 import Foundation
+import os
 
 /**
  Setup for the Dropbox Cloud Provider
 
  - Important: The `DropboxSetup.constants` must be set only once before any interaction with the `DropboxCloudProvider` or `DropboxCredentials` takes place.
  */
-public class DropboxSetup {
-	public static var constants: DropboxSetup!
+public final class DropboxSetup: Sendable {
+	private static let lockedConstants = OSAllocatedUnfairLock<DropboxSetup?>(initialState: nil)
+	public static var constants: DropboxSetup! {
+		get { lockedConstants.withLock { $0 } }
+		set { lockedConstants.withLock { $0 = newValue } }
+	}
 
 	let appKey: String
 	let sharedContainerIdentifier: String?

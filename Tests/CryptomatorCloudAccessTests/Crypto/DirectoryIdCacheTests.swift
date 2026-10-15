@@ -6,7 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
+import os
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -58,8 +58,8 @@ class DirectoryIdCacheTests: XCTestCase {
 	func testRecursiveGet() async throws {
 		let path = CloudPath("/one/two/three")
 
-		var misses: [String] = []
-		let result = cache.get(path, onMiss: { cleartextPath, parentDirId -> Promise<Data> in
+		let misses = OSAllocatedUnfairLock(initialState: [String]())
+		let data = try await cache.get(path, onMiss: { cleartextPath, parentDirId in
 			let dirId: String = {
 				switch cleartextPath.lastPathComponent {
 				case "one":
@@ -76,15 +76,11 @@ class DirectoryIdCacheTests: XCTestCase {
 					return "UNEXPECTED"
 				}
 			}()
-			misses.append(dirId)
-			return Promise(Data(dirId.utf8))
+			misses.withLock { $0.append(dirId) }
+			return Data(dirId.utf8)
 		})
-
-		let data = try await result.async()
 		XCTAssertEqual(Data("THREE".utf8), data)
 
-		XCTAssertEqual("ONE", misses[0])
-		XCTAssertEqual("TWO", misses[1])
-		XCTAssertEqual("THREE", misses[2])
+		XCTAssertEqual(["ONE", "TWO", "THREE"], misses.withLock { $0 })
 	}
 }

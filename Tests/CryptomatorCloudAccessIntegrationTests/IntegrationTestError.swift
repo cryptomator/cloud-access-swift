@@ -13,5 +13,4 @@ enum IntegrationTestError: Error {
 	case missingDirectoryEnumerator
 	case consistencyTimeout
 	case oneTimeSetUpTimeout
-	case setUpTimeout
 }

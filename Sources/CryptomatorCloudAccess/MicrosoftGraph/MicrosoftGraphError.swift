@@ -10,7 +10,6 @@ import Foundation
 
 public enum MicrosoftGraphError: Error {
 	case invalidURL
-	case unexpectedResult
 	case inconsistentCache
 	case missingItemName
 	case unexpectedHTTPStatusCode(code: Int)

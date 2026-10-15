@@ -6,7 +6,7 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-import BoxSdkGen
+@preconcurrency import BoxSdkGen
 import Foundation
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -14,7 +14,8 @@ import Foundation
 @testable import CryptomatorCloudAccess
 #endif
 
-class BoxCredentialMock: BoxCredential {
+/// `@unchecked Sendable`: restates the conformance of `BoxCredential`; this subclass adds no state.
+class BoxCredentialMock: BoxCredential, @unchecked Sendable {
 	init() {
 		let config = CCGConfig(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret, enterpriseId: IntegrationTestSecrets.boxEnterpriseId)
 		let auth = BoxCCGAuth(config: config)
@@ -22,7 +23,8 @@ class BoxCredentialMock: BoxCredential {
 	}
 }
 
-class BoxInvalidCredentialMock: BoxCredential {
+/// `@unchecked Sendable`: restates the conformance of `BoxCredential`; this subclass adds no state.
+class BoxInvalidCredentialMock: BoxCredential, @unchecked Sendable {
 	init() {
 		let auth = BoxAuthenticationMock()
 		super.init(auth: auth)

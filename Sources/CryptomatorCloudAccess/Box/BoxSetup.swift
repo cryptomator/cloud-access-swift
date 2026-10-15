@@ -7,9 +7,14 @@
 //
 
 import Foundation
+import os
 
-public class BoxSetup {
-	public static var constants: BoxSetup!
+public final class BoxSetup: Sendable {
+	private static let lockedConstants = OSAllocatedUnfairLock<BoxSetup?>(initialState: nil)
+	public static var constants: BoxSetup! {
+		get { lockedConstants.withLock { $0 } }
+		set { lockedConstants.withLock { $0 = newValue } }
+	}
 
 	public let clientId: String
 	public let clientSecret: String

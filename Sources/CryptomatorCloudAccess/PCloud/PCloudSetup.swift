@@ -7,9 +7,14 @@
 //
 
 import Foundation
+import os
 
-public class PCloudSetup {
-	public static var constants: PCloudSetup!
+public final class PCloudSetup: Sendable {
+	private static let lockedConstants = OSAllocatedUnfairLock<PCloudSetup?>(initialState: nil)
+	public static var constants: PCloudSetup! {
+		get { lockedConstants.withLock { $0 } }
+		set { lockedConstants.withLock { $0 = newValue } }
+	}
 
 	public let appKey: String
 	public let sharedContainerIdentifier: String?

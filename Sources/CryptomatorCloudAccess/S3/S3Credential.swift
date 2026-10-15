@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct S3Credential: Codable, Equatable {
+public struct S3Credential: Codable, Equatable, Sendable {
 	public let accessKey: String
 	public let secretKey: String
 	public let url: URL

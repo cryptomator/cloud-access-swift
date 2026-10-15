@@ -8,20 +8,24 @@
 
 import CommonCrypto
 import Foundation
-import Promises
+import os
 
 public enum TLSCertificateValidatorError: Error {
 	case validationFailed
 }
 
-private extension Sequence where Element == UInt8 {
+private extension Sequence<UInt8> {
 	func toHexString(separator: String = "") -> String {
 		return map { String(format: "%02lx", $0) }.joined(separator: separator)
 	}
 }
 
-private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
-	var testedCertificate: TLSCertificate?
+private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
+	private let lockedTestedCertificate = OSAllocatedUnfairLock<TLSCertificate?>(initialState: nil)
+	var testedCertificate: TLSCertificate? {
+		get { lockedTestedCertificate.withLock { $0 } }
+		set { lockedTestedCertificate.withLock { $0 = newValue } }
+	}
 
 	// MARK: - URLSessionDelegate
 
@@ -46,7 +50,7 @@ private class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTas
 
 	private func calculateFingerprint(from certificate: Data) -> String {
 		let bytes = [UInt8](certificate)
-		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
+		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA256_DIGEST_LENGTH))
 		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return digest.toHexString(separator: " ")
 	}
@@ -81,17 +85,16 @@ public class TLSCertificateValidator {
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 	}
 
-	public func validate() -> Promise<TLSCertificate> {
+	public func validate() async throws -> TLSCertificate {
 		var request = URLRequest(url: baseURL)
 		request.httpMethod = "GET"
-		let pending = Promise<TLSCertificate>.pending()
-		urlSession.performDownloadTask(with: request).always {
-			if let testedCertificate = self.urlSessionDelegate?.testedCertificate {
-				pending.fulfill(testedCertificate)
-			} else {
-				pending.reject(TLSCertificateValidatorError.validationFailed)
-			}
+		if let (location, _) = try? await urlSession.download(for: request) {
+			try? FileManager.default.removeItem(at: location)
 		}
-		return pending
+		try Task.checkCancellation()
+		guard let testedCertificate = urlSessionDelegate?.testedCertificate else {
+			throw TLSCertificateValidatorError.validationFailed
+		}
+		return testedCertificate
 	}
 }

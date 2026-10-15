@@ -14,8 +14,10 @@ import Foundation
  With this decorator, it is expected that the cloud provider methods are being called with ciphertext paths. It transparently deflates/inflates filenames according to vault format 8, see the name shortening section at the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.6/security/architecture/#name-shortening).
 
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat8ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds the given `threshold`.
+
+ `@unchecked Sendable`: restates the conformance of `VaultFormat7ShorteningProviderDecorator`; this subclass adds no state.
  */
-class VaultFormat8ShorteningProviderDecorator: VaultFormat7ShorteningProviderDecorator {
+final class VaultFormat8ShorteningProviderDecorator: VaultFormat7ShorteningProviderDecorator, @unchecked Sendable {
 	override init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
 		try super.init(delegate: delegate, vaultPath: vaultPath, threshold: threshold)
 	}

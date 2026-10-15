@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import MSGraphClientModels
 
 struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	static let databaseTableName = "CachedEntries"
@@ -29,15 +28,15 @@ struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
 		self.itemType = itemType
 	}
 
-	init(cloudPath: CloudPath, driveItem: MSGraphDriveItem) {
+	init(cloudPath: CloudPath, driveItem: MicrosoftGraphAPI.DriveItem) {
 		self.cloudPath = cloudPath
-		self.identifier = driveItem.remoteItem?.remoteItemId ?? driveItem.entityId
+		self.identifier = driveItem.remoteItem?.id ?? driveItem.id
 		if let remoteDriveId = driveItem.remoteItem?.parentReference?.driveId {
 			self.driveIdentifier = remoteDriveId
 		} else {
 			self.driveIdentifier = driveItem.parentReference?.driveId
 		}
-		self.itemType = driveItem.getCloudItemType()
+		self.itemType = driveItem.cloudItemType
 	}
 }
 

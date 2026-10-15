@@ -12,7 +12,6 @@ import XCTest
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import Promises
 
 class VaultFormat6BoxIntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
@@ -26,14 +25,11 @@ class VaultFormat6BoxIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func setUp() {
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
-			setUpProvider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
-		if let error = setUpPromise.error {
+		do {
+			setUpProvider = try blockingAwait(timeout: 60.0) {
+				try await DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
+			}
+		} catch {
 			classSetUpError = error
 			return
 		}
@@ -42,37 +38,21 @@ class VaultFormat6BoxIntegrationTests: CloudAccessIntegrationTest {
 
 	override class func tearDown() {
 		super.tearDown()
-		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
-		_ = waitForPromises(timeout: 60.0)
+		try? blockingAwait(timeout: 60.0) {
+			try await cloudProvider.deleteFolderIfExisting(at: vaultPath)
+		}
 	}
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
+	override func setUp() async throws {
+		try await super.setUp()
 		let credential = BoxCredentialMock()
 		let cloudProvider = try BoxCloudProvider(credential: credential)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6BoxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
-		}
+		provider = try await DecoratorFactory.createFromExistingVaultFormat6(delegate: cloudProvider, vaultPath: VaultFormat6BoxIntegrationTests.vaultPath, password: "IntegrationTest")
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		let credential = BoxCredentialMock()
 		let limitedDelegate = try BoxCloudProvider(credential: credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6BoxIntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
-		}
-		return try XCTUnwrap(setUpPromise.value)
+		return try await DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6BoxIntegrationTests.vaultPath, password: "IntegrationTest")
 	}
 }

@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-protocol DirectoryContentCache {
+protocol DirectoryContentCache: Sendable {
 	/**
 	 Caches the given element for the given `folderEnumerationPath` and cacheIndex.
 
@@ -93,7 +93,7 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 
 	func getResponse(for folderPath: CloudPath, pageToken: String?) throws -> DirectoryContentCacheResponse {
 		let convertedPageToken: PageToken
-		if let pageToken = pageToken {
+		if let pageToken {
 			let components = pageToken.components(separatedBy: ":")
 			guard components.count == 2, let minID = Int(components[0]), let maxID = Int(components[1]) else {
 				throw CloudProviderError.pageTokenInvalid

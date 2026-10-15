@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct TLSCertificate {
+public struct TLSCertificate: Sendable {
 	public let data: Data
 	public let isTrusted: Bool
 	public let fingerprint: String

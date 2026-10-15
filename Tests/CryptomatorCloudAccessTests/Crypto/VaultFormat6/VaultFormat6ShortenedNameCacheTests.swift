@@ -11,7 +11,6 @@
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class VaultFormat6ShortenedNameCacheTests: XCTestCase {
@@ -51,10 +50,10 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 	func testGetOriginalPath() async throws {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.lng")
 
-		let longName = try await cache.getOriginalPath(shortened) { lngFileName -> Promise<Data> in
+		let longName = try await cache.getOriginalPath(shortened) { lngFileName in
 			XCTAssertEqual("shortened.lng", lngFileName)
-			return Promise(Data("loooong".utf8))
-		}.async()
+			return Data("loooong".utf8)
+		}
 		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
 	}
 

@@ -6,11 +6,11 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
-import GoogleAPIClientForREST_Drive
+@preconcurrency import GoogleAPIClientForREST_Drive
 
 extension GTLRDrive_File {
 	func getCloudItemType() -> CloudItemType {
-		guard let mimeType = mimeType else {
+		guard let mimeType else {
 			return .unknown
 		}
 		return mimeType.convertGoogleDriveMimeTypeToCloudItemType()

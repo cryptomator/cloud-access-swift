@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct CloudItemMetadata {
+public struct CloudItemMetadata: Sendable {
 	public let name: String
 	public let cloudPath: CloudPath
 	public let itemType: CloudItemType

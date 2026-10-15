@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-import Promises
 
 public enum LocalFileSystemProviderError: Error {
 	case resolvingURLFailed
@@ -35,20 +34,24 @@ private extension FileManager {
 
  Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
  */
-public class LocalFileSystemProvider: CloudProvider {
-	private let fileManager = FileManager()
+public final class LocalFileSystemProvider: CloudProvider {
 	private let rootURL: URL
 	private let queue = OperationQueue()
 	private let shouldStopAccessingRootURL: Bool
-	private lazy var fileCoordinator = NSFileCoordinator()
 	private let maxPageSize: Int
 	private let cache: DirectoryContentCache
 	private let tmpDirURL: URL
+	private let securityScopedAccess: (start: @Sendable (URL) -> Bool, stop: @Sendable (URL) -> Void)
 
-	public init(rootURL: URL, maxPageSize: Int = .max) throws {
+	public convenience init(rootURL: URL, maxPageSize: Int = .max) throws {
+		try self.init(rootURL: rootURL, maxPageSize: maxPageSize, securityScopedAccess: (start: { $0.startAccessingSecurityScopedResource() }, stop: { $0.stopAccessingSecurityScopedResource() }))
+	}
+
+	init(rootURL: URL, maxPageSize: Int = .max, securityScopedAccess: (start: @Sendable (URL) -> Bool, stop: @Sendable (URL) -> Void)) throws {
 		precondition(rootURL.isFileURL)
 		self.rootURL = rootURL
-		self.shouldStopAccessingRootURL = rootURL.startAccessingSecurityScopedResource()
+		self.securityScopedAccess = securityScopedAccess
+		self.shouldStopAccessingRootURL = securityScopedAccess.start(rootURL)
 		self.maxPageSize = maxPageSize
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
@@ -59,73 +62,73 @@ public class LocalFileSystemProvider: CloudProvider {
 	deinit {
 		try? FileManager.default.removeItem(at: tmpDirURL)
 		if shouldStopAccessingRootURL {
-			rootURL.stopAccessingSecurityScopedResource()
+			securityScopedAccess.stop(rootURL)
 		}
 	}
 
 	// MARK: - CloudProvider API
 
-	public func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	@concurrent
+	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
 		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
+			if shouldStopAccessing {
+				securityScopedAccess.stop(url)
+			}
+		}
 		CloudAccessDDLogDebug("LocalFileSystemProvider: fetchItemMetadata(at: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		return getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).always {
-			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
-			}
-		}
+		return try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent())
 	}
 
-	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
-		let initialPromise: Promise<Void>
-		if pageToken != nil {
-			initialPromise = Promise(())
-		} else {
-			initialPromise = fillCache(for: cloudPath)
+	@concurrent
+	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		try Task.checkCancellation()
+		if pageToken == nil {
+			try await fillCache(for: cloudPath)
 		}
-		return initialPromise.then {
-			self.getCachedElements(for: cloudPath, pageToken: pageToken)
-		}.then { itemList -> CloudItemList in
-			if itemList.nextPageToken == nil {
-				try self.cache.clearCache(for: cloudPath)
-			}
-			return itemList
+		let itemList = try getCachedElements(for: cloudPath, pageToken: pageToken)
+		if itemList.nextPageToken == nil {
+			try cache.clearCache(for: cloudPath)
 		}
+		return itemList
 	}
 
-	private func fillCache(for cloudPath: CloudPath) -> Promise<Void> {
+	private func fillCache(for cloudPath: CloudPath) async throws {
+		try cache.clearCache(for: cloudPath)
 		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-		CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<Void>.pending().always {
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
 			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
+				securityScopedAccess.stop(url)
 			}
 		}
+		CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url)
-		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed coordinated read with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.evaluateReadingIntentForFetchItemList(readingIntent)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed readingIntent evaluation with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			guard let directoryEnumerator = FileManager.default.enumerator(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey], options: .skipsSubdirectoryDescendants) else {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed directoryEnumerator creation")
-				promise.reject(CloudProviderError.pageTokenInvalid)
-				return
-			}
-			DispatchQueue.global().async {
-				self.fillCacheAfterCheck(for: cloudPath, url: url, directoryEnumerator: directoryEnumerator, promise: promise)
+		let childURLs: [URL] = try await withSDKContinuation { resumer in
+			coordinate(with: readingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed coordinated read with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				do {
+					try self.evaluateReadingIntentForFetchItemList(readingIntent)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed readingIntent evaluation with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				guard let directoryEnumerator = FileManager.default.enumerator(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey], options: .skipsSubdirectoryDescendants) else {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed directoryEnumerator creation")
+					resumer.resume(throwing: CloudProviderError.pageTokenInvalid)
+					return
+				}
+				resumer.resume(returning: directoryEnumerator.compactMap { $0 as? URL })
 			}
 		}
-		return promise
+		try await fillCacheAfterCheck(for: cloudPath, url: url, childURLs: childURLs)
 	}
 
 	private func evaluateReadingIntentForFetchItemList(_ readingIntent: NSFileAccessIntent) throws {
@@ -141,273 +144,296 @@ public class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	private func fillCacheAfterCheck(for cloudPath: CloudPath, url: URL, directoryEnumerator: FileManager.DirectoryEnumerator, promise: Promise<Void>) {
+	private func fillCacheAfterCheck(for cloudPath: CloudPath, url: URL, childURLs: [URL]) async throws {
 		do {
 			var cachedItemsCount: Int64 = 0
-			for case let childURL as URL in directoryEnumerator {
-				try autoreleasepool {
-					guard !childURL.isHidden || self.fileManager.isUbiquitousItem(at: childURL) else {
-						return
-					}
-					let iCloudCompatibleChildURL = url.appendingPathComponent(self.getItemName(forItemAt: childURL))
-					guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
-						return
-					}
-					do {
-						let childItemMetadata = try awaitPromise(self.getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath))
-						cachedItemsCount += 1
-						try self.cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
-					} catch CloudProviderError.itemNotFound {
-						// Ignore item that can't be found anyway, this should not prevent fetching item list
-						return
-					}
+			for childURL in childURLs {
+				try Task.checkCancellation()
+				guard !childURL.isHidden || FileManager.default.isUbiquitousItem(at: childURL) else {
+					continue
+				}
+				let iCloudCompatibleChildURL = url.appendingPathComponent(getItemName(forItemAt: childURL))
+				guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
+					continue
+				}
+				do {
+					let childItemMetadata = try await getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath)
+					cachedItemsCount += 1
+					try cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
+				} catch CloudProviderError.itemNotFound {
+					// Ignore item that can't be found anyway, this should not prevent fetching item list
 				}
 			}
 			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) finished")
-			promise.fulfill(())
 		} catch {
 			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed with error: \(error)")
-			promise.reject(error)
+			throw error
 		}
 	}
 
-	private func getCachedElements(for cloudPath: CloudPath, pageToken: String?) -> Promise<CloudItemList> {
-		let cacheResponse: DirectoryContentCacheResponse
-		do {
-			cacheResponse = try cache.getResponse(for: cloudPath, pageToken: pageToken)
-		} catch {
-			return Promise(error)
-		}
-		return Promise(CloudItemList(items: cacheResponse.elements, nextPageToken: cacheResponse.nextPageToken))
+	private func getCachedElements(for cloudPath: CloudPath, pageToken: String?) throws -> CloudItemList {
+		let cacheResponse = try cache.getResponse(for: cloudPath, pageToken: pageToken)
+		return CloudItemList(items: cacheResponse.elements, nextPageToken: cacheResponse.nextPageToken)
 	}
 
-	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
+	@concurrent
+	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
+			if shouldStopAccessing {
+				securityScopedAccess.stop(url)
+			}
+		}
 		CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<Void>.pending().always {
-			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
-			}
-		}
+		let phases = Progress.phases(of: progress, 999)
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .withoutChanges)
-		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed coordinated read with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.validateAndCopyFile(from: readingIntent.url, to: localURL, replaceExisting: false)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) finished")
-				promise.fulfill(())
-			} catch CocoaError.fileReadNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoSuchFile")
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileWriteFileExists {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileWriteFileExists")
-				promise.reject(CloudProviderError.itemAlreadyExists)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with error: \(error)")
-				promise.reject(error)
-			}
-		}
-		return promise
-	}
-
-	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
-		precondition(localURL.isFileURL)
-		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-		CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<CloudItemMetadata>.pending().always {
-			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
-			}
-		}
-		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])
-		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed coordinated write with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.validateAndCopyFile(from: localURL, to: writingIntent.url, replaceExisting: replaceExisting)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, getting metadata…")
-				self.getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent()).then { metadata in
-					promise.fulfill(metadata)
-				}.catch { error in
-					promise.reject(error)
+		let metadata = try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+			try await withSDKContinuation { (resumer: Resumer<CloudItemMetadata>) in
+				coordinate(with: readingIntent) { error in
+					if let error {
+						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed coordinated read with error: \(error)")
+						resumer.resume(throwing: error)
+						return
+					}
+					do {
+						guard try self.validateItemType(at: readingIntent.url, with: .file) else {
+							throw CloudProviderError.itemTypeMismatch
+						}
+						// The modification date is read before the content is copied, so that it's never newer than the copy
+						let sourceMetadata = try self.readItemMetadata(forItemAt: url, coordinatedURL: readingIntent.url, parentCloudPath: cloudPath.deletingLastPathComponent())
+						try FileManager.default.copyItem(at: readingIntent.url, to: stagedFile)
+						resumer.resume(returning: sourceMetadata)
+					} catch CocoaError.fileReadNoSuchFile {
+						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoSuchFile")
+						resumer.resume(throwing: CloudProviderError.itemNotFound)
+					} catch CocoaError.fileReadNoPermission {
+						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoPermission")
+						resumer.resume(throwing: CloudProviderError.unauthorized)
+					} catch {
+						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with error: \(error)")
+						resumer.resume(throwing: error)
+					}
 				}
-			} catch CocoaError.fileReadNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileReadNoSuchFile")
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileWriteFileExists {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileWriteFileExists")
-				promise.reject(CloudProviderError.itemAlreadyExists)
-			} catch CocoaError.fileNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileNoSuchFile")
-				promise.reject(CloudProviderError.parentFolderDoesNotExist)
-			} catch CocoaError.fileWriteOutOfSpace {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileWriteOutOfSpace")
-				promise.reject(CloudProviderError.quotaInsufficient)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with error: \(error)")
-				promise.reject(error)
 			}
-		}
-		return promise
+		})
+		CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) finished")
+		phases.completeTransfer()
+		return metadata
 	}
 
-	public func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		precondition(localURL.isFileURL)
+		try Task.checkCancellation()
 		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
+			if shouldStopAccessing {
+				securityScopedAccess.stop(url)
+			}
+		}
+		CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
+		let phases = Progress.phases(of: progress, 999)
+		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])
+		try await withSDKContinuation { (resumer: Resumer<Void>) in
+			coordinate(with: writingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed coordinated write with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				do {
+					try self.validateAndCopyFile(from: localURL, to: writingIntent.url, replaceExisting: replaceExisting)
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, getting metadata…")
+					resumer.resume()
+				} catch CocoaError.fileReadNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileReadNoSuchFile")
+					resumer.resume(throwing: CloudProviderError.itemNotFound)
+				} catch CocoaError.fileWriteFileExists {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileWriteFileExists")
+					resumer.resume(throwing: CloudProviderError.itemAlreadyExists)
+				} catch CocoaError.fileNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileNoSuchFile")
+					resumer.resume(throwing: CloudProviderError.parentFolderDoesNotExist)
+				} catch CocoaError.fileWriteOutOfSpace {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileWriteOutOfSpace")
+					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
+				} catch CocoaError.fileReadNoPermission {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileReadNoPermission")
+					resumer.resume(throwing: CloudProviderError.unauthorized)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with error: \(error)")
+					resumer.resume(throwing: error)
+				}
+			}
+		}
+		let metadata = try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent())
+		phases.completeTransfer()
+		return metadata
+	}
+
+	@concurrent
+	public func createFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		let url = rootURL.appendingPathComponent(cloudPath)
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
+			if shouldStopAccessing {
+				securityScopedAccess.stop(url)
+			}
+		}
 		CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<Void>.pending().always {
-			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
-			}
-		}
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: [])
-		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed coordinated write with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.fileManager.createDirectory(at: writingIntent.url, withIntermediateDirectories: false, attributes: nil)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) finished")
-				promise.fulfill(())
-			} catch CocoaError.fileWriteFileExists {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileWriteFileExists")
-				promise.reject(CloudProviderError.itemAlreadyExists)
-			} catch CocoaError.fileNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileNoSuchFile")
-				promise.reject(CloudProviderError.parentFolderDoesNotExist)
-			} catch CocoaError.fileWriteOutOfSpace {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileWriteOutOfSpace")
-				promise.reject(CloudProviderError.quotaInsufficient)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
-				promise.reject(error)
+		try await withSDKContinuation { (resumer: Resumer<Void>) in
+			coordinate(with: writingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed coordinated write with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				do {
+					try FileManager.default.createDirectory(at: writingIntent.url, withIntermediateDirectories: false, attributes: nil)
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) finished")
+					resumer.resume()
+				} catch CocoaError.fileWriteFileExists {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileWriteFileExists")
+					resumer.resume(throwing: CloudProviderError.itemAlreadyExists)
+				} catch CocoaError.fileNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileNoSuchFile")
+					resumer.resume(throwing: CloudProviderError.parentFolderDoesNotExist)
+				} catch CocoaError.fileWriteOutOfSpace {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileWriteOutOfSpace")
+					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
+				} catch CocoaError.fileReadNoPermission {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileReadNoPermission")
+					resumer.resume(throwing: CloudProviderError.unauthorized)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
+					resumer.resume(throwing: error)
+				}
 			}
 		}
-		return promise
 	}
 
-	public func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func deleteFile(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
 	}
 
-	public func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	public func deleteFolder(at cloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await deleteItem(at: cloudPath)
 	}
 
-	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+	private func deleteItem(at cloudPath: CloudPath) async throws {
 		let url = rootURL.appendingPathComponent(cloudPath)
-		let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-		CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<Void>.pending().always {
+		let shouldStopAccessing = securityScopedAccess.start(url)
+		defer {
 			if shouldStopAccessing {
-				url.stopAccessingSecurityScopedResource()
+				securityScopedAccess.stop(url)
 			}
 		}
+		CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
 		let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
-		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed coordinated write with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.fileManager.removeItem(at: writingIntent.url)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) finished")
-				promise.fulfill(())
-			} catch CocoaError.fileNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileNoSuchFile")
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with error: \(error)")
-				promise.reject(error)
+		try await withSDKContinuation { (resumer: Resumer<Void>) in
+			coordinate(with: writingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed coordinated write with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				do {
+					try FileManager.default.removeItem(at: writingIntent.url)
+					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) finished")
+					resumer.resume()
+				} catch CocoaError.fileNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileNoSuchFile")
+					resumer.resume(throwing: CloudProviderError.itemNotFound)
+				} catch CocoaError.fileReadNoPermission {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileReadNoPermission")
+					resumer.resume(throwing: CloudProviderError.unauthorized)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with error: \(error)")
+					resumer.resume(throwing: error)
+				}
 			}
 		}
-		return promise
 	}
 
-	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	@concurrent
+	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
 	}
 
-	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return moveItem(from: sourceCloudPath, to: targetCloudPath)
+	@concurrent
+	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try Task.checkCancellation()
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
 	}
 
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		let sourceURL = rootURL.appendingPathComponent(sourceCloudPath)
 		let targetURL = rootURL.appendingPathComponent(targetCloudPath)
-		let shouldStopAccessing = sourceURL.startAccessingSecurityScopedResource()
-		CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
-		let promise = Promise<Void>.pending().always {
+		let shouldStopAccessing = securityScopedAccess.start(sourceURL)
+		defer {
 			if shouldStopAccessing {
-				sourceURL.stopAccessingSecurityScopedResource()
+				securityScopedAccess.stop(sourceURL)
 			}
 		}
+		CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
 		let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)
-		fileCoordinator.coordinate(with: [writingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed coordinated write with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				try self.fileManager.moveItem(at: writingIntent.url, to: targetURL)
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
-				promise.fulfill(())
-			} catch CocoaError.fileNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileNoSuchFile")
-				if self.fileManager.fileExists(atPath: targetURL.deletingLastPathComponent().path) {
-					promise.reject(CloudProviderError.itemNotFound)
-				} else {
-					promise.reject(CloudProviderError.parentFolderDoesNotExist)
+		try await withSDKContinuation { (resumer: Resumer<Void>) in
+			coordinate(with: writingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed coordinated write with error: \(error)")
+					resumer.resume(throwing: error)
+					return
 				}
-			} catch CocoaError.fileWriteFileExists {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileWriteFileExists")
-				promise.reject(CloudProviderError.itemAlreadyExists)
-			} catch CocoaError.fileWriteOutOfSpace {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileWriteOutOfSpace")
-				promise.reject(CloudProviderError.quotaInsufficient)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
-				promise.reject(error)
+				do {
+					try FileManager.default.moveItem(at: writingIntent.url, to: targetURL)
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
+					resumer.resume()
+				} catch CocoaError.fileNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileNoSuchFile")
+					if FileManager.default.fileExists(atPath: targetURL.deletingLastPathComponent().path) {
+						resumer.resume(throwing: CloudProviderError.itemNotFound)
+					} else {
+						resumer.resume(throwing: CloudProviderError.parentFolderDoesNotExist)
+					}
+				} catch CocoaError.fileWriteFileExists {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileWriteFileExists")
+					resumer.resume(throwing: CloudProviderError.itemAlreadyExists)
+				} catch CocoaError.fileWriteOutOfSpace {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileWriteOutOfSpace")
+					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
+				} catch CocoaError.fileReadNoPermission {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileReadNoPermission")
+					resumer.resume(throwing: CloudProviderError.unauthorized)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
+					resumer.resume(throwing: error)
+				}
 			}
 		}
-		return promise
 	}
 
 	// MARK: - Internal
 
+	/// Uses a file coordinator per access, because accesses through the same file coordinator never wait for each other.
+	private func coordinate(with intent: NSFileAccessIntent, byAccessor accessor: @escaping @Sendable (Error?) -> Void) {
+		NSFileCoordinator().coordinate(with: [intent], queue: queue, byAccessor: accessor)
+	}
+
 	private func getItemType(from url: URL) throws -> CloudItemType {
 		let attributes: [FileAttributeKey: Any]
 		do {
-			attributes = try fileManager.attributesOfItem(atPath: url.path)
+			attributes = try FileManager.default.attributesOfItem(atPath: url.path)
 		} catch CocoaError.fileReadUnknown {
 			throw CloudProviderError.itemNotFound
 		}
@@ -454,36 +480,41 @@ public class LocalFileSystemProvider: CloudProvider {
 		return String(name[matchedRange])
 	}
 
-	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	/// Doesn't check for cancellation, so that an upload can still fetch the metadata to return after its change.
+	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) called")
-		let promise = Promise<CloudItemMetadata>.pending()
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
-		fileCoordinator.coordinate(with: [readingIntent], queue: queue) { error in
-			if let error = error {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed coordinated read with error: \(error)")
-				promise.reject(error)
-				return
-			}
-			do {
-				let attributes = try readingIntent.url.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) read attributes: \(attributes.allValues.reduce(into: [:]) { $0[$1.key.rawValue] = $1.value })")
-				let name = attributes.name ?? url.lastPathComponent
-				let size = attributes.fileSize
-				let lastModifiedDate = attributes.contentModificationDate
-				let itemType = self.getItemType(from: attributes.fileResourceType)
-				promise.fulfill(CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size))
-			} catch CocoaError.fileReadNoSuchFile {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoSuchFile")
-				promise.reject(CloudProviderError.itemNotFound)
-			} catch CocoaError.fileReadNoPermission {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoPermission")
-				promise.reject(CloudProviderError.unauthorized)
-			} catch {
-				CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with error: \(error)")
-				promise.reject(error)
+		return try await withSDKContinuation { resumer in
+			coordinate(with: readingIntent) { error in
+				if let error {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed coordinated read with error: \(error)")
+					resumer.resume(throwing: error)
+					return
+				}
+				do {
+					try resumer.resume(returning: self.readItemMetadata(forItemAt: url, coordinatedURL: readingIntent.url, parentCloudPath: parentCloudPath))
+				} catch CocoaError.fileReadNoSuchFile {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoSuchFile")
+					resumer.resume(throwing: CloudProviderError.itemNotFound)
+				} catch CocoaError.fileReadNoPermission {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoPermission")
+					resumer.resume(throwing: CloudProviderError.unauthorized)
+				} catch {
+					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with error: \(error)")
+					resumer.resume(throwing: error)
+				}
 			}
 		}
-		return promise
+	}
+
+	private func readItemMetadata(forItemAt url: URL, coordinatedURL: URL, parentCloudPath: CloudPath) throws -> CloudItemMetadata {
+		let attributes = try coordinatedURL.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
+		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) read attributes: \(attributes.allValues.reduce(into: [:]) { $0[$1.key.rawValue] = $1.value })")
+		let name = attributes.name ?? url.lastPathComponent
+		let size = attributes.fileSize
+		let lastModifiedDate = attributes.contentModificationDate
+		let itemType = getItemType(from: attributes.fileResourceType)
+		return CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 	}
 
 	private func validateAndCopyFile(from sourceURL: URL, to targetURL: URL, replaceExisting: Bool) throws {
@@ -498,9 +529,9 @@ public class LocalFileSystemProvider: CloudProvider {
 			} catch CocoaError.fileReadNoSuchFile {
 				// no-op
 			}
-			try fileManager.copyItemWithOverwrite(at: sourceURL, to: targetURL)
+			try FileManager.default.copyItemWithOverwrite(at: sourceURL, to: targetURL)
 		} else {
-			try fileManager.copyItem(at: sourceURL, to: targetURL)
+			try FileManager.default.copyItem(at: sourceURL, to: targetURL)
 		}
 	}
 }

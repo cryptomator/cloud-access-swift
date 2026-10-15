@@ -12,13 +12,51 @@ import XCTest
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import AWSS3
+@preconcurrency import AWSS3
 
 class S3CloudProviderTests: XCTestCase {
 	var provider: S3CloudProvider!
 
 	override func setUpWithError() throws {
 		provider = try S3CloudProvider(credential: .stub)
+	}
+
+	func testThrowsCancellationErrorInCancelledTask() async {
+		await assertThrowsCancellationErrorInCancelledTask(provider)
+	}
+
+	func testRecoverDownloadFailureWithCancellationError() async {
+		let error = await provider.recoverDownloadFailure(CancellationError(), metadataCheck: {
+			XCTFail("A cancelled download must not issue a metadata request")
+		})
+		XCTAssertTrue(error is CancellationError)
+	}
+
+	func testCheckContinuationTokenForInvalidityWithCancelledRequest() async {
+		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: CancellationError())
+		XCTAssertTrue(error is CancellationError)
+	}
+
+	func testRecoverDownloadFailureWithExistingFile() async {
+		let error = await provider.recoverDownloadFailure(CloudProviderError.noInternetConnection, metadataCheck: {})
+		XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
+	}
+
+	func testRecoverDownloadFailureWithMissingFile() async {
+		let error = await provider.recoverDownloadFailure(CloudProviderError.noInternetConnection, metadataCheck: {
+			throw CloudProviderError.itemNotFound
+		})
+		XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+	}
+
+	func testConvertAWSErrorWithCancelledRequest() {
+		let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
+		XCTAssertTrue(convertAWSError(cancellationError) is CancellationError)
+		XCTAssertTrue(convertAWSError(NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])) is CancellationError)
+		XCTAssertTrue(convertAWSError(NSError(domain: AWSNetworkingErrorDomain, code: AWSNetworkingErrorType.cancelled.rawValue)) is CancellationError)
+		XCTAssertTrue(convertAWSError(nil) is CancellationError)
+		XCTAssertEqual(.itemNotFound, convertAWSError(CloudProviderError.itemNotFound) as? CloudProviderError)
+		XCTAssertTrue(provider.convertStandardError(CancellationError()) is CancellationError)
 	}
 
 	func testGetPrefix() {
@@ -81,7 +119,7 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
 		let removeContainer = try XCTUnwrap(request.remove)
 		let objects = try XCTUnwrap(removeContainer.objects)
-		XCTAssertEqual(keys, objects.map { $0.key })
+		XCTAssertEqual(keys, objects.map(\.key))
 	}
 
 	func testCreateEmptyFolderPutObjectRequest() {

@@ -10,8 +10,7 @@
 import CryptomatorCloudAccessCore
 #endif
 import AuthenticationServices
-import BoxSdkGen
-import Promises
+@preconcurrency import BoxSdkGen
 import UIKit
 
 public enum BoxAuthenticatorError: Error {
@@ -19,28 +18,33 @@ public enum BoxAuthenticatorError: Error {
 	case invalidContext
 }
 
+@MainActor
 public enum BoxAuthenticator {
-	public static func authenticate(from viewController: UIViewController, tokenStorage: TokenStorage) -> Promise<BoxCredential> {
-		let pendingPromise = Promise<BoxCredential>.pending()
-		_Concurrency.Task {
-			do {
-				guard let context = viewController as? ASWebAuthenticationPresentationContextProviding else {
-					throw BoxAuthenticatorError.invalidContext
-				}
-				let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
-				let oauth = BoxOAuth(config: config)
-				try await oauth.runLoginFlow(options: .init(), context: context) // access token is implictly saved in token storage
-				pendingPromise.fulfill(BoxCredential(tokenStorage: tokenStorage))
-			} catch let error as ASWebAuthenticationSessionError {
-				if error.code == .canceledLogin {
-					CloudAccessDDLogDebug("BoxAuthenticator: Login flow canceled by the user.")
-					pendingPromise.reject(CocoaError(.userCancelled))
-				} else {
-					CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed with error: \(error.localizedDescription).")
-					pendingPromise.reject(BoxAuthenticatorError.authenticationFailed)
-				}
-			}
+	public static func authenticate(from viewController: UIViewController, tokenStorage: TokenStorage) async throws -> BoxCredential {
+		guard let context = viewController as? UIViewController & ASWebAuthenticationPresentationContextProviding else {
+			throw BoxAuthenticatorError.invalidContext
 		}
-		return pendingPromise
+		let config = OAuthConfig(clientId: BoxSetup.constants.clientId, clientSecret: BoxSetup.constants.clientSecret, tokenStorage: tokenStorage)
+		let oauth = BoxOAuth(config: config)
+		do {
+			_ = try await oauth.runLoginFlow(options: .init(), context: context) // access token is implicitly saved in token storage
+		} catch {
+			throw convertLoginFlowError(error)
+		}
+		return BoxCredential(tokenStorage: tokenStorage)
+	}
+
+	static func convertLoginFlowError(_ error: Error) -> Error {
+		// The Box SDK wraps the error of its web authentication session.
+		guard let sessionError = (error as? BoxSDKError)?.error as? ASWebAuthenticationSessionError else {
+			return error
+		}
+		if sessionError.code == .canceledLogin {
+			CloudAccessDDLogDebug("BoxAuthenticator: Login flow canceled by the user.")
+			return CocoaError(.userCancelled)
+		} else {
+			CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed with error: \(sessionError.localizedDescription).")
+			return BoxAuthenticatorError.authenticationFailed
+		}
 	}
 }

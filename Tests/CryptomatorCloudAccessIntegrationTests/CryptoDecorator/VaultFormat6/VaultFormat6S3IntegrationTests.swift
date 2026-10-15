@@ -13,7 +13,6 @@ import XCTest
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import Promises
 
 class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 	override class var defaultTestSuite: XCTestSuite {
@@ -28,64 +27,39 @@ class VaultFormat6S3IntegrationTests: CloudAccessIntegrationTest {
 		S3CloudProviderIntegrationTests.onetimeAWSIntegrationTestsSetup
 
 		integrationTestParentCloudPath = CloudPath("/")
-		let setUpPromise = DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest").then { decorator in
-			setUpProvider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
-		if let error = setUpPromise.error {
+		do {
+			setUpProvider = try blockingAwait(timeout: 60.0) {
+				try await DecoratorFactory.createNewVaultFormat6(delegate: cloudProvider, vaultPath: vaultPath, password: "IntegrationTest")
+			}
+			// Wait for Scaleway S3's eventual consistency to catch up after vault creation.
+			try blockingAwait(timeout: 60.0) {
+				try await waitForVaultReadiness(rawProvider: cloudProvider, vaultPath: vaultPath)
+			}
+		} catch {
 			classSetUpError = error
-			return
-		}
-		// Wait for Scaleway S3's eventual consistency to catch up after vault creation.
-		_ = waitForVaultReadiness(rawProvider: cloudProvider, vaultPath: vaultPath)
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
 			return
 		}
 		super.setUp()
 		guard classSetUpError == nil else { return }
 		// Wait for Scaleway S3's eventual consistency to catch up after setUp uploaded all test fixtures.
 		let expectedItemCount = 6 // 5 files (test 0-4.txt) + 1 folder (testFolder)
-		_ = waitForConsistency(provider: setUpProvider, folderPath: integrationTestRootCloudPath, expectedItemCount: expectedItemCount)
-		guard waitForPromises(timeout: 60.0) else {
-			classSetUpError = IntegrationTestError.oneTimeSetUpTimeout
-			return
-		}
+		waitForConsistencyOfSetUp(expectedItemCount: expectedItemCount)
 	}
 
 	override class func tearDown() {
 		super.tearDown()
-		_ = cloudProvider.deleteFolderIfExisting(at: vaultPath)
-		_ = waitForPromises(timeout: 60.0)
-	}
-
-	override func setUpWithError() throws {
-		try super.setUpWithError()
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6S3IntegrationTests.cloudProvider, vaultPath: VaultFormat6S3IntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
+		try? blockingAwait(timeout: 60.0) {
+			try await cloudProvider.deleteFolderIfExisting(at: vaultPath)
 		}
 	}
 
-	override func createLimitedCloudProvider() throws -> CloudProvider {
+	override func setUp() async throws {
+		try await super.setUp()
+		provider = try await DecoratorFactory.createFromExistingVaultFormat6(delegate: VaultFormat6S3IntegrationTests.cloudProvider, vaultPath: VaultFormat6S3IntegrationTests.vaultPath, password: "IntegrationTest")
+	}
+
+	override func createLimitedCloudProvider() async throws -> CloudProvider {
 		let limitedDelegate = try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential, maxPageSize: maxPageSizeForLimitedCloudProvider)
-		let setUpPromise = DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6S3IntegrationTests.vaultPath, password: "IntegrationTest").then { decorator in
-			self.provider = decorator
-		}
-		guard waitForPromises(timeout: 60.0) else {
-			if let error = setUpPromise.error {
-				throw error
-			}
-			throw IntegrationTestError.setUpTimeout
-		}
-		return try XCTUnwrap(setUpPromise.value)
+		return try await DecoratorFactory.createFromExistingVaultFormat6(delegate: limitedDelegate, vaultPath: VaultFormat6S3IntegrationTests.vaultPath, password: "IntegrationTest")
 	}
 }

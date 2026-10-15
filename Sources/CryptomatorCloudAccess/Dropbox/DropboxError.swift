@@ -13,12 +13,10 @@ public enum DropboxError: Error {
 	case missingResult
 	case unexpectedResult
 	case tooManyWriteOperations
-	case asyncPollError
 
 	case httpError
 	case badInputError
 	case accessError
-	case pathRootError
 	case rateLimitError(retryAfter: Int)
 	case internalServerError
 	case clientError

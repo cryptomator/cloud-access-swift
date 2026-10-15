@@ -6,7 +6,6 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import Promises
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -67,20 +66,20 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 	func testGetOriginalPath1() async throws {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
 
-		let longName = try await cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
+		let longName = try await cache.getOriginalPath(shortened) { cloudPath in
 			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Promise(Data("loooong.c9r".utf8))
-		}.async()
+			return Data("loooong.c9r".utf8)
+		}
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
 	}
 
 	func testGetOriginalPath2() async throws {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s/dir.c9r")
 
-		let longName = try await cache.getOriginalPath(shortened) { cloudPath -> Promise<Data> in
+		let longName = try await cache.getOriginalPath(shortened) { cloudPath in
 			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Promise(Data("loooong.c9r".utf8))
-		}.async()
+			return Data("loooong.c9r".utf8)
+		}
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
 	}
 

@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-class GoogleDriveIdentifierCache {
+final class GoogleDriveIdentifierCache: Sendable {
 	private let inMemoryDB: DatabaseQueue
 
 	init() throws {

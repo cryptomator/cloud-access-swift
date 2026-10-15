@@ -11,13 +11,12 @@
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Promises
 import XCTest
 
 class CloudProvider_ConvenienceTests: XCTestCase {
 	func testFetchItemListExhaustively() async throws {
 		let provider = ConvenienceCloudProviderMock()
-		let cloudItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/")).async()
+		let cloudItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
 		XCTAssertEqual(6, cloudItemList.items.count)
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "a" }))
 		XCTAssertTrue(cloudItemList.items.contains(where: { $0.name == "b" }))
@@ -30,19 +29,19 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testCreateFolderIfMissingFulfillsForExistingItem() async throws {
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		let provider = ConvenienceCloudProviderMock()
-		try await provider.createFolderIfMissing(at: existingItemPath).async()
+		try await provider.createFolderIfMissing(at: existingItemPath)
 	}
 
 	func testCreateFolderIfMissingFulfillsForMissingItem() async throws {
 		let nonExistentItemPath = CloudPath("/nonExistentFolder")
 		let provider = ConvenienceCloudProviderMock()
-		try await provider.createFolderIfMissing(at: nonExistentItemPath).async()
+		try await provider.createFolderIfMissing(at: nonExistentItemPath)
 	}
 
 	func testCreateFolderIfMissingRejectsWithErrorOtherThanItemNotFound() async throws {
 		let itemPath = CloudPath("/AAAAA/BBBB")
 		let provider = ConvenienceCloudProviderMock()
-		await XCTAssertThrowsErrorAsync(try await provider.createFolderIfMissing(at: itemPath).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.createFolderIfMissing(at: itemPath)) { error in
 			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
 		}
 	}
@@ -50,19 +49,19 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testDeleteFolderIfExistingFulfillsForMissingItem() async throws {
 		let nonExistentItemPath = CloudPath("/nonExistentFolder")
 		let provider = ConvenienceCloudProviderMock()
-		try await provider.deleteFolderIfExisting(at: nonExistentItemPath).async()
+		try await provider.deleteFolderIfExisting(at: nonExistentItemPath)
 	}
 
 	func testDeleteFolderIfExistingFulfillsForExistingItem() async throws {
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		let provider = ConvenienceCloudProviderMock()
-		try await provider.deleteFolderIfExisting(at: existingItemPath).async()
+		try await provider.deleteFolderIfExisting(at: existingItemPath)
 	}
 
 	func testDeleteFolderIfExistingRejectsWithErrorOtherThanItemNotFound() async throws {
 		let itemPath = CloudPath("/AAAAA/BBBB")
 		let provider = ConvenienceCloudProviderMock()
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolderIfExisting(at: itemPath).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolderIfExisting(at: itemPath)) { error in
 			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
 		}
 	}
@@ -70,27 +69,27 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 	func testCheckForItemExistenceFulfillsForExistingItem() async throws {
 		let provider = ConvenienceCloudProviderMock()
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
-		let itemExists = try await provider.checkForItemExistence(at: existingItemPath).async()
+		let itemExists = try await provider.checkForItemExistence(at: existingItemPath)
 		XCTAssertTrue(itemExists)
 	}
 
 	func testCheckForItemExistenceFulfillsForMissingItem() async throws {
 		let provider = ConvenienceCloudProviderMock()
 		let nonExistentItemPath = CloudPath("/nonExistentFile")
-		let itemExists = try await provider.checkForItemExistence(at: nonExistentItemPath).async()
+		let itemExists = try await provider.checkForItemExistence(at: nonExistentItemPath)
 		XCTAssertFalse(itemExists)
 	}
 
 	func testCheckForItemExistenceRejectsWithErrorOtherThanItemNotFound() async throws {
 		let provider = ConvenienceCloudProviderMock()
 		let itemPath = CloudPath("/AAAAA/BBBB")
-		await XCTAssertThrowsErrorAsync(try await provider.checkForItemExistence(at: itemPath).async()) { error in
+		await XCTAssertThrowsErrorAsync(try await provider.checkForItemExistence(at: itemPath)) { error in
 			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
 		}
 	}
 }
 
-private class ConvenienceCloudProviderMock: CloudProvider {
+private final class ConvenienceCloudProviderMock: CloudProvider {
 	let pages = [
 		"0": [
 			CloudItemMetadata(name: "a", cloudPath: CloudPath("/a"), itemType: .file, lastModifiedDate: nil, size: nil),
@@ -106,79 +105,88 @@ private class ConvenienceCloudProviderMock: CloudProvider {
 		]
 	]
 
-	func fetchItemMetadata(at cloudPath: CloudPath) -> Promise<CloudItemMetadata> {
+	@concurrent
+	func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		let nonExistentItemPath = CloudPath("/nonExistentFile")
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		switch cloudPath {
 		case nonExistentItemPath:
-			return Promise(CloudProviderError.itemNotFound)
+			throw CloudProviderError.itemNotFound
 		case existingItemPath:
-			return Promise(CloudItemMetadata(name: "thisFolderExistsInTheCloud", cloudPath: existingItemPath, itemType: .folder, lastModifiedDate: nil, size: nil))
+			return CloudItemMetadata(name: "thisFolderExistsInTheCloud", cloudPath: existingItemPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		default:
-			return Promise(CloudProviderError.noInternetConnection)
+			throw CloudProviderError.noInternetConnection
 		}
 	}
 
-	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) -> Promise<CloudItemList> {
+	@concurrent
+	func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		switch pageToken {
 		case nil:
-			return Promise(CloudItemList(items: pages["0"]!, nextPageToken: "1"))
+			return CloudItemList(items: pages["0"]!, nextPageToken: "1")
 		case "1":
-			return Promise(CloudItemList(items: pages["1"]!, nextPageToken: "2"))
+			return CloudItemList(items: pages["1"]!, nextPageToken: "2")
 		case "2":
-			return Promise(CloudItemList(items: pages["2"]!, nextPageToken: nil))
+			return CloudItemList(items: pages["2"]!, nextPageToken: nil)
 		default:
-			return Promise(CloudProviderError.noInternetConnection)
+			throw CloudProviderError.noInternetConnection
 		}
 	}
 
-	func downloadFile(from cloudPath: CloudPath, to localURL: URL, onTaskCreation: ((URLSessionDownloadTask?) -> Void)?) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+	@concurrent
+	func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		throw CloudProviderError.noInternetConnection
 	}
 
-	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, onTaskCreation: ((URLSessionUploadTask?) -> Void)?) -> Promise<CloudItemMetadata> {
-		return Promise(CloudProviderError.noInternetConnection)
+	@concurrent
+	func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		throw CloudProviderError.noInternetConnection
 	}
 
-	func createFolder(at cloudPath: CloudPath) -> Promise<Void> {
+	@concurrent
+	func createFolder(at cloudPath: CloudPath) async throws {
 		let nonExistentItemPath = CloudPath("/nonExistentFolder")
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		switch cloudPath {
 		case nonExistentItemPath:
-			return Promise(())
+			return
 		case existingItemPath:
-			return Promise(CloudProviderError.itemAlreadyExists)
+			throw CloudProviderError.itemAlreadyExists
 		default:
-			return Promise(CloudProviderError.noInternetConnection)
+			throw CloudProviderError.noInternetConnection
 		}
 	}
 
-	func deleteFile(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	func deleteFile(at cloudPath: CloudPath) async throws {
+		try deleteItem(at: cloudPath)
 	}
 
-	func deleteFolder(at cloudPath: CloudPath) -> Promise<Void> {
-		return deleteItem(at: cloudPath)
+	@concurrent
+	func deleteFolder(at cloudPath: CloudPath) async throws {
+		try deleteItem(at: cloudPath)
 	}
 
-	private func deleteItem(at cloudPath: CloudPath) -> Promise<Void> {
+	private func deleteItem(at cloudPath: CloudPath) throws {
 		let nonExistentItemPath = CloudPath("/nonExistentFolder")
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		switch cloudPath {
 		case nonExistentItemPath:
-			return Promise(CloudProviderError.itemNotFound)
+			throw CloudProviderError.itemNotFound
 		case existingItemPath:
-			return Promise(())
+			return
 		default:
-			return Promise(CloudProviderError.noInternetConnection)
+			throw CloudProviderError.noInternetConnection
 		}
 	}
 
-	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+	@concurrent
+	func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		throw CloudProviderError.noInternetConnection
 	}
 
-	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) -> Promise<Void> {
-		return Promise(CloudProviderError.noInternetConnection)
+	@concurrent
+	func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		throw CloudProviderError.noInternetConnection
 	}
 }

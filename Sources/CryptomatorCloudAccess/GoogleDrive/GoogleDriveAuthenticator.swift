@@ -9,57 +9,54 @@
 #if canImport(CryptomatorCloudAccessCore)
 import CryptomatorCloudAccessCore
 #endif
-import AppAuth
+@preconcurrency import AppAuth
 import Foundation
-import GoogleAPIClientForREST_Drive
-import Promises
+@preconcurrency import GoogleAPIClientForREST_Drive
 
+@MainActor
 public enum GoogleDriveAuthenticator {
 	private static let scopes = [kGTLRAuthScopeDrive, OIDScopeEmail]
 	public static var currentAuthorizationFlow: OIDExternalUserAgentSession?
 
-	public static func authenticate(credential: GoogleDriveCredential, from viewController: UIViewController) -> Promise<Void> {
+	public static func authenticate(credential: GoogleDriveCredential, from viewController: UIViewController) async throws {
 		if credential.isAuthorized {
-			return Promise(())
+			return
 		}
-		return createAuthorizationServiceForGoogle().then { configuration in
-			self.getAuthState(for: configuration, with: viewController, credential: credential)
-		}.then { authState in
-			try credential.save(authState: authState)
-			return Promise(())
-		}
+		let configuration = try await createAuthorizationServiceForGoogle()
+		let authState = try await getAuthState(for: configuration, with: viewController, credential: credential)
+		try credential.save(authState: authState)
 	}
 
-	private static func createAuthorizationServiceForGoogle() -> Promise<OIDServiceConfiguration> {
+	private static func createAuthorizationServiceForGoogle() async throws -> OIDServiceConfiguration {
 		let issuer = URL(string: "https://accounts.google.com")!
-		return Promise<OIDServiceConfiguration> { fulfill, reject in
-			OIDAuthorizationService.discoverConfiguration(forIssuer: issuer) { configuration, error in
+		return try await withCheckedThrowingContinuation { continuation in
+			OIDAuthorizationService.discoverConfiguration(forIssuer: issuer) { @Sendable configuration, error in
 				if error != nil {
-					return reject(error!)
+					return continuation.resume(throwing: error!)
 				}
-				guard let configuration = configuration else {
-					return reject(GoogleDriveError.unexpectedError) // This should never occur
+				guard let configuration else {
+					return continuation.resume(throwing: GoogleDriveError.unexpectedError) // This should never occur
 				}
-				fulfill(configuration)
+				continuation.resume(returning: configuration)
 			}
 		}
 	}
 
-	private static func getAuthState(for configuration: OIDServiceConfiguration, with presentingViewController: UIViewController, credential: GoogleDriveCredential) -> Promise<OIDAuthState> {
+	private static func getAuthState(for configuration: OIDServiceConfiguration, with presentingViewController: UIViewController, credential: GoogleDriveCredential) async throws -> OIDAuthState {
 		let request = OIDAuthorizationRequest(configuration: configuration, clientId: GoogleDriveSetup.constants.clientId, scopes: scopes, redirectURL: GoogleDriveSetup.constants.redirectURL, responseType: OIDResponseTypeCode, additionalParameters: nil)
-		return Promise<OIDAuthState> { fulfill, reject in
-			GoogleDriveAuthenticator.currentAuthorizationFlow = OIDAuthState.authState(byPresenting: request, presenting: presentingViewController, callback: { authState, error in
-				guard let authState = authState, error == nil else {
+		return try await withCheckedThrowingContinuation { continuation in
+			GoogleDriveAuthenticator.currentAuthorizationFlow = OIDAuthState.authState(byPresenting: request, presenting: presentingViewController, callback: { @Sendable authState, error in
+				guard let authState, error == nil else {
 					credential.deauthenticate()
 					if let error = error as NSError? {
 						if error.domain == OIDGeneralErrorDomain, error.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue || error.code == OIDErrorCode.programCanceledAuthorizationFlow.rawValue {
-							return reject(CocoaError(.userCancelled))
+							return continuation.resume(throwing: CocoaError(.userCancelled))
 						}
-						return reject(error)
+						return continuation.resume(throwing: error)
 					}
-					return reject(GoogleDriveError.unexpectedError) // This should never occur
+					return continuation.resume(throwing: GoogleDriveError.unexpectedError) // This should never occur
 				}
-				fulfill(authState)
+				continuation.resume(returning: authState)
 			})
 		}
 	}

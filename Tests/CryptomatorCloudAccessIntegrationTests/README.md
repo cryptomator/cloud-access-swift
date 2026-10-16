@@ -100,52 +100,39 @@ print("PCLOUD_ACCESS_TOKEN=\(credential.user.token)")
 print("PCLOUD_HTTP_API_HOST_NAME=\(credential.user.httpAPIHostName)")
 ```
 
-## Create Integration Tests for New Cloud Provider
+## Running the Tests
 
-To create a new set of integration tests based on `CloudAccessIntegrationTest` for a new `CloudProvider`, the following template can be used:
+The tests are Swift Testing suites that run in parallel in one process, so the tests of a provider share its credentials and fixtures. A backend is a provider combined with a vault format (`plain`, `vf6`, `vf7`) and is named by a token like `pcloud-vf7`. The conformance tests in `CloudProviderConformanceTests.swift` run once per selected backend.
 
-```swift
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#else
-import CryptomatorCloudAccess
-#endif
-import XCTest
+`INTEGRATION_BACKENDS` selects the backends: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf7`). Unset or empty selects all backends, and `none` selects none, so only the tests that don't depend on the selection run. An unknown token fails `backendSelectionIsValid`, so a typo can't pass a run that tested nothing. The provider tokens are `box`, `dropbox`, `googledrive`, `microsoftgraph`, `pcloud`, `s3`, `webdav` and `localfilesystem`. Each per-provider scheme, e.g. `PCloudIntegrationTests`, sets the filter to its provider. `AllIntegrationTests` sets none. To filter it, set `TEST_RUNNER_INTEGRATION_BACKENDS` in the environment of `xcodebuild`.
 
-class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTest {
-  override class var defaultTestSuite: XCTestSuite {
-    return XCTestSuite(forTestCaseClass: CloudProviderNameCloudProviderIntegrationTests.self)
-  }
+To run the tests like CI does, build with `xcodebuild build-for-testing -scheme AllIntegrationTests -destination 'name=<simulator>'` and then run `DEVICE='<simulator>' BACKENDS=pcloud ./Scripts/run-integration-tests.sh`.
 
-  override class func setUp() {
-    // This is the folder in which all the files and folders required by the integration test are created and in which the individual tests are executed. This can also be the root folder.
-    integrationTestParentCloudPath = CloudPath("<YOUR-PATH>")
-    setUpProvider = CloudProviderNameCloudProvider()
-    // It is very important to call super.setUp(), otherwise the IntegrationTest will not be built correctly.
-    super.setUp()
-  }
+## Writing Tests
 
-  override func setUp() async throws {
-    // It is very important to call `try await super.setUp()`, otherwise errors from the one-time class setUp() are ignored.
-    try await super.setUp()
-    super.provider = CloudProviderNameCloudProvider()
-  }
-}
-```
+A conformance test takes `IntegrationBackend.selected` as its arguments, or a subset (`selectedPlain`, `selectedPlainRemote`, `selectedPaginating`, `selectedVaults`) if it only applies to some backends. Each test of a backend runs its body through `withIntegrationFixture(_:_:)`, which hands each attempt a new `IntegrationTestContext` with the backend's provider:
 
-### Authentication
+- The read-only tree at `context.treeRoot` (`test 0…4.txt` and `testFolder` with `EmptySubfolder` and `test 0…4.txt`) is built once per backend and read by all of its tests in parallel, so it must not be changed.
+- A test that changes anything works in a folder of its own from `context.makeSandbox()` and creates its items with `createPrerequisiteFolder(at:)` and `uploadPrerequisite(_:to:)`, which wait until the item is visible. `sandboxPath()` returns a unique path without creating anything.
+- Remote calls come before the expectations, because a retried test keeps the issues it recorded. For the same reason, expected errors go through `expectCloudProviderError(_:sourceLocation:_:)`, which rethrows a transient error instead of recording it. Use `eventually(on:_:)` to wait out the visibility lag after a change.
 
-If the cloud provider requires authentication, subclass `CloudAccessIntegrationTestWithAuthentication` instead of `CloudAccessIntegrationTest`. This extends it by tests for unauthorized `CloudProvider` actions.
+A provider-specific suite is nested in `IntegrationTests.ProviderSpecific`, so it runs within the sweep and cleanup of the run. It is gated with `.enabled(if: IntegrationBackend.isSelected(.<provider>))`. Its name is the provider token followed by `Tests`, in any case, e.g. `S3Tests` or `GoogleDriveTests`, because the CI script re-runs a failed test with the provider whose token it derives from the name. A test that needs no fixture runs its body through `withIntegrationRetries(on:_:)`, which retries and bounds it the same way.
 
-The template from above can still be used. Additionally, the following function must be overridden:
+To add a provider, add a case to `IntegrationProvider`, create its providers in `IntegrationProvider+Factory.swift` and add a scheme that sets `INTEGRATION_BACKENDS` to its token.
 
-```swift
-class CloudProviderNameCloudProviderIntegrationTests: CloudAccessIntegrationTestWithAuthentication {
-  override func deauthenticate() async throws {
-    // Invalidate or deauthenticate the credential or client used by the CloudProvider.
-  }
-}
-```
+## Retries
+
+An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts, `CloudProviderError.noInternetConnection`, HTTP 5xx and 429, failed OAuth token requests with such a status, and eventually consistent providers that didn't catch up in time. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
+
+An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because SDK calls don't respond to cancellation.
+
+In CI, `Scripts/run-integration-tests.sh` re-runs the failed tests once against the same build. It runs every failed test on every backend that a test failed on, so a test can also run on a backend it didn't fail on. A failed provider-specific test adds all backends of its provider. The job is green only if each failed (test, backend) pair passed on the re-run, so the extra runs don't count. A re-run of the job via "Re-run failed jobs" selects the same way from the pairs still failing at the end of the previous attempt, and its main pass then counts all the pairs it runs. If that attempt didn't finish its main pass, it runs everything.
+
+The job summary lists the pairs that passed only on the re-run, those still failing, and the in-process retries. Because S3 errors can contain request URLs with credentials, it shows only the parts of a failure message that can't contain them, such as an error's domain and code.
+
+## Remote Folders
+
+Each run works in `/iOS-IntegrationTests-<timestamp>-<runID>` on each provider and deletes it at the end. A root of its own per run avoids the eventual consistency races on S3 and pCloud, where deleting a path and immediately recreating it can fail. A run that is killed can't delete its root, so each run starts by deleting such folders that are older than 24 hours. Folders named `iOS-IntegrationTests-{Plain|VaultFormat6|VaultFormat7}-<runID>` can belong to a running build of an older release, so they are only deleted when empty or when their newest file is older than 24 hours.
 
 ## Important Notes
 

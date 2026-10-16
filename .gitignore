@@ -36,3 +36,5 @@ playground.xcworkspace
 
 .build/
 .vscode/
+integration-output/
+integration-input/

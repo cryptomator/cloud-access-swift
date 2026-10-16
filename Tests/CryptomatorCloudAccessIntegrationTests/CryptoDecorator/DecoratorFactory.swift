@@ -14,10 +14,11 @@ import Foundation
 #endif
 @testable import CryptomatorCryptoLib
 
+/// The `createNewVaultFormat…` functions call `waitUntilVisible` after each folder they create, because the next step fails on an eventually consistent provider if it doesn't see the folder yet.
 enum DecoratorFactory {
 	// MARK: - Vault Format 7
 
-	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> VaultFormat7ProviderDecorator {
+	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat7ProviderDecorator {
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
 		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 		let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
@@ -27,6 +28,7 @@ enum DecoratorFactory {
 			try? FileManager.default.removeItem(at: tmpDirURL)
 		}
 		try await delegate.createFolder(at: vaultPath)
+		try await waitUntilVisible(vaultPath)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 7, passphrase: password, scryptCostParam: 2)
@@ -35,9 +37,12 @@ enum DecoratorFactory {
 		_ = try await delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
 		let dPath = vaultPath.appendingPathComponent("d")
 		try await delegate.createFolder(at: dPath)
+		try await waitUntilVisible(dPath)
 		let twoCharsPath = rootDirPath.deletingLastPathComponent()
 		try await delegate.createFolder(at: twoCharsPath)
+		try await waitUntilVisible(twoCharsPath)
 		try await delegate.createFolder(at: rootDirPath)
+		try await waitUntilVisible(rootDirPath)
 		return decorator
 	}
 
@@ -58,7 +63,7 @@ enum DecoratorFactory {
 
 	// MARK: - Vault Format 6
 
-	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> VaultFormat6ProviderDecorator {
+	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat6ProviderDecorator {
 		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
 		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 		let decorator = try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
@@ -68,6 +73,7 @@ enum DecoratorFactory {
 			try? FileManager.default.removeItem(at: tmpDirURL)
 		}
 		try await delegate.createFolder(at: vaultPath)
+		try await waitUntilVisible(vaultPath)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 6, passphrase: password, scryptCostParam: 2)
@@ -76,11 +82,15 @@ enum DecoratorFactory {
 		_ = try await delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
 		let mPath = vaultPath.appendingPathComponent("m")
 		try await delegate.createFolder(at: mPath)
+		try await waitUntilVisible(mPath)
 		let dPath = vaultPath.appendingPathComponent("d")
 		try await delegate.createFolder(at: dPath)
+		try await waitUntilVisible(dPath)
 		let twoCharsPath = rootDirPath.deletingLastPathComponent()
 		try await delegate.createFolder(at: twoCharsPath)
+		try await waitUntilVisible(twoCharsPath)
 		try await delegate.createFolder(at: rootDirPath)
+		try await waitUntilVisible(rootDirPath)
 		return decorator
 	}
 

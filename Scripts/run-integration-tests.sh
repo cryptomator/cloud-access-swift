@@ -9,11 +9,11 @@
 # Environment:
 #   DERIVED_DATA_PATH  DerivedData of `xcodebuild build-for-testing -scheme AllIntegrationTests` (default: Xcode's default)
 #   DEVICE             Simulator name (default: iPhone 17 Pro)
-#   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf7` (default: all backends)
+#   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf7` (default: all backends, ignored with --only)
 #
 # --only runs just the tests of a still-failing.txt of an earlier run, on the backends it lists. Each of its lines is
 # `<nodeIdentifier>\t<token>`, where the token is a backend token (`pcloud-vf7`), a provider token
-# (`s3`) for provider-specific tests, or `-` followed by `\t<BACKENDS of that run>` for tests of no backend.
+# (`s3`) for provider-specific tests, or `-` followed by `\t<filter of that run's main pass>` for tests of no backend.
 
 set -uo pipefail
 
@@ -96,13 +96,16 @@ lines = [line.rstrip("\n").split("\t") for line in open(sys.argv[1]) if line.str
 if not lines or any(len(fields) < 2 or not fields[0].strip() or not fields[1].strip() for fields in lines):
     sys.exit(f"{sys.argv[1]} lists no pairs, or a line has no test or token")
 tokens = []
+all_backends = False
 for fields in lines:
     if fields[1] == "-":
         original = fields[2] if len(fields) > 2 else ""
+        # An empty filter selects all backends, so it must not narrow the filter to the other lines' tokens.
+        all_backends = all_backends or not original
         tokens += [token for token in original.split(",") if token]
     else:
         tokens.append(fields[1])
-print(",".join(dict.fromkeys(tokens)))
+print("" if all_backends else ",".join(dict.fromkeys(tokens)))
 for node_identifier in dict.fromkeys(fields[0] for fields in lines):
     print(f"-only-testing:{sys.argv[2]}/{node_identifier}")
 EOF
@@ -125,7 +128,8 @@ run_selected_pass() {
   run_pass "$name" "$filter" ${only_testing[@]+"${only_testing[@]}"}
 }
 
-# Runs a pass and writes its exit code to $WORK_DIR/<name>.exit. Arguments: name, filter, -only-testing arguments.
+# Runs a pass and writes its exit code and filter to $WORK_DIR/<name>.exit and <name>.filter. Arguments: name, filter,
+# -only-testing arguments.
 run_pass() {
   local name="$1" filter="$2"
   shift 2
@@ -146,15 +150,17 @@ run_pass() {
     -collect-test-diagnostics never \
     ${1+"$@"} 2>&1 | "${formatter[@]}"
   echo "${PIPESTATUS[0]}" > "$WORK_DIR/$name.exit"
+  echo "$filter" > "$WORK_DIR/$name.filter"
   echo "::endgroup::"
 }
 
-# Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<BACKENDS if the token is ->\t<failure reasons>` per pair.
+# Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<filter of the main pass if the token is ->\t<failure reasons>` per pair.
+# Both passes record the main pass's filter, which the re-run's own filter can differ from, so that their pairs match.
 # Returns non-zero if the pass is incomplete, e.g. if its result can't be read, a test process crashed, or the run failed without a failed test.
 parse_pass() {
   local name="$1"
   xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json" 2> "$WORK_DIR/$name.parse-error" || return 1
-  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$BACKENDS" "$WORK_DIR" > "$WORK_DIR/$name.tsv" <<'EOF'
+  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$(cat "$WORK_DIR/pass1.filter")" "$WORK_DIR" > "$WORK_DIR/$name.tsv" <<'EOF'
 import json, re, sys
 
 sys.path.insert(0, sys.argv[4])
@@ -253,7 +259,7 @@ work_dir, still_failing_file, pass2_incomplete, only_file = sys.argv[1], sys.arg
 # A skip doesn't heal a pair that failed before: a pair of the re-run pass, or a pair that --only lists. A listed pair
 # that the main pass skips isn't re-run, because the re-run would select it the same way and skip it again.
 healed_statuses = set(sys.argv[5].split("|")) - {"Skipped"}
-# The BACKENDS of each pair that --only lists, which only a `-` token's line has.
+# The filter of each pair that --only lists, which only a `-` token's line has.
 only_lines = [line.rstrip("\n").split("\t") for line in open(only_file) if line.strip()] if only_file else []
 listed = {tuple(fields[:2]): fields[2] if len(fields) > 2 else "" for fields in only_lines}
 

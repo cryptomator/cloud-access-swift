@@ -27,7 +27,7 @@ struct IntegrationRunScope: SuiteTrait, TestScoping {
 	}
 
 	private static let maximumAge: TimeInterval = 24 * 60 * 60
-	/// The depth of the old fixture tree, whose files are at most 3 levels below the root.
+	/// Deep enough to reach the files that the old suite uploaded when it set up a root, e.g. `masterkey.cryptomator` or `IntegrationTest/testFolder/test 0.txt`, whose dates are no older than its run. No run lasts 24 hours, so deeper files needn't be listed.
 	private static let legacyRunRootListingDepth = 3
 
 	var isRecursive: Bool {

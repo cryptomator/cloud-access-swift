@@ -43,6 +43,14 @@ done
 # On CI, the runner empties RUNNER_TEMP after the job even when it kills the script.
 WORK_DIR="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/integration-tests.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
+# --only can name the still-failing.txt that this run replaces.
+if [ -n "$ONLY_FILE" ]; then
+  if ! cp "$ONLY_FILE" "$WORK_DIR/only.txt"; then
+    echo "Can't read the pairs to run from $ONLY_FILE." >&2
+    exit 2
+  fi
+  ONLY_FILE="$WORK_DIR/only.txt"
+fi
 mkdir -p "$OUTPUT_DIR"
 rm -f "$STILL_FAILING_FILE"
 SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
@@ -238,13 +246,14 @@ if [ -s "$WORK_DIR/failed-pass1.txt" ]; then
   fi
 fi
 
-python3 -I - "$WORK_DIR" "$STILL_FAILING_FILE" "$pass2_incomplete" "$PASSED_STATUSES" >> "$SUMMARY_FILE" <<'EOF'
+python3 -I - "$WORK_DIR" "$STILL_FAILING_FILE" "$pass2_incomplete" "$ONLY_FILE" "$PASSED_STATUSES" >> "$SUMMARY_FILE" <<'EOF'
 import collections, os, sys
 
-work_dir, still_failing_file, pass2_incomplete = sys.argv[1], sys.argv[2], sys.argv[3] == "true"
-passed = set(sys.argv[4].split("|"))
-# A skipped re-run doesn't heal a failed pair.
-healed_statuses = passed - {"Skipped"}
+work_dir, still_failing_file, pass2_incomplete, only_file = sys.argv[1], sys.argv[2], sys.argv[3] == "true", sys.argv[4]
+# A skip doesn't heal a pair that failed before: a pair of the re-run pass, or a pair that --only lists. A listed pair
+# that the main pass skips isn't re-run, because the re-run would select it the same way and skip it again.
+healed_statuses = set(sys.argv[5].split("|")) - {"Skipped"}
+listed = {tuple(line.rstrip("\n").split("\t")[:2]) for line in open(only_file) if line.strip()} if only_file else set()
 
 def read(name):
     path = os.path.join(work_dir, f"{name}.tsv")
@@ -261,9 +270,9 @@ healed, still_failing = [], []
 counts = collections.defaultdict(lambda: collections.Counter())
 for key, (status, failure_reasons) in pass1.items():
     token = key[1]
-    if status == "Skipped":
+    if status == "Skipped" and key[:2] not in listed:
         counts[token]["skipped"] += 1
-    elif status in passed:
+    elif status in healed_statuses:
         counts[token]["passed"] += 1
     elif pass2.get(key, ("missing", ""))[0] in healed_statuses:
         counts[token]["passed on re-run"] += 1

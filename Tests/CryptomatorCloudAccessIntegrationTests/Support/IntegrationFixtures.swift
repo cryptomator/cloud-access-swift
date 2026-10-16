@@ -294,7 +294,7 @@ actor IntegrationFixtures {
 				for item in level {
 					group.addTask {
 						try await kind.semaphore.withPermit(budget: buildStepBudget) {
-							try await retryOnEventualConsistencyError { try await item.create(with: provider) }
+							try await retryOnEventualConsistencyError(on: kind) { try await item.create(with: provider) }
 						}
 					}
 				}
@@ -329,9 +329,11 @@ actor IntegrationFixtures {
 	/**
 	 Retries a create that fails because an item it depends on isn't visible yet (e.g. on S3).
 
-	 A failed attempt can already have created the item, at least in part, e.g. the folder of a vault decorator's `createFolder` without its `dir.c9r`, or an S3 upload whose metadata wasn't visible yet. The next attempt then fails with `itemAlreadyExists`, which is thrown as `IntegrationTestError.consistencyTimeout`, so that the fixture is built again at a new path instead of failing for the rest of the run.
+	 A failed attempt can already have created the item, at least in part, e.g. the folder of a vault decorator's `createFolder` without its `dir.c9r`, or an S3 upload whose metadata wasn't visible yet. The next attempt then fails with `itemAlreadyExists`.
+
+	 That failure is thrown as `IntegrationTestError.consistencyTimeout`, and so is the last attempt's failure on an eventually consistent provider, so that the fixture is built again at a new path instead of failing for the rest of the run. On any other provider, the last attempt's error is rethrown, so that a regression fails the fixture instead of being retried, as in `eventually(on:)`.
 	 */
-	private static func retryOnEventualConsistencyError(maxAttempts: Int = 10, operation: () async throws -> Void) async throws {
+	private static func retryOnEventualConsistencyError(on kind: IntegrationProvider, maxAttempts: Int = 10, operation: () async throws -> Void) async throws {
 		for attempt in 0 ..< maxAttempts {
 			do {
 				try await operation()
@@ -339,8 +341,11 @@ actor IntegrationFixtures {
 			} catch CloudProviderError.itemAlreadyExists where attempt > 0 {
 				throw IntegrationTestError.consistencyTimeout
 			} catch {
-				guard isEventualConsistencyError(error), attempt < maxAttempts - 1 else {
+				guard isEventualConsistencyError(error) else {
 					throw error
+				}
+				guard attempt < maxAttempts - 1 else {
+					throw kind.isEventuallyConsistent ? IntegrationTestError.consistencyTimeout : error
 				}
 				try await Task.sleep(for: .seconds(2))
 			}

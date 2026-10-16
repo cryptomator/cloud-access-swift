@@ -21,12 +21,6 @@ class MicrosoftGraphCredentialMock: MicrosoftGraphCredential, @unchecked Sendabl
 		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, accessTokenProvider: accessTokenProvider, clientApplication: clientApplication)
 	}
 
-	func resetAccessTokenOverride() {
-		// swiftlint:disable:next force_cast
-		let accessTokenProvider = accessTokenProvider as! MicrosoftGraphAccessTokenProviderMock
-		accessTokenProvider.overrideAccessToken = nil
-	}
-
 	override func deauthenticate() throws {
 		// swiftlint:disable:next force_cast
 		let accessTokenProvider = accessTokenProvider as! MicrosoftGraphAccessTokenProviderMock

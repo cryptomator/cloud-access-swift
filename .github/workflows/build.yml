@@ -4,6 +4,12 @@ on:
   push:
   pull_request_target:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      backends:
+        description: 'Integration test backends, e.g. pcloud,s3-vf7 (empty runs all)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -46,45 +52,27 @@ jobs:
         continue-on-error: true
 
   integration-tests:
-    name: Run integration tests for ${{ matrix.name }}
+    name: Run integration tests
     runs-on: [self-hosted, macOS, ARM64]
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read # Required for downloading the still-failing tests of the previous attempt
     env:
       DERIVED_DATA_PATH: 'DerivedData'
       DEVICE: 'iPhone 17 Pro'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - name: Box
-          scheme-name: BoxIntegrationTests
-        - name: Common
-          scheme-name: CommonIntegrationTests
-        - name: Dropbox
-          scheme-name: DropboxIntegrationTests
-        - name: Google Drive
-          scheme-name: GoogleDriveIntegrationTests
-        - name: Local File System
-          scheme-name: LocalFileSystemIntegrationTests
-        - name: Microsoft Graph
-          scheme-name: MicrosoftGraphIntegrationTests
-        - name: pCloud
-          scheme-name: PCloudIntegrationTests
-        - name: S3
-          scheme-name: S3IntegrationTests
-        - name: WebDAV
-          scheme-name: WebDAVIntegrationTests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: ${{ runner.os }}-integration-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-spm-
-      - name: Run integration tests
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild -scheme '${{ matrix.scheme-name }}' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH test | xcbeautify
+            ${{ runner.os }}-integration-spm-
+      - name: Build
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild build-for-testing -scheme 'AllIntegrationTests' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH | xcbeautify
         env:
           BOX_CLIENT_ID: ${{ secrets.BOX_CLIENT_ID }}
           BOX_CLIENT_SECRET: ${{ secrets.BOX_CLIENT_SECRET }}
@@ -106,6 +94,36 @@ jobs:
           WEBDAV_BASE_URL: ${{ secrets.WEBDAV_BASE_URL }}
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
+      - name: Determine previous attempt
+        id: previous-attempt
+        if: github.run_attempt > 1
+        run: echo "number=$(( GITHUB_RUN_ATTEMPT - 1 ))" >> "$GITHUB_OUTPUT"
+      - name: Download still-failing tests of previous attempt
+        if: github.run_attempt > 1
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: integration-still-failing-${{ steps.previous-attempt.outputs.number }}
+          path: integration-input
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Run integration tests
+        run: |
+          # A missing list means that the previous attempt didn't finish its main pass, and --only rejects an empty one, so either way everything runs.
+          if [ -s integration-input/still-failing.txt ]; then
+            ./Scripts/run-integration-tests.sh --only integration-input/still-failing.txt
+          else
+            ./Scripts/run-integration-tests.sh
+          fi
+        env:
+          BACKENDS: ${{ inputs.backends }}
+      - name: Upload still-failing tests
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-still-failing-${{ github.run_attempt }}
+          path: integration-output/still-failing.txt
+          if-no-files-found: ignore
 
   release:
     name: Deploy and draft a release
@@ -113,7 +131,7 @@ jobs:
     needs: build
     permissions:
       contents: write # Required for drafting the release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Draft release

@@ -10,10 +10,11 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "NO">
       <Testables>
          <TestableReference
-            skipped = "NO">
+            skipped = "NO"
+            parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "4ACA638D2615FDFF00D19304"
@@ -21,85 +22,15 @@
                BlueprintName = "CryptomatorCloudAccessIntegrationTests"
                ReferencedContainer = "container:CryptomatorCloudAccess.xcodeproj">
             </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "BoxCloudProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "CloudAccessIntegrationTest">
-               </Test>
-               <Test
-                  Identifier = "CloudAccessIntegrationTestWithAuthentication">
-               </Test>
-               <Test
-                  Identifier = "CloudProvider_CreateIntermediateFolderTests">
-               </Test>
-               <Test
-                  Identifier = "DropboxCloudProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "GoogleDriveAuthenticatorMockTests">
-               </Test>
-               <Test
-                  Identifier = "LocalFileSystemProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "MicrosoftGraphCloudProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "PCloudCloudProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "S3CloudProviderIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6BoxIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6DropboxIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6LocalFileSystemIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6MicrosoftGraphIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6PCloudIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6S3IntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat6WebDAVIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7BoxIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7DropboxIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7LocalFileSystemIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7MicrosoftGraphIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7PCloudIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7S3IntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "VaultFormat7WebDAVIntegrationTests">
-               </Test>
-               <Test
-                  Identifier = "WebDAVCloudProviderIntegrationTests">
-               </Test>
-            </SkippedTests>
          </TestableReference>
       </Testables>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "INTEGRATION_BACKENDS"
+            value = "googledrive"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

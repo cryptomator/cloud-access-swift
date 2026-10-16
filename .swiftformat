@@ -13,6 +13,7 @@
 --stripunusedargs closure-only
 --swiftversion 6.2
 --tabwidth 4
+--test-case-name-format standard-identifiers
 
 # rules
 

@@ -13,7 +13,7 @@
 #endif
 import Foundation
 import os
-import XCTest
+import Testing
 
 enum CloudProviderFolderMockError: Error {
 	case notMocked
@@ -81,36 +81,30 @@ private final class CloudProviderFolderMock: CloudProvider {
 	}
 }
 
-class CloudProvider_CreateIntermediateFolderTests: XCTestCase {
-	func testDoesNotCreateAnyFolderForRootPath() async throws {
+struct CloudProvider_CreateIntermediateFolderTests {
+	@Test
+	func doesNotCreateAnyFolderForRootPath() async throws {
 		let provider = CloudProviderFolderMock()
 		try await provider.createFolderWithIntermediates(for: CloudPath("/"))
-		guard provider.createdFolders.isEmpty else {
-			XCTFail("Provider created at least one folder")
-			return
-		}
+		#expect(provider.createdFolders.isEmpty, "Provider created at least one folder")
 	}
 
-	func testCreateFolderWithIntermediates() async throws {
+	@Test
+	func createFolderWithIntermediates() async throws {
 		let provider = CloudProviderFolderMock()
 		let path = CloudPath("/Foo/Bar")
 		try await provider.createFolderWithIntermediates(for: path)
-		guard provider.createdFolders.count == 2 else {
-			XCTFail("Provider created not exactly two folders")
-			return
-		}
-		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo")))
-		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
+		try #require(provider.createdFolders.count == 2, "Provider created not exactly two folders")
+		#expect(provider.createdFolders.contains(CloudPath("/Foo")))
+		#expect(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
 	}
 
-	func testCreateFolderWithIntermediatesIfAFolderAlreadyExists() async throws {
+	@Test
+	func createFolderWithIntermediatesIfAFolderAlreadyExists() async throws {
 		let provider = CloudProviderFolderMock(existingFolders: [CloudPath("/Foo")])
 		let path = CloudPath("/Foo/Bar")
 		try await provider.createFolderWithIntermediates(for: path)
-		guard provider.createdFolders.count == 1 else {
-			XCTFail("Provider created not exactly two folders")
-			return
-		}
-		XCTAssert(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
+		try #require(provider.createdFolders.count == 1, "Provider created not exactly one folder")
+		#expect(provider.createdFolders.contains(CloudPath("/Foo/Bar")))
 	}
 }

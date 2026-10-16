@@ -15,7 +15,7 @@ import os
 #endif
 
 enum MicrosoftGraphAccessTokenProviderMockError: Error {
-	case invalidRefreshToken
+	case tokenRequestFailed(statusCode: Int)
 }
 
 final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProvider {
@@ -25,24 +25,40 @@ final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProv
 		set { lockedOverrideAccessToken.withLock { $0 = newValue } }
 	}
 
-	private let lockedAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
-	var accessToken: String? {
-		get { lockedAccessToken.withLock { $0 } }
-		set { lockedAccessToken.withLock { $0 = newValue } }
-	}
+	/// The request for the access token, shared by concurrent callers so that the refresh token is redeemed once.
+	private let lockedAccessTokenTask = OSAllocatedUnfairLock<Task<String, Error>?>(initialState: nil)
 
 	func getAccessToken() async throws -> String {
-		if let accessToken = overrideAccessToken ?? accessToken {
-			return accessToken
+		if let overrideAccessToken {
+			return overrideAccessToken
 		}
+		let accessTokenTask = lockedAccessTokenTask.withLock { accessTokenTask in
+			if let accessTokenTask {
+				return accessTokenTask
+			}
+			let newAccessTokenTask = Task { try await self.requestAccessToken() }
+			accessTokenTask = newAccessTokenTask
+			return newAccessTokenTask
+		}
+		do {
+			return try await accessTokenTask.value
+		} catch {
+			lockedAccessTokenTask.withLock { lockedTask in
+				if lockedTask == accessTokenTask {
+					lockedTask = nil
+				}
+			}
+			throw error
+		}
+	}
+
+	private func requestAccessToken() async throws -> String {
 		let (data, response) = try await URLSession.shared.data(for: getAccessTokenRequest())
-		guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-			throw MicrosoftGraphAccessTokenProviderMockError.invalidRefreshToken
+		let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+		guard statusCode == 200 else {
+			throw MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: statusCode)
 		}
-		let accessTokenResponse = try getAccessTokenResponse(from: data)
-		overrideAccessToken = accessTokenResponse.accessToken
-		accessToken = accessTokenResponse.accessToken
-		return accessTokenResponse.accessToken
+		return try getAccessTokenResponse(from: data).accessToken
 	}
 
 	private func getAccessTokenRequest() -> URLRequest {

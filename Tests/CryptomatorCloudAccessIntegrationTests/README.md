@@ -126,7 +126,9 @@ An attempt that fails with a transient error is retried in-process with a new co
 
 An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because SDK calls don't respond to cancellation.
 
-In CI, `Scripts/run-integration-tests.sh` re-runs the failed (test, backend) pairs once against the same build. The job is green only if each of them passed. The job summary lists those that passed only on the re-run, and the in-process retries. A re-run of the job via "Re-run failed jobs" runs only the pairs still failing at the end of the previous attempt, or everything if that attempt didn't finish its main pass.
+In CI, `Scripts/run-integration-tests.sh` re-runs the failed tests once against the same build. It runs every failed test on every backend that a test failed on, so a test can also run on a backend it didn't fail on. A failed provider-specific test adds all backends of its provider. The job is green only if each failed (test, backend) pair passed on the re-run, so the extra runs don't count. A re-run of the job via "Re-run failed jobs" selects the same way from the pairs still failing at the end of the previous attempt, and its main pass then counts all the pairs it runs. If that attempt didn't finish its main pass, it runs everything.
+
+The job summary lists the pairs that passed only on the re-run, those still failing, and the in-process retries. Because S3 errors can contain request URLs with credentials, it shows only the parts of a failure message that can't contain them, such as an error's domain and code.
 
 ## Remote Folders
 

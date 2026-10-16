@@ -92,11 +92,14 @@ func withIntegrationFixture(_ backend: IntegrationBackend, budget: Duration, bac
 	try await retryingTransientErrors(of: backend.token, backoffs: backoffs) {
 		// The fixture is awaited without a permit, because its build takes permits of the same semaphore.
 		let fixture = try await IntegrationFixtures.shared.fixture(for: backend)
-		let context = try IntegrationTestContext(fixture: fixture)
-		defer {
-			try? FileManager.default.removeItem(at: context.tmpDirURL)
+		// The context is created with the permit, so that only tests that run hold a provider and a temporary folder.
+		try await semaphore.withPermit(budget: budget) {
+			let context = try IntegrationTestContext(fixture: fixture)
+			defer {
+				try? FileManager.default.removeItem(at: context.tmpDirURL)
+			}
+			try await body(context)
 		}
-		try await semaphore.withPermit(budget: budget) { try await body(context) }
 	}
 }
 

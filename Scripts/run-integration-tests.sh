@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Runs the integration tests of an existing build in one parallel pass, then re-runs only the failed
-# (test, backend) pairs once. Writes the pairs that are still failing to integration-output/still-failing.txt
-# and a summary to $GITHUB_STEP_SUMMARY.
+# Runs the integration tests of an existing build in one parallel pass, then re-runs the failed tests once on the
+# backends that had failures. Writes the (test, backend) pairs that are still failing to
+# integration-output/still-failing.txt and a summary to $GITHUB_STEP_SUMMARY.
 #
 # Usage: Scripts/run-integration-tests.sh [--only <file>]
 #
@@ -11,7 +11,7 @@
 #   DEVICE             Simulator name (default: iPhone 17 Pro)
 #   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf7` (default: all backends)
 #
-# --only runs just the pairs of a still-failing.txt of an earlier run. Each of its lines is
+# --only runs just the tests of a still-failing.txt of an earlier run, on the backends it lists. Each of its lines is
 # `<nodeIdentifier>\t<token>`, where the token is a backend token (`pcloud-vf7`), a provider token
 # (`s3`) for provider-specific tests, or `-` followed by `\t<BACKENDS of that run>` for tests of no backend.
 
@@ -47,7 +47,40 @@ mkdir -p "$OUTPUT_DIR"
 rm -f "$STILL_FAILING_FILE"
 SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
-# Prints the filter and the -only-testing arguments that re-run the pairs listed in the given file.
+# The summary is public, and an S3 error's description can contain request URLs with credentials. So a failure message
+# is reduced to a part that can't contain them: an error's domain and code, a case of a known error, a known error that
+# wasn't thrown, or that an expectation failed. Anything else becomes `details withheld`. Expectations aren't quoted,
+# because tests interpolate metadata, contents and errors into them.
+cat > "$WORK_DIR/failure_reason.py" <<'EOF'
+import re
+
+# The cases of CloudProviderError and IntegrationTestError.
+KNOWN_ERRORS = {
+    "itemNotFound", "itemAlreadyExists", "itemTypeMismatch", "parentFolderDoesNotExist", "pageTokenInvalid",
+    "quotaInsufficient", "unauthorized", "noInternetConnection",
+    "consistencyTimeout", "itemNotVisible", "fixtureTimeout", "budgetExceeded",
+}
+
+def reason(message):
+    message = message.strip()
+    if not message:
+        return ""
+    domain_code = re.search(r"\bError Domain=([A-Za-z0-9_.-]+) Code=(-?\d+)", message)
+    if domain_code:
+        return f"{domain_code.group(1)} {domain_code.group(2)}"
+    known_error = re.fullmatch(r"(?:Caught error: )?([A-Za-z]+)(?:\(.*\))?", message, re.DOTALL)
+    if known_error and known_error.group(1) in KNOWN_ERRORS:
+        return known_error.group(1)
+    not_thrown = re.fullmatch(r"Expected ([A-Za-z]+), but nothing was thrown", message)
+    if not_thrown and not_thrown.group(1) in KNOWN_ERRORS:
+        return message
+    if message.startswith("Expectation failed"):
+        return "expectation failed"
+    return "details withheld"
+EOF
+
+# Prints the filter and the -only-testing arguments that re-run the tests listed in the given file on all of its
+# backends, which can include backends that a test didn't fail on.
 selection_for() {
   python3 -I - "$1" "$TEST_BUNDLE" <<'EOF'
 import sys
@@ -67,7 +100,7 @@ for node_identifier in dict.fromkeys(fields[0] for fields in lines):
 EOF
 }
 
-# Runs the pairs listed in the given file as the named pass.
+# Runs the tests listed in the given file on its backends as the named pass.
 run_selected_pass() {
   local name="$1" filter only_testing=() line
   # A selection that can't be read must not turn into a run of everything.
@@ -108,13 +141,16 @@ run_pass() {
   echo "::endgroup::"
 }
 
-# Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<BACKENDS if the token is ->\t<failure message>` per pair.
+# Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<BACKENDS if the token is ->\t<failure reasons>` per pair.
 # Returns non-zero if the pass is incomplete, e.g. if its result can't be read, a test process crashed, or the run failed without a failed test.
 parse_pass() {
   local name="$1"
   xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json" 2> "$WORK_DIR/$name.parse-error" || return 1
-  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$BACKENDS" > "$WORK_DIR/$name.tsv" <<'EOF'
+  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$BACKENDS" "$WORK_DIR" > "$WORK_DIR/$name.tsv" <<'EOF'
 import json, re, sys
+
+sys.path.insert(0, sys.argv[4])
+from failure_reason import reason
 
 results = json.load(open(sys.argv[1]))
 exit_code = int(sys.argv[2])
@@ -127,6 +163,9 @@ incomplete = False
 
 def messages(node):
     return [child.get("name", "") for child in node.get("children", []) if child.get("nodeType") == "Failure Message"]
+
+def reasons(failure_messages):
+    return "; ".join(dict.fromkeys(filter(None, map(reason, failure_messages))))
 
 def token_for(node_identifier):
     match = re.search(r"(?:^|/)ProviderSpecific/([^/]+)Tests/", node_identifier)
@@ -146,9 +185,9 @@ def walk(node):
             incomplete = True
         if arguments and all(backend_token.match(argument.get("name", "")) for argument in arguments):
             for argument in arguments:
-                pairs.append((argument.get("result", "unknown"), node_identifier, argument["name"], " ".join(messages(argument) + messages(node))))
+                pairs.append((argument.get("result", "unknown"), node_identifier, argument["name"], reasons(messages(argument) + messages(node))))
         else:
-            pairs.append((node.get("result", "unknown"), node_identifier, token_for(node_identifier), " ".join(messages(node))))
+            pairs.append((node.get("result", "unknown"), node_identifier, token_for(node_identifier), reasons(messages(node))))
         return
     for child in node.get("children", []):
         walk(child)
@@ -159,9 +198,8 @@ if not pairs:
     incomplete = True
 if exit_code != 0 and not any(status == "Failed" for status, *_ in pairs):
     incomplete = True
-for status, node_identifier, token, message in pairs:
-    flat_message = " ".join(message.split())
-    print(f"{status}\t{node_identifier}\t{token}\t{backends if token == '-' else ''}\t{flat_message}")
+for status, node_identifier, token, failure_reasons in pairs:
+    print(f"{status}\t{node_identifier}\t{token}\t{backends if token == '-' else ''}\t{failure_reasons}")
 sys.exit(1 if incomplete else 0)
 EOF
 }
@@ -214,14 +252,14 @@ def read(name):
         return {}
     pairs = {}
     for line in open(path):
-        status, node_identifier, token, backends, message = line.rstrip("\n").split("\t")
-        pairs[(node_identifier, token, backends)] = (status, message)
+        status, node_identifier, token, backends, failure_reasons = line.rstrip("\n").split("\t")
+        pairs[(node_identifier, token, backends)] = (status, failure_reasons)
     return pairs
 
 pass1, pass2 = read("pass1"), read("pass2")
 healed, still_failing = [], []
 counts = collections.defaultdict(lambda: collections.Counter())
-for key, (status, message) in pass1.items():
+for key, (status, failure_reasons) in pass1.items():
     token = key[1]
     if status == "Skipped":
         counts[token]["skipped"] += 1
@@ -229,10 +267,10 @@ for key, (status, message) in pass1.items():
         counts[token]["passed"] += 1
     elif pass2.get(key, ("missing", ""))[0] in healed_statuses:
         counts[token]["passed on re-run"] += 1
-        healed.append((key, message))
+        healed.append((key, failure_reasons))
     else:
         counts[token]["failed"] += 1
-        still_failing.append((key, pass2.get(key, (None, message))[1] or message))
+        still_failing.append((key, pass2.get(key, (None, failure_reasons))[1] or failure_reasons))
 
 with open(still_failing_file, "w") as file:
     for (node_identifier, token, backends), _ in still_failing:
@@ -247,32 +285,31 @@ if pass2_incomplete:
     print("\n:x: The re-run pass did not complete, so its pairs count as still failing.")
 if healed:
     print("\n### Passed only on re-run\n")
-    for (node_identifier, token, _), message in healed:
-        print(f"- `{node_identifier}` `{token}`: {message or 'no failure message'}")
+    for (node_identifier, token, _), failure_reasons in healed:
+        print(f"- `{node_identifier}` `{token}`: {failure_reasons or 'no failure message'}")
 if still_failing:
     print("\n### Still failing\n")
-    for (node_identifier, token, _), message in still_failing:
-        print(f"- `{node_identifier}` `{token}`: {message or 'no failure message'}")
+    for (node_identifier, token, _), failure_reasons in still_failing:
+        print(f"- `{node_identifier}` `{token}`: {failure_reasons or 'no failure message'}")
 EOF
 # A failed summary script fails the run, because still-failing.txt may then be incomplete.
 summary_status=$?
 
-# The retries within a pass are only logged to the console of the test process. The summary gets the test, backend,
-# attempt and error domain and code (or else the error's first word) of each, but not the error description, which can
-# contain request URLs with credentials.
+# The retries within a pass are only logged to the console of the test process, so they are read from the action log.
 for name in pass1 pass2; do
   if [ -d "$WORK_DIR/$name.xcresult" ]; then
     xcrun xcresulttool get log --path "$WORK_DIR/$name.xcresult" --type action 2> /dev/null | python3 -I -c '
 import re, sys
+sys.path.insert(0, sys.argv[2])
+from failure_reason import reason
 retries = []
 for match in re.finditer(r"\[integration-retry\] (\S+) (\S+) attempt (\d+): ([^\n\x5c\x22]*)", sys.stdin.read()):
     test, backend, attempt, error = match.groups()
-    code = re.search(r"Domain=(\S+) Code=(-?\d+)", error)
-    reason = f"{code.group(1)} {code.group(2)}" if code else re.split(r"[(:\s]", error, maxsplit=1)[0]
-    retries.append(f"- {sys.argv[1]}: `{test}` `{backend}` attempt {attempt}: {reason}")
+    failure_reason = reason(error) or "no failure message"
+    retries.append(f"- {sys.argv[1]}: `{test}` `{backend}` attempt {attempt}: {failure_reason}")
 # The action log repeats the console output.
 print("\n".join(dict.fromkeys(retries)))
-' "$name"
+' "$name" "$WORK_DIR"
   fi
 done | grep -v '^$' > "$WORK_DIR/retries.md"
 if [ -s "$WORK_DIR/retries.md" ]; then

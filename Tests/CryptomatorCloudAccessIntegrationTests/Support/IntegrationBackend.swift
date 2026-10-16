@@ -43,6 +43,11 @@ enum IntegrationProvider: String, CaseIterable, Codable, Sendable {
 	var supportsPagination: Bool {
 		return self != .pCloud
 	}
+
+	/// Whether each test attempt needs an instance of its own, because concurrent listings of the same folder on one instance interfere with each other in its directory content cache.
+	var needsProviderPerTest: Bool {
+		return self == .localFileSystem || self == .webDAV
+	}
 }
 
 enum IntegrationVaultFormat: String, CaseIterable, Codable, Sendable {

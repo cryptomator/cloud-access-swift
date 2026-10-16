@@ -20,9 +20,12 @@ struct IntegrationAccount: Sendable {
 	let limitedProvider: CloudProvider
 	let runRoot: CloudPath
 
-	/// The local file system provider is created per test, because concurrent listings of the same folder on one instance interfere with each other.
 	func makeTestProvider() throws -> CloudProvider {
-		return kind == .localFileSystem ? try kind.makeProvider() : provider
+		return kind.needsProviderPerTest ? try kind.makeProvider() : provider
+	}
+
+	func makeLimitedTestProvider() throws -> CloudProvider {
+		return kind.needsProviderPerTest ? try kind.makeProvider(maxPageSize: IntegrationFixtures.maxPageSizeForLimitedProvider) : limitedProvider
 	}
 }
 
@@ -120,7 +123,8 @@ struct IntegrationFixture: Sendable {
 	}
 
 	func makeLimitedProvider() throws -> CloudProvider {
-		return try vault?.makeDecorator(delegate: account.limitedProvider) ?? account.limitedProvider
+		let delegate = try account.makeLimitedTestProvider()
+		return try vault?.makeDecorator(delegate: delegate) ?? delegate
 	}
 }
 
@@ -148,7 +152,7 @@ actor IntegrationFixtures {
 	private static let buildTimeout: Duration = .seconds(600)
 	/// The budget of each step of a build that holds a permit.
 	private static let buildStepBudget: Duration = .seconds(300)
-	private static let maxPageSizeForLimitedProvider = 3
+	static let maxPageSizeForLimitedProvider = 3
 
 	private let accounts = TaskCache<IntegrationProvider, IntegrationAccount>()
 	private let fixtures = TaskCache<IntegrationBackend, IntegrationFixture>()
@@ -322,12 +326,18 @@ actor IntegrationFixtures {
 		}
 	}
 
-	/// Retries an operation that fails because a just-created or just-deleted item's state hasn't propagated yet (e.g. on S3).
+	/**
+	 Retries a create that fails because an item it depends on isn't visible yet (e.g. on S3).
+
+	 A failed attempt can already have created the item, at least in part, e.g. the folder of a vault decorator's `createFolder` without its `dir.c9r`, or an S3 upload whose metadata wasn't visible yet. The next attempt then fails with `itemAlreadyExists`, which is thrown as `IntegrationTestError.consistencyTimeout`, so that the fixture is built again at a new path instead of failing for the rest of the run.
+	 */
 	private static func retryOnEventualConsistencyError(maxAttempts: Int = 10, operation: () async throws -> Void) async throws {
 		for attempt in 0 ..< maxAttempts {
 			do {
 				try await operation()
 				return
+			} catch CloudProviderError.itemAlreadyExists where attempt > 0 {
+				throw IntegrationTestError.consistencyTimeout
 			} catch {
 				guard isEventualConsistencyError(error), attempt < maxAttempts - 1 else {
 					throw error
@@ -339,7 +349,7 @@ actor IntegrationFixtures {
 
 	private static func isEventualConsistencyError(_ error: Error) -> Bool {
 		switch error {
-		case CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound, CloudProviderError.itemAlreadyExists:
+		case CloudProviderError.parentFolderDoesNotExist, CloudProviderError.itemNotFound:
 			return true
 		default:
 			return false

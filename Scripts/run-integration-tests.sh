@@ -253,7 +253,9 @@ work_dir, still_failing_file, pass2_incomplete, only_file = sys.argv[1], sys.arg
 # A skip doesn't heal a pair that failed before: a pair of the re-run pass, or a pair that --only lists. A listed pair
 # that the main pass skips isn't re-run, because the re-run would select it the same way and skip it again.
 healed_statuses = set(sys.argv[5].split("|")) - {"Skipped"}
-listed = {tuple(line.rstrip("\n").split("\t")[:2]) for line in open(only_file) if line.strip()} if only_file else set()
+# The BACKENDS of each pair that --only lists, which only a `-` token's line has.
+only_lines = [line.rstrip("\n").split("\t") for line in open(only_file) if line.strip()] if only_file else []
+listed = {tuple(fields[:2]): fields[2] if len(fields) > 2 else "" for fields in only_lines}
 
 def read(name):
     path = os.path.join(work_dir, f"{name}.tsv")
@@ -280,6 +282,13 @@ for key, (status, failure_reasons) in pass1.items():
     else:
         counts[token]["failed"] += 1
         still_failing.append((key, pass2.get(key, (None, failure_reasons))[1] or failure_reasons))
+# A listed pair that the main pass has no result for stays failing, so a test that didn't run can't drop out of
+# still-failing.txt. It isn't re-run either, because the re-run would select it the same way.
+reported = {key[:2] for key in pass1}
+for (node_identifier, token), backends in listed.items():
+    if (node_identifier, token) not in reported:
+        counts[token]["failed"] += 1
+        still_failing.append(((node_identifier, token, backends), "no result"))
 
 with open(still_failing_file, "w") as file:
     for (node_identifier, token, backends), _ in still_failing:

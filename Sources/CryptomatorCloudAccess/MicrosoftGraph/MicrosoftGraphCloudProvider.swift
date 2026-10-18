@@ -228,7 +228,8 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private func createUploadSession(for parentItem: MicrosoftGraphItem, with filename: String) async throws -> URL {
 		let request = try createUploadSessionRequest(for: parentItem, with: filename)
-		let data = try await sendExpectingOK(request)
+		// The upload URL in the response is pre-authenticated.
+		let data = try await sendExpectingOK(request, bodyLogging: .omitted)
 		let uploadSession = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.UploadSession.self, from: data)
 		guard let uploadSessionURLString = uploadSession.uploadUrl, let uploadSessionURL = URL(string: uploadSessionURLString) else {
 			throw MicrosoftGraphError.invalidURL
@@ -363,16 +364,16 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Execution
 
-	private func send(_ request: URLRequest) async throws -> (HTTPURLResponse, Data) {
+	private func send(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> (HTTPURLResponse, Data) {
 		do {
-			return try await client.data(for: request)
+			return try await client.data(for: request, bodyLogging: bodyLogging)
 		} catch {
 			throw convertStandardError(error)
 		}
 	}
 
-	private func sendExpectingOK(_ request: URLRequest) async throws -> Data {
-		let (response, data) = try await send(request)
+	private func sendExpectingOK(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
+		let (response, data) = try await send(request, bodyLogging: bodyLogging)
 		guard response.statusCode == 200 else {
 			throw mapStatusCodeToError(response.statusCode)
 		}

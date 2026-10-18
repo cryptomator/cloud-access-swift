@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		10164FF0814246B4BB6353DD /* HTTPDebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177E55054B52430EA9E33F46 /* HTTPDebugLoggerTests.swift */; };
+		58B948C6995149108158C535 /* LogCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3814229743F14C1496F29BE6 /* LogCapture.swift */; };
+		6DAA51063C0D480C9DC87186 /* WebDAVChallengeHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E35CC06167084D84AAF634BD /* WebDAVChallengeHandlerTests.swift */; };
+		85B775B8CBE14BEE8742401E /* BackgroundURLSessionRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */; };
+		C766552960E84D6DB3CC89F3 /* BackgroundURLSessionRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08F613DBC6144917BF4D7443 /* BackgroundURLSessionRegistry.swift */; };
 		FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */; };
 		83D221F5D53B5AFE8CC0BE48 /* TLSCertificateValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */; };
 		0E32E10C4824CBE9FAD8D55F /* WebDAVClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */; };
@@ -236,6 +241,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		177E55054B52430EA9E33F46 /* HTTPDebugLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPDebugLoggerTests.swift; sourceTree = "<group>"; };
+		3814229743F14C1496F29BE6 /* LogCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogCapture.swift; sourceTree = "<group>"; };
+		E35CC06167084D84AAF634BD /* WebDAVChallengeHandlerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVChallengeHandlerTests.swift; sourceTree = "<group>"; };
+		CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundURLSessionRegistryTests.swift; sourceTree = "<group>"; };
+		08F613DBC6144917BF4D7443 /* BackgroundURLSessionRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundURLSessionRegistry.swift; sourceTree = "<group>"; };
 		93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitURLSessionTests.swift; sourceTree = "<group>"; };
 		D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidatorTests.swift; sourceTree = "<group>"; };
 		2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientTests.swift; sourceTree = "<group>"; };
@@ -478,6 +488,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C8E045E07D5544019ADCCD9A /* Logging */ = {
+			isa = PBXGroup;
+			children = (
+				3814229743F14C1496F29BE6 /* LogCapture.swift */,
+				177E55054B52430EA9E33F46 /* HTTPDebugLoggerTests.swift */,
+			);
+			path = Logging;
+			sourceTree = "<group>";
+		};
 		4A058FE724519FFC008831F9 = {
 			isa = PBXGroup;
 			children = (
@@ -531,6 +550,7 @@
 				4A3A396C2615F97600F16B26 /* Dropbox */,
 				4A3A39772615F9AA00F16B26 /* GoogleDrive */,
 				740A7FDB24C5DFB3000216E7 /* LocalFileSystem */,
+				C8E045E07D5544019ADCCD9A /* Logging */,
 				4A0C90222636D59800ADB421 /* MicrosoftGraph */,
 				7402B48227D2625E00BE9F8B /* PCloud */,
 				4A2745FA2847887F00E70D5F /* S3 */,
@@ -650,6 +670,7 @@
 			children = (
 				B7E8F9A0C1D243E5A6B7C8D9 /* AllSettled.swift */,
 				E4B07D2F5A6C4819B3F0D7A2 /* CancellationError.swift */,
+				08F613DBC6144917BF4D7443 /* BackgroundURLSessionRegistry.swift */,
 				4A765CA22878596000794440 /* DirectoryContentCache.swift */,
 				4257D85004FC4A409257C014 /* DownloadOperation.swift */,
 				CA6257FC8E944BC7AA3947D1 /* Progress+Explicit.swift */,
@@ -679,6 +700,7 @@
 				6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */,
 				396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */,
 				93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */,
+				CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */,
 			);
 			path = Common;
 			sourceTree = "<group>";
@@ -911,6 +933,7 @@
 				746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */,
 				D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */,
 				2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */,
+				E35CC06167084D84AAF634BD /* WebDAVChallengeHandlerTests.swift */,
 				74F57AD524BCB4E80040513A /* AuthenticatorResponses */,
 				74E54F5A24BCB6B9003379FA /* ClientTestResponses */,
 				748420C224B8A20D00D84E58 /* PropfindTestRequests */,
@@ -1376,6 +1399,7 @@
 				BA054C1AAD2F468ABF404168 /* DownloadOperation.swift in Sources */,
 				1A76A2AB4075408FA398277B /* Progress+Explicit.swift in Sources */,
 				F93F0263423442348B37641C /* SDKContinuation.swift in Sources */,
+				C766552960E84D6DB3CC89F3 /* BackgroundURLSessionRegistry.swift in Sources */,
 				B3A1C0E32E9D4F7A00B0C5D1 /* SplitURLSession.swift in Sources */,
 				05788765F72F41AFA690C2F3 /* StagingFile.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
@@ -1449,6 +1473,10 @@
 				761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */,
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
 				FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */,
+				10164FF0814246B4BB6353DD /* HTTPDebugLoggerTests.swift in Sources */,
+				58B948C6995149108158C535 /* LogCapture.swift in Sources */,
+				6DAA51063C0D480C9DC87186 /* WebDAVChallengeHandlerTests.swift in Sources */,
+				85B775B8CBE14BEE8742401E /* BackgroundURLSessionRegistryTests.swift in Sources */,
 				A24B06589C535B534CD7BD69 /* BoxCloudProviderTests.swift in Sources */,
 				353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */,
 				1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */,

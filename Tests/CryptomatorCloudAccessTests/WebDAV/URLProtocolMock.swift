@@ -51,6 +51,14 @@ class URLProtocolMock: URLProtocol {
 	}
 
 	override func stopLoading() {}
+
+	/// Returns a configuration whose requests this mock answers and that sends the marker in the `X-Session` header, so that a test can tell which session sent a request.
+	static func configuration(marker: String) -> URLSessionConfiguration {
+		let configuration = URLSessionConfiguration.default
+		configuration.protocolClasses = [URLProtocolMock.self]
+		configuration.httpAdditionalHeaders = ["X-Session": marker]
+		return configuration
+	}
 }
 
 struct URLAuthenticationChallengeMock {
@@ -99,6 +107,9 @@ class URLProtocolAuthenticationMock: URLProtocol {
 class URLProtocolSequenceMock: URLProtocol {
 	enum Step {
 		case response(HTTPURLResponse, Data?)
+		/// A response whose body is delivered in several chunks, with a pause in between. URLSession then passes each chunk of about 1 KiB or more to the delegate in a separate call, and may still combine smaller ones. This is observed, not documented.
+		case chunkedResponse(HTTPURLResponse, [Data])
+		case failure(Error)
 		case authChallenge(URLAuthenticationChallengeMock)
 	}
 
@@ -118,6 +129,18 @@ class URLProtocolSequenceMock: URLProtocol {
 				client?.urlProtocol(self, didLoad: data)
 			}
 			client?.urlProtocolDidFinishLoading(self)
+		case let .chunkedResponse(response, chunks):
+			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+			for (index, chunk) in chunks.enumerated() {
+				if index > 0 {
+					// Without the pause, URLSession combines chunks loaded back to back.
+					Thread.sleep(forTimeInterval: 0.05)
+				}
+				client?.urlProtocol(self, didLoad: chunk)
+			}
+			client?.urlProtocolDidFinishLoading(self)
+		case let .failure(error):
+			client?.urlProtocol(self, didFailWithError: error)
 		case let .authChallenge(settings):
 			let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
 			let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: settings.previousFailureCount, failureResponse: settings.failureResponse, error: nil, sender: URLAuthenticationChallengeSenderMock())

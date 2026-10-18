@@ -123,9 +123,16 @@ final class BoxURLSessionNetworkClient: NetworkClient, Sendable {
 			let (response, data) = try await session.upload(request, fromFile: bodyFile.url)
 			return BoxTaskResult(response: response, data: data, downloadDestinationURL: nil)
 		} else {
-			let (response, data) = try await session.data(for: request)
+			let (response, data) = try await session.data(for: request, bodyLogging: containsCredentials(request) ? .omitted : .logged)
 			return BoxTaskResult(response: response, data: data, downloadDestinationURL: nil)
 		}
+	}
+
+	private func containsCredentials(_ request: URLRequest) -> Bool {
+		guard let path = request.url?.path else {
+			return false
+		}
+		return path.hasSuffix("/oauth2/token") || path.hasSuffix("/oauth2/revoke")
 	}
 
 	// MARK: - Body File

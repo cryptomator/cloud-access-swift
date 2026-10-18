@@ -41,13 +41,6 @@ private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSess
 
 	// MARK: - Internal
 
-	private func getCertificate(from trust: SecTrust) -> Data? {
-		guard SecTrustGetCertificateCount(trust) > 0, let certificate = SecTrustGetCertificateAtIndex(trust, 0) else {
-			return nil
-		}
-		return SecCertificateCopyData(certificate) as Data
-	}
-
 	private func calculateFingerprint(from certificate: Data) -> String {
 		let bytes = [UInt8](certificate)
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA256_DIGEST_LENGTH))
@@ -56,7 +49,7 @@ private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSess
 	}
 
 	private func handleChallenge(_ challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = getCertificate(from: trust) {
+		if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust, let trust = challenge.protectionSpace.serverTrust, let certificate = trust.leafCertificateData {
 			let isTrusted = SecTrustEvaluateWithError(trust, nil)
 			let fingerprint = calculateFingerprint(from: certificate)
 			testedCertificate = TLSCertificate(data: certificate, isTrusted: isTrusted, fingerprint: fingerprint)
@@ -109,5 +102,15 @@ public class TLSCertificateValidator {
 			throw TLSCertificateValidatorError.validationFailed
 		}
 		return testedCertificate
+	}
+}
+
+extension SecTrust {
+	/// The DER data of the server's own certificate, which `WebDAVCredential.allowedCertificate` pins.
+	var leafCertificateData: Data? {
+		guard let certificate = (SecTrustCopyCertificateChain(self) as? [SecCertificate])?.first else {
+			return nil
+		}
+		return SecCertificateCopyData(certificate) as Data
 	}
 }

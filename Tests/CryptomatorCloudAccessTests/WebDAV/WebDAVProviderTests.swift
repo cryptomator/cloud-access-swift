@@ -370,7 +370,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	/// The rejected authentication challenge must not end the call: the session still uses the task until its terminal delegate call.
 	func testDownloadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
-		let (gatedProvider, delegate) = try makeGatedProvider()
+		let (gatedProvider, gate) = try makeGatedProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
@@ -387,9 +387,9 @@ class WebDAVProviderTests: XCTestCase {
 			defer { returned.fulfill() }
 			return try await gatedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)
 		}
-		await fulfillment(of: [delegate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [gate.challengeRejected], timeout: 2.0)
 		await fulfillment(of: [returned], timeout: 0.2)
-		delegate.completionGate.signal()
+		gate.completionGate.signal()
 		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
@@ -400,7 +400,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	/// See the rationale on the download variant.
 	func testUploadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
-		let (gatedProvider, delegate) = try makeGatedProvider()
+		let (gatedProvider, gate) = try makeGatedProvider()
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -417,9 +417,9 @@ class WebDAVProviderTests: XCTestCase {
 			defer { returned.fulfill() }
 			return try await gatedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)
 		}
-		await fulfillment(of: [delegate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [gate.challengeRejected], timeout: 2.0)
 		await fulfillment(of: [returned], timeout: 0.2)
-		delegate.completionGate.signal()
+		gate.completionGate.signal()
 		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
@@ -1086,39 +1086,37 @@ class WebDAVProviderTests: XCTestCase {
 		})
 	}
 
-	private func makeGatedProvider() throws -> (WebDAVProvider, GatedWebDAVClientURLSessionDelegate) {
+	private func makeGatedProvider() throws -> (WebDAVProvider, TransferGate) {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
-		let delegate = GatedWebDAVClientURLSessionDelegate(credential: credential)
+		let gate = TransferGate()
 		let configuration = URLSessionConfiguration.default
 		configuration.httpCookieStorage = HTTPCookieStorage()
 		configuration.urlCredentialStorage = nil
 		configuration.protocolClasses = [URLProtocolSequenceMock.self]
-		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-		let client = WebDAVClient(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
+		let client = WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: gate.hooks))
 		let provider = try WebDAVProvider(with: client)
-		return (provider, delegate)
+		return (provider, gate)
 	}
 }
 
-/// Holds back the terminal delegate call of a transfer task until the test opens the gate, so that a test can observe whether a call already returned while its task is still running.
-/// The plain `PROPFIND` data tasks pass the gate, because `URLSessionUploadTask` is a distinct subclass of `URLSessionDataTask`.
-///
-/// `@unchecked Sendable`: restates the conformance of `WebDAVClientURLSessionDelegate`; the added state is immutable and `Sendable`.
-private final class GatedWebDAVClientURLSessionDelegate: WebDAVClientURLSessionDelegate, @unchecked Sendable {
+/// Holds back the terminal processing of a transfer task until the test opens the gate, so that a test can observe whether a call already returned while its task is still running.
+private final class TransferGate: Sendable {
 	let challengeRejected = XCTestExpectation(description: "authentication challenge rejected")
 	let completionGate = DispatchSemaphore(value: 0)
 
-	override func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-		super.urlSession(session, task: task, didReceive: challenge, completionHandler: completionHandler)
-		if challenge.previousFailureCount >= 1, task is URLSessionUploadTask || task is URLSessionDownloadTask {
-			challengeRejected.fulfill()
-		}
+	var hooks: SplitURLSession.Hooks {
+		return SplitURLSession.Hooks(didApplyChallengeDecision: { [challengeRejected] task, decision in
+			if decision.disposition == .cancelAuthenticationChallenge, TransferGate.isTransfer(task) {
+				challengeRejected.fulfill()
+			}
+		}, willProcessCompletion: { [completionGate] task in
+			if TransferGate.isTransfer(task) {
+				_ = completionGate.wait(timeout: .now() + 2.0)
+			}
+		})
 	}
 
-	override func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-		if task is URLSessionUploadTask || task is URLSessionDownloadTask {
-			_ = completionGate.wait(timeout: .now() + 2.0)
-		}
-		super.urlSession(session, task: task, didCompleteWithError: error)
+	private static func isTransfer(_ task: URLSessionTask) -> Bool {
+		return task is URLSessionUploadTask || task is URLSessionDownloadTask
 	}
 }

@@ -29,8 +29,8 @@ final class MicrosoftGraphHTTPClient: Sendable {
 		self.session = SplitURLSession(configuration: configuration)
 	}
 
-	func data(for request: URLRequest) async throws -> (HTTPURLResponse, Data) {
-		return try await send(authorize(request)) { try await self.session.data(for: $0) }
+	func data(for request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> (HTTPURLResponse, Data) {
+		return try await send(authorize(request)) { try await self.session.data(for: $0, bodyLogging: bodyLogging) }
 	}
 
 	/// Moves the body of a 2xx response to `destinationURL`, replacing any item there. The body of any other response is discarded.

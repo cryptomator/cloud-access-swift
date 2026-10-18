@@ -34,6 +34,9 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	override func tearDownWithError() throws {
+		URLProtocolMock.requestHandler = []
+		URLProtocolAuthenticationMock.authenticationChallenges = []
+		URLProtocolSequenceMock.steps = []
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
@@ -303,7 +306,6 @@ class WebDAVProviderTests: XCTestCase {
 		}
 
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled download must not be resumed")
-		URLProtocolMock.requestHandler.removeAll()
 		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
 	}
 
@@ -325,7 +327,6 @@ class WebDAVProviderTests: XCTestCase {
 		}
 
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled upload must not be resumed")
-		URLProtocolMock.requestHandler.removeAll()
 	}
 
 	/// A task that is cancelled before the session resumed it terminates without the session having registered it, so the session has to complete the call itself.
@@ -387,7 +388,7 @@ class WebDAVProviderTests: XCTestCase {
 			defer { returned.fulfill() }
 			return try await gatedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL)
 		}
-		await fulfillment(of: [gate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [gate.challengeRejected], timeout: testWaitTimeout)
 		await fulfillment(of: [returned], timeout: 0.2)
 		gate.completionGate.signal()
 		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
@@ -417,7 +418,7 @@ class WebDAVProviderTests: XCTestCase {
 			defer { returned.fulfill() }
 			return try await gatedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false)
 		}
-		await fulfillment(of: [gate.challengeRejected], timeout: 2.0)
+		await fulfillment(of: [gate.challengeRejected], timeout: testWaitTimeout)
 		await fulfillment(of: [returned], timeout: 0.2)
 		gate.completionGate.signal()
 		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
@@ -629,14 +630,14 @@ class WebDAVProviderTests: XCTestCase {
 		try enqueueResponse(statusCode: 404, for: responseURL)
 		try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: {
 			putStarted.fulfill()
-			_ = putGate.wait(timeout: .now() + 2.0)
+			_ = putGate.wait(timeout: .now() + testWaitTimeout)
 		})
 		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 
 		let upload = Task {
 			try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 		}
-		await fulfillment(of: [putStarted], timeout: 2.0)
+		await fulfillment(of: [putStarted], timeout: testWaitTimeout)
 		XCTAssertLessThan(progress.fractionCompleted, 1)
 		upload.cancel()
 		putGate.signal()
@@ -1111,7 +1112,7 @@ private final class TransferGate: Sendable {
 			}
 		}, willProcessCompletion: { [completionGate] task in
 			if TransferGate.isTransfer(task) {
-				_ = completionGate.wait(timeout: .now() + 2.0)
+				_ = completionGate.wait(timeout: .now() + testWaitTimeout)
 			}
 		})
 	}

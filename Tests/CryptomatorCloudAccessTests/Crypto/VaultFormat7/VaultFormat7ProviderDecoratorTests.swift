@@ -71,7 +71,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let download = Task {
 			try await decorator.downloadFile(from: CloudPath("/File 1"), to: localURL, progress: progress, onTaskCreation: nil)
 		}
-		await fulfillment(of: [transfer.suspended], timeout: 2.0)
+		await fulfillment(of: [transfer.suspended], timeout: testWaitTimeout)
 		XCTAssertGreaterThan(progress.fractionCompleted, 0)
 		XCTAssertLessThan(progress.fractionCompleted, 1)
 		transfer.resume()
@@ -96,7 +96,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let download = Task {
 			try await decorator.downloadFile(from: CloudPath("/File 1"), to: localURL, progress: progress, onTaskCreation: nil)
 		}
-		await fulfillment(of: [transfer.suspended], timeout: 2.0)
+		await fulfillment(of: [transfer.suspended], timeout: testWaitTimeout)
 		transfer.resume(with: .failure(CloudProviderError.noInternetConnection))
 		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
 			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
@@ -192,7 +192,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let upload = Task {
 			try await decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 		}
-		await fulfillment(of: [transfer.suspended], timeout: 2.0)
+		await fulfillment(of: [transfer.suspended], timeout: testWaitTimeout)
 		XCTAssertGreaterThan(progress.fractionCompleted, 0)
 		XCTAssertLessThan(progress.fractionCompleted, 1)
 		transfer.resume()
@@ -216,7 +216,7 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		let upload = Task {
 			try await decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 		}
-		await fulfillment(of: [transfer.suspended], timeout: 2.0)
+		await fulfillment(of: [transfer.suspended], timeout: testWaitTimeout)
 		transfer.resume(with: .failure(CloudProviderError.quotaInsufficient))
 		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
 			XCTAssertEqual(CloudProviderError.quotaInsufficient, error as? CloudProviderError)

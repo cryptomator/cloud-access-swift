@@ -49,7 +49,7 @@ class BackgroundURLSessionRegistryTests: XCTestCase {
 		let requestGate = DispatchSemaphore(value: 0)
 		URLProtocolMock.requestHandler = [{ [url] _ in
 			requestStarted.fulfill()
-			_ = requestGate.wait(timeout: .now() + 2.0)
+			_ = requestGate.wait(timeout: .now() + testWaitTimeout)
 			return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("content".utf8))
 		}]
 		var owner: SplitURLSession? = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)
@@ -58,7 +58,7 @@ class BackgroundURLSessionRegistryTests: XCTestCase {
 		let request = Task { [url] in
 			try await session.data(from: url)
 		}
-		await fulfillment(of: [requestStarted], timeout: 2.0)
+		await fulfillment(of: [requestStarted], timeout: testWaitTimeout)
 
 		owner = nil
 		XCTAssertNil(releasedOwner)

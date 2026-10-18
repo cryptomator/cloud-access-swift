@@ -41,7 +41,8 @@ class DropboxExponentialBackOffTests: XCTestCase {
 		let credential = DropboxCredential(tokenUID: "testToken")
 		let provider = DropboxCloudProvider(credential: credential)
 		let expectedMinimumDuration = 5.0 // 5 Attempts * retry after 1s
-		let expectedMaximumDuration = 7.5 // 5 Attempts * (retry after 1s + maxJitter) where maxJitter := 0.5s
+		// 5 retries after 1s plus up to 0.5s jitter take at most 7.5s. The bound leaves room for CI stalls but stays below the 15.5s minimum of the exponential backoff, so the test still fails if retryAfter is ignored.
+		let expectedMaximumDuration = 15.0
 		let startTime = DispatchTime.now()
 		await XCTAssertThrowsErrorAsync(try await provider.retryWithExponentialBackoff({ () async throws -> Void in
 			throw DropboxError.rateLimitError(retryAfter: 1)
@@ -70,7 +71,7 @@ class DropboxExponentialBackOffTests: XCTestCase {
 				throw DropboxError.rateLimitError(retryAfter: 60)
 			}, condition: provider.shouldRetryForError)
 		}
-		await fulfillment(of: [firstAttemptFailed], timeout: 2.0)
+		await fulfillment(of: [firstAttemptFailed], timeout: testWaitTimeout)
 		retrying.cancel()
 		await XCTAssertThrowsErrorAsync(try await value(of: retrying)) { error in
 			XCTAssertTrue(error is CancellationError)

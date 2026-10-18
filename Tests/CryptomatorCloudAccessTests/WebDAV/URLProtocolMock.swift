@@ -23,7 +23,10 @@ class URLProtocolMock: URLProtocol {
 	}
 
 	override func startLoading() {
-		let handler = URLProtocolMock.requestHandlerStorage.withLock { $0.removeFirst() }
+		guard let handler = URLProtocolMock.requestHandlerStorage.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
+			client?.urlProtocol(self, didFailWithError: URLProtocolMockError.unexpectedRequest)
+			return
+		}
 		do {
 			let (response, data) = try handler(request)
 			if (300 ... 399).contains(response.statusCode), let location = response.value(forHTTPHeaderField: "Location"), let redirectURL = URL(string: location, relativeTo: request.url) {
@@ -84,7 +87,10 @@ class URLProtocolAuthenticationMock: URLProtocol {
 	}
 
 	override func startLoading() {
-		let challengeSettings = URLProtocolAuthenticationMock.authenticationChallengesStorage.withLock { $0.removeFirst() }
+		guard let challengeSettings = URLProtocolAuthenticationMock.authenticationChallengesStorage.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
+			client?.urlProtocol(self, didFailWithError: URLProtocolMockError.unexpectedRequest)
+			return
+		}
 		let protectionSpace = URLProtectionSpace(host: "", port: 443, protocol: nil, realm: nil, authenticationMethod: nil)
 		let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: challengeSettings.previousFailureCount, failureResponse: challengeSettings.failureResponse, error: nil, sender: URLAuthenticationChallengeSenderMock())
 		client?.urlProtocol(self, didReceive: challenge)
@@ -121,7 +127,10 @@ class URLProtocolSequenceMock: URLProtocol {
 	}
 
 	override func startLoading() {
-		let step = URLProtocolSequenceMock.stepsStorage.withLock { $0.removeFirst() }
+		guard let step = URLProtocolSequenceMock.stepsStorage.withLock({ $0.isEmpty ? nil : $0.removeFirst() }) else {
+			client?.urlProtocol(self, didFailWithError: URLProtocolMockError.unexpectedRequest)
+			return
+		}
 		switch step {
 		case let .response(response, data):
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)

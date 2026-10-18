@@ -16,6 +16,9 @@ import XCTest
 
 struct UnfinishedTaskError: Error {}
 
+/// How long a test waits for a step that it expects to happen. The CI simulator stalls for over half a minute at times, so a shorter wait fails tests that aren't broken.
+let testWaitTimeout: TimeInterval = 60
+
 /// Starts the operation in a task that is already cancelled when the operation begins.
 func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async throws -> Value) -> Task<Value, Error> {
 	return Task {
@@ -28,15 +31,20 @@ extension XCTestCase {
 	/**
 	 Waits for the value of a task that the test started.
 
-	 If the task doesn't finish within the timeout, the test fails instead of hanging the test run. A task group can't serve as the timeout, because it only returns once all of its child tasks returned.
+	 If the task doesn't finish within the timeout, the test fails instead of hanging the test run. The task is then cancelled and given a moment to finish, which makes it less likely to send requests during later tests. A task group can't serve as the timeout, because it only returns once all of its child tasks returned.
 	 */
-	func value<Value: Sendable>(of task: Task<Value, Error>, timeout: TimeInterval = 2.0, file: StaticString = #filePath, line: UInt = #line) async throws -> Value {
+	func value<Value: Sendable>(of task: Task<Value, Error>, timeout: TimeInterval = testWaitTimeout, file: StaticString = #filePath, line: UInt = #line) async throws -> Value {
 		let finished = XCTestExpectation(description: "task finished")
+		// An expectation can only be waited on once.
+		let finishedAfterCancellation = XCTestExpectation(description: "task finished after cancellation")
 		Task {
 			_ = await task.result
 			finished.fulfill()
+			finishedAfterCancellation.fulfill()
 		}
 		guard await XCTWaiter().fulfillment(of: [finished], timeout: timeout) == .completed else {
+			task.cancel()
+			_ = await XCTWaiter().fulfillment(of: [finishedAfterCancellation], timeout: 5)
 			XCTFail("Task did not finish within \(timeout) seconds", file: file, line: line)
 			throw UnfinishedTaskError()
 		}

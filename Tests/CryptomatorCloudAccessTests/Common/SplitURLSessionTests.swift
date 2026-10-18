@@ -120,12 +120,12 @@ class SplitURLSessionTests: XCTestCase {
 		let first = Task {
 			try await firstSession.download(firstRequest, route: .transfer, handler: { location, _ in
 				firstHeld.fulfill()
-				let waitResult = secondFinished.wait(timeout: .now() + 2.0)
+				let waitResult = secondFinished.wait(timeout: .now() + testWaitTimeout)
 				firstWaitResult.withLock { $0 = waitResult }
 				return try .data(Data(contentsOf: location))
 			}, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		}
-		await fulfillment(of: [firstHeld], timeout: 2.0)
+		await fulfillment(of: [firstHeld], timeout: testWaitTimeout)
 		let secondOutcome = try await secondSession.data(secondRequest, bodyLimit: nil, bodyLogging: .logged)
 		secondFinished.signal()
 		let firstOutcome = try await value(of: first)
@@ -152,7 +152,7 @@ class SplitURLSessionTests: XCTestCase {
 		let completionGate = DispatchSemaphore(value: 0)
 		let hooks = SplitURLSession.Hooks(willProcessCompletion: { _ in
 			completionReached.fulfill()
-			_ = completionGate.wait(timeout: .now() + 2.0)
+			_ = completionGate.wait(timeout: .now() + testWaitTimeout)
 		})
 		let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), hooks: hooks)
 		URLProtocolSequenceMock.steps = try [.chunkedResponse(XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), [Data(count: 64 * 1024), Data(count: 1)])]
@@ -163,7 +163,7 @@ class SplitURLSessionTests: XCTestCase {
 			defer { returned.fulfill() }
 			return try await sequenceSession.data(URLRequest(url: url), bodyLimit: 64 * 1024, bodyLogging: .logged)
 		}
-		await fulfillment(of: [completionReached], timeout: 2.0)
+		await fulfillment(of: [completionReached], timeout: testWaitTimeout)
 		await fulfillment(of: [returned], timeout: 0.2)
 		completionGate.signal()
 		let outcome = try await value(of: request)

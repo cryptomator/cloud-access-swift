@@ -27,6 +27,10 @@ class WebDAVAuthenticatorTests: XCTestCase {
 		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
 	}
 
+	override func tearDown() {
+		URLProtocolMock.requestHandler = []
+	}
+
 	func testVerifyClient() async throws {
 		let baseURL: URL = baseURL
 		let optionsResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"]))

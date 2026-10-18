@@ -6,13 +6,13 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
+@preconcurrency import AWSS3
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@preconcurrency import AWSS3
 
 class S3CloudProviderTests: XCTestCase {
 	var provider: S3CloudProvider!

@@ -40,9 +40,9 @@ public final class PCloudAuthenticator {
 	}
 }
 
+@available(iOS 13, OSX 10.15, *)
 @MainActor
 public extension OAuth {
-	@available(iOS 13, OSX 10.15, *)
 	static func performAuthorizationFlow(with anchor: ASPresentationAnchor, appKey: String) async -> Result {
 		return await withCheckedContinuation { continuation in
 			OAuth.performAuthorizationFlow(with: anchor, appKey: appKey, completionBlock: { @Sendable result in

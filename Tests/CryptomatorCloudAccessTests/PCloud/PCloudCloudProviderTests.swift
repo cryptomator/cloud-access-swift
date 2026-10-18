@@ -7,12 +7,12 @@
 //
 
 import XCTest
+@preconcurrency @testable import PCloudSDKSwift
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@preconcurrency @testable import PCloudSDKSwift
 
 class PCloudCloudProviderTests: XCTestCase {
 	let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)

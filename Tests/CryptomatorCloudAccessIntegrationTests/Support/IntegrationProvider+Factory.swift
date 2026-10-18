@@ -7,13 +7,13 @@
 //
 
 @preconcurrency import AWSCore
+import Foundation
+@preconcurrency import PCloudSDKSwift
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Foundation
-@preconcurrency import PCloudSDKSwift
 
 /// The credentials that all tests of a provider share, so that each is authorized once per run.
 private enum SharedCredentials {

@@ -95,10 +95,7 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 		let convertedPageToken: PageToken
 		if let pageToken {
 			let components = pageToken.components(separatedBy: ":")
-			guard components.count == 2, let minID = Int(components[0]), let maxID = Int(components[1]) else {
-				throw CloudProviderError.pageTokenInvalid
-			}
-			guard minID >= 0, maxID >= 0, minID < maxID else {
+			guard components.count == 2, let minID = Int(components[0]), let maxID = Int(components[1]), minID >= 0, maxID >= 0, minID < maxID else {
 				throw CloudProviderError.pageTokenInvalid
 			}
 			convertedPageToken = PageToken(minID: minID, maxID: maxID)

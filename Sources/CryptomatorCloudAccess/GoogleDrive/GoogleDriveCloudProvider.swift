@@ -65,10 +65,8 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 		driveService.fetcherService.isRetryEnabled = true
 		driveService.fetcherService.retryBlock = { suggestedWillRetry, error, response in
-			if let error = error as NSError? {
-				if error.domain == kGTMSessionFetcherStatusDomain, error.code == 403 {
-					return response(true)
-				}
+			if let error = error as NSError?, error.domain == kGTMSessionFetcherStatusDomain, error.code == 403 {
+				return response(true)
 			}
 			response(suggestedWillRetry)
 		}

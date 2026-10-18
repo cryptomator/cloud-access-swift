@@ -7,13 +7,13 @@
 //
 
 @preconcurrency import AWSS3
+import Foundation
+import Testing
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-import Foundation
-import Testing
 
 extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.s3)))

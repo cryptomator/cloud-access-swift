@@ -43,10 +43,7 @@ public enum VaultProviderFactory {
 	}
 
 	public static func isSupported(unverifiedVaultConfig: UnverifiedVaultConfig) -> Bool {
-		guard CryptorScheme(rawValue: unverifiedVaultConfig.allegedCipherCombo) != nil else {
-			return false
-		}
-		guard unverifiedVaultConfig.allegedFormat == 8 else {
+		guard CryptorScheme(rawValue: unverifiedVaultConfig.allegedCipherCombo) != nil, unverifiedVaultConfig.allegedFormat == 8 else {
 			return false
 		}
 		switch VaultConfigHelper.getType(for: unverifiedVaultConfig) {

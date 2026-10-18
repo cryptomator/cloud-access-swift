@@ -20,6 +20,12 @@ class BoxCloudProviderTests: XCTestCase {
 		await assertThrowsCancellationErrorInCancelledTask(provider)
 	}
 
+	func testConvertStandardErrorMapsNetworkErrorsToNoInternetConnection() throws {
+		let provider = try BoxCloudProvider(credential: BoxCredential(auth: BoxDeveloperTokenAuth(token: "")))
+		XCTAssertEqual(.noInternetConnection, provider.convertStandardError(BoxNetworkError(message: "", error: URLError(.notConnectedToInternet))) as? CloudProviderError)
+		XCTAssertTrue(provider.convertStandardError(BoxNetworkError(message: "", error: URLError(.badServerResponse))) is BoxNetworkError)
+	}
+
 	func testCancellationShieldAwaitsCallInUncancelledTask() async throws {
 		let (started, startedContinuation) = AsyncStream.makeStream(of: Void.self)
 		let (gate, gateContinuation) = AsyncStream.makeStream(of: Void.self)

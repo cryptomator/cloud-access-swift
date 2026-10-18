@@ -548,8 +548,8 @@ public final class BoxCloudProvider: CloudProvider {
 		return CloudItemList(items: items, nextPageToken: folderItems.nextMarker)
 	}
 
-	private func convertStandardError(_ error: Error) -> Error {
-		if isNetworkConnectionError(error) {
+	func convertStandardError(_ error: Error) -> Error {
+		if isNetworkConnectionError((error as? BoxNetworkError)?.error ?? error) {
 			return CloudProviderError.noInternetConnection
 		}
 		switch error {

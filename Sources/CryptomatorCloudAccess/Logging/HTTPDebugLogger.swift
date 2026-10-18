@@ -19,6 +19,9 @@ enum HTTPDebugLogger {
 	}
 
 	static func logRequest(_ request: URLRequest) {
+		guard isCloudAccessLogEnabled(for: .debug) else {
+			return
+		}
 		CloudAccessDDLogDebug("--> \(request.httpMethod ?? "nil") \(request.url?.absoluteString ?? "nil")")
 		if let headerFields = request.allHTTPHeaderFields {
 			headerFields.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
@@ -66,6 +69,9 @@ enum HTTPDebugLogger {
 	}
 
 	static func logResponse(_ response: URLResponse, with data: Data?, or localURL: URL?) {
+		guard isCloudAccessLogEnabled(for: .debug) else {
+			return
+		}
 		guard let httpResponse = response as? HTTPURLResponse else {
 			CloudAccessDDLogDebug("<-- \(response.url?.absoluteString ?? "nil")")
 			return

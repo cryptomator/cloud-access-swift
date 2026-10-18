@@ -18,6 +18,11 @@ public var dynamicCloudAccessLogLevel: DDLogLevel {
 	set { lockedDynamicCloudAccessLogLevel.withLock { $0 = newValue } }
 }
 
+/// Whether a message with the flag would be logged, i.e., passes both `dynamicCloudAccessLogLevel` and CocoaLumberjack's `dynamicLogLevel`, as checked by `_DDLogMessage`. Lets callers skip building messages that would be dropped.
+func isCloudAccessLogEnabled(for flag: DDLogFlag) -> Bool {
+	return dynamicCloudAccessLogLevel.rawValue & flag.rawValue != 0 && dynamicLogLevel.rawValue & flag.rawValue != 0
+}
+
 @inlinable
 // swiftlint:disable:next identifier_name
 public func CloudAccessDDLogDebug(_ message: @autoclosure () -> DDLogMessageFormat,

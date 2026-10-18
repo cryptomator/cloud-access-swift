@@ -40,7 +40,7 @@ jobs:
       - name: Build
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | xcbeautify
       - name: Test
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild test-without-building -xctestrun $(find . -type f -name "*.xctestrun") -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH | xcbeautify
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild test-without-building -xctestrun $(find . -type f -name "*.xctestrun") -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -test-timeouts-enabled YES | xcbeautify
       - name: Generate coverage report
         run: |
           xcresult_path=$(find $DERIVED_DATA_PATH/Logs/Test -name "*.xcresult" | head -n 1)

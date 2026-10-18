@@ -293,9 +293,7 @@ actor IntegrationFixtures {
 			try await withThrowingTaskGroup(of: Void.self) { group in
 				for item in level {
 					group.addTask {
-						try await kind.semaphore.withPermit(budget: buildStepBudget) {
-							try await retryOnEventualConsistencyError(on: kind) { try await item.create(with: provider) }
-						}
+						try await create(item, with: provider, on: kind)
 					}
 				}
 				try await group.waitForAll()
@@ -327,27 +325,31 @@ actor IntegrationFixtures {
 	}
 
 	/**
-	 Retries a create that fails because an item it depends on isn't visible yet (e.g. on S3).
+	 Creates the item, retrying while it fails because an item it depends on isn't visible yet (e.g. on S3).
 
-	 A failed attempt can already have created the item, at least in part, e.g. the folder of a vault decorator's `createFolder` without its `dir.c9r`, or an S3 upload whose metadata wasn't visible yet. The next attempt then fails with `itemAlreadyExists`.
+	 The retries are paced and limited by `eventually(on:)` while they hold one of the provider's permits, so that waiting for a permit doesn't use up the time for the provider to catch up.
 
-	 That failure is thrown as `IntegrationTestError.consistencyTimeout`, and so is the last attempt's failure on an eventually consistent provider, so that the fixture is built again at a new path instead of failing for the rest of the run. On any other provider, the last attempt's error is rethrown, so that a regression fails the fixture instead of being retried, as in `eventually(on:)`.
+	 A failed attempt can already have created the item, at least in part, e.g. the folder of a vault decorator's `createFolder` without its `dir.c9r`. A later attempt's `itemAlreadyExists` is therefore thrown as `IntegrationTestError.consistencyTimeout`, so that the fixture is built again at a new path. When the retries run out, an eventually consistent provider throws the same error, and any other provider rethrows the last attempt's error, so that a regression fails the fixture.
 	 */
-	private static func retryOnEventualConsistencyError(on kind: IntegrationProvider, maxAttempts: Int = 10, operation: () async throws -> Void) async throws {
-		for attempt in 0 ..< maxAttempts {
-			do {
-				try await operation()
-				return
-			} catch CloudProviderError.itemAlreadyExists where attempt > 0 {
-				throw IntegrationTestError.consistencyTimeout
-			} catch {
-				guard isEventualConsistencyError(error) else {
-					throw error
+	private static func create(_ item: TreeItem, with provider: CloudProvider, on kind: IntegrationProvider) async throws {
+		try await kind.semaphore.withPermit(budget: buildStepBudget) {
+			var lastError: Error?
+			let isCreated = try await eventually(on: kind) {
+				do {
+					try await item.create(with: provider)
+					return true
+				} catch CloudProviderError.itemAlreadyExists where lastError != nil {
+					throw IntegrationTestError.consistencyTimeout
+				} catch {
+					guard isEventualConsistencyError(error) else {
+						throw error
+					}
+					lastError = error
+					return false
 				}
-				guard attempt < maxAttempts - 1 else {
-					throw kind.isEventuallyConsistent ? IntegrationTestError.consistencyTimeout : error
-				}
-				try await Task.sleep(for: .seconds(2))
+			}
+			if !isCreated, let lastError {
+				throw lastError
 			}
 		}
 	}

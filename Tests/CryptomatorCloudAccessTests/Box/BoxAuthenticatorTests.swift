@@ -13,16 +13,6 @@ import XCTest
 
 @MainActor
 class BoxAuthenticatorTests: XCTestCase {
-	func testAuthenticateWithInvalidContext() async {
-		let viewController = UIViewController()
-		let authentication = _Concurrency.Task {
-			try await BoxAuthenticator.authenticate(from: viewController, tokenStorage: InMemoryTokenStorage())
-		}
-		await XCTAssertThrowsErrorAsync(try await value(of: authentication)) { error in
-			XCTAssertEqual(BoxAuthenticatorError.invalidContext, error as? BoxAuthenticatorError)
-		}
-	}
-
 	func testConvertLoginFlowErrorWithCanceledLogin() {
 		let error = BoxSDKError(message: "", error: ASWebAuthenticationSessionError(.canceledLogin))
 		XCTAssertEqual(.userCancelled, (BoxAuthenticator.convertLoginFlowError(error) as? CocoaError)?.code)

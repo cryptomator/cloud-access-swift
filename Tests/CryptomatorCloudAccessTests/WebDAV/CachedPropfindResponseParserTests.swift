@@ -130,7 +130,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 	}
 }
 
-extension CloudItemMetadata: Equatable {
+extension CloudItemMetadata: @retroactive Equatable {
 	public static func == (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
 		return lhs.name == rhs.name && lhs.cloudPath == rhs.cloudPath && lhs.itemType == rhs.itemType && lhs.size == rhs.size
 	}

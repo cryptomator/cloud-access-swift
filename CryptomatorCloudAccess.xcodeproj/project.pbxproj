@@ -7,7 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */; };
 		83D221F5D53B5AFE8CC0BE48 /* TLSCertificateValidatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */; };
+		0E32E10C4824CBE9FAD8D55F /* WebDAVClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */; };
 		05788765F72F41AFA690C2F3 /* StagingFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D69812AD1449F79B4AF702 /* StagingFile.swift */; };
 		1A76A2AB4075408FA398277B /* Progress+Explicit.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA6257FC8E944BC7AA3947D1 /* Progress+Explicit.swift */; };
 		4A0421822642B9260033144A /* VaultProviderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0421812642B9260033144A /* VaultProviderFactory.swift */; };
@@ -234,7 +236,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitURLSessionTests.swift; sourceTree = "<group>"; };
 		D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidatorTests.swift; sourceTree = "<group>"; };
+		2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientTests.swift; sourceTree = "<group>"; };
 		31D69812AD1449F79B4AF702 /* StagingFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingFile.swift; sourceTree = "<group>"; };
 		B7E8F9A0C1D243E5A6B7C8D9 /* AllSettled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSettled.swift; sourceTree = "<group>"; };
 		D9F0A1B2C3D44E5F6A7B8C9D /* VaultCryptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultCryptor.swift; sourceTree = "<group>"; };
@@ -674,6 +678,7 @@
 				45CB69A938F046EDACD40378 /* SDKContinuationTests.swift */,
 				6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */,
 				396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */,
+				93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */,
 			);
 			path = Common;
 			sourceTree = "<group>";
@@ -905,6 +910,7 @@
 				74E54F6724BCB92E003379FA /* WebDAVClientMock.swift */,
 				746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */,
 				D48F8386C4D9BBFD74FDD7B2 /* TLSCertificateValidatorTests.swift */,
+				2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */,
 				74F57AD524BCB4E80040513A /* AuthenticatorResponses */,
 				74E54F5A24BCB6B9003379FA /* ClientTestResponses */,
 				748420C224B8A20D00D84E58 /* PropfindTestRequests */,
@@ -1428,6 +1434,7 @@
 				7494B06D249CEAC500430610 /* VaultFormat7ShorteningProviderDecoratorTests.swift in Sources */,
 				746AA0E224BDF66A0051BACC /* WebDAVProviderTests.swift in Sources */,
 				83D221F5D53B5AFE8CC0BE48 /* TLSCertificateValidatorTests.swift in Sources */,
+				0E32E10C4824CBE9FAD8D55F /* WebDAVClientTests.swift in Sources */,
 				9ED0E6202461809A00FDB438 /* VaultFormat7ProviderDecoratorTests.swift in Sources */,
 				9ECEC0B1246EE6A700151299 /* DirectoryIdCacheTests.swift in Sources */,
 				7460B77A2519056E004AEB56 /* VaultFormat7CryptorMock.swift in Sources */,
@@ -1441,6 +1448,7 @@
 				2744BEBC3BCFAD7A35797B38 /* XCTestCase+Task.swift in Sources */,
 				761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */,
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
+				FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */,
 				A24B06589C535B534CD7BD69 /* BoxCloudProviderTests.swift in Sources */,
 				353D637A82E9684349C6F7C0 /* BoxURLSessionNetworkClientTests.swift in Sources */,
 				1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */,

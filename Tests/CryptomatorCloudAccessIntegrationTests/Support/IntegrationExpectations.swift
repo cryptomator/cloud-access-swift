@@ -119,7 +119,7 @@ func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration) asyn
 
 // MARK: - CloudItemMetadata
 
-extension CloudItemMetadata: Comparable {
+extension CloudItemMetadata: @retroactive Comparable, @retroactive Equatable {
 	public static func < (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
 		return lhs.name < rhs.name
 	}

@@ -26,6 +26,12 @@ class URLProtocolMock: URLProtocol {
 		let handler = URLProtocolMock.requestHandlerStorage.withLock { $0.removeFirst() }
 		do {
 			let (response, data) = try handler(request)
+			if (300 ... 399).contains(response.statusCode), let location = response.value(forHTTPHeaderField: "Location"), let redirectURL = URL(string: location, relativeTo: request.url) {
+				var redirectRequest = request
+				redirectRequest.url = redirectURL
+				client?.urlProtocol(self, wasRedirectedTo: redirectRequest, redirectResponse: response)
+				return
+			}
 			client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
 			if let data {
 				client?.urlProtocol(self, didLoad: data)

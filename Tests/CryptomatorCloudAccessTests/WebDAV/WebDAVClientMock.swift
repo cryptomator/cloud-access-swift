@@ -63,11 +63,11 @@ class WebDAVClientMock: WebDAVClient, @unchecked Sendable {
 
 	init(baseURL: URL, urlProtocolMock: AnyClass) {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
-		let delegate = WebDAVClientURLSessionDelegate(credential: credential)
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [urlProtocolMock]
-		let urlSession = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-		super.init(credential: credential, session: WebDAVSession(urlSession: urlSession, delegate: delegate))
+		let metadataConfiguration = URLSessionConfiguration.default
+		metadataConfiguration.protocolClasses = [urlProtocolMock]
+		super.init(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: metadataConfiguration))
 	}
 
 	override func OPTIONS(url: URL) async throws -> (HTTPURLResponse, Data?) {

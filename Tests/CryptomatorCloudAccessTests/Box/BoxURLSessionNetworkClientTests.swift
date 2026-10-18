@@ -139,6 +139,29 @@ class BoxURLSessionNetworkClientTests: XCTestCase {
 		XCTAssertFalse(FileManager.default.fileExists(atPath: destinationURL.path))
 	}
 
+	func testTokenRequestBodiesAreNotLogged() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		let tokenHandler: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("{\"access_token\":\"SECRET-ACCESS-TOKEN\"}".utf8))
+		}
+		URLProtocolMock.requestHandler = [tokenHandler, tokenHandler, { [url] _ in
+			(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("{\"id\":\"logged\"}".utf8))
+		}]
+
+		for tokenURL in ["https://api.box.com/oauth2/token", "https://api.box.com/oauth2/revoke"] {
+			let tokenOptions = FetchOptions(url: tokenURL, method: "POST", data: SerializedData(data: Data("{\"token\":\"SECRET-REFRESH-TOKEN\"}".utf8)), contentType: "application/x-www-form-urlencoded")
+			_ = try await client.fetch(options: tokenOptions)
+		}
+		_ = try await client.fetch(options: FetchOptions(url: url.absoluteString, method: "GET"))
+
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
+		XCTAssertTrue(logCapture.messages.contains("Body: {\"id\":\"logged\"}"))
+	}
+
 	func testTransportFailureThrowsNetworkError() async {
 		URLProtocolMock.requestHandler = [{ _ in
 			throw URLError(.notConnectedToInternet)

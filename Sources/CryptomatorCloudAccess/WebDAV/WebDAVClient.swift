@@ -33,8 +33,7 @@ public class WebDAVClient: @unchecked Sendable {
 	 If the `WebDAVClient` is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
 	 */
 	public static func withBackgroundSession(credential: WebDAVCredential, sessionIdentifier: String, sharedContainerIdentifier: String? = nil) -> WebDAVClient {
-		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		let session = WebDAVSession.createBackgroundSession(with: urlSessionDelegate, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+		let session = WebDAVSession.createBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 		return WebDAVClient(credential: credential, session: session)
 	}
 
@@ -42,9 +41,7 @@ public class WebDAVClient: @unchecked Sendable {
 	 Creates a `WebDAVClient` with a foreground `URLSession`.
 	 */
 	public convenience init(credential: WebDAVCredential) {
-		let urlSessionDelegate = WebDAVClientURLSessionDelegate(credential: credential)
-		let webDAVSession = WebDAVSession(delegate: urlSessionDelegate)
-		self.init(credential: credential, session: webDAVSession)
+		self.init(credential: credential, session: WebDAVSession(credential: credential))
 	}
 
 	// MARK: - HTTP Methods for WebDAV
@@ -69,7 +66,7 @@ public class WebDAVClient: @unchecked Sendable {
 		request.httpBody = Data("""
 		<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:">\(propfindPropElementsAsXML(with: propertyNames))</d:propfind>
 		""".utf8)
-		return try await webDAVSession.performDownloadTask(with: request, to: localURL, progress: nil, onTaskCreation: nil)
+		return try await webDAVSession.performMetadataDownloadTask(with: request, to: localURL)
 	}
 
 	public func PROPFIND(url: URL, depth: PropfindDepth, propertyNames: [String]? = nil) async throws -> (HTTPURLResponse, Data?) {

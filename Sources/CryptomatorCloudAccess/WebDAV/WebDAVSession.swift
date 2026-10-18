@@ -92,7 +92,7 @@ final class WebDAVSession: Sendable {
 	}
 
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data?) {
-		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: WebDAVSession.maxResponseBodyLength, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: WebDAVSession.maxResponseBodyLength, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		return try (WebDAVSession.successfulResponse(of: outcome), outcome.data)
 	}
 

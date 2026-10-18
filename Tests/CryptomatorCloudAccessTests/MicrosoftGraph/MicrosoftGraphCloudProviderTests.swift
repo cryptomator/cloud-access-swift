@@ -53,7 +53,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		URLProtocolMock.requestHandler = [
 			{ request in (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(folderBody.utf8)) },
 			{ request in (HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!, nil) },
-			{ request in (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("{\"uploadUrl\":\"https://upload.example.com/up?tempauth=SECRET-TEMPAUTH\"}".utf8)) },
+			{ request in (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("{\"uploadUrl\":\"https://upload.example.com/up/SECRET-PATH-TOKEN?tempauth=SECRET-TEMPAUTH\"}".utf8)) },
 			{ request in (HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!, Data("{\"id\":\"FileIdentifier\",\"name\":\"file.txt\",\"size\":7}".utf8)) }
 		]
 
@@ -62,6 +62,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
 		XCTAssertTrue(logCapture.messages.contains("Body: \(folderBody)"))
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("--> PUT https://upload.example.com") })
 	}
 
 	func testChildrenRequest() throws {

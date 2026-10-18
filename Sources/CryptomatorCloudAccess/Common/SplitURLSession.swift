@@ -19,6 +19,7 @@ private struct TaskRecord {
 	let hooks: SplitURLSession.Hooks
 	let bodyLimit: Int?
 	let bodyLogging: HTTPDebugLogger.BodyLogging
+	let urlLogging: HTTPDebugLogger.URLLogging
 	let downloadHandler: SplitURLSession.DownloadHandler?
 	var accumulatedData = Data()
 	var downloadedBody = SplitURLSession.Outcome.Body.none
@@ -50,11 +51,11 @@ private struct TaskRecord {
 		if let response {
 			switch body {
 			case let .data(data):
-				HTTPDebugLogger.logResponse(response, with: data, or: nil, bodyLogging: bodyLogging)
+				HTTPDebugLogger.logResponse(response, with: data, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			case let .file(url):
-				HTTPDebugLogger.logResponse(response, with: nil, or: url, bodyLogging: bodyLogging)
+				HTTPDebugLogger.logResponse(response, with: nil, or: url, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			case .none:
-				HTTPDebugLogger.logResponse(response, with: nil, or: nil, bodyLogging: bodyLogging)
+				HTTPDebugLogger.logResponse(response, with: nil, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			}
 		}
 		resumer.resume(returning: SplitURLSession.Outcome(response: response, body: body, error: error, recordedFailure: recordedFailure))
@@ -87,7 +88,8 @@ final class SplitURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessio
 	/// Also receives the session-wide challenges, e.g., server trust, because the session-level variant is not implemented.
 	func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
 		guard let (challengeHandler, hooks) = records.withLock({ $0[task].map { ($0.challengeHandler, $0.hooks) } }) else {
-			CloudAccessDDLogDebug("SplitURLSessionDelegate: received a challenge for the unknown task of \(HTTPDebugLogger.redactedURLString(task.originalRequest?.url))")
+			// A task without a record, e.g., one that an earlier process left on a background session, might have a URL that is a credential.
+			CloudAccessDDLogDebug("SplitURLSessionDelegate: received a challenge for the unknown task of \(HTTPDebugLogger.redactedURLString(task.originalRequest?.url, urlLogging: .originOnly))")
 			completionHandler(.performDefaultHandling, nil)
 			return
 		}
@@ -217,6 +219,7 @@ final class SplitURLSession: Sendable {
 		let sessionDescription: String
 		let bodyLimit: Int?
 		let bodyLogging: HTTPDebugLogger.BodyLogging
+		let urlLogging: HTTPDebugLogger.URLLogging
 		let downloadHandler: DownloadHandler?
 		let cancelsBeforeResume: Bool
 	}
@@ -272,7 +275,7 @@ final class SplitURLSession: Sendable {
 	/// - Parameter bodyLimit: The maximum length of the response body. A longer body is discarded and cancels the task, and the outcome records `SplitURLSessionError.responseBodyTooLarge`.
 	func data(_ request: URLRequest, bodyLimit: Int?, bodyLogging: HTTPDebugLogger.BodyLogging) async throws -> Outcome {
 		let onTaskCreation: (@concurrent @Sendable (URLSessionDataTask) async -> Void)? = nil
-		let attempt = Attempt(sessionDescription: SplitURLSession.foregroundSessionDescription, bodyLimit: bodyLimit, bodyLogging: bodyLogging, downloadHandler: nil, cancelsBeforeResume: false)
+		let attempt = Attempt(sessionDescription: SplitURLSession.foregroundSessionDescription, bodyLimit: bodyLimit, bodyLogging: bodyLogging, urlLogging: .redacted, downloadHandler: nil, cancelsBeforeResume: false)
 		return try await perform(metadataSession.dataTask(with: request), request: request, attempt: attempt, progress: nil, onTaskCreation: onTaskCreation)
 	}
 
@@ -285,18 +288,18 @@ final class SplitURLSession: Sendable {
 		case .metadata:
 			(metadataSession, SplitURLSession.foregroundSessionDescription)
 		}
-		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: .logged, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
+		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
 		return try await perform(session.downloadTask(with: request), request: request, attempt: attempt, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	// swiftlint:disable:next function_parameter_count
-	func upload(_ request: URLRequest, fromFile fileURL: URL, bodyLimit: Int?, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> Outcome {
-		let attempt = Attempt(sessionDescription: transferSessionDescription, bodyLimit: bodyLimit, bodyLogging: .logged, downloadHandler: nil, cancelsBeforeResume: cancelsBeforeResume)
+	func upload(_ request: URLRequest, fromFile fileURL: URL, bodyLimit: Int?, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> Outcome {
+		let attempt = Attempt(sessionDescription: transferSessionDescription, bodyLimit: bodyLimit, bodyLogging: .logged, urlLogging: urlLogging, downloadHandler: nil, cancelsBeforeResume: cancelsBeforeResume)
 		return try await perform(transferSession.uploadTask(with: request, fromFile: fileURL), request: request, attempt: attempt, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	private func perform<SessionTask: URLSessionTask>(_ task: SessionTask, request: URLRequest, attempt: Attempt, progress: Progress?, onTaskCreation: (@concurrent @Sendable (SessionTask) async -> Void)?) async throws -> Outcome {
-		HTTPDebugLogger.logRequest(request, session: attempt.sessionDescription, bodyLogging: attempt.bodyLogging)
+		HTTPDebugLogger.logRequest(request, session: attempt.sessionDescription, bodyLogging: attempt.bodyLogging, urlLogging: attempt.urlLogging)
 		progress?.addChild(task.progress, withPendingUnitCount: 1)
 		await onTaskCreation?(task)
 		if attempt.cancelsBeforeResume, Task.isCancelled {
@@ -305,7 +308,7 @@ final class SplitURLSession: Sendable {
 		}
 		let delegate = SplitURLSessionDelegate.shared
 		return try await withSDKContinuation { resumer in
-			delegate.register(TaskRecord(resumer: resumer, challengeHandler: challengeHandler, hooks: hooks, bodyLimit: attempt.bodyLimit, bodyLogging: attempt.bodyLogging, downloadHandler: attempt.downloadHandler), for: task)
+			delegate.register(TaskRecord(resumer: resumer, challengeHandler: challengeHandler, hooks: hooks, bodyLimit: attempt.bodyLimit, bodyLogging: attempt.bodyLogging, urlLogging: attempt.urlLogging, downloadHandler: attempt.downloadHandler), for: task)
 			if task.isTerminated {
 				delegate.completeTask(task, error: task.error ?? URLError(.cancelled))
 			} else {
@@ -334,8 +337,8 @@ final class SplitURLSession: Sendable {
 		return try SplitURLSession.result(of: outcome)
 	}
 
-	func upload(_ request: URLRequest, fromFile fileURL: URL) async throws -> (HTTPURLResponse, Data) {
-		return try await SplitURLSession.result(of: upload(request, fromFile: fileURL, bodyLimit: nil, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil))
+	func upload(_ request: URLRequest, fromFile fileURL: URL, urlLogging: HTTPDebugLogger.URLLogging = .redacted) async throws -> (HTTPURLResponse, Data) {
+		return try await SplitURLSession.result(of: upload(request, fromFile: fileURL, bodyLimit: nil, urlLogging: urlLogging, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil))
 	}
 
 	private static func result(of outcome: Outcome) throws -> (HTTPURLResponse, Data) {

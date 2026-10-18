@@ -14,7 +14,7 @@ import XCTest
 #endif
 
 class HTTPDebugLoggerTests: XCTestCase {
-	private let url = URL(string: "https://user:SECRET-PASSWORD@example.com:8443/path/file.txt?token=SECRET-TOKEN&flag#SECRET-FRAGMENT")!
+	private let url = URL(string: "https://user:SECRET-PASSWORD@example.com:8443/path/file.txt?token=SECRET-TOKEN&SECRET-BARE-TOKEN#SECRET-FRAGMENT")!
 	private var logCapture: LogCapture!
 
 	override func setUp() {
@@ -31,7 +31,7 @@ class HTTPDebugLoggerTests: XCTestCase {
 
 		HTTPDebugLogger.logRequest(request)
 
-		XCTAssertTrue(logCapture.messages.contains("--> GET https://example.com:8443/path/file.txt?token=<redacted>&flag"))
+		XCTAssertTrue(logCapture.messages.contains("--> GET https://example.com:8443/path/file.txt?token=<redacted>&<redacted>"))
 		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
 	}
 
@@ -40,7 +40,7 @@ class HTTPDebugLoggerTests: XCTestCase {
 
 		HTTPDebugLogger.logResponse(response, with: nil, or: nil)
 
-		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://example.com:8443/path/file.txt?token=<redacted>&flag"))
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://example.com:8443/path/file.txt?token=<redacted>&<redacted>"))
 		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
 	}
 
@@ -49,7 +49,7 @@ class HTTPDebugLoggerTests: XCTestCase {
 
 		HTTPDebugLogger.logResponse(response, with: nil, or: nil)
 
-		XCTAssertTrue(logCapture.messages.contains("<-- https://example.com:8443/path/file.txt?token=<redacted>&flag"))
+		XCTAssertTrue(logCapture.messages.contains("<-- https://example.com:8443/path/file.txt?token=<redacted>&<redacted>"))
 		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
 	}
 
@@ -65,6 +65,21 @@ class HTTPDebugLoggerTests: XCTestCase {
 		XCTAssertTrue(logCapture.messages.contains("destination: https://example.com/target?sig=<redacted>"))
 		XCTAssertTrue(logCapture.messages.contains("Location: https://download.example.com/file?sig=<redacted>"))
 		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
+	}
+
+	func testOriginOnlyURLsAreRedacted() throws {
+		var request = URLRequest(url: url)
+		request.httpMethod = "PUT"
+		let response = try XCTUnwrap(HTTPURLResponse(url: url, statusCode: 201, httpVersion: nil, headerFields: ["Location": "https://upload.example.com/up/SECRET-PATH-TOKEN"]))
+
+		HTTPDebugLogger.logRequest(request, urlLogging: .originOnly)
+		HTTPDebugLogger.logResponse(response, with: nil, or: nil, urlLogging: .originOnly)
+
+		XCTAssertTrue(logCapture.messages.contains("--> PUT https://example.com:8443/<redacted>"))
+		XCTAssertTrue(logCapture.messages.contains("<-- 201 created https://example.com:8443/<redacted>"))
+		XCTAssertTrue(logCapture.messages.contains("Location: https://upload.example.com/<redacted>"))
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"))
+		XCTAssertFalse(logCapture.joinedMessages.contains("file.txt"))
 	}
 
 	func testOmittedBodiesAreNotLogged() throws {

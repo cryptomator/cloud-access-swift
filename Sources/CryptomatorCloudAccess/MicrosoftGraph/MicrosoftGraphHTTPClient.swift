@@ -39,9 +39,9 @@ final class MicrosoftGraphHTTPClient: Sendable {
 		return response
 	}
 
-	/// Sends the request without an `Authorization` header, which an upload URL of an upload session must not receive.
+	/// Sends the request without an `Authorization` header, which an upload URL of an upload session must not receive. The upload URL is pre-authenticated, possibly by a token in its path, so only its origin is logged.
 	func upload(_ request: URLRequest, fromFile fileURL: URL) async throws -> (HTTPURLResponse, Data) {
-		return try await send(request) { try await self.session.upload($0, fromFile: fileURL) }
+		return try await send(request) { try await self.session.upload($0, fromFile: fileURL, urlLogging: .originOnly) }
 	}
 
 	private func authorize(_ request: URLRequest) async throws -> URLRequest {

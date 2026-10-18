@@ -407,32 +407,6 @@ When calling the functions of this provider, the cloud paths should be provided 
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
 
-## Migrating to 4.0.0
-
-Version 4.0.0 is async-only: every asynchronous API uses Swift concurrency. The library is built in Swift 6 language mode and requires Swift 6.2 or higher and iOS 17.0 or higher.
-
-- The library no longer depends on [google/promises](https://github.com/google/promises). If your app keeps using it, add the package to your app yourself.
-- The library depends on cryptolib-swift 2.0.0. If your app also depends on cryptolib-swift, update it to 2.0.0.
-- The library depends on AppAuth 3.0.0, GTMAppAuth 6.0.0, GTMSessionFetcher 5.3.1, MSAL 2.16.0 and CocoaLumberjack 3.10.0. If your app also depends on one of them, update it accordingly. With AppAuth 3.0.0, `OIDExternalUserAgentSession.resumeExternalUserAgentFlow(with:)` is deprecated in favor of the throwing `resumeExternalUserAgentFlow(_:)`, e.g., on `GoogleDriveAuthenticator.currentAuthorizationFlow`.
-- The library depends on [cryptomator/JOSESwift](https://github.com/cryptomator/JOSESwift) 3.0.0-cryptomator.2 instead of tobihagemann/JOSESwift 2.4.1-cryptomator. The fork is JOSESwift 3.0.0 plus a fix for `epk` and `jwk` header parameters that contain non-string JWK members. It also exposes `JWSHeader.parameters` and `JWEHeader.parameters` for reading. If your app also depends on JOSESwift, switch it to this fork at the same version. If your app calls JOSESwift, migrate to the 3.0.0 API, e.g., `Signer(signingAlgorithm:key:)` and `Verifier(verifyingAlgorithm:key:)` are now `Signer(signatureAlgorithm:key:)` and `Verifier(signatureAlgorithm:key:)`.
-- The library depends on [box/box-ios-sdk](https://github.com/box/box-ios-sdk) 10.17.0 instead of tobihagemann/box-swift-sdk-gen 0.5.1-cryptomator. Its SwiftPM product is `BoxSDK`, but the module is still `BoxSdkGen`, so your imports don't change. If your app also depends on the Box SDK, switch it to box-ios-sdk at the same version. If your app calls the Box SDK, follow Box's [migration guide](https://github.com/box/box-ios-sdk/blob/main/migration-guides/from-box-swift-sdk-gen-v0-to-box-ios-sdk.md).
-- The library no longer depends on the Microsoft Graph SDK ([phil1995/msgraph-sdk-objc-spm](https://github.com/phil1995/msgraph-sdk-objc-spm) and [phil1995/msgraph-sdk-objc-models-spm](https://github.com/phil1995/msgraph-sdk-objc-models-spm)) and calls the Graph API directly. If your app keeps using `MSGraphClientSDK` or `MSGraphClientModels`, add the packages to your app yourself. `MicrosoftGraphError.unexpectedResult` is removed.
-- The library depends on [dropbox/SwiftyDropbox](https://github.com/dropbox/SwiftyDropbox) 10.2.4 instead of phil1995/dropbox-sdk-obj-c-spm 7.2.0. Stored Dropbox logins keep working, because the library reads the tokens that the Objective-C SDK stored in the keychain. If your app calls the Objective-C SDK, e.g., `DBClientsManager`, migrate to SwiftyDropbox. `DropboxCredential.authorizedClient` is internal, and `DropboxError.asyncPollError` and `DropboxError.pathRootError` are removed.
-- Every API that was asynchronous before is `async throws` now, e.g., `WebDAVClient`'s HTTP methods and `getUsername()` of the Box, Dropbox and pCloud credentials. Only the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension is `async` without `throws`. Its overload that takes an `OAuthAuthorizationFlowView` is removed.
-- `CloudProvider` is `Sendable` and its methods are `@concurrent`. Your own implementations must be `Sendable` and should mark their methods `@concurrent` as well.
-- Cancelling the task that calls a `CloudProvider` method now ends the call with `CancellationError`, see [Core](#core).
-- `downloadFile` returns the `CloudItemMetadata` of the downloaded file.
-- `downloadFile` and `uploadFile` take a `progress:` parameter. It replaces the implicit progress composition via `becomeCurrent(withPendingUnitCount:)`, which no longer reports anything.
-- `onTaskCreation` closures are `async` and get a non-optional task. They are no longer called with `nil` if there is no such task. They must not resume the task anymore, because the provider does it.
-- `downloadFile` no longer fails before the transfer if an item exists at `localURL`. It throws `CloudProviderError.itemAlreadyExists` after the transfer instead.
-- All providers, the `*Setup` classes, `DropboxAuthenticator`, `GoogleDriveCredential`, `MicrosoftGraphAuthenticator`, `MicrosoftGraphDiscovery` and `PCloudAuthenticator` are `final`.
-- `DropboxClientSetup.oneTimeSetup` is `@Sendable`.
-- `BoxAuthenticator`, `DropboxAuthenticator`, `GoogleDriveAuthenticator`, `MicrosoftGraphAuthenticator`, `PCloudAuthenticator` and the pCloud `OAuth.performAuthorizationFlow(with:appKey:)` extension are `@MainActor`. `MicrosoftGraphCredential`'s `getUsername()` and `deauthenticate()` are `@MainActor` as well.
-- `DropboxAuthenticator.pendingAuthentication`, `processAuthentication(with:)` and `DropboxAuthenticatorError.noPendingAuthentication` are removed. Pass the redirect URL to `DropboxAuthenticator.handleRedirectURL(_:)` instead of calling `DBClientsManager.handleRedirectURL` yourself.
-- `BoxAuthenticator.authenticate(from:tokenStorage:)` throws errors that left it pending forever before, e.g., `BoxAuthenticatorError.invalidContext`. `DropboxCredential.getUsername()` throws `CloudProviderError.unauthorized` without an authorized client, instead of never returning.
-- `LocalFileSystemProvider` releases its security-scoped access to an item when the operation returns. Before, only `fetchItemMetadata(at:)` released it.
-- `S3CloudProvider.downloadFile` no longer reports success if the transfer of an existing remote file failed.
-
 ## Logging
 
 This SDK utilizes [CocoaLumberjack](https://github.com/CocoaLumberjack/CocoaLumberjack) for logging. CocoaLumberjack is a flexible, fast, open source logging framework. It supports many capabilities including the ability to set logging level per output target, for instance, concise messages logged to the console and verbose messages to a log file.

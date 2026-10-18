@@ -109,7 +109,7 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 		let bytes = [UInt8](originalName.precomposedStringWithCanonicalMapping.utf8)
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
 		CC_SHA1(bytes, UInt32(bytes.count) as CC_LONG, &digest)
-		return Data(digest).base32EncodedString
+		return Data(digest).base32EncodedString()
 	}
 
 	func deflatePath(_ originalPath: CloudPath, with shortenedName: String) -> CloudPath {

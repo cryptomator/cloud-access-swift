@@ -1823,7 +1823,7 @@
 			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 5.4.0;
+				minimumVersion = 5.5.0;
 			};
 		};
 		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
@@ -1903,7 +1903,7 @@
 			repositoryURL = "https://github.com/cryptomator/cryptolib-swift.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 2.0.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
@@ -1919,7 +1919,7 @@
 			repositoryURL = "https://github.com/box/box-ios-sdk.git";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 10.17.0;
+				minimumVersion = 10.18.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

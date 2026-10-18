@@ -34,10 +34,10 @@ let package = Package(
 	dependencies: [
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.16.0"),
 		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.41.0")),
-		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "10.17.0")),
-		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "2.0.0")),
+		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "10.18.0")),
+		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "3.0.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
-		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.4.0")),
+		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.5.0")),
 		.package(url: "https://github.com/google/GTMAppAuth.git", .upToNextMinor(from: "6.0.0")),
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "5.3.1")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.11.1")),

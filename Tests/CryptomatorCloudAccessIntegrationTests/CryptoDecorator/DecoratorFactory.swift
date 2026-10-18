@@ -6,20 +6,20 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCryptoLib
 import Foundation
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import CryptomatorCryptoLib
 
 /// The `createNewVaultFormat…` functions call `waitUntilVisible` after each folder they create, because the next step fails on an eventually consistent provider if it doesn't see the folder yet.
 enum DecoratorFactory {
 	// MARK: - Vault Format 7
 
 	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat7ProviderDecorator {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 		let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 		let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
@@ -64,7 +64,7 @@ enum DecoratorFactory {
 	// MARK: - Vault Format 6
 
 	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat6ProviderDecorator {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
 		let decorator = try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
 		let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)

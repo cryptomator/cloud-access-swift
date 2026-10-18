@@ -6,13 +6,13 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCryptoLib
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
 @testable import CryptomatorCloudAccess
 #endif
-@testable import CryptomatorCryptoLib
 
 class VaultProviderFactoryTests: XCTestCase {
 	let cloudProviderMock = CloudProviderMock(folders: [], files: [String: Data]())
@@ -22,7 +22,7 @@ class VaultProviderFactoryTests: XCTestCase {
 
 	func testCreateVaultProvider() throws {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: masterkey.rawKey)
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
@@ -40,7 +40,7 @@ class VaultProviderFactoryTests: XCTestCase {
 
 	func testCreateVaultProviderFailsForUnsupportedVaultConfig() throws {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 7, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: masterkey.rawKey)
 		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
@@ -56,7 +56,7 @@ class VaultProviderFactoryTests: XCTestCase {
 	// MARK: - createLegacyVaultProvider Tests
 
 	func testCreateLegacyVaultFormat7Provider() throws {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		let vaultProvider = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 7, vaultPath: vaultPath, with: cloudProviderMock)
 		guard let vaultFormat7Provider = vaultProvider as? VaultFormat7ProviderDecorator else {
@@ -70,7 +70,7 @@ class VaultProviderFactoryTests: XCTestCase {
 	}
 
 	func testCreateLegacyVaultFormat6Provider() throws {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		let vaultProvider = try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 6, vaultPath: vaultPath, with: cloudProviderMock)
 		guard let vaultFormat6Provider = vaultProvider as? VaultFormat6ProviderDecorator else {
@@ -83,8 +83,8 @@ class VaultProviderFactoryTests: XCTestCase {
 		}
 	}
 
-	func testCreateLegacyVaultProviderFailsForLowerVaultVersion() {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+	func testCreateLegacyVaultProviderFailsForLowerVaultVersion() throws {
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		XCTAssertThrowsError(try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 5, vaultPath: vaultPath, with: cloudProviderMock)) { error in
 			guard case VaultProviderFactoryError.unsupportedVaultVersion = error else {
@@ -94,8 +94,8 @@ class VaultProviderFactoryTests: XCTestCase {
 		}
 	}
 
-	func testCreateLegacyVaultProviderFailsForHigherVaultVersion() {
-		let masterkey = Masterkey.createFromRaw(aesMasterKey: [UInt8](repeating: 0x55, count: 32), macMasterKey: [UInt8](repeating: 0x77, count: 32))
+	func testCreateLegacyVaultProviderFailsForHigherVaultVersion() throws {
+		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
 
 		XCTAssertThrowsError(try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 8, vaultPath: vaultPath, with: cloudProviderMock)) { error in
 			guard case VaultProviderFactoryError.unsupportedVaultVersion = error else {

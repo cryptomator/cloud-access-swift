@@ -85,14 +85,27 @@ public class TLSCertificateValidator {
 		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
 	}
 
+	/**
+	 Fetches the certificate that the server at `baseURL` presents.
+
+	 - Throws: The transport error if the request failed before the server presented a certificate, e.g., because the server can't be reached. Otherwise, `TLSCertificateValidatorError.validationFailed` if no certificate was received.
+	 */
 	public func validate() async throws -> TLSCertificate {
 		var request = URLRequest(url: baseURL)
 		request.httpMethod = "GET"
-		if let (location, _) = try? await urlSession.download(for: request) {
+		var transportError: Error?
+		do {
+			let (location, _) = try await urlSession.download(for: request)
 			try? FileManager.default.removeItem(at: location)
+		} catch {
+			transportError = error
 		}
 		try Task.checkCancellation()
 		guard let testedCertificate = urlSessionDelegate?.testedCertificate else {
+			// The delegate cancels every challenge, so a cancelled request means that a challenge without a certificate was received.
+			if let transportError, !isCancellationError(transportError) {
+				throw transportError
+			}
 			throw TLSCertificateValidatorError.validationFailed
 		}
 		return testedCertificate

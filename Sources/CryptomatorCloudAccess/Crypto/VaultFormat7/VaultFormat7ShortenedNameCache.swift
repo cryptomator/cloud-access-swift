@@ -181,7 +181,9 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 			return originalName
 		} else {
 			let data = try await loadNameC9S(c9sDirPath)
-			let originalName = String(data: data, encoding: .utf8)!
+			guard let originalName = String(data: data, encoding: .utf8) else {
+				throw VaultFormatError.invalidNameFile
+			}
 			try? addToCache(shortenedName, originalName: originalName)
 			return originalName
 		}

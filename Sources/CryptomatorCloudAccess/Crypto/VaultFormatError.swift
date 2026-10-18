@@ -10,4 +10,5 @@ import Foundation
 
 public enum VaultFormatError: Error {
 	case encounteredUnrelatedFile
+	case invalidNameFile
 }

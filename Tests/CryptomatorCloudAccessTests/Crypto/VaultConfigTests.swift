@@ -82,6 +82,15 @@ class VaultConfigTests: XCTestCase {
 		}
 	}
 
+	func testAllegedHubConfigWithNullAndNonStringMembers() throws {
+		let header = #"{"kid":"hub+https://hub.example.com/vaults/1","typ":"JWT","alg":"HS256","hub":{"clientId":"cryptomator","authEndpoint":"https://auth.example.com/auth","tokenEndpoint":"https://auth.example.com/token","authSuccessUrl":"https://hub.example.com/success","authErrorUrl":"https://hub.example.com/error","apiBaseUrl":null,"devicesResourceUrl":"https://hub.example.com/devices","version":1}}"#
+		let encodedHeader = Data(header.utf8).base64URLEncodedString()
+		let tokenComponents = try XCTUnwrap(String(data: tokenHS256, encoding: .utf8)?.split(separator: "."))
+		let token = Data(([Substring(encodedHeader)] + tokenComponents.dropFirst()).joined(separator: ".").utf8)
+		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+		XCTAssertEqual(HubConfig(clientId: "cryptomator", authEndpoint: "https://auth.example.com/auth", tokenEndpoint: "https://auth.example.com/token", authSuccessUrl: "https://hub.example.com/success", authErrorUrl: "https://hub.example.com/error", apiBaseUrl: nil, devicesResourceUrl: "https://hub.example.com/devices"), unverifiedVaultConfig.allegedHubConfig)
+	}
+
 	func testToToken() throws {
 		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
 		let rawKey = [UInt8](repeating: 0x55, count: 64)

@@ -57,6 +57,16 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
 	}
 
+	func testGetOriginalPathWithNonUTF8Name() async {
+		let shortened = CloudPath("/foo/bar/d/2/30/shortened.lng")
+
+		await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(shortened) { _ in
+			return Data([0xFF, 0xFE])
+		}) { error in
+			XCTAssertEqual(.invalidNameFile, error as? VaultFormatError)
+		}
+	}
+
 	func testDeflatePath() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong")
 		let shortened = cache.deflatePath(originalPath, with: "short.lng")

@@ -165,7 +165,7 @@ public class VaultConfig {
 
 extension JWSHeader {
 	var hubConfig: HubConfig? {
-		guard let hub = parameters["hub"] as? [String: String], let json = try? JSONEncoder().encode(hub) else {
+		guard let hub = parameters["hub"] as? [String: Any], let json = try? JSONSerialization.data(withJSONObject: hub) else {
 			return nil
 		}
 		return try? JSONDecoder().decode(HubConfig.self, from: json)

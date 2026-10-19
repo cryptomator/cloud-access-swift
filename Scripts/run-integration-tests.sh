@@ -8,7 +8,7 @@
 #
 # Environment:
 #   DERIVED_DATA_PATH  DerivedData of `xcodebuild build-for-testing -scheme AllIntegrationTests` (default: Xcode's default)
-#   DEVICE             Simulator name (default: iPhone 17 Pro)
+#   DEVICE             Simulator name (default: iPhone 17)
 #   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf7` (default: all backends, ignored with --only)
 #
 # --only runs just the tests of a still-failing.txt of an earlier run, on the backends it lists. Each of its lines is
@@ -17,7 +17,7 @@
 
 set -uo pipefail
 
-DEVICE="${DEVICE:-iPhone 17 Pro}"
+DEVICE="${DEVICE:-iPhone 17}"
 BACKENDS="${BACKENDS:-}"
 OUTPUT_DIR="integration-output"
 STILL_FAILING_FILE="$OUTPUT_DIR/still-failing.txt"

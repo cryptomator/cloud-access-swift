@@ -255,6 +255,38 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual("next", itemList.nextPageToken)
 	}
 
+	func testFetchItemMetadataOfFolderListedAfterSibling() async throws {
+		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+		let recordRequest: @Sendable (URLRequest) -> Void = { request in
+			requests.withLock { $0.append(request) }
+		}
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
+		]
+
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+
+		XCTAssertEqual(CloudPath("/folder"), metadata.cloudPath)
+		XCTAssertEqual(.folder, metadata.itemType)
+		XCTAssertEqual([
+			["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
+			["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
+		], requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)))
+	}
+
+	func testFetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	func testCreateFolderPutsFolderMarker() async throws {
 		let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
 		URLProtocolMock.requestHandler = [

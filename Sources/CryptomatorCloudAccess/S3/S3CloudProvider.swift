@@ -41,20 +41,23 @@ public final class S3CloudProvider: CloudProvider {
 		return try await getItemMetadata(at: cloudPath)
 	}
 
-	/// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
+	/// Lists the item's key as prefix (without trailing slash) instead of sending a `headObject` request, because some providers don't respond to that with an access denied error. A sibling such as `a/b 2/` or `a/b.txt` sorts before the folder `a/b/`, so when the first page holds only a sibling, the folder's own prefix is listed as well.
 	private func getItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
-		var prefix = getPrefix(for: cloudPath)
-		if prefix != getPrefix(for: .root), prefix.hasSuffix(S3CloudProvider.delimiter) {
-			prefix.removeLast(1)
-		}
 		do {
-			let output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: nil, maxKeys: 1)
+			let output = try await listObjects(withPrefix: getKey(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
-			guard let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) else {
+			if let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) {
+				return item
+			}
+			guard cloudPath != .root, output.nextContinuationToken != nil else {
 				throw CloudProviderError.itemNotFound
 			}
-			return item
+			let folderOutput = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
+			guard !folderOutput.contents.isEmpty || !folderOutput.commonPrefixes.isEmpty else {
+				throw CloudProviderError.itemNotFound
+			}
+			return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		} catch {
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with error: \(error)")
 			throw convertStandardError(error)

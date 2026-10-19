@@ -41,9 +41,21 @@ class S3XMLTests: XCTestCase {
 		XCTAssertEqual("a+b/c=", result.nextContinuationToken)
 	}
 
-	func testListObjectsResultWithoutContinuationToken() throws {
+	func testListObjectsResultWithoutNextPage() throws {
 		let result = try S3ListObjectsResult(xml: Data("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>".utf8))
 		XCTAssertEqual(S3ListObjectsResult(contents: [], commonPrefixes: [], nextContinuationToken: nil), result)
+		XCTAssertNil(try S3ListObjectsResult(xml: Data("<ListBucketResult><IsTruncated>false</IsTruncated><NextContinuationToken>next</NextContinuationToken></ListBucketResult>".utf8)).nextContinuationToken)
+		XCTAssertNil(try S3ListObjectsResult(xml: Data("<ListBucketResult><NextContinuationToken/></ListBucketResult>".utf8)).nextContinuationToken)
+	}
+
+	func testTruncatedListObjectsResultWithoutContinuationTokenIsUnparseable() {
+		for body in ["<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken/></ListBucketResult>", "<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>"] {
+			XCTAssertThrowsError(try S3ListObjectsResult(xml: Data(body.utf8))) { error in
+				guard case S3ResponseError.unparseableResult = error else {
+					return XCTFail("Expected unparseableResult, got \(error)")
+				}
+			}
+		}
 	}
 
 	func testErrorResponse() {

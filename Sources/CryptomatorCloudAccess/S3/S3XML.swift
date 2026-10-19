@@ -27,7 +27,7 @@ struct S3ListObjectsResult: Equatable {
 		self.nextContinuationToken = nextContinuationToken
 	}
 
-	/// - Throws: `S3ResponseError.unparseableResult` if the body is no `ListBucketResult` document.
+	/// - Throws: `S3ResponseError.unparseableResult` if the body is no `ListBucketResult` document, or a truncated one without a continuation token.
 	init(xml body: Data) throws {
 		guard let root = S3XMLElement.parse(body), root.name == "ListBucketResult" else {
 			throw S3ResponseError.unparseableResult
@@ -39,7 +39,19 @@ struct S3ListObjectsResult: Equatable {
 			return S3Object(key: key, lastModified: content.text(of: "LastModified").flatMap(Date.date(fromISO8601:)), size: content.text(of: "Size").flatMap { Int($0) })
 		}
 		self.commonPrefixes = root.children("CommonPrefixes").compactMap { $0.text(of: "Prefix") }
-		self.nextContinuationToken = root.text(of: "NextContinuationToken")
+		let nextContinuationToken = root.text(of: "NextContinuationToken").flatMap { $0.isEmpty ? nil : $0 }
+		switch root.text(of: "IsTruncated") {
+		case "false":
+			self.nextContinuationToken = nil
+		case "true":
+			// A folder move or deletion that stopped at such a page would leave the rest of the folder behind.
+			guard let nextContinuationToken else {
+				throw S3ResponseError.unparseableResult
+			}
+			self.nextContinuationToken = nextContinuationToken
+		default:
+			self.nextContinuationToken = nextContinuationToken
+		}
 	}
 }
 

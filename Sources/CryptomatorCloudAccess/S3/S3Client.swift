@@ -179,7 +179,9 @@ final class S3Client: Sendable {
 	/**
 	 Sends a metadata request, signing each attempt afresh, and returns the result that `result` reads from the body of a successful response.
 
-	 A failed attempt is retried up to three times if its failure is transient. That is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout error status or code, also in an `<Error>` document of a 2xx response, and a 2xx response whose `<Error>` document or result can't be read (`S3ResponseError.unparseableResult`). A request that failed because of the device's clock is retried once with the server's clock. The wait before a retry is the only point at which a cancelled task stops the request.
+	 A failed attempt is retried up to three times if its failure is transient. That is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`). A request that failed because of the device's clock is retried once with the server's clock.
+
+	 A cancelled task stops the request instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
 	 */
 	func send<Output>(_ request: URLRequest, result: (Data) throws -> Output) async throws -> Output {
 		let payloadHash = request.httpBody.map(S3Signer.sha256Hex) ?? S3Signer.emptyPayloadHash
@@ -199,6 +201,7 @@ final class S3Client: Sendable {
 			S3Client.logFailure(of: request, with: failure)
 			if !hasCorrectedClockSkew, correctClockSkew(after: failure, response: outcome.response, signingOffset: signingOffset) {
 				hasCorrectedClockSkew = true
+				try Task.checkCancellation()
 				continue
 			}
 			guard retryCount < S3Client.maxRetryCount, S3Client.isTransient(failure) else {

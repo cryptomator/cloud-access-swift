@@ -173,6 +173,21 @@ class S3ClientTests: XCTestCase {
 		XCTAssertEqual(3600, sentDates[2].timeIntervalSince(sentDates[0]), accuracy: 60)
 	}
 
+	func testDoesNotRetryAfterClockSkewInCancelledTask() async throws {
+		let client: S3Client = client
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
+			S3MockResponse.handler(statusCode: 200)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
+			try await client.putEmptyObject(key: "folder/", contentType: "application/x-directory")
+		})) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
 	/// Requests that were signed before another one corrected the offset still retry with the corrected one.
 	func testCorrectsClockSkewOfConcurrentRequests() async throws {
 		let client: S3Client = client

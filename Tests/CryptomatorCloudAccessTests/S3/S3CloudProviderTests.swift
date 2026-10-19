@@ -275,6 +275,30 @@ class S3CloudProviderTests: XCTestCase {
 		], requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)))
 	}
 
+	func testFetchItemMetadataDoesNotListFolderAfterSiblingInCancelledTask() async throws {
+		let provider: S3CloudProvider = provider
+		let fetch = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
+		let fetchStored = DispatchSemaphore(value: 0)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
+				_ = fetchStored.wait(timeout: .now() + testWaitTimeout)
+				fetch.withLock { $0 }?.cancel()
+			}),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]))
+		]
+
+		let fetchTask = Task {
+			try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+		}
+		fetch.withLock { $0 = fetchTask }
+		fetchStored.signal()
+
+		await XCTAssertThrowsErrorAsync(try await value(of: fetchTask)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
 	func testFetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
 		URLProtocolMock.requestHandler = [
 			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),

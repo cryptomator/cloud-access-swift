@@ -53,6 +53,7 @@ public final class S3CloudProvider: CloudProvider {
 			guard cloudPath != .root, output.nextContinuationToken != nil else {
 				throw CloudProviderError.itemNotFound
 			}
+			try Task.checkCancellation()
 			let folderOutput = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
 			guard !folderOutput.contents.isEmpty || !folderOutput.commonPrefixes.isEmpty else {
 				throw CloudProviderError.itemNotFound

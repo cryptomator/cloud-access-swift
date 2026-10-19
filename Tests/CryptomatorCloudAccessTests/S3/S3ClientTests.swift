@@ -131,6 +131,17 @@ class S3ClientTests: XCTestCase {
 		XCTAssertEqual("\"etag-2\"", eTag)
 	}
 
+	func testRetriesUnreadableErrorDocumentInSuccessfulResponseWithoutResult() async throws {
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: "<Error><Code>InternalError</Code>"),
+			S3MockResponse.handler(statusCode: 204)
+		]
+
+		try await client.deleteObject(key: "a.txt")
+
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Clock Skew
 
 	/// The corrected offset also signs later requests, including presigned transfers, which don't correct it themselves.

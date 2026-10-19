@@ -50,6 +50,6 @@ struct S3Error: Error, Equatable, CustomStringConvertible {
 }
 
 enum S3ResponseError: Error {
-	/// A 2xx response lacks the result that its operation returns, e.g., because S3 cut a long-running copy short.
+	/// A 2xx response lacks the result that its operation returns, e.g., because S3 cut a long-running copy short, or carries an `<Error>` document that can't be read.
 	case unparseableResult
 }

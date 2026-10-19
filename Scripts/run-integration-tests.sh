@@ -2,7 +2,7 @@
 #
 # Runs the integration tests of an existing build in one parallel pass, then re-runs the failed tests once on the
 # backends that had failures. Writes the (test, backend) pairs that are still failing to
-# integration-output/still-failing.txt and a summary to $GITHUB_STEP_SUMMARY.
+# integration-output/still-failing.txt and a summary to the log and $GITHUB_STEP_SUMMARY.
 #
 # Usage: Scripts/run-integration-tests.sh [--only <file>]
 #
@@ -53,7 +53,7 @@ if [ -n "$ONLY_FILE" ]; then
 fi
 mkdir -p "$OUTPUT_DIR"
 rm -f "$STILL_FAILING_FILE"
-SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+SUMMARY_FILE="$WORK_DIR/summary.md"
 
 # The summary is public, and an S3 error's description can contain request URLs with credentials. So a failure message
 # is reduced to a part that can't contain them: an error's domain and code, a case of a known error, a known error that
@@ -156,12 +156,16 @@ run_pass() {
 
 # Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<filter of the main pass if the token is ->\t<failure reasons>` per pair.
 # Both passes record the main pass's filter, which the re-run's own filter can differ from, so that their pairs match.
-# Returns non-zero if the pass is incomplete, e.g. if its result can't be read, a test process crashed, or the run failed without a failed test.
+# Returns non-zero if the pass is incomplete, e.g. if its result can't be read, a test process crashed, or the run failed
+# without a failed test. It then writes why to $WORK_DIR/<name>.incomplete.
 parse_pass() {
   local name="$1"
-  xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json" 2> "$WORK_DIR/$name.parse-error" || return 1
-  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$(cat "$WORK_DIR/pass1.filter")" "$WORK_DIR" > "$WORK_DIR/$name.tsv" <<'EOF'
-import json, re, sys
+  if ! xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json" 2> "$WORK_DIR/$name.parse-error"; then
+    echo "its results can't be read" > "$WORK_DIR/$name.incomplete"
+    return 1
+  fi
+  python3 -I - "$WORK_DIR/$name.json" "$(cat "$WORK_DIR/$name.exit")" "$(cat "$WORK_DIR/pass1.filter")" "$WORK_DIR" "$WORK_DIR/$name.incomplete" > "$WORK_DIR/$name.tsv" <<'EOF'
+import json, os, re, sys
 
 sys.path.insert(0, sys.argv[4])
 from failure_reason import reason
@@ -170,33 +174,51 @@ results = json.load(open(sys.argv[1]))
 exit_code = int(sys.argv[2])
 backends = sys.argv[3]
 backend_token = re.compile(r"^[a-z0-9]+-[a-z0-9]+$")
-# A crashed test process is reported as a failure message like `Crash: xctest` of the test or its argument.
-crash_marker = re.compile(r"^Crash: |did not finish|restarting after unexpected exit|lost connection", re.IGNORECASE)
+# A crashed test process is reported as a failure message like `Crash: xctest` of the test or its argument, or as the
+# underlying error of a test runner error.
+crash_marker = re.compile(r"^Crash: |Underlying Error: Crash: |did not finish|restarting after unexpected exit|lost connection", re.IGNORECASE)
+# A test process that exits before it starts testing is reported as `Early unexpected exit, operation never finished bootstrapping`.
+bootstrap_marker = re.compile(r"never finished bootstrapping")
 pairs = []
-incomplete = False
+# Why the pass is incomplete, in fixed words, because the messages behind them aren't redacted.
+incomplete_causes = []
 
 def messages(node):
-    return [child.get("name", "") for child in node.get("children", []) if child.get("nodeType") == "Failure Message"]
+    return [(child.get("name", ""), child.get("sourceLocation")) for child in node.get("children", []) if child.get("nodeType") == "Failure Message"]
+
+# The file name and line can't contain credentials, and they tell which check failed.
+def located_reason(message):
+    text, location = message
+    failure_reason = reason(text)
+    if failure_reason and location:
+        return f"{failure_reason} ({os.path.basename(location['filePath'])}:{location['lineNumber']})"
+    return failure_reason
 
 def reasons(failure_messages):
-    return "; ".join(dict.fromkeys(filter(None, map(reason, failure_messages))))
+    return "; ".join(dict.fromkeys(filter(None, map(located_reason, failure_messages))))
+
+def runner_error_cause(node):
+    texts = [text for text, _ in messages(node)]
+    if any(bootstrap_marker.search(text) for text in texts):
+        crashed = any(crash_marker.search(text) for text in texts)
+        return "the test process crashed before testing started" if crashed else "the test process exited before testing started"
+    return "the test runner reported an error"
 
 def token_for(node_identifier):
     match = re.search(r"(?:^|/)ProviderSpecific/([^/]+)Tests/", node_identifier)
     return match.group(1).lower() if match else "-"
 
 def walk(node):
-    global incomplete
     if node.get("nodeType") == "Test Case":
         node_identifier = node["nodeIdentifier"]
         # A test process that couldn't run, e.g. because the simulator couldn't be cloned, is reported as a test case whose
         # identifier names no test, like `The test runner encountered an error`.
         if "/" not in node_identifier:
-            incomplete = True
+            incomplete_causes.append(runner_error_cause(node))
             return
         arguments = [child for child in node.get("children", []) if child.get("nodeType") == "Arguments"]
-        if any(crash_marker.search(message) for target in [node] + arguments for message in messages(target)):
-            incomplete = True
+        if any(crash_marker.search(text) for target in [node] + arguments for text, _ in messages(target)):
+            incomplete_causes.append("a test process crashed")
         if arguments and all(backend_token.match(argument.get("name", "")) for argument in arguments):
             for argument in arguments:
                 pairs.append((argument.get("result", "unknown"), node_identifier, argument["name"], reasons(messages(argument) + messages(node))))
@@ -208,14 +230,29 @@ def walk(node):
 
 for node in results.get("testNodes", []):
     walk(node)
-if not pairs:
-    incomplete = True
-if exit_code != 0 and not any(status == "Failed" for status, *_ in pairs):
-    incomplete = True
+# Only when the walk found no cause, because a runner error or crash also leaves no results or a failure without a failed test.
+if not incomplete_causes:
+    if not pairs:
+        incomplete_causes.append("no test reported a result")
+    elif exit_code != 0 and not any(status == "Failed" for status, *_ in pairs):
+        incomplete_causes.append("it failed without a failed test")
 for status, node_identifier, token, failure_reasons in pairs:
     print(f"{status}\t{node_identifier}\t{token}\t{backends if token == '-' else ''}\t{failure_reasons}")
-sys.exit(1 if incomplete else 0)
+if incomplete_causes:
+    with open(sys.argv[5], "w") as file:
+        file.write("; ".join(dict.fromkeys(incomplete_causes)))
+    sys.exit(1)
 EOF
+  local parse_status=$?
+  if [ "$parse_status" -ne 0 ] && [ ! -s "$WORK_DIR/$name.incomplete" ]; then
+    echo "its results can't be parsed" > "$WORK_DIR/$name.incomplete"
+  fi
+  return "$parse_status"
+}
+
+# The job summary can't be read through the API, so the log gets the summary too.
+publish_summary() {
+  tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$SUMMARY_FILE"
 }
 
 # Prints the pairs of a parsed pass that didn't pass, as lines of a still-failing.txt.
@@ -236,29 +273,28 @@ if ! parse_pass pass1; then
   {
     echo "## Integration tests"
     echo
-    echo ":x: The main pass did not complete (crash, unreadable results, or a failure that no test reported). Nothing was re-run, and the next attempt runs everything."
+    echo ":x: The main pass did not complete: $(cat "$WORK_DIR/pass1.incomplete"). Nothing was re-run, and the next attempt runs everything."
   } >> "$SUMMARY_FILE"
-  echo "The main pass did not complete." >&2
+  publish_summary
   exit 1
 fi
 
 not_passed pass1 > "$WORK_DIR/failed-pass1.txt"
-pass2_incomplete=false
 if [ -s "$WORK_DIR/failed-pass1.txt" ]; then
   run_selected_pass pass2 "$WORK_DIR/failed-pass1.txt"
   if ! parse_pass pass2; then
-    pass2_incomplete=true
     : > "$WORK_DIR/pass2.tsv"
   fi
 fi
 
-python3 -I - "$WORK_DIR" "$STILL_FAILING_FILE" "$pass2_incomplete" "$ONLY_FILE" "$PASSED_STATUSES" >> "$SUMMARY_FILE" <<'EOF'
+python3 -I - "$WORK_DIR" "$STILL_FAILING_FILE" "$ONLY_FILE" "$PASSED_STATUSES" >> "$SUMMARY_FILE" <<'EOF'
 import collections, os, sys
 
-work_dir, still_failing_file, pass2_incomplete, only_file = sys.argv[1], sys.argv[2], sys.argv[3] == "true", sys.argv[4]
+work_dir, still_failing_file, only_file = sys.argv[1], sys.argv[2], sys.argv[3]
+pass2_incomplete_file = os.path.join(work_dir, "pass2.incomplete")
 # A skip doesn't heal a pair that failed before: a pair of the re-run pass, or a pair that --only lists. A listed pair
 # that the main pass skips isn't re-run, because the re-run would select it the same way and skip it again.
-healed_statuses = set(sys.argv[5].split("|")) - {"Skipped"}
+healed_statuses = set(sys.argv[4].split("|")) - {"Skipped"}
 # The filter of each pair that --only lists, which only a `-` token's line has.
 only_lines = [line.rstrip("\n").split("\t") for line in open(only_file) if line.strip()] if only_file else []
 listed = {tuple(fields[:2]): fields[2] if len(fields) > 2 else "" for fields in only_lines}
@@ -305,8 +341,9 @@ print("| Backend | Passed | Failed | Passed on re-run | Skipped |")
 print("| --- | ---: | ---: | ---: | ---: |")
 for token in sorted(counts):
     print(f"| `{token}` | {counts[token]['passed']} | {counts[token]['failed']} | {counts[token]['passed on re-run']} | {counts[token]['skipped']} |")
-if pass2_incomplete:
-    print("\n:x: The re-run pass did not complete, so its pairs count as still failing.")
+if os.path.exists(pass2_incomplete_file):
+    cause = open(pass2_incomplete_file).read().strip()
+    print(f"\n:x: The re-run pass did not complete: {cause}. Its pairs count as still failing.")
 if healed:
     print("\n### Passed only on re-run\n")
     for (node_identifier, token, _), failure_reasons in healed:
@@ -346,7 +383,8 @@ if [ -s "$WORK_DIR/retries.md" ]; then
     echo "</details>"
   } >> "$SUMMARY_FILE"
 fi
+publish_summary
 
-if [ "$summary_status" -ne 0 ] || [ -s "$STILL_FAILING_FILE" ] || [ "$pass2_incomplete" = true ]; then
+if [ "$summary_status" -ne 0 ] || [ -s "$STILL_FAILING_FILE" ] || [ -s "$WORK_DIR/pass2.incomplete" ]; then
   exit 1
 fi

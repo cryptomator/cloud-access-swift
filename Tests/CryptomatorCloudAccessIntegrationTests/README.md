@@ -128,7 +128,7 @@ An attempt runs while it holds one of its provider's few permits (`IntegrationPr
 
 In CI, `Scripts/run-integration-tests.sh` re-runs the failed tests once against the same build. It runs every failed test on every backend that a test failed on, so a test can also run on a backend it didn't fail on. A failed provider-specific test adds all backends of its provider. The job is green only if each failed (test, backend) pair passed on the re-run, so the extra runs don't count. A re-run of the job via "Re-run failed jobs" selects the same way from the pairs still failing at the end of the previous attempt, and its main pass then counts all the pairs it runs. If that attempt didn't finish its main pass, it runs everything.
 
-The job summary lists the pairs that passed only on the re-run, those still failing, and the in-process retries. Because S3 errors can contain request URLs with credentials, it shows only the parts of a failure message that can't contain them, such as an error's domain and code.
+The script's summary lists the pairs that passed only on the re-run, those still failing, the in-process retries, and why a pass didn't complete. It goes to the log as well as the job summary, because the job summary can't be read through the API. Because S3 errors can contain request URLs with credentials, it shows only the parts of a failure message that can't contain them, such as an error's domain and code. It also names the file and line of the failing check.
 
 ## Remote Folders
 

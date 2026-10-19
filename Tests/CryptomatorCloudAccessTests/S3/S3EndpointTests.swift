@@ -35,8 +35,15 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("https://\(bucket).example.com/file.txt", try url(endpointURL: "https://example.com", bucket: bucket, key: "file.txt"))
 	}
 
-	func testPathStyleForIPv6Host() throws {
+	func testPathStyleForIPAddressHost() throws {
 		XCTAssertEqual("http://[fd00::1]:9000/mybucket/file.txt", try url(endpointURL: "http://[fd00::1]:9000", bucket: "mybucket", key: "file.txt"))
+		XCTAssertEqual("http://192.168.1.10:9000/mybucket/file.txt", try url(endpointURL: "http://192.168.1.10:9000", bucket: "mybucket", key: "file.txt"))
+		XCTAssertEqual("https://127.1/mybucket/file.txt", try url(endpointURL: "https://127.1", bucket: "mybucket", key: "file.txt"))
+		XCTAssertEqual("http://192.168.1.09:9000/mybucket/file.txt", try url(endpointURL: "http://192.168.1.09:9000", bucket: "mybucket", key: "file.txt"))
+	}
+
+	func testVirtualHostedStyleForHostnameContainingIPAddress() throws {
+		XCTAssertEqual("http://mybucket.127.0.0.1.nip.io:9000/file.txt", try url(endpointURL: "http://127.0.0.1.nip.io:9000", bucket: "mybucket", key: "file.txt"))
 	}
 
 	/// Such buckets pass the DNS rule of AWS SDK 2.41.0, but a host can't contain them.

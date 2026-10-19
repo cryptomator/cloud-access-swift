@@ -11,7 +11,7 @@ import Foundation
 /**
  Builds the URLs of a bucket's requests.
 
- Only the scheme, host and port of the credential's URL are used, which is how AWS SDK 2.41.0 addressed its transfers. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Any other bucket, and every bucket of an IPv6 host, is addressed in the path (path style).
+ Only the scheme, host and port of the credential's URL are used, which is how AWS SDK 2.41.0 addressed its transfers. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Any other bucket, and every bucket of an IP address host, is addressed in the path (path style).
  */
 struct S3Endpoint: Sendable {
 	private static let hostLabelCharacters = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
@@ -34,7 +34,13 @@ struct S3Endpoint: Sendable {
 			self.port = nil
 		}
 		self.bucket = credential.bucket
-		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !host.hasPrefix("[")
+		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
+	}
+
+	/// Whether the host is an IPv6 address in brackets or a string that URLSession connects to as an IPv4 address. `inet_aton` covers the short, hex and octal forms such as `127.1`, and `inet_pton` covers dotted quads with a zero-padded `08` or `09`, which `inet_aton` reads as invalid octal.
+	private static func isIPAddress(_ host: String) -> Bool {
+		var address = in_addr()
+		return host.hasPrefix("[") || inet_aton(host, &address) == 1 || inet_pton(AF_INET, host, &address) == 1
 	}
 
 	static func isVirtualHostedStyleCompliant(bucket: String) -> Bool {

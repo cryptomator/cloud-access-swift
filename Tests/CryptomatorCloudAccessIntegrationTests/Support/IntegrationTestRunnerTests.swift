@@ -197,7 +197,8 @@ extension IntegrationTests {
 				BoxAPIError(message: "Service Unavailable", requestInfo: RequestInfo(method: "GET", url: "https://api.box.com/2.0/folders/0", queryParams: [:], headers: [:]), responseInfo: ResponseInfo(statusCode: 503, headers: [:])),
 				NSError(domain: "com.google.GTLRErrorObjectDomain", code: 503),
 				NSError(domain: "com.google.HTTPStatus", code: 429),
-				NSError(domain: "com.amazonaws.AWSS3ErrorDomain", code: 0, userInfo: ["Code": "SlowDown"]),
+				S3Error(statusCode: 503, code: "SlowDown"),
+				S3Error(statusCode: 502),
 				CallError<PCloudAPI.ListFolder.Error>.rateLimitError,
 				CallError<PCloudAPI.ListFolder.Error>.serverInternalError(5000, nil)
 			]
@@ -217,7 +218,9 @@ extension IntegrationTests {
 				IntegrationTestError.fixtureTimeout(.seconds(600)),
 				IntegrationTestError.budgetExceeded(.seconds(300)),
 				URLSessionError.httpError(nil, statusCode: 404),
-				NSError(domain: "com.google.HTTPStatus", code: 404)
+				NSError(domain: "com.google.HTTPStatus", code: 404),
+				S3Error(statusCode: 404, code: "NoSuchBucket"),
+				S3Error(statusCode: 400, code: "InvalidArgument")
 			]
 			for error in errors {
 				#expect(!isTransientIntegrationError(error), "\(error)")

@@ -53,9 +53,9 @@ class SplitURLSessionTests: XCTestCase {
 		try Data("content".utf8).write(to: fileURL)
 
 		_ = try await markedSession.data(URLRequest(url: url), bodyLimit: nil, bodyLogging: .logged)
-		_ = try await markedSession.download(URLRequest(url: url), route: .metadata, handler: { _, _ in .none }, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
-		_ = try await markedSession.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
-		_ = try await markedSession.upload(URLRequest(url: url), fromFile: fileURL, bodyLimit: nil, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await markedSession.download(URLRequest(url: url), route: .metadata, handler: { _, _ in .none }, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await markedSession.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await markedSession.upload(URLRequest(url: url), fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 
 		XCTAssertEqual(["metadata", "metadata", "transfer", "transfer"], markers.withLock { $0 })
 	}
@@ -69,7 +69,7 @@ class SplitURLSessionTests: XCTestCase {
 			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 		}, count: 2)
 
-		let uploadOutcome = try await backgroundSession.upload(URLRequest(url: mockURL), fromFile: fileURL, bodyLimit: nil, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		let uploadOutcome = try await backgroundSession.upload(URLRequest(url: mockURL), fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		XCTAssertEqual(200, (uploadOutcome.response as? HTTPURLResponse)?.statusCode)
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
 
@@ -94,7 +94,7 @@ class SplitURLSessionTests: XCTestCase {
 		var uploadRequest = URLRequest(url: mockURL)
 		uploadRequest.httpMethod = "PUT"
 
-		_ = try await backgroundSession.upload(uploadRequest, fromFile: fileURL, bodyLimit: nil, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await backgroundSession.upload(uploadRequest, fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		_ = try await backgroundSession.data(URLRequest(url: mockURL), bodyLimit: nil, bodyLogging: .logged)
 
 		let messages = logCapture.messages
@@ -123,7 +123,7 @@ class SplitURLSessionTests: XCTestCase {
 				let waitResult = secondFinished.wait(timeout: .now() + testWaitTimeout)
 				firstWaitResult.withLock { $0 = waitResult }
 				return try .data(Data(contentsOf: location))
-			}, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+			}, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		}
 		await fulfillment(of: [firstHeld], timeout: testWaitTimeout)
 		let secondOutcome = try await secondSession.data(secondRequest, bodyLimit: nil, bodyLogging: .logged)

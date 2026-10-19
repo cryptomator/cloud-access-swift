@@ -47,20 +47,8 @@ enum MicrosoftGraphAPI {
 		let lastModifiedDateTime: String?
 
 		var lastModifiedDate: Date? {
-			guard let lastModifiedDateTime else {
-				return nil
-			}
-			let formatter = lastModifiedDateTime.contains(".") ? FileSystemInfo.fractionalSecondsFormatter : FileSystemInfo.formatter
-			return formatter.date(from: lastModifiedDateTime)
+			return lastModifiedDateTime.flatMap(Date.date(fromISO8601:))
 		}
-
-		// The formatters are never mutated after their creation, which makes them safe to share across threads.
-		private nonisolated(unsafe) static let formatter = ISO8601DateFormatter()
-		private nonisolated(unsafe) static let fractionalSecondsFormatter = {
-			let formatter = ISO8601DateFormatter()
-			formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-			return formatter
-		}()
 	}
 
 	struct UploadSession: Decodable {

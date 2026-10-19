@@ -86,6 +86,8 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return true
 	case let error as BoxAPIError:
 		return isTransientHTTPStatusCode(error.responseInfo.statusCode)
+	case let error as S3Error:
+		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
 	default:
 		return nil
 	}
@@ -97,9 +99,6 @@ private func isTransientNSError(_ error: NSError) -> Bool {
 	}
 	if httpStatusErrorDomains.contains(error.domain) {
 		return isTransientHTTPStatusCode(error.code)
-	}
-	if let code = error.userInfo["Code"] as? String, transientS3ErrorCodes.contains(code) {
-		return true
 	}
 	return isAppAuthServerErrorWithTransientStatus(error)
 }

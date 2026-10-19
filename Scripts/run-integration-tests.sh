@@ -55,7 +55,7 @@ mkdir -p "$OUTPUT_DIR"
 rm -f "$STILL_FAILING_FILE"
 SUMMARY_FILE="$WORK_DIR/summary.md"
 
-# The summary is public, and an S3 error's description can contain request URLs with credentials. So a failure message
+# The summary is public, and a failure message can contain request URLs with credentials, e.g., in a URLError. So a failure message
 # is reduced to a part that can't contain them: an error's domain and code, a case of a known error, a known error that
 # wasn't thrown, or that an expectation failed. Anything else becomes `details withheld`. Expectations aren't quoted,
 # because tests interpolate metadata, contents and errors into them.

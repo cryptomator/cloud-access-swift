@@ -6,7 +6,6 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import AWSS3
 import Foundation
 import Testing
 #if canImport(CryptomatorCloudAccessCore)
@@ -36,57 +35,53 @@ extension IntegrationTests.ProviderSpecific {
 			}
 		}
 
-		@MainActor
+		/// Downloads the copy and compares it with the source, because a manifest that drops or reorders a part completes with a truncated or scrambled object.
 		private static func multiPartCopy(in context: IntegrationTestContext) async throws {
 			let (copyTaskUtility, _) = try createCopyTaskUtility()
-			let (request, _) = try await uploadFileForMultiPartCopy(in: context)
-			try await copyTaskUtility.copy(request)
+			let upload = try await uploadFileForMultiPartCopy(in: context)
+			try await copyTaskUtility.copy(upload.request)
+			let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+			_ = try await context.provider.downloadFile(from: upload.targetCloudPath, to: downloadURL)
+			let copiedData = try Data(contentsOf: downloadURL)
+			#expect(copiedData.count == upload.data.count)
+			#expect(copiedData == upload.data, "The copy differs from its source")
 		}
 
-		@MainActor
 		private static func multiPartCopyInCancelledTask(in context: IntegrationTestContext) async throws {
-			let (copyTaskUtility, service) = try createCopyTaskUtility()
-			let (request, sourceCloudPath) = try await uploadFileForMultiPartCopy(in: context)
+			let (copyTaskUtility, client) = try createCopyTaskUtility()
+			let upload = try await uploadFileForMultiPartCopy(in: context)
 			let copyResult: Result<Void, Error>
 			do {
-				try await value(of: cancelledTask { try await copyTaskUtility.copy(request) }, timeout: .seconds(60))
+				try await value(of: cancelledTask { try await copyTaskUtility.copy(upload.request) }, timeout: .seconds(60))
 				copyResult = .success(())
 			} catch {
 				copyResult = .failure(error)
 			}
-			let listRequest = try #require(AWSS3ListMultipartUploadsRequest())
-			listRequest.bucket = IntegrationTestSecrets.s3Credential.bucket
-			listRequest.prefix = request.targetKey
-			let listOutput = try await service.listMultipartUploads(listRequest)
-			let sourceExists = try await context.provider.checkForItemExistence(at: sourceCloudPath)
+			let listRequest = URLRequest(url: client.endpoint.url(forKey: "", query: [URLQueryItem(name: "uploads", value: nil), URLQueryItem(name: "prefix", value: upload.request.targetKey)]))
+			let multipartUploads = try await client.send(listRequest) { body in
+				String(bytes: body, encoding: .utf8) ?? ""
+			}
+			let sourceExists = try await context.provider.checkForItemExistence(at: upload.sourceCloudPath)
 			switch copyResult {
 			case .success:
 				Issue.record("copy fulfilled in cancelled task")
 			case let .failure(error):
 				#expect(error is CancellationError, "copy threw \(error)")
 			}
-			#expect(listOutput.uploads?.isEmpty ?? true)
+			#expect(!multipartUploads.contains("<Upload>"), "multipart upload left behind")
 			#expect(sourceExists)
 		}
 
-		@MainActor
-		private static func createCopyTaskUtility() throws -> (S3CopyTaskUtility, AWSS3) {
-			let credential = IntegrationTestSecrets.s3Credential
-			let endpoint = AWSEndpoint(url: credential.url)
-			let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
-			let region = credential.region.aws_regionTypeValue()
-			let serviceConfiguration = try #require(AWSServiceConfiguration(region: region, endpoint: endpoint, credentialsProvider: credentialsProvider))
-			AWSS3.register(with: serviceConfiguration, forKey: credential.identifier)
-			let service = AWSS3.s3(forKey: credential.identifier)
-			return (S3CopyTaskUtility(service: service, bucket: credential.bucket, maxPartSize: multiPartCopyMaxPartSize), service)
+		private static func createCopyTaskUtility() throws -> (S3CopyTaskUtility, S3Client) {
+			let client = try S3Client.foreground(credential: IntegrationTestSecrets.s3Credential)
+			return (S3CopyTaskUtility(client: client, maxPartSize: multiPartCopyMaxPartSize), client)
 		}
 
-		/// Uploads a 12 MB file to test 3 parts with the last part smaller than 5 MB. The run root's deletion removes it and its copy.
-		@MainActor
-		private static func uploadFileForMultiPartCopy(in context: IntegrationTestContext) async throws -> (S3CopyRequest, CloudPath) {
+		/// Uploads a 12 MB file to test 3 parts with the last part smaller than 5 MB. Each 4-byte word holds its own offset, so that the parts differ. The run root's deletion removes it and its copy.
+		private static func uploadFileForMultiPartCopy(in context: IntegrationTestContext) async throws -> MultiPartCopyUpload {
 			let length = multiPartCopyMaxPartSize + (7 * 1024 * 1024)
-			let bytes = [UInt32](repeating: 0, count: length)
-			let data = Data(bytes: bytes, count: length)
+			let words = stride(from: 0, to: length, by: 4).map { UInt32($0).littleEndian }
+			let data = words.withUnsafeBufferPointer { Data(buffer: $0) }
 			let tmpFileURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
 			try data.write(to: tmpFileURL)
 			let sandbox = try await context.makeSandbox()
@@ -97,7 +92,14 @@ extension IntegrationTests.ProviderSpecific {
 			let sourceKey = s3Provider.getKey(for: sourceCloudPath)
 			let targetKey = s3Provider.getKey(for: targetCloudPath)
 			let itemSize = try #require(metadata.size)
-			return (S3CopyRequest(sourceKey: sourceKey, targetKey: targetKey, itemSize: itemSize), sourceCloudPath)
+			return MultiPartCopyUpload(request: S3CopyRequest(sourceKey: sourceKey, targetKey: targetKey, itemSize: itemSize), sourceCloudPath: sourceCloudPath, targetCloudPath: targetCloudPath, data: data)
 		}
 	}
+}
+
+private struct MultiPartCopyUpload {
+	let request: S3CopyRequest
+	let sourceCloudPath: CloudPath
+	let targetCloudPath: CloudPath
+	let data: Data
 }

@@ -81,18 +81,18 @@ final class WebDAVSession: Sendable {
 	}
 
 	func performDownloadTask(with request: URLRequest, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
-		let outcome = try await session.download(request, route: .transfer, handler: WebDAVSession.downloadHandler(movingTo: localURL), progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.download(request, route: .transfer, handler: WebDAVSession.downloadHandler(movingTo: localURL), bodyLogging: .logged, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		return try WebDAVSession.successfulDownloadResponse(of: outcome)
 	}
 
 	/// Streams the response of a metadata request, e.g., a folder listing, to `localURL` on the foreground session.
 	func performMetadataDownloadTask(with request: URLRequest, to localURL: URL) async throws -> HTTPURLResponse {
-		let outcome = try await session.download(request, route: .metadata, handler: WebDAVSession.downloadHandler(movingTo: localURL), progress: nil, cancelsBeforeResume: true, onTaskCreation: nil)
+		let outcome = try await session.download(request, route: .metadata, handler: WebDAVSession.downloadHandler(movingTo: localURL), bodyLogging: .logged, progress: nil, cancelsBeforeResume: true, onTaskCreation: nil)
 		return try WebDAVSession.successfulDownloadResponse(of: outcome)
 	}
 
 	func performUploadTask(with request: URLRequest, fromFile fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data?) {
-		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: WebDAVSession.maxResponseBodyLength, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: WebDAVSession.maxResponseBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		return try (WebDAVSession.successfulResponse(of: outcome), outcome.data)
 	}
 

@@ -6,7 +6,7 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import AWSS3
+import os
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -16,47 +16,26 @@ import XCTest
 
 class S3CloudProviderTests: XCTestCase {
 	var provider: S3CloudProvider!
+	var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		provider = try S3CloudProvider(credential: .stub)
+		provider = try S3CloudProvider(client: .mocked(), maxPageSize: .max)
+		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+	}
+
+	override func tearDownWithError() throws {
+		URLProtocolMock.requestHandler = []
+		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
 	func testThrowsCancellationErrorInCancelledTask() async {
 		await assertThrowsCancellationErrorInCancelledTask(provider)
 	}
 
-	func testRecoverDownloadFailureWithCancellationError() async {
-		let error = await provider.recoverDownloadFailure(CancellationError(), metadataCheck: {
-			XCTFail("A cancelled download must not issue a metadata request")
-		})
-		XCTAssertTrue(error is CancellationError)
-	}
-
 	func testCheckContinuationTokenForInvalidityWithCancelledRequest() async {
 		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: CancellationError())
 		XCTAssertTrue(error is CancellationError)
-	}
-
-	func testRecoverDownloadFailureWithExistingFile() async {
-		let error = await provider.recoverDownloadFailure(CloudProviderError.noInternetConnection, metadataCheck: {})
-		XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
-	}
-
-	func testRecoverDownloadFailureWithMissingFile() async {
-		let error = await provider.recoverDownloadFailure(CloudProviderError.noInternetConnection, metadataCheck: {
-			throw CloudProviderError.itemNotFound
-		})
-		XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
-	}
-
-	func testConvertAWSErrorWithCancelledRequest() {
-		let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
-		XCTAssertTrue(convertAWSError(cancellationError) is CancellationError)
-		XCTAssertTrue(convertAWSError(NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])) is CancellationError)
-		XCTAssertTrue(convertAWSError(NSError(domain: AWSNetworkingErrorDomain, code: AWSNetworkingErrorType.cancelled.rawValue)) is CancellationError)
-		XCTAssertTrue(convertAWSError(nil) is CancellationError)
-		XCTAssertEqual(.itemNotFound, convertAWSError(CloudProviderError.itemNotFound) as? CloudProviderError)
-		XCTAssertTrue(provider.convertStandardError(CancellationError()) is CancellationError)
 	}
 
 	func testGetPrefix() {
@@ -74,65 +53,319 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual("foo/bar.txt", provider.getKey(for: CloudPath("/foo/bar.txt")))
 	}
 
-	func testMapUnknownAWSS3ErrorToInvalidPageToken() {
-		let awsS3ContinuationTokenError = NSError(domain: AWSS3ErrorDomain, code: 0, userInfo: ["Code": "InvalidArgument", "ArgumentName": "continuation-token"])
-		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(awsS3ContinuationTokenError) as? CloudProviderError)
+	// MARK: - Error Conversion
 
-		let scalewayS3ContinuationTokenError = NSError(domain: AWSS3ErrorDomain, code: 0, userInfo: ["Code": "InternalError", "Reason": "Incorrect padding"])
-		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(scalewayS3ContinuationTokenError) as? CloudProviderError)
+	func testConvertStandardErrorPassesCancellationThrough() {
+		XCTAssertTrue(provider.convertStandardError(CancellationError()) is CancellationError)
 	}
 
-	func testCreateListObjectsV2Request() {
-		let request = provider.createListObjectsV2Request(for: CloudPath("/folder"), recursive: false, pageToken: nil)
-		XCTAssertEqual("folder/", request.prefix)
-		XCTAssertEqual("/", request.delimiter)
-		XCTAssertNil(request.continuationToken)
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
+	func testConvertUnauthorizedErrors() {
+		for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken"] {
+			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403, code: code)) as? CloudProviderError, code)
+		}
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401)) as? CloudProviderError)
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403)) as? CloudProviderError)
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue))) as? CloudProviderError)
 	}
 
-	func testCreateListObjectsV2RequestWithContinuationToken() {
-		let pageToken = "test-page-token"
-		let request = provider.createListObjectsV2Request(for: CloudPath("/folder"), recursive: false, pageToken: pageToken)
-		XCTAssertEqual("folder/", request.prefix)
-		XCTAssertEqual("/", request.delimiter)
-		XCTAssertEqual(pageToken, request.continuationToken)
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
+	func testConvertInvalidPageTokenErrors() {
+		for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
+			XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError, code)
+		}
+		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "continuation-token")) as? CloudProviderError)
+		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 500, code: "InternalError", reason: "Incorrect padding")) as? CloudProviderError)
 	}
 
-	func testCreateListObjectsV2RequestRecursive() {
-		let request = provider.createListObjectsV2Request(for: CloudPath("/folder"), recursive: true, pageToken: nil)
-		XCTAssertEqual("folder/", request.prefix)
-		XCTAssertNil(request.delimiter)
-		XCTAssertNil(request.continuationToken)
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
+	func testConvertItemNotFoundError() {
+		XCTAssertEqual(.itemNotFound, provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchKey")) as? CloudProviderError)
 	}
 
-	func testCreateDeleteObjectRequest() {
-		let request = provider.createDeleteObjectRequest(for: CloudPath("/test.txt"))
-		XCTAssertEqual("test.txt", request.key)
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
+	func testConvertNoInternetConnectionError() {
+		XCTAssertEqual(.noInternetConnection, provider.convertStandardError(URLError(.notConnectedToInternet)) as? CloudProviderError)
 	}
 
-	func testCreateDeleteObjectsRequest() throws {
-		let keys = ["test.txt", "folder/test1.pdf"]
-		let request = provider.createDeleteObjectsRequest(keys: keys)
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
-		let removeContainer = try XCTUnwrap(request.remove)
-		let objects = try XCTUnwrap(removeContainer.objects)
-		XCTAssertEqual(keys, objects.map(\.key))
+	func testConvertOtherErrorsUnchanged() {
+		XCTAssertEqual(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys"), provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys")) as? S3Error)
+		XCTAssertEqual(S3Error(statusCode: 404, code: "NoSuchBucket"), provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchBucket")) as? S3Error)
+		XCTAssertEqual(S3Error(statusCode: 404), provider.convertStandardError(S3Error(statusCode: 404)) as? S3Error)
 	}
 
-	func testCreateEmptyFolderPutObjectRequest() {
-		let request = provider.createEmptyFolderPutObjectRequest(for: CloudPath("/folder"))
-		XCTAssertEqual(S3Credential.stub.bucket, request.bucket)
-		XCTAssertEqual("folder/", request.key)
-		XCTAssertNil(request.body)
+	// MARK: - Transfers
+
+	func testDownloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+		let provider: S3CloudProvider = provider
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		let progress = Progress(totalUnitCount: 1)
+		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			S3MockResponse.handler(statusCode: 200, body: "content", onRequest: { _ in
+				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
+			})
+		]
+
+		let metadata = try await value(of: Task {
+			try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: progress, onTaskCreation: { task in
+				taskStates.withLock { $0.append(task.state) }
+				try? await Task.sleep(for: .milliseconds(100))
+				onTaskCreationReturned.withLock { $0 = true }
+			})
+		})
+
+		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
+		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: localURL))
+		XCTAssertEqual(7, metadata.size)
+		XCTAssertEqual(1, progress.fractionCompleted)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
-	func testInitializerSetRegionName() throws {
-		let hostName = try XCTUnwrap(S3Credential.stub.url.host)
-		let customRegionName = CustomAWSEndpointRegionNameStorage.shared.getRegionName(for: hostName)
-		XCTAssertEqual(S3Credential.stub.region, customRegionName)
+	func testUploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+		let provider: S3CloudProvider = provider
+		let localURL = try makeLocalFile()
+		let progress = Progress(totalUnitCount: 1)
+		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
+			S3MockResponse.handler(statusCode: 200, onRequest: { _ in
+				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
+			}),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
+				XCTAssertGreaterThan(progress.fractionCompleted, 0.5, "The progress of the upload task isn't part of the upload's progress")
+				XCTAssertLessThan(progress.fractionCompleted, 1, "The progress completed before the upload returned")
+			})
+		]
+
+		let metadata = try await value(of: Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: { task in
+				taskStates.withLock { $0.append(task.state) }
+				try? await Task.sleep(for: .milliseconds(100))
+				onTaskCreationReturned.withLock { $0 = true }
+			})
+		})
+
+		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
+		XCTAssertEqual(CloudPath("/file.txt"), metadata.cloudPath)
+		XCTAssertEqual(1, progress.fractionCompleted)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDownloadFileWithCancellationDuringOnTaskCreation() async throws {
+		let provider: S3CloudProvider = provider
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			S3MockResponse.handler(statusCode: 200, body: "content")
+		]
+
+		let download = Task {
+			try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
+				withUnsafeCurrentTask { $0?.cancel() }
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled download must not be resumed")
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	func testUploadFileWithCancellationDuringOnTaskCreation() async throws {
+		let provider: S3CloudProvider = provider
+		let localURL = try makeLocalFile()
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
+			S3MockResponse.handler(statusCode: 200)
+		]
+
+		let upload = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+				withUnsafeCurrentTask { $0?.cancel() }
+			})
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled upload must not be resumed")
+	}
+
+	/// The error body of a download may be missing, so any 404 means that the file is gone.
+	func testDownloadFileOfMissingFileThrowsItemNotFound() async throws {
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			S3MockResponse.handler(statusCode: 404)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	/// The upload committed with its PUT, so a cancellation afterwards must not cut short the retries of the metadata request.
+	func testUploadFileCancelledAfterPutReturnsMetadata() async throws {
+		let provider: S3CloudProvider = provider
+		let localURL = try makeLocalFile()
+		let upload = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
+		let uploadStored = DispatchSemaphore(value: 0)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []), onRequest: { _ in
+				_ = uploadStored.wait(timeout: .now() + testWaitTimeout)
+			}),
+			S3MockResponse.handler(statusCode: 200, onRequest: { _ in
+				upload.withLock { $0 }?.cancel()
+			}),
+			S3MockResponse.handler(statusCode: 503),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
+		]
+
+		let uploadTask = Task {
+			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+		}
+		upload.withLock { $0 = uploadTask }
+		uploadStored.signal()
+		let metadata = try await value(of: uploadTask)
+
+		XCTAssertEqual(CloudPath("/file.txt"), metadata.cloudPath)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	// MARK: - Requests
+
+	func testFetchItemListRequestsOnePageOfFolder() async throws {
+		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
+				requests.withLock { $0.append(request) }
+			})
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: "token")
+
+		let request = try XCTUnwrap(requests.withLock { $0 }.first)
+		XCTAssertEqual("GET", request.httpMethod)
+		XCTAssertEqual("/exampleBucket", request.url?.path)
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1001", "delimiter": "/", "continuation-token": "token"], S3CloudProviderTests.queryParameters(of: request))
+		XCTAssertEqual([CloudPath("/folder/a.txt"), CloudPath("/folder/sub")], itemList.items.map(\.cloudPath))
+		XCTAssertEqual([.file, .folder], itemList.items.map(\.itemType))
+		XCTAssertEqual("next", itemList.nextPageToken)
+	}
+
+	func testFetchItemMetadataOfFolderListedAfterSibling() async throws {
+		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+		let recordRequest: @Sendable (URLRequest) -> Void = { request in
+			requests.withLock { $0.append(request) }
+		}
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
+		]
+
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+
+		XCTAssertEqual(CloudPath("/folder"), metadata.cloudPath)
+		XCTAssertEqual(.folder, metadata.itemType)
+		XCTAssertEqual([
+			["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
+			["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
+		], requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)))
+	}
+
+	func testFetchItemMetadataDoesNotListFolderAfterSiblingInCancelledTask() async throws {
+		let provider: S3CloudProvider = provider
+		let fetch = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
+		let fetchStored = DispatchSemaphore(value: 0)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
+				_ = fetchStored.wait(timeout: .now() + testWaitTimeout)
+				fetch.withLock { $0 }?.cancel()
+			}),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]))
+		]
+
+		let fetchTask = Task {
+			try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+		}
+		fetch.withLock { $0 = fetchTask }
+		fetchStored.signal()
+
+		await XCTAssertThrowsErrorAsync(try await value(of: fetchTask)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testFetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testCreateFolderPutsFolderMarker() async throws {
+		let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
+			S3MockResponse.handler(statusCode: 200, onRequest: { request in
+				markerRequest.withLock { $0 = request }
+			})
+		]
+
+		try await provider.createFolder(at: CloudPath("/folder"))
+
+		let request = try XCTUnwrap(markerRequest.withLock { $0 })
+		XCTAssertEqual("PUT", request.httpMethod)
+		XCTAssertEqual("/exampleBucket/folder/", request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath })
+		XCTAssertEqual("application/x-directory", request.value(forHTTPHeaderField: "Content-Type"))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteFolderDeletesEveryPage() async throws {
+		let requests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: String)]())
+		let recordRequest: @Sendable (URLRequest) -> Void = { request in
+			let body = String(bytes: S3MockResponse.body(of: request), encoding: .utf8) ?? ""
+			requests.withLock { $0.append((request, body)) }
+		}
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
+			S3MockResponse.handler(statusCode: 200, body: "<DeleteResult/>", onRequest: recordRequest),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
+			S3MockResponse.handler(statusCode: 200, body: "<DeleteResult/>", onRequest: recordRequest)
+		]
+
+		try await provider.deleteFolder(at: CloudPath("/folder"))
+
+		let sent = requests.withLock { $0 }
+		XCTAssertEqual(["GET", "POST", "GET", "POST"], sent.map(\.request.httpMethod))
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000"], S3CloudProviderTests.queryParameters(of: sent[0].request))
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"], S3CloudProviderTests.queryParameters(of: sent[2].request))
+		XCTAssertEqual(["delete": ""], S3CloudProviderTests.queryParameters(of: sent[1].request))
+		XCTAssertTrue(sent[1].body.contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), sent[1].body)
+		XCTAssertTrue(sent[3].body.contains("<Object><Key>folder/b.txt</Key></Object>"), sent[3].body)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	// MARK: - Helpers
+
+	private static func queryParameters(of request: URLRequest) -> [String: String] {
+		let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+		return Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+	}
+
+	private func makeLocalFile() throws -> URL {
+		let localURL = tmpDirURL.appendingPathComponent("local.txt")
+		try Data("content".utf8).write(to: localURL)
+		return localURL
 	}
 }
 

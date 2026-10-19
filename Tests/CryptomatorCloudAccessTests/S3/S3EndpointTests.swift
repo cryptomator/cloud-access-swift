@@ -80,6 +80,20 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("https://example.com/tenant%2Farchive/my.bucket/file.txt", try url(endpointURL: "https://example.com/tenant%2Farchive", bucket: "my.bucket", key: "file.txt"))
 	}
 
+	func testRejectsEndpointURLThatIsNoAbsoluteHTTPURLWithHost() {
+		for endpointURL in ["s3.example.com", "s3.example.com:9000", "https:///bucket", "ftp://example.com"] {
+			XCTAssertThrowsError(try makeEndpoint(endpointURL: endpointURL, bucket: "mybucket"), endpointURL) { error in
+				XCTAssertEqual(.badURL, (error as? URLError)?.code, endpointURL)
+			}
+		}
+	}
+
+	func testResolvesRelativeEndpointURLAgainstItsBase() throws {
+		let endpointURL = try XCTUnwrap(URL(string: "tenant", relativeTo: URL(string: "https://example.com/")))
+		let endpoint = try S3Endpoint(credential: S3Credential(accessKey: "", secretKey: "", url: endpointURL, bucket: "mybucket", region: "us-east-1"))
+		XCTAssertEqual("https://mybucket.example.com/tenant/file.txt", endpoint.url(forKey: "file.txt").absoluteString)
+	}
+
 	func testEncodesQueryCompletely() throws {
 		let endpoint = try makeEndpoint(endpointURL: "https://example.com", bucket: "mybucket")
 		let url = endpoint.url(forKey: "", query: [URLQueryItem(name: "prefix", value: "a+b/c=d?e;f:g@h i"), URLQueryItem(name: "uploads", value: nil)])

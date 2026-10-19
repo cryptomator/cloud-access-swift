@@ -21,7 +21,7 @@ class S3CopyTaskUtilityTests: XCTestCase {
 
 	/// Each part copies its own range, and the completion lists every part in order with the ETag of its copy.
 	func testMultipartCopyCompletesPartsInOrder() async throws {
-		let copyTaskUtility = S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
+		let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
 		let ranges = OSAllocatedUnfairLock(initialState: [String: String]())
 		let completionBody = OSAllocatedUnfairLock<String?>(initialState: nil)
 		let partCopy: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
@@ -50,7 +50,7 @@ class S3CopyTaskUtilityTests: XCTestCase {
 
 	/// The abort of a cancelled multipart copy is retried after a transient failure, so that no multipart upload is left behind.
 	func testCancelledMultipartCopyRetriesAbort() async throws {
-		let copyTaskUtility = S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
+		let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
 		let abortRequestCount = OSAllocatedUnfairLock(initialState: 0)
 		let countAbortRequest: @Sendable (URLRequest) -> Void = { request in
 			if request.httpMethod == "DELETE", request.url?.query?.contains("uploadId=upload-id") ?? false {

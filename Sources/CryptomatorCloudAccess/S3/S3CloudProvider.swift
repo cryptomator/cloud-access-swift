@@ -26,13 +26,16 @@ public final class S3CloudProvider: CloudProvider {
 	 Creates an S3 provider whose downloads and uploads run on a background URL session, and whose other requests run on a foreground URL session.
 
 	 If the provider is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+
+	 - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
 	 */
 	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?, maxPageSize: Int = .max) throws -> S3CloudProvider {
-		return S3CloudProvider(client: .background(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
+		return try S3CloudProvider(client: .background(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
 	}
 
+	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
 	public convenience init(credential: S3Credential, maxPageSize: Int = .max) throws {
-		self.init(client: .foreground(credential: credential), maxPageSize: maxPageSize)
+		try self.init(client: .foreground(credential: credential), maxPageSize: maxPageSize)
 	}
 
 	@concurrent

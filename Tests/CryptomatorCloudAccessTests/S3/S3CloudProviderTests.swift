@@ -19,7 +19,7 @@ class S3CloudProviderTests: XCTestCase {
 	var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		provider = S3CloudProvider(client: .mocked(), maxPageSize: .max)
+		provider = try S3CloudProvider(client: .mocked(), maxPageSize: .max)
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}

@@ -20,7 +20,7 @@ class S3ClientTests: XCTestCase {
 	private var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		client = S3Client.mocked()
+		client = try S3Client.mocked()
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
@@ -290,7 +290,7 @@ class S3ClientTests: XCTestCase {
 
 	func testBackgroundClientRunsOnlyTransfersOnBackgroundSession() async throws {
 		let registry = BackgroundURLSessionRegistry { _ in URLProtocolMock.configuration(marker: "transfer") }
-		let backgroundClient = S3Client(credential: .stub, configuration: .background(withIdentifier: "S3ClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)
+		let backgroundClient = try S3Client(credential: .stub, configuration: .background(withIdentifier: "S3ClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)
 		let markers = OSAllocatedUnfairLock(initialState: [String?]())
 		let recordMarker: @Sendable (URLRequest) -> Void = { request in
 			markers.withLock { $0.append(request.value(forHTTPHeaderField: "X-Session")) }
@@ -318,7 +318,7 @@ class S3ClientTests: XCTestCase {
 			logCapture.stop()
 		}
 		let secretKey = "SECRETKEY123"
-		let client = S3Client.mocked(credential: S3Credential(accessKey: "access", secretKey: secretKey, url: S3Credential.stub.url, bucket: S3Credential.stub.bucket, region: S3Credential.stub.region))
+		let client = try S3Client.mocked(credential: S3Credential(accessKey: "access", secretKey: secretKey, url: S3Credential.stub.url, bucket: S3Credential.stub.bucket, region: S3Credential.stub.region))
 		let presignedSignature = OSAllocatedUnfairLock<String?>(initialState: nil)
 		let signingDetails = "<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided.</Message><AWSAccessKeyId>access</AWSAccessKeyId><StringToSign>STRINGTOSIGN</StringToSign><SignatureProvided>PROVIDEDSIGNATURE</SignatureProvided><CanonicalRequest>CANONICALREQUEST</CanonicalRequest></Error>"
 		URLProtocolMock.requestHandler = [
@@ -390,10 +390,10 @@ class S3ClientTests: XCTestCase {
 
 extension S3Client {
 	/// Returns a client whose requests `URLProtocolMock` answers.
-	static func mocked(credential: S3Credential = .stub) -> S3Client {
+	static func mocked(credential: S3Credential = .stub) throws -> S3Client {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil)
+		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil)
 	}
 }
 

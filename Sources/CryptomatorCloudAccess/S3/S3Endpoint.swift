@@ -25,18 +25,21 @@ struct S3Endpoint: Sendable {
 	private let isVirtualHosted: Bool
 	let bucket: String
 
-	init(credential: S3Credential) {
-		let scheme = credential.url.scheme?.lowercased() ?? "https"
+	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
+	init(credential: S3Credential) throws {
+		let url = credential.url.absoluteURL
+		guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https", let host = components.encodedHost, !host.isEmpty else {
+			throw URLError(.badURL)
+		}
 		self.scheme = scheme
-		let components = URLComponents(url: credential.url, resolvingAgainstBaseURL: false)
-		self.host = components?.encodedHost ?? ""
+		self.host = host
 		// An explicit default port is dropped, so that a stored `https://host:443` credential signs and sends the bare host, as AWS SDK 2.41.0 did.
-		if let port = credential.url.port, !(scheme == "https" && port == 443), !(scheme == "http" && port == 80) {
+		if let port = url.port, !(scheme == "https" && port == 443), !(scheme == "http" && port == 80) {
 			self.port = port
 		} else {
 			self.port = nil
 		}
-		var path = components?.percentEncodedPath ?? ""
+		var path = components.percentEncodedPath
 		while path.hasSuffix("/") {
 			path.removeLast()
 		}

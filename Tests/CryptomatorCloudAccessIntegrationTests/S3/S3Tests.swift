@@ -37,7 +37,7 @@ extension IntegrationTests.ProviderSpecific {
 
 		/// Downloads the copy and compares it with the source, because a manifest that drops or reorders a part completes with a truncated or scrambled object.
 		private static func multiPartCopy(in context: IntegrationTestContext) async throws {
-			let (copyTaskUtility, _) = createCopyTaskUtility()
+			let (copyTaskUtility, _) = try createCopyTaskUtility()
 			let upload = try await uploadFileForMultiPartCopy(in: context)
 			try await copyTaskUtility.copy(upload.request)
 			let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
@@ -48,7 +48,7 @@ extension IntegrationTests.ProviderSpecific {
 		}
 
 		private static func multiPartCopyInCancelledTask(in context: IntegrationTestContext) async throws {
-			let (copyTaskUtility, client) = createCopyTaskUtility()
+			let (copyTaskUtility, client) = try createCopyTaskUtility()
 			let upload = try await uploadFileForMultiPartCopy(in: context)
 			let copyResult: Result<Void, Error>
 			do {
@@ -72,8 +72,8 @@ extension IntegrationTests.ProviderSpecific {
 			#expect(sourceExists)
 		}
 
-		private static func createCopyTaskUtility() -> (S3CopyTaskUtility, S3Client) {
-			let client = S3Client.foreground(credential: IntegrationTestSecrets.s3Credential)
+		private static func createCopyTaskUtility() throws -> (S3CopyTaskUtility, S3Client) {
+			let client = try S3Client.foreground(credential: IntegrationTestSecrets.s3Credential)
 			return (S3CopyTaskUtility(client: client, maxPartSize: multiPartCopyMaxPartSize), client)
 		}
 

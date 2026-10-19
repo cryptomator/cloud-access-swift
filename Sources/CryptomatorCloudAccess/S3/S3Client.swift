@@ -36,19 +36,20 @@ final class S3Client: Sendable {
 	/// The offset of the server's clock from the device's clock, which every signature adds to the current date.
 	private let clockOffset = OSAllocatedUnfairLock<TimeInterval>(initialState: 0)
 
-	init(credential: S3Credential, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, registry: BackgroundURLSessionRegistry = .shared) {
-		self.endpoint = S3Endpoint(credential: credential)
+	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
+	init(credential: S3Credential, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, registry: BackgroundURLSessionRegistry = .shared) throws {
+		self.endpoint = try S3Endpoint(credential: credential)
 		self.signer = S3Signer(credential: credential)
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, registry: registry)
 	}
 
-	static func foreground(credential: S3Credential) -> S3Client {
-		return S3Client(credential: credential, configuration: hardened(.default), metadataConfiguration: nil)
+	static func foreground(credential: S3Credential) throws -> S3Client {
+		return try S3Client(credential: credential, configuration: hardened(.default), metadataConfiguration: nil)
 	}
 
 	/// Creates a client whose downloads and uploads run on a background URL session, which all clients of the account share, and whose other requests run on a foreground URL session.
-	static func background(credential: S3Credential, sharedContainerIdentifier: String?) -> S3Client {
-		return S3Client(credential: credential, configuration: backgroundConfiguration(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: hardened(.default))
+	static func background(credential: S3Credential, sharedContainerIdentifier: String?) throws -> S3Client {
+		return try S3Client(credential: credential, configuration: backgroundConfiguration(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: hardened(.default))
 	}
 
 	static func backgroundConfiguration(credential: S3Credential, sharedContainerIdentifier: String?) -> URLSessionConfiguration {

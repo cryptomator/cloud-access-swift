@@ -69,12 +69,19 @@ func waitUntilVisible(_ cloudPath: CloudPath, through provider: CloudProvider, o
 
 // MARK: - Tasks
 
+/// How long a test waits for a step to happen, generous because a loaded CI machine can stall for over half a minute.
+let testWaitTimeout: Duration = .seconds(60)
+
 struct UnfinishedTaskError: Error, CustomStringConvertible {
 	let timeout: Duration
 
 	var description: String {
 		return "Task did not finish within \(timeout)"
 	}
+}
+
+func taskSleep(for duration: Duration) async throws {
+	try await Task.sleep(for: duration)
 }
 
 /// Starts the operation in a task that is already cancelled when the operation begins.
@@ -89,8 +96,10 @@ func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async th
  Waits for the value of a task, but at most for the timeout, after which `UnfinishedTaskError` is thrown and the task is left running.
 
  A task group can't serve as the timeout, because it only returns once all of its child tasks returned, and SDK calls don't respond to cancellation.
+
+ The timeout runs out when `sleep` returns, and never if it throws.
  */
-func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration) async throws -> Value {
+func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration, sleep: @escaping @Sendable (Duration) async throws -> Void = taskSleep(for:)) async throws -> Value {
 	let lockedContinuation = OSAllocatedUnfairLock<CheckedContinuation<Value, Error>?>(initialState: nil)
 	let lockedTimer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
 	let resume: @Sendable (Result<Value, Error>) -> Void = { result in
@@ -104,7 +113,7 @@ func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration) asyn
 		lockedContinuation.withLock { $0 = continuation }
 		lockedTimer.withLock { timer in
 			timer = Task {
-				guard await (try? Task.sleep(for: timeout)) != nil else {
+				guard await (try? sleep(timeout)) != nil else {
 					return
 				}
 				resume(.failure(UnfinishedTaskError(timeout: timeout)))

@@ -73,21 +73,31 @@ extension IntegrationTests {
 		}
 
 		@Test
-		func budgetAbandonsHangingAttempt() async throws {
+		func budgetAbandonsHangingOperation() async throws {
 			let semaphore = AsyncSemaphore(permits: 1)
 			let budget: Duration = .seconds(2)
-			let clock = ContinuousClock()
-			// The attempt's start, because the wait for the shared fixture before it isn't part of the budget.
-			let started = OSAllocatedUnfairLock<ContinuousClock.Instant?>(initialState: nil)
-			await #expect(throws: IntegrationTestError.budgetExceeded(budget)) {
-				try await withIntegrationFixture(Runner.backend, budget: budget, backoffs: [], semaphore: semaphore) { _ in
-					started.withLock { $0 = clock.now }
-					await withCheckedContinuation { HangingContinuations.keep($0) }
+			// The test runs out the budget through `sleep` once the operation hangs, so that the outcome doesn't depend on timing.
+			let operationStarted = AsyncSemaphore(permits: 0)
+			let budgetRunsOut = AsyncSemaphore(permits: 0)
+			let operationMayReturn = AsyncSemaphore(permits: 0)
+			let sleep: @Sendable (Duration) async throws -> Void = { _ in
+				await budgetRunsOut.acquire()
+			}
+			let caller = _Concurrency.Task {
+				try await semaphore.withPermit(budget: budget, sleep: sleep) {
+					await operationStarted.release()
+					await operationMayReturn.acquire()
 				}
 			}
-			let start = try #require(started.withLock { $0 })
-			#expect(clock.now - start < budget + .seconds(5))
-			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: .seconds(1))
+			defer {
+				_Concurrency.Task { await operationMayReturn.release() }
+			}
+			try await acquire(operationStarted)
+			await budgetRunsOut.release()
+			await #expect(throws: IntegrationTestError.budgetExceeded(budget)) {
+				try await value(of: caller, timeout: testWaitTimeout)
+			}
+			try await acquire(semaphore)
 		}
 
 		@Test
@@ -102,31 +112,28 @@ extension IntegrationTests {
 			}
 			await semaphore.release()
 			await #expect(throws: CancellationError.self) {
-				try await value(of: caller, timeout: .seconds(5))
+				try await value(of: caller, timeout: testWaitTimeout)
 			}
 			#expect(!ran.withLock { $0 })
-			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: .seconds(1))
+			try await acquire(semaphore)
 		}
 
 		@Test
 		func cancellingTheCallerCancelsThePermittedOperation() async throws {
 			let semaphore = AsyncSemaphore(permits: 1)
-			let started = OSAllocatedUnfairLock(initialState: false)
+			let operationStarted = AsyncSemaphore(permits: 0)
 			let caller = _Concurrency.Task {
-				try await semaphore.withPermit(budget: .seconds(60)) {
-					started.withLock { $0 = true }
-					try await _Concurrency.Task.sleep(for: .seconds(60))
+				try await semaphore.withPermit(budget: .seconds(300)) {
+					await operationStarted.release()
+					try await _Concurrency.Task.sleep(for: .seconds(300))
 				}
 			}
-			for _ in 0 ..< 100 where !started.withLock({ $0 }) {
-				try await _Concurrency.Task.sleep(for: .milliseconds(10))
-			}
-			try #require(started.withLock { $0 })
+			try await acquire(operationStarted)
 			caller.cancel()
 			await #expect(throws: CancellationError.self) {
-				try await value(of: caller, timeout: .seconds(5))
+				try await value(of: caller, timeout: testWaitTimeout)
 			}
-			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: .seconds(1))
+			try await acquire(semaphore)
 		}
 
 		// MARK: - Fixtures
@@ -237,14 +244,9 @@ extension IntegrationTests {
 			}
 			#expect(attempts.withLock { $0 } == 1)
 		}
-	}
-}
 
-/// Keeps the continuations of hanging operations alive, so that they aren't reported as leaked.
-private enum HangingContinuations {
-	private static let continuations = OSAllocatedUnfairLock(initialState: [CheckedContinuation<Void, Never>]())
-
-	static func keep(_ continuation: CheckedContinuation<Void, Never>) {
-		continuations.withLock { $0.append(continuation) }
+		private func acquire(_ semaphore: AsyncSemaphore) async throws {
+			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: testWaitTimeout)
+		}
 	}
 }

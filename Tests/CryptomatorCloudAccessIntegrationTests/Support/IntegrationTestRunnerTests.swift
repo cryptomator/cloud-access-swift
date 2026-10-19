@@ -76,16 +76,16 @@ extension IntegrationTests {
 		func budgetAbandonsHangingAttempt() async throws {
 			let semaphore = AsyncSemaphore(permits: 1)
 			let budget: Duration = .seconds(2)
-			let started = OSAllocatedUnfairLock(initialState: false)
 			let clock = ContinuousClock()
-			let start = clock.now
+			// The attempt's start, because the wait for the shared fixture before it isn't part of the budget.
+			let started = OSAllocatedUnfairLock<ContinuousClock.Instant?>(initialState: nil)
 			await #expect(throws: IntegrationTestError.budgetExceeded(budget)) {
 				try await withIntegrationFixture(Runner.backend, budget: budget, backoffs: [], semaphore: semaphore) { _ in
-					started.withLock { $0 = true }
+					started.withLock { $0 = clock.now }
 					await withCheckedContinuation { HangingContinuations.keep($0) }
 				}
 			}
-			#expect(started.withLock { $0 })
+			let start = try #require(started.withLock { $0 })
 			#expect(clock.now - start < budget + .seconds(5))
 			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: .seconds(1))
 		}

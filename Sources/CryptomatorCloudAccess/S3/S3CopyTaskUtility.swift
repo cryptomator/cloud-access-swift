@@ -13,8 +13,8 @@ final class S3CopyTaskUtility: Sendable {
 
 	private let concurrencyLimit: Int
 	private let maxPartSize: Int
-	/// allowed maximum part size is 5GiB in multipart upload.
-	private static let maxPartSize = 5 * 1024 * 1024 * 1024
+	/// The size of a copied part and of the largest object copied in one request. AWS allows 5 GiB and Cloudflare R2 5 MiB less, while Backblaze B2 allows less than 5 GB, so this is rclone's limit of 4768 MiB.
+	private static let maxPartSize = 4768 * 1024 * 1024
 
 	init(client: S3Client, concurrencyLimit: Int = 4, maxPartSize: Int = S3CopyTaskUtility.maxPartSize) {
 		self.client = client

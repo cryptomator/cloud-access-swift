@@ -64,6 +64,17 @@ class S3ClientTests: XCTestCase {
 		XCTAssertNotEqual(S3Signer.emptyPayloadHash, sent.contentSHA256)
 	}
 
+	func testCopySourceEncodesReservedCharacters() async throws {
+		let copySource = OSAllocatedUnfairLock<String?>(initialState: nil)
+		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>", onRequest: { request in
+			copySource.withLock { $0 = request.value(forHTTPHeaderField: "x-amz-copy-source") }
+		})]
+
+		try await client.copyObject(sourceKey: "folder/a+b&c=d é.txt", targetKey: "b.txt")
+
+		XCTAssertEqual("exampleBucket/folder/a%2Bb%26c%3Dd%20%C3%A9.txt", copySource.withLock { $0 })
+	}
+
 	func testDeleteObjectsIgnoresErrorsOfSingleObjects() async throws {
 		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: "<DeleteResult><Error><Key>a.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>")]
 

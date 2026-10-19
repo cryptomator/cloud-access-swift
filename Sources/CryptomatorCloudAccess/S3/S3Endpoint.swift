@@ -68,4 +68,9 @@ struct S3Endpoint: Sendable {
 		}
 		return url
 	}
+
+	/// Returns the `x-amz-copy-source` header value that addresses the object with the given key.
+	func copySource(forKey key: String) -> String {
+		return "\(S3Signer.encode(bucket, encodeSlash: true))/\(S3Signer.encode(key, encodeSlash: false))"
+	}
 }

@@ -36,7 +36,7 @@ struct S3ListObjectsResult: Equatable {
 			guard let key = content.text(of: "Key") else {
 				return nil
 			}
-			return S3Object(key: key, lastModified: content.text(of: "LastModified").flatMap(S3XML.date(from:)), size: content.text(of: "Size").flatMap { Int($0) })
+			return S3Object(key: key, lastModified: content.text(of: "LastModified").flatMap(Date.date(fromISO8601:)), size: content.text(of: "Size").flatMap { Int($0) })
 		}
 		self.commonPrefixes = root.children("CommonPrefixes").compactMap { $0.text(of: "Prefix") }
 		self.nextContinuationToken = root.text(of: "NextContinuationToken")
@@ -45,18 +45,6 @@ struct S3ListObjectsResult: Equatable {
 
 enum S3XML {
 	private static let namespace = "http://s3.amazonaws.com/doc/2006-03-01/"
-
-	// The formatters are never mutated after their creation, which makes them safe to share across threads.
-	private nonisolated(unsafe) static let formatter = ISO8601DateFormatter()
-	private nonisolated(unsafe) static let fractionalSecondsFormatter = {
-		let formatter = ISO8601DateFormatter()
-		formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-		return formatter
-	}()
-
-	static func date(from string: String) -> Date? {
-		return fractionalSecondsFormatter.date(from: string) ?? formatter.date(from: string)
-	}
 
 	// MARK: - Results
 
@@ -103,6 +91,9 @@ enum S3XML {
 			.replacingOccurrences(of: ">", with: "&gt;")
 			.replacingOccurrences(of: "\"", with: "&quot;")
 			.replacingOccurrences(of: "'", with: "&apos;")
+			// AWS requires line breaks in keys as character references, because an XML parser turns a literal CR or CRLF into an LF.
+			.replacingOccurrences(of: "\r", with: "&#13;")
+			.replacingOccurrences(of: "\n", with: "&#10;")
 	}
 }
 

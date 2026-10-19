@@ -203,6 +203,7 @@
 		B3D620D22BFC7B2E007301C1 /* BoxSDK in Frameworks */ = {isa = PBXBuildFile; productRef = B3D620D12BFC7B2E007301C1 /* BoxSDK */; };
 		B3A1C0DF2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0DE2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift */; };
 		B3A1C0E12E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0E02E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift */; };
+		D8A1F0C2E3B44A5D9C6E7F81 /* Date+ISO8601.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A1F0C2E3B44A5D9C6E7F80 /* Date+ISO8601.swift */; };
 		B3A1C0E32E9D4F7A00B0C5D1 /* SplitURLSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0E22E9D4F7A00B0C5D1 /* SplitURLSession.swift */; };
 		B3A1C0E52E9D4F7A00B0C5D1 /* MicrosoftGraphAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0E42E9D4F7A00B0C5D1 /* MicrosoftGraphAPI.swift */; };
 		B3A1C0E72E9D4F7A00B0C5D1 /* MicrosoftGraphHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0E62E9D4F7A00B0C5D1 /* MicrosoftGraphHTTPClient.swift */; };
@@ -434,6 +435,7 @@
 		B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BoxSetup.swift; sourceTree = "<group>"; };
 		B3A1C0DE2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxSDKCancellationShield.swift; sourceTree = "<group>"; };
 		B3A1C0E02E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxURLSessionNetworkClient.swift; sourceTree = "<group>"; };
+		D8A1F0C2E3B44A5D9C6E7F80 /* Date+ISO8601.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Date+ISO8601.swift"; sourceTree = "<group>"; };
 		B3A1C0E22E9D4F7A00B0C5D1 /* SplitURLSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitURLSession.swift; sourceTree = "<group>"; };
 		B3A1C0E42E9D4F7A00B0C5D1 /* MicrosoftGraphAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphAPI.swift; sourceTree = "<group>"; };
 		B3A1C0E62E9D4F7A00B0C5D1 /* MicrosoftGraphHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphHTTPClient.swift; sourceTree = "<group>"; };
@@ -686,6 +688,7 @@
 				B7E8F9A0C1D243E5A6B7C8D9 /* AllSettled.swift */,
 				E4B07D2F5A6C4819B3F0D7A2 /* CancellationError.swift */,
 				08F613DBC6144917BF4D7443 /* BackgroundURLSessionRegistry.swift */,
+				D8A1F0C2E3B44A5D9C6E7F80 /* Date+ISO8601.swift */,
 				4A765CA22878596000794440 /* DirectoryContentCache.swift */,
 				4257D85004FC4A409257C014 /* DownloadOperation.swift */,
 				CA6257FC8E944BC7AA3947D1 /* Progress+Explicit.swift */,
@@ -1418,6 +1421,7 @@
 				F93F0263423442348B37641C /* SDKContinuation.swift in Sources */,
 				C766552960E84D6DB3CC89F3 /* BackgroundURLSessionRegistry.swift in Sources */,
 				B3A1C0E32E9D4F7A00B0C5D1 /* SplitURLSession.swift in Sources */,
+				D8A1F0C2E3B44A5D9C6E7F81 /* Date+ISO8601.swift in Sources */,
 				05788765F72F41AFA690C2F3 /* StagingFile.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
 				749F59A52BD1211500AB299A /* PCloudSetup.swift in Sources */,

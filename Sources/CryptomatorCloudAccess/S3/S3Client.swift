@@ -97,7 +97,7 @@ final class S3Client: Sendable {
 	}
 
 	func copyObject(sourceKey: String, targetKey: String) async throws {
-		try await send(request(method: "PUT", key: targetKey, headers: ["x-amz-copy-source": copySource(for: sourceKey)])) { body in
+		try await send(request(method: "PUT", key: targetKey, headers: ["x-amz-copy-source": endpoint.copySource(forKey: sourceKey)])) { body in
 			_ = try S3XML.copyETag(in: body)
 		}
 	}
@@ -112,7 +112,7 @@ final class S3Client: Sendable {
 	/// - Returns: The ETag of the part.
 	func uploadPartCopy(sourceKey: String, range: String, key: String, uploadID: String, partNumber: Int) async throws -> String {
 		let query = [URLQueryItem(name: "partNumber", value: String(partNumber)), URLQueryItem(name: "uploadId", value: uploadID)]
-		return try await send(request(method: "PUT", key: key, query: query, headers: ["x-amz-copy-source": copySource(for: sourceKey), "x-amz-copy-source-range": range])) { body in
+		return try await send(request(method: "PUT", key: key, query: query, headers: ["x-amz-copy-source": endpoint.copySource(forKey: sourceKey), "x-amz-copy-source-range": range])) { body in
 			try S3XML.copyETag(in: body)
 		}
 	}
@@ -218,11 +218,6 @@ final class S3Client: Sendable {
 		// An empty body makes URLSession send `Content-Length: 0`, which S3 requires for a PUT or POST.
 		request.httpBody = body ?? (["PUT", "POST"].contains(method) ? Data() : nil)
 		return request
-	}
-
-	private func copySource(for sourceKey: String) -> String {
-		let source = "\(endpoint.bucket)/\(sourceKey)"
-		return source.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? source
 	}
 
 	// MARK: - Clock Skew

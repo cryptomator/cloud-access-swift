@@ -98,4 +98,10 @@ class S3XMLTests: XCTestCase {
 		let body = try XCTUnwrap(String(bytes: S3XML.deleteObjectsBody(keys: ["a<b>&c.txt"]), encoding: .utf8))
 		XCTAssertTrue(body.contains("<Quiet>true</Quiet><Object><Key>a&lt;b&gt;&amp;c.txt</Key></Object>"), body)
 	}
+
+	func testDeleteObjectsBodyPreservesLineBreaksInKeys() throws {
+		let keys = ["a\rb.txt", "a\r\nb.txt", "a\nb.txt"]
+		let root = try XCTUnwrap(S3XMLElement.parse(S3XML.deleteObjectsBody(keys: keys)))
+		XCTAssertEqual(keys, root.children("Object").compactMap { $0.text(of: "Key") })
+	}
 }

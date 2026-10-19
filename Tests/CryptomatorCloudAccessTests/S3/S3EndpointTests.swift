@@ -74,9 +74,10 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("https://example.com/prefix/my.bucket", try url(endpointURL: "https://example.com/prefix", bucket: "my.bucket", key: ""))
 	}
 
-	/// S3 checks the signature against the path encoded with the SigV4 rules, so the path is sent encoded like a key rather than as the credential's URL encodes it.
-	func testEncodesPathOfEndpointURLLikeKey() throws {
+	/// S3 checks the signature against the path encoded with the SigV4 rules, so each segment of the path is re-encoded with them rather than sent as the credential's URL encodes it. An escaped slash stays part of its segment.
+	func testEncodesPathOfEndpointURLWithSigV4Rules() throws {
 		XCTAssertEqual("https://example.com/a%2Bb%20c/my.bucket/file.txt", try url(endpointURL: "https://example.com/a+b%20c", bucket: "my.bucket", key: "file.txt"))
+		XCTAssertEqual("https://example.com/tenant%2Farchive/my.bucket/file.txt", try url(endpointURL: "https://example.com/tenant%2Farchive", bucket: "my.bucket", key: "file.txt"))
 	}
 
 	func testEncodesQueryCompletely() throws {

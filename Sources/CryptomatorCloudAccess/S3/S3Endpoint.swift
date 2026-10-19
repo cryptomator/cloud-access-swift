@@ -20,7 +20,7 @@ struct S3Endpoint: Sendable {
 	/// The percent-encoded host, which keeps the brackets of an IPv6 address.
 	private let host: String
 	private let port: Int?
-	/// The path of the credential's URL without a trailing slash, encoded like a key.
+	/// The path of the credential's URL without a trailing slash. Each segment is decoded and re-encoded with the SigV4 rules, slash included, so that an escaped slash stays distinct from a separator. A segment that isn't valid percent-encoded UTF-8 is kept as it is.
 	private let basePath: String
 	private let isVirtualHosted: Bool
 	let bucket: String
@@ -28,18 +28,21 @@ struct S3Endpoint: Sendable {
 	init(credential: S3Credential) {
 		let scheme = credential.url.scheme?.lowercased() ?? "https"
 		self.scheme = scheme
-		self.host = URLComponents(url: credential.url, resolvingAgainstBaseURL: false)?.encodedHost ?? ""
+		let components = URLComponents(url: credential.url, resolvingAgainstBaseURL: false)
+		self.host = components?.encodedHost ?? ""
 		// An explicit default port is dropped, so that a stored `https://host:443` credential signs and sends the bare host, as AWS SDK 2.41.0 did.
 		if let port = credential.url.port, !(scheme == "https" && port == 443), !(scheme == "http" && port == 80) {
 			self.port = port
 		} else {
 			self.port = nil
 		}
-		var path = credential.url.path
+		var path = components?.percentEncodedPath ?? ""
 		while path.hasSuffix("/") {
 			path.removeLast()
 		}
-		self.basePath = S3Signer.encode(path, encodeSlash: false)
+		self.basePath = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
+			segment.removingPercentEncoding.map { S3Signer.encode($0, encodeSlash: true) } ?? String(segment)
+		}.joined(separator: "/")
 		self.bucket = credential.bucket
 		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
 	}

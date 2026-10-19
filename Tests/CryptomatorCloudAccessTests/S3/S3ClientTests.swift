@@ -85,6 +85,13 @@ class S3ClientTests: XCTestCase {
 
 	// MARK: - Retries
 
+	func testRetryDelayStaysWithinExponentialBound() {
+		for _ in 0 ..< 100 {
+			XCTAssertTrue((0 ... 1).contains(S3Client.retryDelay(forRetry: 1)))
+			XCTAssertTrue((0 ... 4).contains(S3Client.retryDelay(forRetry: 3)))
+		}
+	}
+
 	func testRetriesTransientStatus() async throws {
 		URLProtocolMock.requestHandler = [
 			S3MockResponse.handler(statusCode: 429),

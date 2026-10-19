@@ -25,7 +25,7 @@ final class S3Client: Sendable {
 	private static let maxErrorBodyLength = 1024 * 1024
 	private static let clockSkewTolerance: TimeInterval = 5 * 60
 	private static let clockSkewErrorCodes: Set<String> = ["RequestTimeTooSkewed", "RequestExpired", "SignatureDoesNotMatch"]
-	private static let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost]
+	private static let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed]
 	private static let transientStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
 	private static let transientErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 	private static let failingURLKeys = [NSURLErrorFailingURLErrorKey, NSURLErrorFailingURLStringErrorKey, NSURLErrorFailingURLPeerTrustErrorKey]
@@ -179,7 +179,7 @@ final class S3Client: Sendable {
 	/**
 	 Sends a metadata request, signing each attempt afresh, and returns the result that `result` reads from the body of a successful response.
 
-	 A failed attempt is retried up to three times if its failure is transient: a dropped or timed-out connection, a throttling or server error status or code, also in an `<Error>` document of a 2xx response, or a 2xx response whose `<Error>` document or result can't be read (`S3ResponseError.unparseableResult`). A request that failed because of the device's clock is retried once with the server's clock. The wait before a retry is the only point at which a cancelled task stops the request.
+	 A failed attempt is retried up to three times if its failure is transient. That is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout error status or code, also in an `<Error>` document of a 2xx response, and a 2xx response whose `<Error>` document or result can't be read (`S3ResponseError.unparseableResult`). A request that failed because of the device's clock is retried once with the server's clock. The wait before a retry is the only point at which a cancelled task stops the request.
 	 */
 	func send<Output>(_ request: URLRequest, result: (Data) throws -> Output) async throws -> Output {
 		let payloadHash = request.httpBody.map(S3Signer.sha256Hex) ?? S3Signer.emptyPayloadHash
@@ -205,8 +205,13 @@ final class S3Client: Sendable {
 				throw failure
 			}
 			retryCount += 1
-			try await Task.sleep(for: .seconds(1 + 2 * retryCount))
+			try await Task.sleep(for: .seconds(S3Client.retryDelay(forRetry: retryCount)))
 		}
+	}
+
+	/// Returns a random wait of up to 2^(retry - 1) seconds, as in the legacy retry mode that botocore and the AWS SDK for Swift use by default. The randomness keeps requests that were throttled together from retrying together.
+	static func retryDelay(forRetry retry: Int) -> TimeInterval {
+		return TimeInterval.random(in: 0 ... pow(2, TimeInterval(retry - 1)))
 	}
 
 	private func request(method: String, key: String, query: [URLQueryItem] = [], headers: [String: String] = [:], body: Data? = nil) -> URLRequest {

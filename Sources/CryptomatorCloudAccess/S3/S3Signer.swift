@@ -75,7 +75,7 @@ struct S3Signer: Sendable {
 		let headers = S3Signer.canonicalHeaders(url: url, headers: request.allHTTPHeaderFields ?? [:])
 		let signedHeaders = headers.map(\.name).joined(separator: ";")
 		let signature = signature(method: request.httpMethod ?? "GET", url: url, headers: headers, payloadHash: payloadHash, dateTime: dateTime)
-		request.setValue("\(S3Signer.algorithm) Credential=\(accessKey)/\(scope(dateTime: dateTime)),SignedHeaders=\(signedHeaders),Signature=\(signature)", forHTTPHeaderField: "Authorization")
+		request.setValue("\(S3Signer.algorithm) Credential=\(accessKey)/\(scope(dateTime: dateTime)), SignedHeaders=\(signedHeaders), Signature=\(signature)", forHTTPHeaderField: "Authorization")
 	}
 
 	/// Returns the URL with the authentication parameters and the signature in its query. The request must send each of the given `headers` with its given value.

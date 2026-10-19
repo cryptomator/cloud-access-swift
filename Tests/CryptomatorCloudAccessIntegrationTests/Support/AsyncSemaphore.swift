@@ -39,8 +39,10 @@ actor AsyncSemaphore {
 	 An operation that takes longer is cancelled best effort, and `IntegrationTestError.budgetExceeded` is thrown. It is left running without the permit, because SDK calls don't respond to cancellation, so that a hanging operation can't keep the permit for the rest of the run.
 
 	 A caller that is cancelled before it gets the permit still waits for one, then releases it without running the operation. A caller that is cancelled later cancels the operation best effort and keeps the permit until the operation returns or the budget is exceeded.
+
+	 The budget is waited out with `sleep`, as in `value(of:timeout:sleep:)`.
 	 */
-	nonisolated func withPermit<T: Sendable>(budget: Duration, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+	nonisolated func withPermit<T: Sendable>(budget: Duration, sleep: @escaping @Sendable (Duration) async throws -> Void = taskSleep(for:), _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
 		await acquire()
 		if Task.isCancelled {
 			await release()
@@ -57,7 +59,7 @@ actor AsyncSemaphore {
 		let result: Result<T, Error>
 		do {
 			result = try await withTaskCancellationHandler {
-				try await value(of: task, timeout: budget)
+				try await value(of: task, timeout: budget, sleep: sleep)
 			} onCancel: {
 				task.cancel()
 			}

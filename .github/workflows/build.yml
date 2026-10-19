@@ -17,10 +17,10 @@ permissions:
 jobs:
   build:
     name: Build and test
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: xcode-27
     env:
       DERIVED_DATA_PATH: 'DerivedData'
-      DEVICE: 'iPhone 17 Pro'
+      DEVICE: 'iPhone 17'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,6 +33,14 @@ jobs:
           key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-spm-
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app"
+          xcodebuild -version
+      - name: Install SwiftFormat and SwiftLint
+        run: |
+          brew update
+          brew install swiftformat swiftlint
       - name: Run process.sh script
         run: |
           ./Scripts/process.sh
@@ -53,7 +61,7 @@ jobs:
 
   integration-tests:
     name: Run integration tests
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: xcode-27
     needs: build
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
@@ -62,7 +70,7 @@ jobs:
       actions: read # Required for downloading the still-failing tests of the previous attempt
     env:
       DERIVED_DATA_PATH: 'DerivedData'
-      DEVICE: 'iPhone 17 Pro'
+      DEVICE: 'iPhone 17'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -71,6 +79,10 @@ jobs:
           key: ${{ runner.os }}-integration-spm-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-integration-spm-
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app"
+          xcodebuild -version
       - name: Build
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild build-for-testing -scheme 'AllIntegrationTests' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH | xcbeautify
         env:

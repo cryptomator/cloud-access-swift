@@ -87,7 +87,7 @@ class S3ClientTests: XCTestCase {
 
 	func testRetriesTransientStatus() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 503),
+			S3MockResponse.handler(statusCode: 429),
 			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["a.txt"]))
 		]
 

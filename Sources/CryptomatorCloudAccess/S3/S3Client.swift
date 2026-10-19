@@ -26,7 +26,7 @@ final class S3Client: Sendable {
 	private static let clockSkewTolerance: TimeInterval = 5 * 60
 	private static let clockSkewErrorCodes: Set<String> = ["RequestTimeTooSkewed", "RequestExpired", "SignatureDoesNotMatch"]
 	private static let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost]
-	private static let transientStatusCodes: Set<Int> = [500, 502, 503, 504]
+	private static let transientStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
 	private static let transientErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 	private static let failingURLKeys = [NSURLErrorFailingURLErrorKey, NSURLErrorFailingURLStringErrorKey, NSURLErrorFailingURLPeerTrustErrorKey]
 
@@ -179,7 +179,7 @@ final class S3Client: Sendable {
 	/**
 	 Sends a metadata request, signing each attempt afresh, and returns the result that `result` reads from the body of a successful response.
 
-	 A failed attempt is retried up to three times if its failure is transient: a dropped or timed-out connection, a server error status or code, also in an `<Error>` document of a 2xx response, or a `result` that throws `S3ResponseError.unparseableResult`. A request that failed because of the device's clock is retried once with the server's clock. The wait before a retry is the only point at which a cancelled task stops the request.
+	 A failed attempt is retried up to three times if its failure is transient: a dropped or timed-out connection, a throttling or server error status or code, also in an `<Error>` document of a 2xx response, or a `result` that throws `S3ResponseError.unparseableResult`. A request that failed because of the device's clock is retried once with the server's clock. The wait before a retry is the only point at which a cancelled task stops the request.
 	 */
 	func send<Output>(_ request: URLRequest, result: (Data) throws -> Output) async throws -> Output {
 		let payloadHash = request.httpBody.map(S3Signer.sha256Hex) ?? S3Signer.emptyPayloadHash

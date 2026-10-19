@@ -173,6 +173,16 @@ class S3ClientTests: XCTestCase {
 		XCTAssertEqual(3600, sentDates[2].timeIntervalSince(sentDates[0]), accuracy: 60)
 	}
 
+	/// The error code decides, whatever the status, as in the AWS SDKs: a 400 is neither retried as transient nor corrected otherwise.
+	func testCorrectsClockSkewAfterRequestExpiredWithStatus400() async throws {
+		URLProtocolMock.requestHandler = [
+			S3MockResponse.handler(statusCode: 400, body: "<Error><Code>RequestExpired</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
+			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+		]
+
+		_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
+	}
+
 	func testDoesNotRetryAfterClockSkewInCancelledTask() async throws {
 		let client: S3Client = client
 		URLProtocolMock.requestHandler = [

@@ -237,7 +237,7 @@ final class S3Client: Sendable {
 
 	/// Adopts the clock of the server if the request failed because the offset it was signed with is off, and returns whether it did. The offset of the attempt counts rather than the current one, because concurrent requests may have been signed before another one corrected it.
 	private func correctClockSkew(after failure: Error, response: URLResponse?, signingOffset: TimeInterval) -> Bool {
-		guard let s3Error = failure as? S3Error, s3Error.statusCode == 403, let code = s3Error.code, S3Client.clockSkewErrorCodes.contains(code), let serverDate = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Date").flatMap({ Date.date(fromRFC822: $0) }) else {
+		guard let s3Error = failure as? S3Error, let code = s3Error.code, S3Client.clockSkewErrorCodes.contains(code), let serverDate = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Date").flatMap({ Date.date(fromRFC822: $0) }) else {
 			return false
 		}
 		let offset = serverDate.timeIntervalSinceNow

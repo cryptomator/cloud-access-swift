@@ -281,20 +281,20 @@ final class SplitURLSession: Sendable {
 
 	/// - Parameter cancelsBeforeResume: Whether to cancel the task and throw `CancellationError` instead of resuming it if the calling task is cancelled by the time `onTaskCreation` returns.
 	// swiftlint:disable:next function_parameter_count
-	func download(_ request: URLRequest, route: DownloadRoute, handler: @escaping DownloadHandler, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> Outcome {
+	func download(_ request: URLRequest, route: DownloadRoute, handler: @escaping DownloadHandler, bodyLogging: HTTPDebugLogger.BodyLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> Outcome {
 		let (session, sessionDescription) = switch route {
 		case .transfer:
 			(transferSession, transferSessionDescription)
 		case .metadata:
 			(metadataSession, SplitURLSession.foregroundSessionDescription)
 		}
-		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
+		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: bodyLogging, urlLogging: .redacted, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
 		return try await perform(session.downloadTask(with: request), request: request, attempt: attempt, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	// swiftlint:disable:next function_parameter_count
-	func upload(_ request: URLRequest, fromFile fileURL: URL, bodyLimit: Int?, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> Outcome {
-		let attempt = Attempt(sessionDescription: transferSessionDescription, bodyLimit: bodyLimit, bodyLogging: .logged, urlLogging: urlLogging, downloadHandler: nil, cancelsBeforeResume: cancelsBeforeResume)
+	func upload(_ request: URLRequest, fromFile fileURL: URL, bodyLimit: Int?, bodyLogging: HTTPDebugLogger.BodyLogging, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> Outcome {
+		let attempt = Attempt(sessionDescription: transferSessionDescription, bodyLimit: bodyLimit, bodyLogging: bodyLogging, urlLogging: urlLogging, downloadHandler: nil, cancelsBeforeResume: cancelsBeforeResume)
 		return try await perform(transferSession.uploadTask(with: request, fromFile: fileURL), request: request, attempt: attempt, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
@@ -333,12 +333,12 @@ final class SplitURLSession: Sendable {
 			} else {
 				return try .data(Data(contentsOf: location))
 			}
-		}, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		}, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		return try SplitURLSession.result(of: outcome)
 	}
 
 	func upload(_ request: URLRequest, fromFile fileURL: URL, urlLogging: HTTPDebugLogger.URLLogging = .redacted) async throws -> (HTTPURLResponse, Data) {
-		return try await SplitURLSession.result(of: upload(request, fromFile: fileURL, bodyLimit: nil, urlLogging: urlLogging, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil))
+		return try await SplitURLSession.result(of: upload(request, fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: urlLogging, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil))
 	}
 
 	private static func result(of outcome: Outcome) throws -> (HTTPURLResponse, Data) {

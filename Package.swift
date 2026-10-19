@@ -33,7 +33,6 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.16.0"),
-		.package(url: "https://github.com/aws-amplify/aws-sdk-ios-spm.git", .upToNextMinor(from: "2.41.0")),
 		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "10.18.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "3.0.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
@@ -50,8 +49,6 @@ let package = Package(
 		.target(
 			name: "CryptomatorCloudAccessCore",
 			dependencies: [
-				.product(name: "AWSCore", package: "aws-sdk-ios-spm"),
-				.product(name: "AWSS3", package: "aws-sdk-ios-spm"),
 				.product(name: "BoxSDK", package: "box-ios-sdk"),
 				.product(name: "CocoaLumberjackSwift", package: "CocoaLumberjack"),
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),

@@ -6,7 +6,6 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import AWSCore
 import Foundation
 @preconcurrency import PCloudSDKSwift
 #if canImport(CryptomatorCloudAccessCore)
@@ -23,13 +22,7 @@ private enum SharedCredentials {
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
 	static let microsoftGraph = MicrosoftGraphCredentialMock()
 	static let pCloudClient = PCloud.createClient(with: PCloudCredentialMock().user)
-	static let s3: S3Credential = {
-		AWSDDLog.sharedInstance.logLevel = .verbose
-		if let logger = AWSDDTTYLogger.sharedInstance {
-			AWSDDLog.add(logger)
-		}
-		return IntegrationTestSecrets.s3Credential
-	}()
+	static let s3 = IntegrationTestSecrets.s3Credential
 
 	static let webDAVClient = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
 }

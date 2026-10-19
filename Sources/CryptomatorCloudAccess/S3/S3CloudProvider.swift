@@ -6,65 +6,33 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import AWSCore
-@preconcurrency import AWSS3
-import CocoaLumberjackSwift
 import Foundation
 
-enum S3CloudProviderError: Error {
-	case invalidRequest
-	case missingTransferUtility
-	case serviceConfigurationInitFailed
-}
-
 public final class S3CloudProvider: CloudProvider {
-	private let transferUtility: AWSS3TransferUtility
-	private let service: AWSS3
-	private let credential: S3Credential
+	private let client: S3Client
 	private let copyUtility: S3CopyTaskUtility
 	private let maxPageSize: Int
 	private static let delimiter = "/"
 	private static let folderContentType = "application/x-directory"
 	private static let s3MaxPageSize = 1000
 
-	init(credential: S3Credential, useBackgroundSession: Bool, transferUtilityConfiguration: AWSS3TransferUtilityConfiguration, serviceConfiguration: AWSServiceConfiguration, maxPageSize: Int) throws {
-		self.credential = credential
-		AWSEndpoint.exchangeRegionNameImplementation
-		CustomAWSEndpointRegionNameStorage.shared.setRegionName(credential.region, for: credential)
-		AWSS3TransferUtility.register(with: serviceConfiguration, transferUtilityConfiguration: transferUtilityConfiguration, forKey: credential.identifier)
-		AWSS3.register(with: serviceConfiguration, forKey: credential.identifier)
-		guard let transferUtility = AWSS3TransferUtility.s3TransferUtility(forKey: credential.identifier) else {
-			throw S3CloudProviderError.missingTransferUtility
-		}
-		if !useBackgroundSession {
-			AWSS3TransferUtility.useForegroundURLSession(for: transferUtility)
-		}
-		self.transferUtility = transferUtility
-		let service = AWSS3.s3(forKey: credential.identifier)
-		self.copyUtility = S3CopyTaskUtility(service: service, bucket: credential.bucket)
-		self.service = service
+	init(client: S3Client, maxPageSize: Int) {
+		self.client = client
+		self.copyUtility = S3CopyTaskUtility(client: client)
 		self.maxPageSize = min(max(1, maxPageSize), S3CloudProvider.s3MaxPageSize)
 	}
 
+	/**
+	 Creates an S3 provider whose downloads and uploads run on a background URL session, and whose other requests run on a foreground URL session.
+
+	 If the provider is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+	 */
 	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?, maxPageSize: Int = .max) throws -> S3CloudProvider {
-		try S3CloudProvider(credential: credential, useBackgroundSession: true, sharedContainerIdentifier: sharedContainerIdentifier, maxPageSize: maxPageSize)
+		return S3CloudProvider(client: .background(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
 	}
 
 	public convenience init(credential: S3Credential, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, useBackgroundSession: false, sharedContainerIdentifier: nil, maxPageSize: maxPageSize)
-	}
-
-	convenience init(credential: S3Credential, useBackgroundSession: Bool, sharedContainerIdentifier: String?, maxPageSize: Int) throws {
-		let endpoint = AWSEndpoint(url: credential.url)
-		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: credential.accessKey, secretKey: credential.secretKey)
-		let region = credential.region.aws_regionTypeValue()
-		guard let serviceConfiguration = AWSServiceConfiguration(region: region, endpoint: endpoint, credentialsProvider: credentialsProvider) else {
-			throw S3CloudProviderError.serviceConfigurationInitFailed
-		}
-		serviceConfiguration.sharedContainerIdentifier = sharedContainerIdentifier
-		let transferUtilityConfiguration = AWSS3TransferUtilityConfiguration()
-		transferUtilityConfiguration.bucket = credential.bucket
-		try self.init(credential: credential, useBackgroundSession: useBackgroundSession, transferUtilityConfiguration: transferUtilityConfiguration, serviceConfiguration: serviceConfiguration, maxPageSize: maxPageSize)
+		self.init(client: .foreground(credential: credential), maxPageSize: maxPageSize)
 	}
 
 	@concurrent
@@ -73,23 +41,15 @@ public final class S3CloudProvider: CloudProvider {
 		return try await getItemMetadata(at: cloudPath)
 	}
 
-	/**
-	 Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
-
-	 Doesn't check for cancellation, so that an upload can still fetch the metadata to return after its remote change.
-	 */
+	/// Use a `listObjectsV2` request with the cloudPath as prefix (without trailing slash) instead of a `headObject` request as some providers do not respond with an access denied error.
 	private func getItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
-		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: nil, maxKeys: 1)
-		guard var prefix = request.prefix else {
-			throw S3CloudProviderError.invalidRequest
-		}
+		var prefix = getPrefix(for: cloudPath)
 		if prefix != getPrefix(for: .root), prefix.hasSuffix(S3CloudProvider.delimiter) {
 			prefix.removeLast(1)
 		}
-		request.prefix = prefix
 		do {
-			let output = try await service.executeListObjectsV2(request)
+			let output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: nil, maxKeys: 1)
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
 			guard let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) else {
 				throw CloudProviderError.itemNotFound
@@ -105,12 +65,11 @@ public final class S3CloudProvider: CloudProvider {
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) called")
-		let request = createListObjectsV2Request(for: cloudPath, recursive: false, pageToken: pageToken)
-		request.maxKeys = NSNumber(value: maxPageSize + 1) // request includes the folder itself
 		do {
-			let output: AWSS3ListObjectsV2Output
+			let output: S3ListObjectsResult
 			do {
-				output = try await service.executeListObjectsV2(request)
+				// The listing includes the folder itself.
+				output = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: pageToken, maxKeys: maxPageSize + 1)
 			} catch {
 				throw await checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
 			}
@@ -138,9 +97,10 @@ public final class S3CloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			let metadata = try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 				do {
-					try await transferUtility.download(to: stagedFile, key: key, expression: .init())
-				} catch {
-					throw await recoverDownloadFailure(error, metadataCheck: { try await assertFileExists(at: cloudPath) })
+					try await client.download(key: key, to: stagedFile, progress: phases[0], onTaskCreation: onTaskCreation)
+				} catch let error as S3Error where error.statusCode == 404 {
+					// The error body of a download may be missing or too long to read, so any 404 means that the file is gone.
+					throw CloudProviderError.itemNotFound
 				}
 				return remoteMetadata
 			})
@@ -186,9 +146,12 @@ public final class S3CloudProvider: CloudProvider {
 			}
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) precondition done, uploading file…")
-			try await transferUtility.uploadFile(localURL, key: key, contentType: contentType, expression: .init())
+			try await client.upload(key: key, fromFile: localURL, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, fetching metadata…")
-			let metadata = try await getItemMetadata(at: cloudPath)
+			// The upload committed with its PUT, so the metadata is fetched even if the task is cancelled meanwhile.
+			let metadata = try await withoutCancellation {
+				try await self.getItemMetadata(at: cloudPath)
+			}
 			phases.completeTransfer()
 			return metadata
 		} catch {
@@ -201,16 +164,15 @@ public final class S3CloudProvider: CloudProvider {
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) called")
-		let request = createEmptyFolderPutObjectRequest(for: cloudPath)
-		request.contentType = S3CloudProvider.folderContentType
 		do {
 			if try await checkForItemExistence(at: cloudPath) {
 				throw CloudProviderError.itemAlreadyExists
 			}
 			try await assertParentFolderExists(for: cloudPath)
 			try Task.checkCancellation()
-			let output = try await service.executePutObject(request)
-			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) received output: \(output)")
+			// S3 has no folders, so a folder is a 0-byte object whose key is the folder path with a trailing slash.
+			try await client.putEmptyObject(key: getKey(for: cloudPath) + S3CloudProvider.delimiter, contentType: S3CloudProvider.folderContentType)
+			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) finished")
 		} catch {
 			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
 			throw convertStandardError(error)
@@ -224,9 +186,8 @@ public final class S3CloudProvider: CloudProvider {
 		do {
 			_ = try await getItemMetadata(at: cloudPath)
 			try Task.checkCancellation()
-			let request = createDeleteObjectRequest(for: cloudPath)
-			let output = try await service.executeDeleteObject(request)
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) received output: \(output)")
+			try await client.deleteObject(key: getKey(for: cloudPath))
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) finished")
 		} catch {
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) failed with error: \(error)")
 			throw convertStandardError(error)
@@ -299,19 +260,13 @@ public final class S3CloudProvider: CloudProvider {
 		let parentTargetKey = getKey(for: targetCloudPath)
 		var nextContinuationToken: String?
 		repeat {
-			let request = createListObjectsV2Request(for: sourceCloudPath, recursive: true, pageToken: nextContinuationToken)
-			let listObjects = try await service.executeListObjectsV2(request)
-
-			let contents: [AWSS3Object] = listObjects.contents ?? []
-			let keys: [String] = contents.compactMap(\.key)
-			assert(contents.count == keys.count)
-
-			let copyRequests: [S3CopyRequest] = contents.compactMap {
-				guard let sourceKey = $0.key, let name = sourceKey.deletingPrefix(parentSourceKey), let itemSize = $0.size?.intValue else {
+			let listObjects = try await listObjects(withPrefix: getPrefix(for: sourceCloudPath), recursive: true, pageToken: nextContinuationToken)
+			let copyRequests: [S3CopyRequest] = listObjects.contents.compactMap {
+				guard let name = $0.key.deletingPrefix(parentSourceKey), let itemSize = $0.size else {
 					return nil
 				}
 				let targetKey = parentTargetKey + name
-				return .init(sourceKey: sourceKey, targetKey: targetKey, itemSize: itemSize)
+				return .init(sourceKey: $0.key, targetKey: targetKey, itemSize: itemSize)
 			}
 			try await withThrowingTaskGroup(of: Void.self) { group in
 				for copyRequest in copyRequests {
@@ -322,8 +277,7 @@ public final class S3CloudProvider: CloudProvider {
 				try await group.waitForAll()
 			}
 
-			let deleteObjectsRequest = createDeleteObjectsRequest(keys: keys)
-			_ = try await deleteObjects(deleteObjectsRequest)
+			try await deleteObjects(keys: listObjects.contents.map(\.key))
 
 			nextContinuationToken = listObjects.nextContinuationToken
 		} while nextContinuationToken != nil
@@ -372,79 +326,10 @@ public final class S3CloudProvider: CloudProvider {
 		}
 	}
 
-	func assertFileExists(at cloudPath: CloudPath) async throws {
-		let metadata = try await fetchItemMetadata(at: cloudPath)
-		guard metadata.itemType == .file else {
-			throw CloudProviderError.itemTypeMismatch
-		}
-	}
-
-	/**
-	 Maps the error of a failed download. As the transfer doesn't report whether the file is missing, this is determined by a metadata check.
-
-	 - Parameter error: The error of the transfer.
-	 - Parameter metadataCheck: Throws if there is no file at the remote path. Not called if the download was cancelled.
-	 - Returns: The error of `metadataCheck` if it throws, otherwise `error`.
-	 */
-	func recoverDownloadFailure(_ error: Error, metadataCheck: () async throws -> Void) async -> Error {
-		if error is CancellationError {
-			return error
-		}
-		do {
-			try await metadataCheck()
-			return error
-		} catch let metadataError {
-			return metadataError
-		}
-	}
-
 	// - MARK: Requests
 
-	func createListObjectsV2Request(for cloudPath: CloudPath, recursive: Bool, pageToken: String?, maxKeys: Int = 1000) -> AWSS3ListObjectsV2Request {
-		let request = AWSS3ListObjectsV2Request()!
-		request.bucket = credential.bucket
-		request.prefix = getPrefix(for: cloudPath)
-		if !recursive {
-			request.delimiter = S3CloudProvider.delimiter
-		}
-		request.continuationToken = pageToken
-		request.maxKeys = NSNumber(value: maxKeys)
-		return request
-	}
-
-	func createDeleteObjectRequest(for cloudPath: CloudPath) -> AWSS3DeleteObjectRequest {
-		let request = AWSS3DeleteObjectRequest()!
-		request.bucket = credential.bucket
-		request.key = getKey(for: cloudPath)
-		return request
-	}
-
-	func createDeleteObjectsRequest(keys: [String]) -> AWSS3DeleteObjectsRequest {
-		let request = AWSS3DeleteObjectsRequest()!
-		request.bucket = credential.bucket
-		let removeContainer = AWSS3Remove()
-		let identifiers = keys.compactMap { key -> AWSS3ObjectIdentifier? in
-			let identifier = AWSS3ObjectIdentifier()
-			identifier?.key = key
-			return identifier
-		}
-		assert(keys.count == identifiers.count)
-		removeContainer?.objects = identifiers
-		request.remove = removeContainer
-		return request
-	}
-
-	/**
-	 Creates a `putObject` request for an empty folder.
-
-	 Empty folders are represented in S3 due to the flat structure via a 0-byte file with the folder path incl. trailing slash.
-	 */
-	func createEmptyFolderPutObjectRequest(for cloudPath: CloudPath) -> AWSS3PutObjectRequest {
-		let request = AWSS3PutObjectRequest()!
-		request.bucket = credential.bucket
-		request.key = getKey(for: cloudPath) + S3CloudProvider.delimiter
-		request.body = nil
-		return request
+	private func listObjects(withPrefix prefix: String, recursive: Bool, pageToken: String?, maxKeys: Int = S3CloudProvider.s3MaxPageSize) async throws -> S3ListObjectsResult {
+		return try await client.listObjectsV2(prefix: prefix, delimiter: recursive ? nil : S3CloudProvider.delimiter, continuationToken: pageToken, maxKeys: maxKeys)
 	}
 
 	func getKey(for cloudPath: CloudPath, isFolder: Bool = false) -> String {
@@ -482,68 +367,41 @@ public final class S3CloudProvider: CloudProvider {
 
 	// - MARK: Error Conversion
 
-	func convertStandardError(_ error: Error, mapUnknownErrorTo unknownError: Error? = nil) -> Error {
-		if error is CloudProviderError {
+	func convertStandardError(_ error: Error) -> Error {
+		if error is CloudProviderError || error is CancellationError {
 			return error
 		}
 		if isNetworkConnectionError(error) {
 			return CloudProviderError.noInternetConnection
 		}
+		if let s3Error = error as? S3Error {
+			return convertS3Error(s3Error)
+		}
 		let nsError = error as NSError
-		switch (nsError.domain, nsError.code) {
-		case (AWSServiceErrorDomain, _):
-			return convertAWSServiceError(nsError, unknownError: unknownError)
-		case (AWSS3ErrorDomain, _):
-			return convertAWSS3Error(nsError, unknownError: unknownError)
-		case let (domain, code) where domain == kCFErrorDomainCFNetwork as String && code == CFNetworkErrors.cfErrorHTTPParseFailure.rawValue:
+		if nsError.domain == kCFErrorDomainCFNetwork as String, nsError.code == CFNetworkErrors.cfErrorHTTPParseFailure.rawValue {
 			// workaround as some providers (e.g. Scaleway) return sometimes an 303 HTTP Error instead of an access denied
 			return CloudProviderError.unauthorized
-		default:
-			return error
 		}
+		return error
 	}
 
-	func convertAWSServiceError(_ error: NSError, unknownError: Error?) -> Error {
-		switch AWSServiceErrorType(rawValue: error.code) {
-		case .accessDenied, .accessDeniedException, .authFailure, .authMissingFailure, .invalidAccessKeyId, .invalidClientTokenId, .missingAuthenticationToken, .invalidSignatureException, .signatureDoesNotMatch:
+	func convertS3Error(_ error: S3Error) -> Error {
+		switch error.code {
+		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken":
 			return CloudProviderError.unauthorized
-		case .expiredToken, .invalidToken, .tokenRefreshRequired:
+		case "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
 			return CloudProviderError.pageTokenInvalid
-		case .unknown:
-			return unknownError ?? error
-		default:
-			return error
-		}
-	}
-
-	func convertAWSS3Error(_ error: NSError, unknownError: Error?) -> Error {
-		switch AWSS3ErrorType(rawValue: error.code) {
-		case .noSuchKey:
+		case "NoSuchKey":
 			return CloudProviderError.itemNotFound
-		case .unknown:
-			guard let convertedError = convertUnknownAWSS3Error(error) else {
-				return unknownError ?? error
-			}
-			return convertedError
+		case "InvalidArgument" where error.argumentName == "continuation-token":
+			return CloudProviderError.pageTokenInvalid
+		case "InternalError" where error.reason == "Incorrect padding":
+			return CloudProviderError.pageTokenInvalid
+		case nil where error.statusCode == 401 || error.statusCode == 403:
+			return CloudProviderError.unauthorized
 		default:
 			return error
 		}
-	}
-
-	func convertUnknownAWSS3Error(_ error: NSError) -> Error? {
-		let userInfo = error.userInfo
-		if userInfo["Code"] as? String == "InvalidArgument", userInfo["ArgumentName"] as? String == "continuation-token" {
-			return CloudProviderError.pageTokenInvalid
-		}
-		if userInfo["Code"] as? String == "InternalError", userInfo["Reason"] as? String == "Incorrect padding" {
-			return CloudProviderError.pageTokenInvalid
-		}
-		return nil
-	}
-
-	func convertStandardError<T>(_ error: Error, mapUnknownErrorTo unknownError: Error) throws -> T {
-		let convertedError = convertStandardError(error, mapUnknownErrorTo: unknownError)
-		throw convertedError
 	}
 
 	// - MARK: Delete
@@ -558,27 +416,20 @@ public final class S3CloudProvider: CloudProvider {
 		repeat {
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) called")
-			let request = createListObjectsV2Request(for: cloudPath, recursive: true, pageToken: nextContinuationToken)
-			let listObjects = try await service.executeListObjectsV2(request)
-			let contents: [AWSS3Object] = listObjects.contents ?? []
-			let keys: [String] = contents.compactMap(\.key)
-			assert(contents.count == keys.count)
+			let listObjects = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: true, pageToken: nextContinuationToken)
 			try Task.checkCancellation()
-			let deleteObjectsRequest = createDeleteObjectsRequest(keys: keys)
-			let output = try await deleteObjects(deleteObjectsRequest)
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) received output: \(output)")
+			try await deleteObjects(keys: listObjects.contents.map(\.key))
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) finished")
 			nextContinuationToken = listObjects.nextContinuationToken
 		} while nextContinuationToken != nil
 	}
 
-	func deleteObjects(_ request: AWSS3DeleteObjectsRequest) async throws -> AWSS3DeleteObjectsOutput {
-		guard let objects = request.remove?.objects else {
-			throw S3CloudProviderError.invalidRequest
+	/// The errors of single objects are ignored, so that a folder of which S3 refused to delete some objects counts as deleted.
+	func deleteObjects(keys: [String]) async throws {
+		if keys.isEmpty {
+			return
 		}
-		if objects.isEmpty {
-			return AWSS3DeleteObjectsOutput()
-		}
-		return try await service.executeDeleteObjects(request)
+		try await client.deleteObjects(keys: keys)
 	}
 
 	// - MARK: Assertions
@@ -615,37 +466,22 @@ public final class S3CloudProvider: CloudProvider {
 }
 
 extension CloudItemMetadata {
-	init(headObject: AWSS3HeadObjectOutput, key: String) {
-		let itemType: CloudItemType = key.hasSuffix("/") ? .folder : .file
-		let path = key.hasPrefix("/") ? key : "/" + key
+	init(object: S3Object) {
+		let itemType: CloudItemType = object.key.hasSuffix("/") ? .folder : .file
+		let path = object.key.hasPrefix("/") ? object.key : "/" + object.key
 		let cloudPath = CloudPath(path)
-		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: headObject.lastModified, size: headObject.contentLength?.intValue)
-	}
-
-	init?(object: AWSS3Object) {
-		guard let key = object.key else {
-			return nil
-		}
-		let itemType: CloudItemType = key.hasSuffix("/") ? .folder : .file
-		let path = key.hasPrefix("/") ? key : "/" + key
-		let cloudPath = CloudPath(path)
-		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified, size: object.size?.intValue)
+		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified, size: object.size)
 	}
 }
 
 extension CloudItemList {
-	init(listObjects: AWSS3ListObjectsV2Output) {
-		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes?.compactMap {
-			guard let prefix = $0.prefix else {
-				return nil
-			}
+	init(listObjects: S3ListObjectsResult) {
+		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.map { prefix in
 			let path = prefix.hasPrefix("/") ? prefix : "/" + prefix
 			let subFolderCloudPath = CloudPath(path)
 			return CloudItemMetadata(name: subFolderCloudPath.lastPathComponent, cloudPath: subFolderCloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
-		} ?? []
-		let contents: [AWSS3Object] = listObjects.contents ?? []
-		let files: [CloudItemMetadata] = contents.compactMap { CloudItemMetadata(object: $0) }
-		var items = files
+		}
+		var items = listObjects.contents.map { CloudItemMetadata(object: $0) }
 		items.append(contentsOf: subFolders)
 		self.init(items: items, nextPageToken: listObjects.nextContinuationToken)
 	}

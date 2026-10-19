@@ -66,10 +66,17 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("http://mybucket.example.com/file.txt", try url(endpointURL: "http://example.com:80", bucket: "mybucket", key: "file.txt"))
 	}
 
-	/// The path of the endpoint URL is ignored, as by the presigned transfers of AWS SDK 2.41.0.
-	func testIgnoresPathOfEndpointURL() throws {
+	func testKeepsPathOfEndpointURL() throws {
 		XCTAssertEqual("https://mybucket.example.com/file.txt", try url(endpointURL: "https://example.com/", bucket: "mybucket", key: "file.txt"))
-		XCTAssertEqual("https://mybucket.example.com/file.txt", try url(endpointURL: "https://example.com/prefix", bucket: "mybucket", key: "file.txt"))
+		XCTAssertEqual("https://mybucket.example.com/prefix/file.txt", try url(endpointURL: "https://example.com/prefix/", bucket: "mybucket", key: "file.txt"))
+		XCTAssertEqual("https://mybucket.example.com/prefix/", try url(endpointURL: "https://example.com/prefix", bucket: "mybucket", key: ""))
+		XCTAssertEqual("https://example.com/prefix/my.bucket/file.txt", try url(endpointURL: "https://example.com/prefix", bucket: "my.bucket", key: "file.txt"))
+		XCTAssertEqual("https://example.com/prefix/my.bucket", try url(endpointURL: "https://example.com/prefix", bucket: "my.bucket", key: ""))
+	}
+
+	/// S3 checks the signature against the path encoded with the SigV4 rules, so the path is sent encoded like a key rather than as the credential's URL encodes it.
+	func testEncodesPathOfEndpointURLLikeKey() throws {
+		XCTAssertEqual("https://example.com/a%2Bb%20c/my.bucket/file.txt", try url(endpointURL: "https://example.com/a+b%20c", bucket: "my.bucket", key: "file.txt"))
 	}
 
 	func testEncodesQueryCompletely() throws {

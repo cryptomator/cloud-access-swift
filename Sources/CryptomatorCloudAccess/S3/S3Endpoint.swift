@@ -11,7 +11,7 @@ import Foundation
 /**
  Builds the URLs of a bucket's requests.
 
- Only the scheme, host and port of the credential's URL are used, which is how AWS SDK 2.41.0 addressed its transfers. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Any other bucket, and every bucket of an IP address host, is addressed in the path (path style).
+ The scheme, host, port and path of the credential's URL are used. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Any other bucket, and every bucket of an IP address host, is addressed in the path (path style). As in the S3 endpoint rules of the AWS SDKs, the URL's path precedes the key in virtual-hosted style and the bucket in path style.
  */
 struct S3Endpoint: Sendable {
 	private static let hostLabelCharacters = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
@@ -20,6 +20,8 @@ struct S3Endpoint: Sendable {
 	/// The percent-encoded host, which keeps the brackets of an IPv6 address.
 	private let host: String
 	private let port: Int?
+	/// The path of the credential's URL without a trailing slash, encoded like a key.
+	private let basePath: String
 	private let isVirtualHosted: Bool
 	let bucket: String
 
@@ -33,6 +35,11 @@ struct S3Endpoint: Sendable {
 		} else {
 			self.port = nil
 		}
+		var path = credential.url.path
+		while path.hasSuffix("/") {
+			path.removeLast()
+		}
+		self.basePath = S3Signer.encode(path, encodeSlash: false)
 		self.bucket = credential.bucket
 		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
 	}
@@ -58,10 +65,10 @@ struct S3Endpoint: Sendable {
 		let encodedKey = S3Signer.encode(key, encodeSlash: false)
 		if isVirtualHosted {
 			components.encodedHost = "\(bucket).\(host)"
-			components.percentEncodedPath = "/\(encodedKey)"
+			components.percentEncodedPath = "\(basePath)/\(encodedKey)"
 		} else {
 			components.encodedHost = host
-			components.percentEncodedPath = "/\(S3Signer.encode(bucket, encodeSlash: true))" + (key.isEmpty ? "" : "/\(encodedKey)")
+			components.percentEncodedPath = "\(basePath)/\(S3Signer.encode(bucket, encodeSlash: true))" + (key.isEmpty ? "" : "/\(encodedKey)")
 		}
 		if !query.isEmpty {
 			components.percentEncodedQuery = query.map { item in

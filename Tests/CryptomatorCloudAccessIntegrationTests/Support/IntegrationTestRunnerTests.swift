@@ -6,7 +6,6 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import BoxSdkGen
 import Foundation
 import os
 import Testing
@@ -82,14 +81,14 @@ extension IntegrationTests {
 			let sleep: @Sendable (Duration) async throws -> Void = { _ in
 				await budgetRunsOut.acquire()
 			}
-			let caller = _Concurrency.Task {
+			let caller = Task {
 				try await semaphore.withPermit(budget: budget, sleep: sleep) {
 					await operationStarted.release()
 					await operationMayReturn.acquire()
 				}
 			}
 			defer {
-				_Concurrency.Task { await operationMayReturn.release() }
+				Task { await operationMayReturn.release() }
 			}
 			try await acquire(operationStarted)
 			await budgetRunsOut.release()
@@ -121,10 +120,10 @@ extension IntegrationTests {
 		func cancellingTheCallerCancelsThePermittedOperation() async throws {
 			let semaphore = AsyncSemaphore(permits: 1)
 			let operationStarted = AsyncSemaphore(permits: 0)
-			let caller = _Concurrency.Task {
+			let caller = Task {
 				try await semaphore.withPermit(budget: .seconds(300)) {
 					await operationStarted.release()
-					try await _Concurrency.Task.sleep(for: .seconds(300))
+					try await Task.sleep(for: .seconds(300))
 				}
 			}
 			try await acquire(operationStarted)
@@ -187,7 +186,7 @@ extension IntegrationTests {
 				URLSessionError.httpError(URLError(.networkConnectionLost), statusCode: 200),
 				DropboxError.rateLimitError(retryAfter: 1),
 				DropboxError.internalServerError,
-				BoxAPIError(message: "Service Unavailable", requestInfo: RequestInfo(method: "GET", url: "https://api.box.com/2.0/folders/0", queryParams: [:], headers: [:]), responseInfo: ResponseInfo(statusCode: 503, headers: [:])),
+				BoxError.apiError(statusCode: 503, code: nil, message: nil),
 				NSError(domain: "com.google.GTLRErrorObjectDomain", code: 503),
 				NSError(domain: "com.google.HTTPStatus", code: 429),
 				S3Error(statusCode: 503, code: "SlowDown"),
@@ -244,7 +243,7 @@ extension IntegrationTests {
 		}
 
 		private func acquire(_ semaphore: AsyncSemaphore) async throws {
-			try await value(of: _Concurrency.Task { await semaphore.acquire() }, timeout: testWaitTimeout)
+			try await value(of: Task { await semaphore.acquire() }, timeout: testWaitTimeout)
 		}
 	}
 }

@@ -33,7 +33,6 @@ let package = Package(
 	],
 	dependencies: [
 		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.16.0"),
-		.package(url: "https://github.com/box/box-ios-sdk.git", .upToNextMinor(from: "10.18.0")),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "3.0.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
 		.package(url: "https://github.com/google/google-api-objectivec-client-for-rest.git", .upToNextMinor(from: "5.5.0")),
@@ -48,7 +47,6 @@ let package = Package(
 		.target(
 			name: "CryptomatorCloudAccessCore",
 			dependencies: [
-				.product(name: "BoxSDK", package: "box-ios-sdk"),
 				.product(name: "CocoaLumberjackSwift", package: "CocoaLumberjack"),
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
 				.product(name: "GoogleAPIClientForREST_Drive", package: "google-api-objectivec-client-for-rest"),

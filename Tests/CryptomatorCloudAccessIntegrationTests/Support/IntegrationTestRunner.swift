@@ -82,7 +82,7 @@ private let retryBackoffs: [Duration] = [.seconds(2), .seconds(8)]
 
  An attempt that fails with a transient error, see `isTransientIntegrationError(_:)`, is retried in a new context, at most twice. Any other error fails the test without a retry.
 
- The body runs while it holds one of the provider's permits, so that the account isn't overloaded. It gets at most 5 minutes from the moment it got the permit. An attempt that takes longer fails with `IntegrationTestError.budgetExceeded` and is left running, because SDK calls don't respond to cancellation.
+ The body runs while it holds one of the provider's permits, so that the account isn't overloaded. It gets at most 5 minutes from the moment it got the permit. An attempt that takes longer fails with `IntegrationTestError.budgetExceeded` and is left running, because a running request doesn't respond to cancellation.
  */
 func withIntegrationFixture(_ backend: IntegrationBackend, _ body: @escaping @Sendable (IntegrationTestContext) async throws -> Void) async throws {
 	try await withIntegrationFixture(backend, budget: attemptBudget, backoffs: retryBackoffs, semaphore: backend.kind.semaphore, body)

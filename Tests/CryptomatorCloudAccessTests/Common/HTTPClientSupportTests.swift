@@ -22,12 +22,19 @@ class HTTPClientSupportTests: XCTestCase {
 	}
 
 	func testHardenedConfigurationsCacheNothing() {
-		for configuration in [HTTPClientSupport.hardened(.default), HTTPClientSupport.hardened(.background(withIdentifier: "test"))] {
+		for configuration in [HTTPClientSupport.hardened(.default), HTTPClientSupport.hardenedBackground(identifier: "test", sharedContainerIdentifier: nil)] {
 			XCTAssertNil(configuration.urlCache)
 			XCTAssertNil(configuration.urlCredentialStorage)
 			XCTAssertNotNil(configuration.httpCookieStorage)
 			XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
 		}
+	}
+
+	func testHardenedBackgroundConfiguration() {
+		let configuration = HTTPClientSupport.hardenedBackground(identifier: "HTTPClientSupportTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("HTTPClientSupportTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
 	}
 
 	/// A failure recorded while the task ran, e.g., an exceeded body limit, takes precedence over the cancellation it caused.

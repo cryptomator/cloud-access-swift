@@ -303,7 +303,7 @@ private struct ProviderCase<Expected: Error & Equatable>: Sendable {
 	let expected: Expected
 }
 
-private enum PCloudProviderTestResponse {
+enum PCloudProviderTestResponse {
 	static let rootWithFile = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "file.txt")])
 
 	/// The listing, `stat` and `getfilelink` that precede the download of `/file.txt`.

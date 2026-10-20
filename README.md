@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3 and pCloud providers do, also when a vault provider wraps them. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3, pCloud and Box providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, because it uploads such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -93,22 +93,36 @@ The following constants must be set once, e.g. in your app delegate:
 ```swift
 let clientId = ... // your Box client identifier
 let clientSecret = ... // your Box client secret
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `BoxCloudProvider` with a background `URLSession` in an app extension 
-BoxSetup.constants = BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier)
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `BoxCloudProvider` with a background `URLSession` in an app extension
+let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
+BoxSetup.constants = try BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier, tokenLockDirectory: tokenLockDirectory)
 ```
+
+The library keeps the Box tokens in an `OAuthTokenStorage` that your app implements, e.g., over the keychain, with one item per Box user ID. The library decides what the stored bytes contain, and it reads an item that the Box SDK stored, too. Your storage must hold to this contract:
+
+- `load(forAccount:)` returns `nil` only if no item exists and throws for any other failure, e.g., a keychain that is locked.
+- Nothing is cached: every load reads the persisted bytes, because other processes write them, too.
+- `save(_:forAccount:)` returns after the write completed and replaces an existing item in place.
+- Every process that uses the same items passes the same `tokenLockDirectory`. The library refreshes a token only while holding a lock in it, because Box refresh tokens can be used only once.
 
 Begin the authentication flow:
 
 ```swift
-let tokenStorage = ... // a `TokenStorage` from the Box SDK, e.g. `KeychainTokenStorage`
-let viewController = ... // the presenting `UIViewController`, it must conform to `ASWebAuthenticationPresentationContextProviding`
+let tokenStorage = ... // your `OAuthTokenStorage`
+let viewController = ... // the presenting `UIViewController`
 do {
   let credential = try await BoxAuthenticator.authenticate(from: viewController, tokenStorage: tokenStorage)
   // do something with `BoxCredential`
-  // you can re-create the credential later with `BoxCredential(tokenStorage: tokenStorage)`
+  // you probably want to save `credential.userID` to re-create the credential later
 } catch {
   // error handling
 }
+```
+
+Re-create a saved credential:
+
+```swift
+let credential = try BoxCredential(userID: userID, tokenStorage: tokenStorage)
 ```
 
 You can then use the credential to create a Box provider:
@@ -117,12 +131,14 @@ You can then use the credential to create a Box provider:
 let provider = try BoxCloudProvider(credential: credential)
 ```
 
-Or create a Box provider using a background URLSession:
+Or create a Box provider whose downloads and uploads run on a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
 let provider = try BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
+
+To log out, call `try await credential.deauthenticate()`. It deletes the stored item and then revokes the token. The item is deleted also if the revocation fails.
 
 ### Dropbox
 

@@ -6,7 +6,6 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import BoxSdkGen
 import Foundation
 import GRDB
 
@@ -22,16 +21,14 @@ struct BoxItem: Decodable, FetchableRecord, TableRecord, Equatable {
 }
 
 extension BoxItem {
-	init(cloudPath: CloudPath, file: FileBase) {
+	/// - Throws: `BoxError.unexpectedContent` if the entry is neither a file nor a folder.
+	init(cloudPath: CloudPath, entry: BoxEntry) throws {
 		self.cloudPath = cloudPath
-		self.identifier = file.id
-		self.itemType = .file
-	}
-
-	init(cloudPath: CloudPath, folder: FolderBase) {
-		self.cloudPath = cloudPath
-		self.identifier = folder.id
-		self.itemType = .folder
+		self.identifier = entry.id
+		guard let itemType = entry.itemType else {
+			throw BoxError.unexpectedContent
+		}
+		self.itemType = itemType
 	}
 }
 

@@ -6,7 +6,6 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import BoxSdkGen
 import Foundation
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -77,8 +76,8 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return isTransientHTTPStatusCode(statusCode) || underlyingError.map(isTransientIntegrationError) ?? false
 	case DropboxError.tooManyWriteOperations, DropboxError.rateLimitError, DropboxError.internalServerError, DropboxError.clientError:
 		return true
-	case let error as BoxAPIError:
-		return isTransientHTTPStatusCode(error.responseInfo.statusCode)
+	case let BoxError.apiError(statusCode, _, _):
+		return isTransientHTTPStatusCode(statusCode)
 	case let error as S3Error:
 		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
 	default:

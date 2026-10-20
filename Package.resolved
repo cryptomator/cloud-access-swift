@@ -1,5 +1,5 @@
 {
-  "originHash" : "fbb8f0f6ce6c02cdca9b0e2e1572253b6bd9f5ce9e57d231f0c719caa4d60bc6",
+  "originHash" : "e4ad50687b0a3eca790117b48b3af94dc5ba8c4a344f1a8e84e36e593bf95e2a",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "a972daac82d449d58ab119e91c68153e29ddac33",
         "version" : "3.0.0"
-      }
-    },
-    {
-      "identity" : "box-ios-sdk",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/box/box-ios-sdk.git",
-      "state" : {
-        "revision" : "cfc85b920b1af89d7c76e27217be47a3138affd4",
-        "version" : "10.18.0"
       }
     },
     {

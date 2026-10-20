@@ -35,13 +35,7 @@ final class PCloudClient: Sendable {
 
 	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 	static func background(credential: PCloudCredential, sessionIdentifier: String) -> PCloudClient {
-		return PCloudClient(credential: credential, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: PCloudSetup.constants.sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		let configuration = HTTPClientSupport.hardened(.background(withIdentifier: sessionIdentifier))
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
-		return configuration
+		return PCloudClient(credential: credential, configuration: HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: PCloudSetup.constants.sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
 	}
 
 	// MARK: - Operations

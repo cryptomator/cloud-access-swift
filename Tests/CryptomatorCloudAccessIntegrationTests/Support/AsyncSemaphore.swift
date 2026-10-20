@@ -36,7 +36,7 @@ actor AsyncSemaphore {
 	/**
 	 Runs the operation while it holds a permit, for at most the budget.
 
-	 An operation that takes longer is cancelled best effort, and `IntegrationTestError.budgetExceeded` is thrown. It is left running without the permit, because SDK calls don't respond to cancellation, so that a hanging operation can't keep the permit for the rest of the run.
+	 An operation that takes longer is cancelled best effort, and `IntegrationTestError.budgetExceeded` is thrown. It is left running without the permit, because a running request doesn't respond to cancellation, so that a hanging operation can't keep the permit for the rest of the run.
 
 	 A caller that is cancelled before it gets the permit still waits for one, then releases it without running the operation. A caller that is cancelled later cancels the operation best effort and keeps the permit until the operation returns or the budget is exceeded.
 

@@ -92,12 +92,12 @@ func extractMicrosoftGraphRefreshToken() {
 
 #### pCloud
 
-To get the access token for pCloud, extract it from the `PCloudCredential` after a successful login. The credential's `user` property has public access to the token and API host name. The following can be added to `CloudAuthenticator.authenticatePCloud` in the iOS app:
+To get the access token and API host name for pCloud, read them from the `PCloudCredential` after a successful login. The following can be added to `CloudAuthenticator.authenticatePCloud` in the iOS app:
 
 ```swift
 // After `try await PCloudAuthenticator.authenticate(from:)` returns, `credential` is a PCloudCredential
-print("PCLOUD_ACCESS_TOKEN=\(credential.user.token)")
-print("PCLOUD_HTTP_API_HOST_NAME=\(credential.user.httpAPIHostName)")
+print("PCLOUD_ACCESS_TOKEN=\(credential.accessToken)")
+print("PCLOUD_HTTP_API_HOST_NAME=\(credential.apiHostName)")
 ```
 
 ## Running the Tests

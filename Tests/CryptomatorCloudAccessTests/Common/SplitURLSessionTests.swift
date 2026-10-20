@@ -53,8 +53,8 @@ class SplitURLSessionTests: XCTestCase {
 		try Data("content".utf8).write(to: fileURL)
 
 		_ = try await markedSession.data(URLRequest(url: url), bodyLimit: nil, bodyLogging: .logged)
-		_ = try await markedSession.download(URLRequest(url: url), route: .metadata, handler: { _, _ in .none }, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
-		_ = try await markedSession.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await markedSession.download(URLRequest(url: url), route: .metadata, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		_ = try await markedSession.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		_ = try await markedSession.upload(URLRequest(url: url), fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 
 		XCTAssertEqual(["metadata", "metadata", "transfer", "transfer"], markers.withLock { $0 })
@@ -104,6 +104,28 @@ class SplitURLSessionTests: XCTestCase {
 		XCTAssertEqual("Session: foreground", messages[dataIndex + 1])
 	}
 
+	func testDownloadLogsURLsByItsURLLogging() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		let downloadURL = try XCTUnwrap(URL(string: "https://download.example.com/REQUESTPATH/file.txt"))
+		URLProtocolMock.requestHandler = Array(repeating: { request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Location": "https://download.example.com/RESPONSEPATH/file.txt"])!, Data())
+		}, count: 2)
+
+		_ = try await session.download(URLRequest(url: downloadURL), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .originOnly, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		let originOnlyLog = logCapture.joinedMessages
+		_ = try await session.download(URLRequest(url: downloadURL), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		let redactedLog = logCapture.joinedMessages
+
+		XCTAssertTrue(originOnlyLog.contains("https://download.example.com/<redacted>"), originOnlyLog)
+		XCTAssertFalse(originOnlyLog.contains("REQUESTPATH"), originOnlyLog)
+		XCTAssertFalse(originOnlyLog.contains("RESPONSEPATH"), originOnlyLog)
+		XCTAssertTrue(redactedLog.contains("REQUESTPATH"), redactedLog)
+		XCTAssertTrue(redactedLog.contains("RESPONSEPATH"), redactedLog)
+	}
+
 	func testOverlappingRequestsGetTheirOwnOutcomes() async throws {
 		let firstSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
 		let secondSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
@@ -123,7 +145,7 @@ class SplitURLSessionTests: XCTestCase {
 				let waitResult = secondFinished.wait(timeout: .now() + testWaitTimeout)
 				firstWaitResult.withLock { $0 = waitResult }
 				return try .data(Data(contentsOf: location))
-			}, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+			}, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		}
 		await fulfillment(of: [firstHeld], timeout: testWaitTimeout)
 		let secondOutcome = try await secondSession.data(secondRequest, bodyLimit: nil, bodyLogging: .logged)

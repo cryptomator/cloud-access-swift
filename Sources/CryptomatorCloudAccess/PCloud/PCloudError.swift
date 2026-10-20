@@ -8,7 +8,11 @@
 
 import Foundation
 
-public enum PCloudError: Error {
+public enum PCloudError: Error, Equatable {
+	/// The pCloud API answered with an error code that the method doesn't map to a `CloudProviderError`.
+	case apiError(code: Int, message: String?)
+	case unexpectedHTTPStatusCode(code: Int)
+	/// The response couldn't be read.
 	case unexpectedContent
 	case inconsistentCache
 	case fileLinkNotFound

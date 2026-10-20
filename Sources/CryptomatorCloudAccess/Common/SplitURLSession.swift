@@ -281,14 +281,14 @@ final class SplitURLSession: Sendable {
 
 	/// - Parameter cancelsBeforeResume: Whether to cancel the task and throw `CancellationError` instead of resuming it if the calling task is cancelled by the time `onTaskCreation` returns.
 	// swiftlint:disable:next function_parameter_count
-	func download(_ request: URLRequest, route: DownloadRoute, handler: @escaping DownloadHandler, bodyLogging: HTTPDebugLogger.BodyLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> Outcome {
+	func download(_ request: URLRequest, route: DownloadRoute, handler: @escaping DownloadHandler, bodyLogging: HTTPDebugLogger.BodyLogging, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress?, cancelsBeforeResume: Bool, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> Outcome {
 		let (session, sessionDescription) = switch route {
 		case .transfer:
 			(transferSession, transferSessionDescription)
 		case .metadata:
 			(metadataSession, SplitURLSession.foregroundSessionDescription)
 		}
-		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: bodyLogging, urlLogging: .redacted, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
+		let attempt = Attempt(sessionDescription: sessionDescription, bodyLimit: nil, bodyLogging: bodyLogging, urlLogging: urlLogging, downloadHandler: handler, cancelsBeforeResume: cancelsBeforeResume)
 		return try await perform(session.downloadTask(with: request), request: request, attempt: attempt, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
@@ -333,7 +333,7 @@ final class SplitURLSession: Sendable {
 			} else {
 				return try .data(Data(contentsOf: location))
 			}
-		}, bodyLogging: .logged, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		}, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 		return try SplitURLSession.result(of: outcome)
 	}
 

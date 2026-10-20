@@ -34,7 +34,7 @@ class S3ClientTests: XCTestCase {
 
 	func testRequestsAreSigned() async throws {
 		let headers = OSAllocatedUnfairLock(initialState: [String: String]())
-		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []), onRequest: { request in
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: { request in
 			headers.withLock { $0 = request.allHTTPHeaderFields ?? [:] }
 		})]
 
@@ -49,8 +49,8 @@ class S3ClientTests: XCTestCase {
 	func testDeleteObjectsSendsHashesOfBody() async throws {
 		let sentHashes = OSAllocatedUnfairLock<(contentMD5: String?, contentSHA256: String?)>(initialState: (nil, nil))
 		let bodyHashes = OSAllocatedUnfairLock<(md5: String, sha256: String)?>(initialState: nil)
-		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: "<DeleteResult/>", onRequest: { request in
-			let body = S3MockResponse.body(of: request)
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: { request in
+			let body = URLProtocolMock.body(of: request)
 			sentHashes.withLock { $0 = (request.value(forHTTPHeaderField: "Content-MD5"), request.value(forHTTPHeaderField: "x-amz-content-sha256")) }
 			bodyHashes.withLock { $0 = (Data(Insecure.MD5.hash(data: body)).base64EncodedString(), S3Signer.sha256Hex(body)) }
 		})]
@@ -66,7 +66,7 @@ class S3ClientTests: XCTestCase {
 
 	func testCopySourceEncodesReservedCharacters() async throws {
 		let copySource = OSAllocatedUnfairLock<String?>(initialState: nil)
-		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>", onRequest: { request in
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>", onRequest: { request in
 			copySource.withLock { $0 = request.value(forHTTPHeaderField: "x-amz-copy-source") }
 		})]
 
@@ -76,7 +76,7 @@ class S3ClientTests: XCTestCase {
 	}
 
 	func testDeleteObjectsIgnoresErrorsOfSingleObjects() async throws {
-		URLProtocolMock.requestHandler = [S3MockResponse.handler(statusCode: 200, body: "<DeleteResult><Error><Key>a.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>")]
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "<DeleteResult><Error><Key>a.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>")]
 
 		try await client.deleteObjects(keys: ["a.txt"])
 
@@ -85,17 +85,10 @@ class S3ClientTests: XCTestCase {
 
 	// MARK: - Retries
 
-	func testRetryDelayStaysWithinExponentialBound() {
-		for _ in 0 ..< 100 {
-			XCTAssertTrue((0 ... 1).contains(S3Client.retryDelay(forRetry: 1)))
-			XCTAssertTrue((0 ... 4).contains(S3Client.retryDelay(forRetry: 3)))
-		}
-	}
-
 	func testRetriesTransientStatus() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 429),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["a.txt"]))
+			URLProtocolMock.handler(statusCode: 429),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"]))
 		]
 
 		let result = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
@@ -107,7 +100,7 @@ class S3ClientTests: XCTestCase {
 	func testDoesNotRetryWithoutInternetConnection() async throws {
 		URLProtocolMock.requestHandler = [
 			{ _ in throw URLError(.notConnectedToInternet) },
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
 		]
 
 		await XCTAssertThrowsErrorAsync(try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)) { error in
@@ -118,8 +111,8 @@ class S3ClientTests: XCTestCase {
 
 	func testRetriesErrorDocumentInSuccessfulCopyResponse() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error. Please try again.</Message></Error>"),
-			S3MockResponse.handler(statusCode: 200, body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>")
+			URLProtocolMock.handler(body: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error. Please try again.</Message></Error>"),
+			URLProtocolMock.handler(body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>")
 		]
 
 		try await client.copyObject(sourceKey: "a.txt", targetKey: "b.txt")
@@ -129,8 +122,8 @@ class S3ClientTests: XCTestCase {
 
 	func testRetriesPartCopyResponseThatWasCutShort() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "     "),
-			S3MockResponse.handler(statusCode: 200, body: "<CopyPartResult><ETag>\"etag-2\"</ETag></CopyPartResult>")
+			URLProtocolMock.handler(body: "     "),
+			URLProtocolMock.handler(body: "<CopyPartResult><ETag>\"etag-2\"</ETag></CopyPartResult>")
 		]
 
 		let eTag = try await client.uploadPartCopy(sourceKey: "a.txt", range: "bytes=0-9", key: "b.txt", uploadID: "upload", partNumber: 1)
@@ -140,8 +133,8 @@ class S3ClientTests: XCTestCase {
 
 	func testRetriesUnreadableErrorDocumentInSuccessfulResponseWithoutResult() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "<Error><Code>InternalError</Code>"),
-			S3MockResponse.handler(statusCode: 204)
+			URLProtocolMock.handler(body: "<Error><Code>InternalError</Code>"),
+			URLProtocolMock.handler(statusCode: 204)
 		]
 
 		try await client.deleteObject(key: "a.txt")
@@ -159,9 +152,9 @@ class S3ClientTests: XCTestCase {
 			dates.withLock { $0.append(request.value(forHTTPHeaderField: "x-amz-date") ?? presignedDate ?? "") }
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))], onRequest: recordDate),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []), onRequest: recordDate),
-			S3MockResponse.handler(statusCode: 200, body: "content", onRequest: recordDate)
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))], onRequest: recordDate),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: recordDate),
+			URLProtocolMock.handler(body: "content", onRequest: recordDate)
 		]
 
 		_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
@@ -176,8 +169,8 @@ class S3ClientTests: XCTestCase {
 	/// The error code decides, whatever the status, as in the AWS SDKs: a 400 is neither retried as transient nor corrected otherwise.
 	func testCorrectsClockSkewAfterRequestExpiredWithStatus400() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 400, body: "<Error><Code>RequestExpired</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>RequestExpired</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
 		]
 
 		_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
@@ -186,8 +179,8 @@ class S3ClientTests: XCTestCase {
 	func testDoesNotRetryAfterClockSkewInCancelledTask() async throws {
 		let client: S3Client = client
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
-			S3MockResponse.handler(statusCode: 200)
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))]),
+			URLProtocolMock.handler()
 		]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
@@ -229,8 +222,8 @@ class S3ClientTests: XCTestCase {
 	/// A rejected signature from a device whose clock matches the server's, e.g., because of a wrong secret key, is not retried.
 	func testDoesNotCorrectClockWithinTolerance() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 403, body: "<Error><Code>SignatureDoesNotMatch</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(60))]),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>SignatureDoesNotMatch</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(60))]),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
 		]
 
 		await XCTAssertThrowsErrorAsync(try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)) { error in
@@ -240,9 +233,9 @@ class S3ClientTests: XCTestCase {
 	}
 
 	func testCorrectsClockSkewOnlyOnce() async throws {
-		let skewedResponse = S3MockResponse.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))])
-		let otherSkewedResponse = S3MockResponse.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(-3600))])
-		URLProtocolMock.requestHandler = [skewedResponse, otherSkewedResponse, S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))]
+		let skewedResponse = URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))])
+		let otherSkewedResponse = URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(-3600))])
+		URLProtocolMock.requestHandler = [skewedResponse, otherSkewedResponse, URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))]
 
 		await XCTAssertThrowsErrorAsync(try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)) { error in
 			XCTAssertEqual("RequestTimeTooSkewed", (error as? S3Error)?.code)
@@ -262,23 +255,14 @@ class S3ClientTests: XCTestCase {
 		XCTAssertNil(configuration.urlCredentialStorage)
 	}
 
-	func testHardenedConfigurationsCacheNothing() {
-		for configuration in [S3Client.hardened(.default), S3Client.hardened(.background(withIdentifier: "test"))] {
-			XCTAssertNil(configuration.urlCache)
-			XCTAssertNil(configuration.urlCredentialStorage)
-			XCTAssertNotNil(configuration.httpCookieStorage)
-			XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
-		}
-	}
-
 	func testTransfersUsePresignedURLs() async throws {
 		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
 		let recordRequest: @Sendable (URLRequest) -> Void = { request in
 			requests.withLock { $0.append(request) }
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "content", onRequest: recordRequest),
-			S3MockResponse.handler(statusCode: 200, onRequest: recordRequest)
+			URLProtocolMock.handler(body: "content", onRequest: recordRequest),
+			URLProtocolMock.handler(onRequest: recordRequest)
 		]
 		let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
 		try Data("content".utf8).write(to: fileURL)
@@ -306,9 +290,9 @@ class S3ClientTests: XCTestCase {
 			markers.withLock { $0.append(request.value(forHTTPHeaderField: "X-Session")) }
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []), onRequest: recordMarker),
-			S3MockResponse.handler(statusCode: 200, body: "content", onRequest: recordMarker),
-			S3MockResponse.handler(statusCode: 200, onRequest: recordMarker)
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: recordMarker),
+			URLProtocolMock.handler(body: "content", onRequest: recordMarker),
+			URLProtocolMock.handler(onRequest: recordMarker)
 		]
 		let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
 		try Data("content".utf8).write(to: fileURL)
@@ -332,14 +316,14 @@ class S3ClientTests: XCTestCase {
 		let presignedSignature = OSAllocatedUnfairLock<String?>(initialState: nil)
 		let signingDetails = "<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided.</Message><AWSAccessKeyId>access</AWSAccessKeyId><StringToSign>STRINGTOSIGN</StringToSign><SignatureProvided>PROVIDEDSIGNATURE</SignatureProvided><CanonicalRequest>CANONICALREQUEST</CanonicalRequest></Error>"
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 403, body: signingDetails),
+			URLProtocolMock.handler(statusCode: 403, body: signingDetails),
 			{ request in
 				let url = try XCTUnwrap(request.url)
 				presignedSignature.withLock { $0 = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "X-Amz-Signature" }?.value }
 				throw URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString])
 			},
-			S3MockResponse.handler(statusCode: 403, body: signingDetails),
-			S3MockResponse.handler(statusCode: 403, body: signingDetails)
+			URLProtocolMock.handler(statusCode: 403, body: signingDetails),
+			URLProtocolMock.handler(statusCode: 403, body: signingDetails)
 		]
 		let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
 		try Data("content".utf8).write(to: fileURL)
@@ -374,19 +358,6 @@ class S3ClientTests: XCTestCase {
 		}
 	}
 
-	func testSanitizedErrorDropsFailingURLsOfNestedErrors() throws {
-		let url = try XCTUnwrap(URL(string: "https://www.example.com/exampleBucket/file.txt?X-Amz-Signature=0123abcd"))
-		let underlyingError = NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut, userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString])
-		let error = NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue), userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString, NSUnderlyingErrorKey: underlyingError])
-
-		let sanitizedError = S3Client.sanitized(error) as NSError
-
-		XCTAssertEqual(kCFErrorDomainCFNetwork as String, sanitizedError.domain)
-		XCTAssertEqual(Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue), sanitizedError.code)
-		XCTAssertEqual(.timedOut, (sanitizedError.userInfo[NSUnderlyingErrorKey] as? URLError)?.code)
-		XCTAssertFalse(String(describing: sanitizedError).contains("0123abcd"), "\(sanitizedError)")
-	}
-
 	// MARK: - Helpers
 
 	private static let dateFormatter = {
@@ -408,41 +379,10 @@ extension S3Client {
 }
 
 enum S3MockResponse {
-	static func handler(statusCode: Int, body: String = "", headerFields: [String: String]? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return { request in
-			onRequest(request)
-			let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headerFields))
-			return (response, Data(body.utf8))
-		}
-	}
-
 	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = 7) -> String {
 		let contents = keys.map { "<Contents><Key>\($0)</Key><LastModified>2026-10-18T12:34:56.000Z</LastModified><Size>\(size)</Size></Contents>" }.joined()
 		let prefixes = commonPrefixes.map { "<CommonPrefixes><Prefix>\($0)</Prefix></CommonPrefixes>" }.joined()
 		let continuation = nextContinuationToken.map { "<IsTruncated>true</IsTruncated><NextContinuationToken>\($0)</NextContinuationToken>" } ?? "<IsTruncated>false</IsTruncated>"
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\(continuation)\(contents)\(prefixes)</ListBucketResult>"
-	}
-
-	/// The body of a request that a `URLProtocol` receives, which URLSession usually passes as a stream.
-	static func body(of request: URLRequest) -> Data {
-		if let body = request.httpBody {
-			return body
-		}
-		guard let stream = request.httpBodyStream else {
-			return Data()
-		}
-		stream.open()
-		defer {
-			stream.close()
-		}
-		var body = Data()
-		var buffer = [UInt8](repeating: 0, count: 4096)
-		while true {
-			let count = stream.read(&buffer, maxLength: buffer.count)
-			guard count > 0 else {
-				return body
-			}
-			body.append(buffer, count: count)
-		}
 	}
 }

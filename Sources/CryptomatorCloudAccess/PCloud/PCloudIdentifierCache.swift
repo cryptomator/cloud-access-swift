@@ -8,7 +8,6 @@
 
 import Foundation
 import GRDB
-@preconcurrency import PCloudSDKSwift
 
 final class PCloudIdentifierCache: Sendable {
 	private let inMemoryDB: DatabaseQueue
@@ -21,7 +20,7 @@ final class PCloudIdentifierCache: Sendable {
 				table.column(PCloudItem.identifierKey, .text).notNull()
 				table.column(PCloudItem.itemTypeKey, .text).notNull()
 			}
-			try PCloudItem(cloudPath: CloudPath("/"), identifier: Folder.root, itemType: .folder).save(db)
+			try PCloudItem(cloudPath: CloudPath("/"), identifier: PCloudItem.rootFolderID, itemType: .folder).save(db)
 		}
 	}
 

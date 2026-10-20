@@ -445,6 +445,48 @@ class OAuthTokenStoreTests: XCTestCase {
 		XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token)
 	}
 
+	func testExpiryDuringStorageWriteReleasesLockAfterWrite() async throws {
+		for write in ["save", "delete"] {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let script = ActivityScript()
+			let writeStarted = XCTestExpectation(description: "write started")
+			let writeGate = DispatchSemaphore(value: 0)
+			let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
+				writeStarted.fulfill()
+				_ = writeGate.wait(timeout: .now() + testWaitTimeout)
+			})
+			let store = makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
+			let operation = Task {
+				if write == "save" {
+					try await store.replace(with: OAuthTokenStoreTests.tokenC)
+				} else {
+					try await store.delete(revoking: { _ in })
+				}
+			}
+			await fulfillment(of: [writeStarted], timeout: testWaitTimeout)
+			let expiryStarted = XCTestExpectation(description: "expiry started")
+			let expiryReturned = XCTestExpectation(description: "expiry returned")
+			// The expiry waits for the write, so it runs on another thread.
+			DispatchQueue.global().async {
+				expiryStarted.fulfill()
+				script.expireRunningAssertion()
+				expiryReturned.fulfill()
+			}
+			await fulfillment(of: [expiryStarted], timeout: testWaitTimeout)
+
+			await XCTAssertThrowsErrorAsync(try await store.makeLock().acquire(timeout: .milliseconds(500), pollInterval: .milliseconds(10)), write) { error in
+				XCTAssertEqual(.lockTimeout, error as? OAuthTokenStoreError, write)
+			}
+			writeGate.signal()
+			try await value(of: operation)
+			await fulfillment(of: [expiryReturned], timeout: testWaitTimeout)
+			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			otherHolder.release()
+
+			XCTAssertEqual(write == "save" ? OAuthTokenStoreTests.tokenC : nil, buffer.token, write)
+		}
+	}
+
 	func testDeleteReleasesLockBeforeRevoking() async throws {
 		buffer.store(OAuthTokenStoreTests.tokenA)
 		let store = makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
@@ -668,11 +710,13 @@ final class MemoryTokenStorage: OAuthTokenStorage {
 
 	private let buffer: TokenBuffer
 	private let onLoad: @Sendable () -> Void
+	private let onWrite: @Sendable () -> Void
 	private let state = OSAllocatedUnfairLock(initialState: State())
 
-	init(buffer: TokenBuffer, onLoad: @escaping @Sendable () -> Void = {}) {
+	init(buffer: TokenBuffer, onLoad: @escaping @Sendable () -> Void = {}, onWrite: @escaping @Sendable () -> Void = {}) {
 		self.buffer = buffer
 		self.onLoad = onLoad
+		self.onWrite = onWrite
 	}
 
 	var loadCount: Int {
@@ -712,10 +756,12 @@ final class MemoryTokenStorage: OAuthTokenStorage {
 			}
 			state.saveCount += 1
 		}
+		onWrite()
 		buffer.data = data
 	}
 
 	func delete(forAccount account: String) throws {
+		onWrite()
 		buffer.data = nil
 	}
 }

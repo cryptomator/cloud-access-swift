@@ -20,6 +20,7 @@ final class ProcessExecutionAssertion: Sendable {
 	private enum Phase {
 		case waiting
 		case running
+		case expired
 		case finished
 	}
 
@@ -41,27 +42,23 @@ final class ProcessExecutionAssertion: Sendable {
 
 	 The operation's result is returned also if the assertion expires while it runs.
 
-	 - Parameter operation: Gets a closure that tells whether the assertion has expired, so that it can stop before its next protected step.
 	 - Parameter onExpiration: Runs once when the assertion expires while the operation runs, e.g., to release a lock right away.
 	 - Throws: `OAuthTokenStoreError.executionTimeUnavailable` without running the operation if the process gets no assertion, and otherwise what the operation throws.
 	 */
-	func perform<T: Sendable>(reason: String, operation: @escaping @Sendable (_ isExpired: @escaping @Sendable () -> Bool) async throws -> T, onExpiration: @escaping @Sendable () -> Void) async throws -> T {
-		let state = OSAllocatedUnfairLock(initialState: (phase: Phase.waiting, isExpired: false))
-		let isExpired: @Sendable () -> Bool = {
-			state.withLock { $0.isExpired }
-		}
+	func perform<T: Sendable>(reason: String, operation: @escaping @Sendable () async throws -> T, onExpiration: @escaping @Sendable () -> Void) async throws -> T {
+		let phase = OSAllocatedUnfairLock(initialState: Phase.waiting)
 		return try await withSDKContinuation { resumer in
 			performActivity(reason) { expired in
-				let action = state.withLock { state -> Action in
-					switch (state.phase, expired) {
+				let action = phase.withLock { phase -> Action in
+					switch (phase, expired) {
 					case (.waiting, false):
-						state.phase = .running
+						phase = .running
 						return .start
 					case (.waiting, true):
-						state.phase = .finished
+						phase = .finished
 						return .reportUnavailable
-					case (.running, true) where !state.isExpired:
-						state.isExpired = true
+					case (.running, true):
+						phase = .expired
 						return .expire
 					default:
 						return .none
@@ -73,12 +70,12 @@ final class ProcessExecutionAssertion: Sendable {
 					let semaphore = DispatchSemaphore(value: 0)
 					Task {
 						do {
-							let value = try await operation(isExpired)
+							let value = try await operation()
 							resumer.resume(returning: value)
 						} catch {
 							resumer.resume(throwing: error)
 						}
-						state.withLock { $0.phase = .finished }
+						phase.withLock { $0 = .finished }
 						semaphore.signal()
 					}
 					semaphore.wait()

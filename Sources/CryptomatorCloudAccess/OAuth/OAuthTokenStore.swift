@@ -38,6 +38,8 @@ final class OAuthTokenCoordinator: Sendable {
 
  The lock is held only while the process holds an execution assertion, and the only request sent while holding it is the refresh. If the assertion expires, the lock is released right away, because iOS terminates a suspended process that holds a file lock. Another process may then refresh with the same refresh token while the request is still under way. A response that arrives after the expiry is saved only if storage still holds the token it was rotated from.
 
+ Only a storage write that is running at the expiry delays the release until it returns, so that the write can't land after another process took the lock. If the write blocks then, iOS may terminate the process, and a rotated token that wasn't saved yet is lost.
+
  Log lines name the provider and the outcome only, never a token.
  */
 final class OAuthTokenStore: Sendable {
@@ -131,8 +133,8 @@ final class OAuthTokenStore: Sendable {
 
 	/// Stores the token of a new login, replacing any stored token.
 	func replace(with token: OAuthToken) async throws {
-		try await underLock { _ in
-			try self.save(token)
+		try await underLock { slot in
+			try self.save(token, holding: slot)
 			self.publish(token)
 		}
 	}
@@ -144,7 +146,7 @@ final class OAuthTokenStore: Sendable {
 	 - Throws: `OAuthTokenStoreError` if the token couldn't be updated safely now, a storage error, or what `revoke` throws. An undecodable item is deleted without a revocation.
 	 */
 	func delete(revoking revoke: @escaping @Sendable (OAuthToken) async throws -> Void) async throws {
-		let token: OAuthToken? = try await underLock { isExpired in
+		let token: OAuthToken? = try await underLock { slot in
 			guard let data = try self.storage.load(forAccount: self.account) else {
 				self.clearEntry()
 				return nil
@@ -154,10 +156,7 @@ final class OAuthTokenStore: Sendable {
 				// The unsaved token replaced the stored one, so it is the one to revoke.
 				token = unsaved.token
 			}
-			guard !isExpired() else {
-				throw OAuthTokenStoreError.executionTimeUnavailable
-			}
-			try self.storage.delete(forAccount: self.account)
+			try self.deleteStoredToken(holding: slot)
 			self.clearEntry()
 			return token
 		}
@@ -174,8 +173,8 @@ final class OAuthTokenStore: Sendable {
 		}
 		let outcome: RefreshOutcome
 		do {
-			outcome = try await underLock { isExpired in
-				try await self.refreshLocked(rejecting: rejectedAccessToken, isExpired: isExpired)
+			outcome = try await underLock { slot in
+				try await self.refreshLocked(rejecting: rejectedAccessToken, slot: slot)
 			}
 		} catch OAuthTokenStoreError.lockTimeout {
 			return try tokenAfterLockTimeout(rejecting: rejectedAccessToken)
@@ -191,14 +190,11 @@ final class OAuthTokenStore: Sendable {
 		}
 	}
 
-	private func refreshLocked(rejecting rejectedAccessToken: String, isExpired: @Sendable () -> Bool) async throws -> RefreshOutcome {
+	private func refreshLocked(rejecting rejectedAccessToken: String, slot: LockHolderSlot) async throws -> RefreshOutcome {
 		var storedToken = try loadStoredToken()
 		if let unsaved = withEntry({ $0.unsaved }) {
 			if let token = storedToken, token.hasSameTokens(as: unsaved.source) {
-				guard !isExpired() else {
-					throw OAuthTokenStoreError.executionTimeUnavailable
-				}
-				try save(unsaved.token)
+				try save(unsaved.token, holding: slot)
 				storedToken = unsaved.token
 			}
 			// Otherwise, the unsaved token was saved already, or the stored token was replaced or deleted since.
@@ -216,15 +212,15 @@ final class OAuthTokenStore: Sendable {
 		guard storedToken.refreshToken != nil else {
 			throw CloudProviderError.unauthorized
 		}
-		guard !isExpired() else {
+		guard slot.isHeld else {
 			throw OAuthTokenStoreError.executionTimeUnavailable
 		}
 		// No retry, because a refresh token may already be used up after a failed request.
 		let refreshedToken = try await refresher(storedToken)
-		guard !isExpired() else {
+		guard slot.isHeld else {
 			return .lateResponse(refreshedToken, rotatedFrom: storedToken)
 		}
-		saveRotatedToken(refreshedToken, rotatedFrom: storedToken)
+		saveRotatedToken(refreshedToken, rotatedFrom: storedToken, slot: slot)
 		CloudAccessDDLogDebug("OAuthTokenStore: \(provider) token was refreshed")
 		return .token(refreshedToken)
 	}
@@ -232,7 +228,7 @@ final class OAuthTokenStore: Sendable {
 	/// Saves a response that arrived after the lock was released, but only if no other process replaced or deleted the token it was rotated from meanwhile. If it can't be saved now, it is kept unsaved.
 	private func saveLateResponse(_ refreshedToken: OAuthToken, rotatedFrom source: OAuthToken) async throws -> OAuthToken {
 		do {
-			return try await underLock { isExpired in
+			return try await underLock { slot in
 				guard let storedToken = try self.loadStoredToken() else {
 					self.clearEntry()
 					throw CloudProviderError.unauthorized
@@ -241,10 +237,7 @@ final class OAuthTokenStore: Sendable {
 					self.publish(storedToken)
 					return storedToken
 				}
-				guard !isExpired() else {
-					throw OAuthTokenStoreError.executionTimeUnavailable
-				}
-				self.saveRotatedToken(refreshedToken, rotatedFrom: source)
+				self.saveRotatedToken(refreshedToken, rotatedFrom: source, slot: slot)
 				return refreshedToken
 			}
 		} catch CloudProviderError.unauthorized {
@@ -266,9 +259,9 @@ final class OAuthTokenStore: Sendable {
 	}
 
 	/// Saves a rotated token. If saving fails, the token is kept in this process, so that the next refresh saves it instead of sending a used-up refresh token.
-	private func saveRotatedToken(_ token: OAuthToken, rotatedFrom source: OAuthToken) {
+	private func saveRotatedToken(_ token: OAuthToken, rotatedFrom source: OAuthToken, slot: LockHolderSlot) {
 		do {
-			try save(token)
+			try save(token, holding: slot)
 			publish(token)
 		} catch {
 			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) saving the refreshed token failed with \(error)")
@@ -278,21 +271,21 @@ final class OAuthTokenStore: Sendable {
 
 	// MARK: - Lock
 
-	/// Runs the body while holding the lock and an execution assertion. The expiry of the assertion releases the lock right away.
-	private func underLock<T: Sendable>(_ body: @escaping @Sendable (_ isExpired: @escaping @Sendable () -> Bool) async throws -> T) async throws -> T {
+	/// Runs the body while holding the lock and an execution assertion, whose expiry releases the lock.
+	private func underLock<T: Sendable>(_ body: @escaping @Sendable (_ slot: LockHolderSlot) async throws -> T) async throws -> T {
 		let slot = LockHolderSlot()
-		return try await assertion.perform(reason: "Updating the \(provider) login", operation: { isExpired in
+		return try await assertion.perform(reason: "Updating the \(provider) login", operation: {
 			let holder = try await self.makeLock().acquire(timeout: self.lockTimeout, pollInterval: self.lockPollInterval)
-			guard slot.install(holder), !isExpired() else {
+			guard slot.install(holder) else {
 				holder.release()
 				throw OAuthTokenStoreError.executionTimeUnavailable
 			}
 			defer {
 				slot.release()
 			}
-			return try await body(isExpired)
+			return try await body(slot)
 		}, onExpiration: {
-			slot.expire()
+			slot.release()
 		})
 	}
 
@@ -326,8 +319,17 @@ final class OAuthTokenStore: Sendable {
 		return try OAuthTokenEncoding.decode(data, legacyDecoder: legacyDecoder)
 	}
 
-	private func save(_ token: OAuthToken) throws {
-		try storage.save(OAuthTokenEncoding.encode(token), forAccount: account)
+	private func save(_ token: OAuthToken, holding slot: LockHolderSlot) throws {
+		let data = try OAuthTokenEncoding.encode(token)
+		try slot.write {
+			try storage.save(data, forAccount: account)
+		}
+	}
+
+	private func deleteStoredToken(holding slot: LockHolderSlot) throws {
+		try slot.write {
+			try storage.delete(forAccount: account)
+		}
 	}
 
 	private func isDue(_ token: OAuthToken) -> Bool {
@@ -364,33 +366,59 @@ final class OAuthTokenStore: Sendable {
 	}
 }
 
-/// The lock holder of one assertion. The expiry of the assertion releases it right away, and a holder installed after the expiry is refused.
+/// The lock holder of one assertion. The expiry of the assertion releases it right away, or once a running `write(_:)` returns. A holder installed after the expiry is refused.
 private final class LockHolderSlot: Sendable {
-	private let state = OSAllocatedUnfairLock(initialState: (holder: CrossProcessFileLock.Holder?.none, isExpired: false))
+	private enum State {
+		case empty
+		case held(CrossProcessFileLock.Holder)
+		case released
+	}
 
-	func install(_ holder: CrossProcessFileLock.Holder) -> Bool {
+	private let state = OSAllocatedUnfairLock(initialState: State.empty)
+
+	var isHeld: Bool {
 		return state.withLock { state in
-			guard !state.isExpired else {
+			guard case .held = state else {
 				return false
 			}
-			state.holder = holder
 			return true
 		}
 	}
 
-	func expire() {
-		let holder = state.withLock { state in
-			state.isExpired = true
-			defer { state.holder = nil }
-			return state.holder
+	func install(_ holder: CrossProcessFileLock.Holder) -> Bool {
+		return state.withLock { state in
+			guard case .empty = state else {
+				return false
+			}
+			state = .held(holder)
+			return true
 		}
-		holder?.release()
 	}
 
+	/**
+	 Runs a storage write if the lock is still held. The expiry waits for it, so that a write that iOS suspends with the process can't land after another process took the lock.
+
+	 - Throws: `OAuthTokenStoreError.executionTimeUnavailable` without running the write if the lock was released.
+	 */
+	func write(_ body: () throws -> Void) throws {
+		try state.withLockUnchecked { state in
+			guard case .held = state else {
+				throw OAuthTokenStoreError.executionTimeUnavailable
+			}
+			try body()
+		}
+	}
+
+	/// Releases the lock. A holder installed afterwards is refused.
 	func release() {
-		let holder = state.withLock { state in
-			defer { state.holder = nil }
-			return state.holder
+		let holder: CrossProcessFileLock.Holder? = state.withLock { state in
+			defer {
+				state = .released
+			}
+			guard case let .held(holder) = state else {
+				return nil
+			}
+			return holder
 		}
 		holder?.release()
 	}

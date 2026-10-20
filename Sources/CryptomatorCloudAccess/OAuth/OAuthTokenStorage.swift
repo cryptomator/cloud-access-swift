@@ -15,6 +15,7 @@ import Foundation
  - `load(forAccount:)` returns `nil` only if no item exists for the account, and throws for any other failure, e.g., a keychain that is locked.
  - Nothing is cached: every `load(forAccount:)` reads the persisted bytes, because other processes write them, too.
  - `save(_:forAccount:)` returns after the write completed. It replaces an existing item in place.
+ - `save(_:forAccount:)` and `delete(forAccount:)` return promptly, e.g., without waiting for user interaction. When the process's background time runs out, the library releases the lock only once a running write returns, and iOS may terminate a process that still holds it.
  - One storage object is one persistence namespace. Every process and every instance that uses the same items must pass the same token lock directory, e.g., to `BoxSetup`. The lock in it serializes token refreshes across processes.
  */
 public protocol OAuthTokenStorage: Sendable {

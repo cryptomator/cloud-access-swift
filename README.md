@@ -103,6 +103,7 @@ The library keeps the Box tokens in an `OAuthTokenStorage` that your app impleme
 - `load(forAccount:)` returns `nil` only if no item exists and throws for any other failure, e.g., a keychain that is locked.
 - Nothing is cached: every load reads the persisted bytes, because other processes write them, too.
 - `save(_:forAccount:)` returns after the write completed and replaces an existing item in place.
+- `save(_:forAccount:)` and `delete(forAccount:)` return promptly, e.g., without waiting for user interaction. When the process's background time runs out, the library releases the lock only once a running write returns, and iOS may terminate a process that still holds it.
 - Every process that uses the same items passes the same `tokenLockDirectory`. The library refreshes a token only while holding a lock in it, because Box refresh tokens can be used only once.
 
 Begin the authentication flow:

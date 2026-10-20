@@ -530,6 +530,8 @@ public final class BoxCloudProvider: CloudProvider {
 
 	func convertStandardError(_ error: Error) -> Error {
 		switch error {
+		case BoxError.apiError(statusCode: 403, code: "storage_limit_exceeded", _):
+			return CloudProviderError.quotaInsufficient
 		case BoxError.apiError(statusCode: 401, _, _), BoxError.apiError(statusCode: 403, _, _):
 			return CloudProviderError.unauthorized
 		case BoxError.apiError(statusCode: 404, _, _):

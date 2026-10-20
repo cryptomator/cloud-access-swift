@@ -292,4 +292,8 @@ enum BoxMockResponse {
 	static func files(_ entries: [String]) -> String {
 		return #"{"total_count":\#(entries.count),"entries":[\#(entries.joined(separator: ","))]}"#
 	}
+
+	static func error(status: Int, code: String) -> String {
+		return #"{"type":"error","status":\#(status),"code":"\#(code)"}"#
+	}
 }

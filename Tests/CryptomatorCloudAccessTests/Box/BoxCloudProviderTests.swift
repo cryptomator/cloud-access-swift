@@ -118,7 +118,7 @@ class BoxCloudProviderTests: XCTestCase {
 	func testDeleteMissingFileThrowsItemNotFound() async throws {
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
-			URLProtocolMock.handler(statusCode: 404, body: #"{"type":"error","status":404,"code":"not_found","message":"Not Found"}"#)
+			URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found"))
 		]
 
 		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/file.txt"))) { error in
@@ -287,6 +287,24 @@ class BoxCloudProviderTests: XCTestCase {
 		XCTAssertTrue(bodyString.hasSuffix("\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\nfile content\r\n--\(boundary)--\r\n"), bodyString)
 		let attributes = try XCTUnwrap(bodyString.dropFirst(expectedPrefix.count).components(separatedBy: "\r\n").first)
 		XCTAssertEqual(["name": "file.txt", "parent": ["id": "0"]] as NSDictionary, try JSONSerialization.jsonObject(with: Data(attributes.utf8)) as? NSDictionary)
+	}
+
+	func testUploadErrors() async throws {
+		let localURL = try makeLocalFile(content: "file content")
+		let cases: [(code: String, expectedError: CloudProviderError)] = [
+			("storage_limit_exceeded", .quotaInsufficient),
+			("access_denied_insufficient_permissions", .unauthorized)
+		]
+		for (code, expectedError) in cases {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
+				URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: code))
+			]
+
+			await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil), code) { error in
+				XCTAssertEqual(expectedError, error as? CloudProviderError, code)
+			}
+		}
 	}
 
 	func testChunkedUploadSendsPartsWithDigestsAndCommits() async throws {

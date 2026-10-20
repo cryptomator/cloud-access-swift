@@ -55,40 +55,9 @@ public final class PCloudAuthenticator {
 		return "pclsdk-w-\(appKey.lowercased())"
 	}
 
-	/**
-	 The session holds its presentation context provider weakly, so the provider is kept alive here until the session completes.
-
-	 The session is ephemeral, because pCloud's authorize page approves a remembered browser login without offering to switch accounts, which would make adding another account impossible.
-	 */
+	/// The session is ephemeral, because pCloud's authorize page approves a remembered browser login without offering to switch accounts, which would make adding another account impossible.
 	private static func runLoginFlow(url: URL, callbackURLScheme: String, anchor: ASPresentationAnchor) async throws -> URL {
-		let contextProvider = PresentationContextProvider(anchor: anchor)
-		defer {
-			withExtendedLifetime(contextProvider) {}
-		}
-		return try await withCheckedThrowingContinuation { continuation in
-			let pendingContinuation = OSAllocatedUnfairLock<CheckedContinuation<URL, Error>?>(initialState: continuation)
-			let resume: @Sendable (Result<URL, Error>) -> Void = { result in
-				let continuation = pendingContinuation.withLock { continuation in
-					defer { continuation = nil }
-					return continuation
-				}
-				continuation?.resume(with: result)
-			}
-			let webSession = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme) { @Sendable callbackURL, error in
-				if let callbackURL {
-					resume(.success(callbackURL))
-				} else {
-					resume(.failure(convertLoginFlowError(error ?? PCloudAuthenticatorError.authenticationFailed)))
-				}
-			}
-			webSession.presentationContextProvider = contextProvider
-			webSession.prefersEphemeralWebBrowserSession = true
-			if !webSession.start() {
-				// A session that didn't start may never run its completion handler.
-				CloudAccessDDLogDebug("PCloudAuthenticator: The web authentication session didn't start.")
-				resume(.failure(PCloudAuthenticatorError.authenticationFailed))
-			}
-		}
+		return try await runWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, anchor: anchor, prefersEphemeralWebBrowserSession: true, logPrefix: "PCloudAuthenticator", convertError: { convertLoginFlowError($0 ?? PCloudAuthenticatorError.authenticationFailed) })
 	}
 
 	/// Reads the credential from the fragment of the callback URL, which carries `access_token`, `userid`, `locationid`, `hostname` and the `state` of the request.
@@ -137,6 +106,47 @@ public final class PCloudAuthenticator {
 	private nonisolated static func authenticationFailed(because reason: String) -> PCloudAuthenticatorError {
 		CloudAccessDDLogDebug("PCloudAuthenticator: Authentication failed, because \(reason).")
 		return .authenticationFailed
+	}
+}
+
+/**
+ Runs a web authentication session and returns its callback URL.
+
+ The session holds its presentation context provider weakly, so the provider is kept alive here until the session completes.
+
+ - Parameter logPrefix: The name of the authenticator that the log lines start with.
+ - Parameter convertError: Converts the error that the session completed with, or `nil` if it didn't start or completed without an error.
+ */
+@MainActor
+// swiftlint:disable:next function_parameter_count
+func runWebAuthenticationSession(url: URL, callbackURLScheme: String, anchor: ASPresentationAnchor, prefersEphemeralWebBrowserSession: Bool, logPrefix: String, convertError: @escaping @Sendable (Error?) -> Error) async throws -> URL {
+	let contextProvider = PresentationContextProvider(anchor: anchor)
+	defer {
+		withExtendedLifetime(contextProvider) {}
+	}
+	return try await withCheckedThrowingContinuation { continuation in
+		let pendingContinuation = OSAllocatedUnfairLock<CheckedContinuation<URL, Error>?>(initialState: continuation)
+		let resume: @Sendable (Result<URL, Error>) -> Void = { result in
+			let continuation = pendingContinuation.withLock { continuation in
+				defer { continuation = nil }
+				return continuation
+			}
+			continuation?.resume(with: result)
+		}
+		let webSession = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme) { @Sendable callbackURL, error in
+			if let callbackURL {
+				resume(.success(callbackURL))
+			} else {
+				resume(.failure(convertError(error)))
+			}
+		}
+		webSession.presentationContextProvider = contextProvider
+		webSession.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
+		if !webSession.start() {
+			// A session that didn't start may never run its completion handler.
+			CloudAccessDDLogDebug("\(logPrefix): The web authentication session didn't start.")
+			resume(.failure(convertError(nil)))
+		}
 	}
 }
 

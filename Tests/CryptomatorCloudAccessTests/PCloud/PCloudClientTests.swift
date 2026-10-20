@@ -269,17 +269,6 @@ class PCloudClientTests: XCTestCase {
 
 	// MARK: - Sessions
 
-	func testBackgroundConfiguration() {
-		let configuration = PCloudClient.backgroundConfiguration(sessionIdentifier: "PCloudClientTests", sharedContainerIdentifier: "group.test")
-
-		XCTAssertEqual("PCloudClientTests", configuration.identifier)
-		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
-		XCTAssertNotNil(configuration.httpCookieStorage)
-		XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
-		XCTAssertNil(configuration.urlCredentialStorage)
-		XCTAssertNil(configuration.urlCache)
-	}
-
 	func testBackgroundClientRunsOnlyTransfersOnBackgroundSession() async throws {
 		let registry = BackgroundURLSessionRegistry { _ in URLProtocolMock.configuration(marker: "transfer") }
 		let backgroundClient = try PCloudClient(credential: .stub(), configuration: .background(withIdentifier: "PCloudClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)

@@ -51,8 +51,7 @@ final class S3Client: Sendable {
 	}
 
 	static func backgroundConfiguration(credential: S3Credential, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		let configuration = HTTPClientSupport.hardened(.background(withIdentifier: "CryptomatorCloudAccess.S3.\(credential.identifier)"))
-		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		let configuration = HTTPClientSupport.hardenedBackground(identifier: "CryptomatorCloudAccess.S3.\(credential.identifier)", sharedContainerIdentifier: sharedContainerIdentifier)
 		configuration.timeoutIntervalForResource = TimeInterval(presignedURLLifetime)
 		return configuration
 	}

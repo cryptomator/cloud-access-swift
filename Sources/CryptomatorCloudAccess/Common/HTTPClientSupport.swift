@@ -22,6 +22,13 @@ enum HTTPClientSupport {
 		return configuration
 	}
 
+	/// Returns a hardened background configuration whose files an app extension can share with the app through `sharedContainerIdentifier`.
+	static func hardenedBackground(identifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
+		let configuration = hardened(.background(withIdentifier: identifier))
+		configuration.sharedContainerIdentifier = sharedContainerIdentifier
+		return configuration
+	}
+
 	/// Returns a random wait of up to 2^(retry - 1) seconds, as in the legacy retry mode that botocore and the AWS SDK for Swift use by default. The randomness keeps requests that were throttled together from retrying together.
 	static func retryDelay(forRetry retry: Int) -> TimeInterval {
 		return TimeInterval.random(in: 0 ... pow(2, TimeInterval(retry - 1)))

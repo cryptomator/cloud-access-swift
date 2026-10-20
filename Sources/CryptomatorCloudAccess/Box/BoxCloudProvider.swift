@@ -6,57 +6,60 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import BoxSdkGen
 import CryptoKit
 import Foundation
 
-/// Safe to share across threads, because `BoxClient` is immutable and each of its requests is an independent async call.
 public final class BoxCloudProvider: CloudProvider {
 	private let client: BoxClient
 	private let identifierCache: BoxIdentifierCache
 	private let maxPageSize: Int
+	/// Box recommends uploading files of 50 MiB or more with a chunked upload.
+	private let chunkedUploadThreshold: Int
 
-	public init(credential: BoxCredential, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
-		let networkSession = NetworkSession(networkClient: BoxURLSessionNetworkClient(configuration: urlSessionConfiguration))
-		self.client = BoxClient(auth: credential.client.auth, networkSession: networkSession)
+	init(client: BoxClient, maxPageSize: Int, chunkedUploadThreshold: Int = 52_428_800) throws {
+		self.client = client
 		self.identifierCache = try BoxIdentifierCache()
 		self.maxPageSize = max(1, min(maxPageSize, 1000))
+		self.chunkedUploadThreshold = chunkedUploadThreshold
 	}
 
 	public convenience init(credential: BoxCredential, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
+		try self.init(client: .foreground(tokenSource: credential.tokenSource), maxPageSize: maxPageSize)
 	}
 
+	/**
+	 Creates a Box provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
+
+	 If the provider is used in an app extension, set `BoxSetup.constants.sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+	 */
 	public static func withBackgroundSession(credential: BoxCredential, maxPageSize: Int = .max, sessionIdentifier: String) throws -> BoxCloudProvider {
-		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = BoxSetup.constants.sharedContainerIdentifier
-		return try BoxCloudProvider(credential: credential, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
+		return try BoxCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier), maxPageSize: maxPageSize)
 	}
 
 	@concurrent
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		let item = try await resolvePath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		return try await fetchItemMetadata(for: item)
 	}
 
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		let item = try await resolvePath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		return try await fetchItemList(for: item, pageToken: pageToken)
 	}
 
 	@concurrent
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		let phases = Progress.phases(of: progress, 999)
 		let item = try await resolvePath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
-		let metadata = try await downloadFile(for: item, to: localURL)
+		try Task.checkCancellation()
+		let metadata = try await downloadFile(for: item, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -64,7 +67,7 @@ public final class BoxCloudProvider: CloudProvider {
 	@concurrent
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		var isDirectory: ObjCBool = false
 		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
 		if !fileExists {
@@ -75,59 +78,59 @@ public final class BoxCloudProvider: CloudProvider {
 		}
 		let phases = Progress.phases(of: progress, 999)
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting)
+		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
 
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		if try await checkForItemExistence(at: cloudPath) {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 	}
 
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		let item = try await resolvePath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		try await deleteFile(for: item)
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		let item = try await resolvePath(forItemAt: cloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		try await deleteFolder(for: item)
 	}
 
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		if try await checkForItemExistence(at: targetCloudPath) {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		let item = try await resolvePath(forItemAt: sourceCloudPath)
 		let targetParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		try await moveFile(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		if try await checkForItemExistence(at: targetCloudPath) {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		let item = try await resolvePath(forItemAt: sourceCloudPath)
 		let targetParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		try await moveFolder(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 	}
 
@@ -149,11 +152,11 @@ public final class BoxCloudProvider: CloudProvider {
 		assert(item.itemType == .file)
 		CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item)) called")
 		do {
-			let file = try await withBoxSDKCancellationShield { try await self.client.files.getFileById(fileId: item.identifier) }
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) received file: \((try? file.serializeToString()) ?? file)")
-			return convertToCloudItemMetadata(file, at: item.cloudPath)
+			let file = try await client.file(id: item.identifier)
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) received file: \(file)")
+			return try convertToCloudItemMetadata(file, at: item.cloudPath)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchFileMetadata(for: \(item.identifier)) error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -162,11 +165,11 @@ public final class BoxCloudProvider: CloudProvider {
 		assert(item.itemType == .folder)
 		CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) called")
 		do {
-			let folder = try await withBoxSDKCancellationShield { try await self.client.folders.getFolderById(folderId: item.identifier) }
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received folder: \((try? folder.serializeToString()) ?? folder)")
-			return convertToCloudItemMetadata(folder, at: item.cloudPath)
+			let folder = try await client.folder(id: item.identifier)
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received folder: \(folder)")
+			return try convertToCloudItemMetadata(folder, at: item.cloudPath)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchFolderMetadata(for: \(item.identifier)) error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -176,41 +179,38 @@ public final class BoxCloudProvider: CloudProvider {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		do {
-			let queryParams = GetFolderItemsQueryParams(fields: ["name", "size", "modified_at"], usemarker: true, marker: pageToken, limit: Int64(maxPageSize))
-			let items = try await withBoxSDKCancellationShield { try await self.client.folders.getFolderItems(folderId: folderItem.identifier, queryParams: queryParams) }
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) received items: \((try? items.serializeToString()) ?? items)")
+			let items = try await client.folderItems(id: folderItem.identifier, marker: pageToken, limit: maxPageSize)
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) received items: \(items)")
 			return try convertToCloudItemList(items, at: folderItem.cloudPath)
-		} catch let error as BoxAPIError where error.responseInfo.statusCode == 400 {
+		} catch BoxError.apiError(statusCode: 400, _, _) {
 			throw CloudProviderError.pageTokenInvalid
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
-	private func downloadFile(for item: BoxItem, to localURL: URL) async throws -> CloudItemMetadata {
+	private func downloadFile(for item: BoxItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
 		guard item.itemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let remoteMetadata = try await fetchFileMetadata(for: item)
-		try _Concurrency.Task.checkCancellation()
+		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			do {
-				// The download returns no URL if the file isn't ready for download yet.
-				guard let url = try await withBoxSDKCancellationShield({ try await self.client.downloads.downloadFile(fileId: item.identifier, downloadDestinationUrl: stagedFile) }) else {
-					throw BoxSDKError(message: "File is not ready for download")
-				}
-				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) finished downloading to: \(url)")
+				try await client.download(fileID: item.identifier, to: stagedFile, progress: progress, onTaskCreation: onTaskCreation)
+				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) finished")
 			} catch {
-				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error.localizedDescription)")
+				CloudAccessDDLogDebug("BoxCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) failed with error: \(error)")
 				throw convertStandardError(error)
 			}
 			return remoteMetadata
 		})
 	}
 
-	private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool) async throws -> CloudItemMetadata {
+	// swiftlint:disable:next function_parameter_count
+	private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath), replaceExisting: \(replaceExisting)) called")
 		let attributes: [FileAttributeKey: Any]
 		do {
@@ -218,134 +218,137 @@ public final class BoxCloudProvider: CloudProvider {
 		} catch CocoaError.fileReadNoSuchFile {
 			throw CloudProviderError.itemNotFound
 		}
-		let fileSize = attributes[FileAttributeKey.size] as? Int ?? 52_428_800
-		// Box recommends uploading files over 50 MiB with a chunked upload.
+		let fileSize = attributes[FileAttributeKey.size] as? Int ?? chunkedUploadThreshold
 		do {
 			let item = try await resolvePath(forItemAt: cloudPath)
 			if !replaceExisting || (replaceExisting && item.itemType == .folder) {
 				throw CloudProviderError.itemAlreadyExists
 			}
-			try _Concurrency.Task.checkCancellation()
-			if fileSize >= 52_428_800 {
-				return try await uploadLargeExistingFile(for: item, from: localURL, to: cloudPath, fileSize: fileSize)
+			try Task.checkCancellation()
+			if fileSize >= chunkedUploadThreshold {
+				return try await uploadLargeExistingFile(for: item, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
 			} else {
-				return try await uploadSmallExistingFile(for: item, from: localURL, to: cloudPath)
+				return try await uploadSmallExistingFile(for: item, from: localURL, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 			}
 		} catch CloudProviderError.itemNotFound {
-			try _Concurrency.Task.checkCancellation()
-			if fileSize >= 52_428_800 {
-				return try await uploadLargeNewFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize)
+			try Task.checkCancellation()
+			if fileSize >= chunkedUploadThreshold {
+				return try await uploadLargeNewFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
 			} else {
-				return try await uploadSmallNewFile(for: parentItem, from: localURL, to: cloudPath)
+				return try await uploadSmallNewFile(for: parentItem, from: localURL, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 			}
 		}
 	}
 
-	private func uploadSmallNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) async throws -> CloudItemMetadata {
+	private func uploadSmallNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = try UploadFileRequestBody(
-				attributes: UploadFileRequestBodyAttributesField(
-					name: cloudPath.lastPathComponent,
-					parent: UploadFileRequestBodyAttributesParentField(id: parentItem.identifier)
-				),
-				file: createInputStream(for: localURL)
-			)
-			let files = try await withBoxSDKCancellationShield { try await self.client.uploads.uploadFile(requestBody: requestBody) }
+			let files = try await client.uploadNewFile(from: localURL, name: cloudPath.lastPathComponent, parentID: parentItem.identifier, progress: progress, onTaskCreation: onTaskCreation)
 			guard let file = files.entries?.first else {
 				throw CloudProviderError.itemNotFound
 			}
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) received file: \((try? file.serializeToString()) ?? file)")
-			return convertToCloudItemMetadata(file, at: cloudPath)
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) received file: \(file)")
+			return try convertToCloudItemMetadata(file, at: cloudPath)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallNewFile(for: \(parentItem.identifier), to: \(cloudPath)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
-	private func uploadSmallExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath) async throws -> CloudItemMetadata {
+	private func uploadSmallExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = try UploadFileVersionRequestBody(
-				attributes: UploadFileVersionRequestBodyAttributesField(name: cloudPath.lastPathComponent),
-				file: createInputStream(for: localURL)
-			)
-			let files = try await withBoxSDKCancellationShield { try await self.client.uploads.uploadFileVersion(fileId: existingItem.identifier, requestBody: requestBody) }
+			let files = try await client.uploadFileVersion(from: localURL, fileID: existingItem.identifier, name: cloudPath.lastPathComponent, progress: progress, onTaskCreation: onTaskCreation)
 			guard let file = files.entries?.first else {
 				throw CloudProviderError.itemNotFound
 			}
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) received file: \((try? file.serializeToString()) ?? file)")
-			return convertToCloudItemMetadata(file, at: cloudPath)
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) received file: \(file)")
+			return try convertToCloudItemMetadata(file, at: cloudPath)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
-	private func uploadLargeNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
+	private func uploadLargeNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = CreateFileUploadSessionRequestBody(folderId: parentItem.identifier, fileSize: Int64(fileSize), fileName: cloudPath.lastPathComponent)
-			let uploadSession = try await withBoxSDKCancellationShield { try await self.client.chunkedUploads.createFileUploadSession(requestBody: requestBody) }
-			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize)
+			let uploadSession = try await client.createUploadSession(parentID: parentItem.identifier, name: cloudPath.lastPathComponent, fileSize: Int64(fileSize))
+			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeNewFile(for: \(parentItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeNewFile(for: \(parentItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
-	private func uploadLargeExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
+	private func uploadLargeExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
 		do {
-			let requestBody = CreateFileUploadSessionForExistingFileRequestBody(fileSize: Int64(fileSize))
-			let uploadSession = try await withBoxSDKCancellationShield { try await self.client.chunkedUploads.createFileUploadSessionForExistingFile(fileId: existingItem.identifier, requestBody: requestBody) }
-			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize)
+			let uploadSession = try await client.createUploadSession(fileID: existingItem.identifier, fileSize: Int64(fileSize))
+			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeExistingFile(for: \(existingItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeExistingFile(for: \(existingItem.identifier), to: \(cloudPath), fileSize: \(fileSize)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
-	private func uploadLargeFile(for uploadSession: UploadSession, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
-		guard let uploadPartUrl = uploadSession.sessionEndpoints?.uploadPart, let commitUrl = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize else {
-			throw BoxSDKError(message: "Failed to retrieve upload session data")
+	/// Uploads the parts one by one, each from a temporary file, so that no part is held in memory. The progress counts bytes, and each part gets a share of its length.
+	private func uploadLargeFile(for uploadSession: BoxUploadSession, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
+		guard let uploadPartURL = uploadSession.sessionEndpoints?.uploadPart, let commitURL = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize, partSize > 0 else {
+			throw BoxError.unexpectedContent
 		}
-		// Parts are uploaded one by one instead of through the SDK's reducer, which would keep a second copy of each part in memory.
+		progress?.totalUnitCount = Int64(fileSize)
 		var fileHash = Insecure.SHA1()
-		var parts = [UploadPart]()
+		var parts = [BoxPart]()
 		var offset: Int64 = 0
 		let fileHandle = try FileHandle(forReadingFrom: localURL)
 		defer {
 			try? fileHandle.close()
 		}
-		while let chunk = try fileHandle.read(upToCount: Int(partSize)), !chunk.isEmpty {
-			try _Concurrency.Task.checkCancellation()
-			let digest = "sha=\(Data(Insecure.SHA1.hash(data: chunk)).base64EncodedString())"
-			let contentRange = "bytes \(offset)-\(offset + Int64(chunk.count) - 1)/\(fileSize)"
-			let uploadedPart = try await withBoxSDKCancellationShield { try await self.client.chunkedUploads.uploadFilePartByUrl(url: uploadPartUrl, requestBody: InputStream(data: chunk), headers: UploadFilePartByUrlHeaders(digest: digest, contentRange: contentRange)) }
-			guard let part = uploadedPart.part else {
-				throw BoxSDKError(message: "Failed to retrieve uploaded part")
+		while true {
+			try Task.checkCancellation()
+			var partHash = Insecure.SHA1()
+			var partLength: Int64 = 0
+			let partFileURL = try BoxClient.writeTemporaryFile { partHandle in
+				while partLength < partSize, let chunk = try fileHandle.read(upToCount: Int(min(Int64(BoxClient.bufferLength), partSize - partLength))), !chunk.isEmpty {
+					try partHandle.write(contentsOf: chunk)
+					partHash.update(data: chunk)
+					fileHash.update(data: chunk)
+					partLength += Int64(chunk.count)
+				}
 			}
+			defer {
+				try? FileManager.default.removeItem(at: partFileURL)
+			}
+			if partLength == 0 {
+				break
+			}
+			let digest = "sha=\(Data(partHash.finalize()).base64EncodedString())"
+			let partProgress = progress?.makeExplicitChild(pendingUnitCount: partLength)
+			let part = try await client.uploadPart(url: uploadPartURL, from: partFileURL, range: offset ... offset + partLength - 1, fileSize: Int64(fileSize), digest: digest, progress: partProgress)
 			parts.append(part)
-			fileHash.update(data: chunk)
-			offset += Int64(chunk.count)
+			offset += partLength
 		}
 		let digest = "sha=\(Data(fileHash.finalize()).base64EncodedString())"
-		try _Concurrency.Task.checkCancellation()
-		let committedSession = try await withBoxSDKCancellationShield { [parts] in try await self.client.chunkedUploads.createFileUploadSessionCommitByUrl(url: commitUrl, requestBody: CreateFileUploadSessionCommitByUrlRequestBody(parts: parts), headers: CreateFileUploadSessionCommitByUrlHeaders(digest: digest)) }
-		guard let file = committedSession?.entries?.first else {
+		try Task.checkCancellation()
+		// The commit creates the file, so it runs to its end, with its retries, even if the task is cancelled meanwhile.
+		let committedFiles = try await withoutCancellation { [parts] in
+			try await self.client.commit(url: commitURL, parts: parts, digest: digest)
+		}
+		guard let file = committedFiles.entries?.first else {
 			throw CloudProviderError.itemNotFound
 		}
-		CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeFile(for: \(uploadSession), to: \(cloudPath), fileSize: \(fileSize)) received file: \((try? file.serializeToString()) ?? file)")
-		return convertToCloudItemMetadata(file, at: cloudPath)
+		CloudAccessDDLogDebug("BoxCloudProvider: uploadLargeFile(to: \(cloudPath), fileSize: \(fileSize)) received file: \(file)")
+		return try convertToCloudItemMetadata(file, at: cloudPath)
 	}
 
 	private func createFolder(for parentItem: BoxItem, with name: String) async throws {
 		do {
-			let requestBody = CreateFolderRequestBody(name: name, parent: CreateFolderRequestBodyParentField(id: parentItem.identifier))
-			let folder = try await withBoxSDKCancellationShield { try await self.client.folders.createFolder(requestBody: requestBody) }
-			CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received folder: \((try? folder.serializeToString()) ?? folder)")
+			let folder = try await withoutCancellation {
+				try await self.client.createFolder(name: name, parentID: parentItem.identifier)
+			}
+			CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received folder: \(folder)")
 			let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
-			let item = BoxItem(cloudPath: cloudPath, folder: folder)
+			let item = try BoxItem(cloudPath: cloudPath, entry: folder)
 			try identifierCache.addOrUpdate(item)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -356,13 +359,13 @@ public final class BoxCloudProvider: CloudProvider {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		do {
-			try await withBoxSDKCancellationShield { try await self.client.files.deleteFileById(fileId: item.identifier) }
+			try await withoutCancellation {
+				try await self.client.deleteFile(id: item.identifier)
+			}
 			CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) succeeded")
 			try identifierCache.invalidate(item)
-		} catch let error as BoxAPIError where error.responseInfo.statusCode == 404 {
-			throw CloudProviderError.itemNotFound
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -373,14 +376,13 @@ public final class BoxCloudProvider: CloudProvider {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		do {
-			let queryParams = DeleteFolderByIdQueryParams(recursive: true)
-			try await withBoxSDKCancellationShield { try await self.client.folders.deleteFolderById(folderId: item.identifier, queryParams: queryParams) }
+			try await withoutCancellation {
+				try await self.client.deleteFolder(id: item.identifier)
+			}
 			CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) succeeded")
 			try identifierCache.invalidate(item)
-		} catch let error as BoxAPIError where error.responseInfo.statusCode == 404 {
-			throw CloudProviderError.itemNotFound
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -388,17 +390,15 @@ public final class BoxCloudProvider: CloudProvider {
 	private func moveFile(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) async throws {
 		CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
 		do {
-			let requestBody = UpdateFileByIdRequestBody(
-				name: targetCloudPath.lastPathComponent,
-				parent: UpdateFileByIdRequestBodyParentField(id: targetParentItem.identifier)
-			)
-			let file = try await withBoxSDKCancellationShield { try await self.client.files.updateFileById(fileId: sourceItem.identifier, requestBody: requestBody) }
-			CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received file: \((try? file.serializeToString()) ?? file)")
+			let file = try await withoutCancellation {
+				try await self.client.moveFile(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+			}
+			CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received file: \(file)")
 			try identifierCache.invalidate(sourceItem)
-			let targetItem = BoxItem(cloudPath: targetCloudPath, file: file)
+			let targetItem = try BoxItem(cloudPath: targetCloudPath, entry: file)
 			try identifierCache.addOrUpdate(targetItem)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -406,17 +406,15 @@ public final class BoxCloudProvider: CloudProvider {
 	private func moveFolder(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) async throws {
 		CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
 		do {
-			let requestBody = UpdateFolderByIdRequestBody(
-				name: targetCloudPath.lastPathComponent,
-				parent: UpdateFolderByIdRequestBodyParentField(id: targetParentItem.identifier)
-			)
-			let folder = try await withBoxSDKCancellationShield { try await self.client.folders.updateFolderById(folderId: sourceItem.identifier, requestBody: requestBody) }
-			CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received folder: \((try? folder.serializeToString()) ?? folder)")
+			let folder = try await withoutCancellation {
+				try await self.client.moveFolder(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+			}
+			CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received folder: \(folder)")
 			try identifierCache.invalidate(sourceItem)
-			let newItem = BoxItem(cloudPath: targetCloudPath, folder: folder)
+			let newItem = try BoxItem(cloudPath: targetCloudPath, entry: folder)
 			try identifierCache.addOrUpdate(newItem)
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
@@ -455,7 +453,7 @@ public final class BoxCloudProvider: CloudProvider {
 		var parentItem = startItem
 		for i in startIndex ..< endIndex {
 			let itemName = endCloudPath.pathComponents[i]
-			try _Concurrency.Task.checkCancellation()
+			try Task.checkCancellation()
 			parentItem = try await getBoxItem(for: itemName, withParentItem: parentItem)
 			try identifierCache.addOrUpdate(parentItem)
 		}
@@ -468,94 +466,75 @@ public final class BoxCloudProvider: CloudProvider {
 			CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) found item: \(foundItem)")
 			return foundItem
 		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error.localizedDescription)")
+			CloudAccessDDLogDebug("BoxCloudProvider: getBoxItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error)")
 			throw convertStandardError(error)
 		}
 	}
 
 	func findBoxItem(in parentItem: BoxItem, withName name: String, marker: String?) async throws -> BoxItem {
-		let queryParams = GetFolderItemsQueryParams(fields: ["name", "size", "modified_at"], usemarker: true, marker: marker, limit: Int64(maxPageSize))
-		let items = try await withBoxSDKCancellationShield { try await self.client.folders.getFolderItems(folderId: parentItem.identifier, queryParams: queryParams) }
-		CloudAccessDDLogDebug("BoxCloudProvider: findBoxItem(in: \(name), withName: \(name), marker: \(marker ?? "nil")) received items: \((try? items.serializeToString()) ?? items)")
-		if let foundItem = try await locateBoxItem(in: items, withName: name, parentItem: parentItem) {
+		let items = try await client.folderItems(id: parentItem.identifier, marker: marker, limit: maxPageSize)
+		CloudAccessDDLogDebug("BoxCloudProvider: findBoxItem(in: \(parentItem.identifier), withName: \(name), marker: \(marker ?? "nil")) received items: \(items)")
+		if let foundItem = try locateBoxItem(in: items, withName: name, parentItem: parentItem) {
 			return foundItem
 		} else if let nextMarker = items.nextMarker {
-			try _Concurrency.Task.checkCancellation()
+			try Task.checkCancellation()
 			return try await findBoxItem(in: parentItem, withName: name, marker: nextMarker)
 		} else {
 			throw CloudProviderError.itemNotFound
 		}
 	}
 
-	func locateBoxItem(in items: Items, withName name: String, parentItem: BoxItem) async throws -> BoxItem? {
-		if let entries = items.entries {
-			for entry in entries {
-				switch entry {
-				case let .fileFull(file) where file.name == name:
-					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
-				case let .folderMini(folder) where folder.name == name:
-					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), folder: folder)
-				case .webLink, .fileFull, .folderMini:
-					continue
-				}
-			}
+	/// Skips web links, which can have the name of a file or folder but aren't cloud items.
+	func locateBoxItem(in items: BoxItems, withName name: String, parentItem: BoxItem) throws -> BoxItem? {
+		guard let entry = items.entries?.first(where: { $0.itemType != nil && $0.name == name }) else {
+			return nil
 		}
-		return nil
+		return try BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), entry: entry)
 	}
 
 	// MARK: - Helpers
 
-	private func createInputStream(for localURL: URL) throws -> InputStream {
-		guard let inputStream = InputStream(url: localURL) else {
-			throw CloudProviderError.itemNotFound
+	/**
+	 Converts a file or folder entry. A folder has no size or date, and a file entry without a date has none either.
+
+	 - Throws: `BoxError.unexpectedContent` for any other entry, e.g., a web link, and for a file whose `modified_at` doesn't parse.
+	 */
+	private func convertToCloudItemMetadata(_ entry: BoxEntry, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+		let name = entry.name ?? ""
+		switch entry.itemType {
+		case .file:
+			var lastModifiedDate: Date?
+			if let modifiedAt = entry.modifiedAt {
+				guard let date = BoxJSON.date(fromBoxDateTime: modifiedAt) else {
+					throw BoxError.unexpectedContent
+				}
+				lastModifiedDate = date
+			}
+			return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: lastModifiedDate, size: entry.size.map { Int($0) })
+		case .folder:
+			return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
+		default:
+			throw BoxError.unexpectedContent
 		}
-		return inputStream
 	}
 
-	private func convertToCloudItemMetadata(_ file: File, at cloudPath: CloudPath) -> CloudItemMetadata {
-		let name = file.name ?? ""
-		let itemType = CloudItemType.file
-		let size = file.size.map { Int($0) }
-		let lastModifiedDate = file.modifiedAt
-		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-	}
-
-	private func convertToCloudItemMetadata(_ folder: FolderMini, at cloudPath: CloudPath) -> CloudItemMetadata {
-		let name = folder.name ?? ""
-		let itemType = CloudItemType.folder
-		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: nil, size: nil)
-	}
-
-	private func convertToCloudItemList(_ folderItems: Items, at cloudPath: CloudPath) throws -> CloudItemList {
-		var items = [CloudItemMetadata]()
+	private func convertToCloudItemList(_ folderItems: BoxItems, at cloudPath: CloudPath) throws -> CloudItemList {
 		guard let entries = folderItems.entries else {
 			return CloudItemList(items: [])
 		}
-		for entry in entries {
-			switch entry {
-			case let .fileFull(file):
-				let itemCloudPath = cloudPath.appendingPathComponent(file.name ?? "")
-				let itemMetadata = convertToCloudItemMetadata(file, at: itemCloudPath)
-				items.append(itemMetadata)
-			case let .folderMini(folder):
-				let itemCloudPath = cloudPath.appendingPathComponent(folder.name ?? "")
-				let itemMetadata = convertToCloudItemMetadata(folder, at: itemCloudPath)
-				items.append(itemMetadata)
-			default:
-				throw BoxError.unexpectedContent
-			}
+		let items = try entries.map { entry in
+			try convertToCloudItemMetadata(entry, at: cloudPath.appendingPathComponent(entry.name ?? ""))
 		}
 		return CloudItemList(items: items, nextPageToken: folderItems.nextMarker)
 	}
 
 	func convertStandardError(_ error: Error) -> Error {
-		if isNetworkConnectionError((error as? BoxNetworkError)?.error ?? error) {
-			return CloudProviderError.noInternetConnection
-		}
 		switch error {
-		case let error as BoxAPIError where (error.responseInfo.statusCode == 400 && error.responseInfo.rawBody?.contains("invalid_grant") == true) || error.responseInfo.statusCode == 401 || error.responseInfo.statusCode == 403:
+		case BoxError.apiError(statusCode: 403, code: "storage_limit_exceeded", _):
+			return CloudProviderError.quotaInsufficient
+		case BoxError.apiError(statusCode: 401, _, _), BoxError.apiError(statusCode: 403, _, _):
 			return CloudProviderError.unauthorized
-		case let error as BoxAPIError where error.responseInfo.statusCode == 404:
+		case BoxError.apiError(statusCode: 404, _, _):
 			return CloudProviderError.itemNotFound
 		default:
 			return error

@@ -95,7 +95,7 @@ func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async th
 /**
  Waits for the value of a task, but at most for the timeout, after which `UnfinishedTaskError` is thrown and the task is left running.
 
- A task group can't serve as the timeout, because it only returns once all of its child tasks returned, and SDK calls don't respond to cancellation.
+ A task group can't serve as the timeout, because it only returns once all of its child tasks returned, and a running request doesn't respond to cancellation.
 
  The timeout runs out when `sleep` returns, and never if it throws.
  */

@@ -36,6 +36,10 @@ If you are building via a CI system, set these secret environment variables acco
 
 ### How to Get the Secrets
 
+#### Box
+
+The Box tests authenticate as the service account of a Box Platform app that uses the client credentials grant (CCG), so they need no stored login. Take `BOX_CLIENT_ID` and `BOX_CLIENT_SECRET` from the app's configuration in the Box Developer Console, and set `BOX_ENTERPRISE_ID` to the ID of the enterprise whose admin authorized the app.
+
 #### Dropbox
 
 To get the access token for Dropbox, generate a token in the Dropbox Developer Portal. For more detailed instructions, check out the [OAuth Guide from Dropbox](https://developers.dropbox.com/oauth-guide).
@@ -124,7 +128,7 @@ To add a provider, add a case to `IntegrationProvider`, create its providers in 
 
 An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts, `CloudProviderError.noInternetConnection`, HTTP 5xx and 429, failed OAuth token requests with such a status, and eventually consistent providers that didn't catch up in time. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
 
-An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because SDK calls don't respond to cancellation.
+An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because a running request doesn't respond to cancellation.
 
 In CI, `Scripts/run-integration-tests.sh` re-runs the failed tests once against the same build. It runs every failed test on every backend that a test failed on, so a test can also run on a backend it didn't fail on. A failed provider-specific test adds all backends of its provider. The job is green only if each failed (test, backend) pair passed on the re-run, so the extra runs don't count. A re-run of the job via "Re-run failed jobs" selects the same way from the pairs still failing at the end of the previous attempt, and its main pass then counts all the pairs it runs. If that attempt didn't finish its main pass, it runs everything.
 

@@ -9,6 +9,9 @@
 import AuthenticationServices
 import XCTest
 @testable import CryptomatorCloudAccess
+#if canImport(CryptomatorCloudAccessCore)
+import CryptomatorCloudAccessCore
+#endif
 
 class PCloudAuthenticatorTests: XCTestCase {
 	private let appKey = "AppKey"

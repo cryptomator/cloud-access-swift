@@ -7,58 +7,50 @@
 //
 
 import Foundation
-@preconcurrency import PCloudSDKSwift
 
-/// `@unchecked Sendable`: all stored properties are immutable, and `client` only builds tasks that guard their own state. The class is subclassed in tests.
-public class PCloudCredential: @unchecked Sendable {
-	public let user: OAuth.User
+/// The login of a pCloud account. Persist its fields to re-create it later.
+public final class PCloudCredential: Sendable {
+	private static let hostNameCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789.-")
+
+	public let id: UInt64
 	public var userID: String {
-		return String(user.id)
+		return String(id)
 	}
 
-	private let client: PCloudClient
+	public let accessToken: String
+	/// The host of the account's API, e.g., `api.pcloud.com` in the US or `eapi.pcloud.com` in the EU.
+	public let apiHostName: String
+	/// The data region of the account: 1 for the US, 2 for the EU.
+	public let locationID: UInt
 
-	public init(user: OAuth.User) {
-		self.user = user
-		self.client = PCloud.createClient(with: user)
+	/// - Throws: `URLError(.badURL)` if `apiHostName` isn't a bare host name, e.g., `api.pcloud.com`.
+	public init(id: UInt64, accessToken: String, apiHostName: String, locationID: UInt) throws {
+		let apiHostName = apiHostName.lowercased()
+		guard PCloudCredential.isValidAPIHostName(apiHostName) else {
+			throw URLError(.badURL)
+		}
+		self.id = id
+		self.accessToken = accessToken
+		self.apiHostName = apiHostName
+		self.locationID = locationID
 	}
 
 	public func getUsername() async throws -> String {
-		let metadata = try await client.fetchUserInfo().execute()
-		return metadata.emailAddress
-	}
-}
-
-extension PCloud {
-	/**
-	 Creates a pCloud client with a background `URLSession`.
-
-	 Does not update the `sharedClient` property. You are responsible for storing it and keeping it alive. Use if you want a more direct control over the lifetime of the `PCloudClient` object. Multiple clients can exist simultaneously.
-
-	 - Parameter user: A `OAuth.User` value obtained from the keychain or the OAuth flow.
-	 - Parameter sessionIdentifier: The unique identifier for the `URLSessionConfiguration` object.
-	 - Parameter sharedContainerIdentifier: To create a URL session for use by an app extension, set this property to a valid identifier for a container shared between the app extension and its containing app.
-	 - Returns: An instance of a `PCloudClient` ready to take requests.
-	 */
-	public static func createBackgroundClient(with user: OAuth.User, sessionIdentifier: String) -> PCloudClient {
-		return createBackgroundClient(withAccessToken: user.token, apiHostName: user.httpAPIHostName, sessionIdentifier: sessionIdentifier)
+		return try await getUsername(client: .foreground(credential: self))
 	}
 
-	private static func createBackgroundClient(withAccessToken accessToken: String, apiHostName: String, sessionIdentifier: String) -> PCloudClient {
-		let authenticator = OAuthAccessTokenBasedAuthenticator(accessToken: accessToken)
-		let eventHub = URLSessionEventHub()
-		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = PCloudSetup.constants.sharedContainerIdentifier
-		let session = URLSession(configuration: configuration, delegate: eventHub, delegateQueue: nil)
-		let foregroundSession = URLSession(configuration: .default, delegate: eventHub, delegateQueue: nil)
+	func getUsername(client: PCloudClient) async throws -> String {
+		return try await client.userInfoEmail()
+	}
 
-		// The event hub is expected to be kept in memory by the operation builder blocks.
-		let callOperationBuilder = URLSessionBasedNetworkOperationUtilities.createCallOperationBuilder(with: .https, session: foregroundSession, delegate: eventHub)
-		let uploadOperationBuilder = URLSessionBasedNetworkOperationUtilities.createUploadOperationBuilder(with: .https, session: session, delegate: eventHub)
-		let downloadOperationBuilder = URLSessionBasedNetworkOperationUtilities.createDownloadOperationBuilder(with: session, delegate: eventHub)
-		let callTaskBuilder = PCloudAPICallTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: callOperationBuilder)
-		let uploadTaskBuilder = PCloudAPIUploadTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: uploadOperationBuilder)
-		let downloadTaskBuilder = PCloudAPIDownloadTaskBuilder(hostProvider: apiHostName, authenticator: authenticator, operationBuilder: downloadOperationBuilder)
-		return PCloudClient(callTaskBuilder: callTaskBuilder, uploadTaskBuilder: uploadTaskBuilder, downloadTaskBuilder: downloadTaskBuilder)
+	/// Whether the lowercased host name is bare, i.e., without a path, query, fragment, user info, port or IPv6 literal, so that every request goes to that host. IPv4 literals pass.
+	static func isValidAPIHostName(_ hostName: String) -> Bool {
+		guard !hostName.isEmpty, hostName.unicodeScalars.allSatisfy(hostNameCharacters.contains), !hostName.split(separator: ".", omittingEmptySubsequences: false).contains(where: \.isEmpty) else {
+			return false
+		}
+		var components = URLComponents()
+		components.scheme = "https"
+		components.host = hostName
+		return components.url?.host == hostName
 	}
 }

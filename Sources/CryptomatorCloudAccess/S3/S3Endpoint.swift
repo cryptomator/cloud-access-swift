@@ -44,7 +44,7 @@ struct S3Endpoint: Sendable {
 			path.removeLast()
 		}
 		self.basePath = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
-			segment.removingPercentEncoding.map { S3Signer.encode($0, encodeSlash: true) } ?? String(segment)
+			segment.removingPercentEncoding.map { HTTPClientSupport.percentEncoded($0, encodeSlash: true) } ?? String(segment)
 		}.joined(separator: "/")
 		self.bucket = credential.bucket
 		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
@@ -68,18 +68,18 @@ struct S3Endpoint: Sendable {
 		var components = URLComponents()
 		components.scheme = scheme
 		components.port = port
-		let encodedKey = S3Signer.encode(key, encodeSlash: false)
+		let encodedKey = HTTPClientSupport.percentEncoded(key, encodeSlash: false)
 		if isVirtualHosted {
 			components.encodedHost = "\(bucket).\(host)"
 			components.percentEncodedPath = "\(basePath)/\(encodedKey)"
 		} else {
 			components.encodedHost = host
-			components.percentEncodedPath = "\(basePath)/\(S3Signer.encode(bucket, encodeSlash: true))" + (key.isEmpty ? "" : "/\(encodedKey)")
+			components.percentEncodedPath = "\(basePath)/\(HTTPClientSupport.percentEncoded(bucket, encodeSlash: true))" + (key.isEmpty ? "" : "/\(encodedKey)")
 		}
 		if !query.isEmpty {
 			components.percentEncodedQuery = query.map { item in
-				let name = S3Signer.encode(item.name, encodeSlash: true)
-				return item.value.map { "\(name)=\(S3Signer.encode($0, encodeSlash: true))" } ?? name
+				let name = HTTPClientSupport.percentEncoded(item.name, encodeSlash: true)
+				return item.value.map { "\(name)=\(HTTPClientSupport.percentEncoded($0, encodeSlash: true))" } ?? name
 			}.joined(separator: "&")
 		}
 		guard let url = components.url else {
@@ -90,6 +90,6 @@ struct S3Endpoint: Sendable {
 
 	/// Returns the `x-amz-copy-source` header value that addresses the object with the given key.
 	func copySource(forKey key: String) -> String {
-		return "\(S3Signer.encode(bucket, encodeSlash: true))/\(S3Signer.encode(key, encodeSlash: false))"
+		return "\(HTTPClientSupport.percentEncoded(bucket, encodeSlash: true))/\(HTTPClientSupport.percentEncoded(key, encodeSlash: false))"
 	}
 }

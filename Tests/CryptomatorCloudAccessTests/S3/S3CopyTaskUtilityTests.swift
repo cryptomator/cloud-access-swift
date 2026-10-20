@@ -31,12 +31,12 @@ class S3CopyTaskUtilityTests: XCTestCase {
 			return try (XCTUnwrap(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)), Data("<CopyPartResult><ETag>\"etag-\(partNumber)\"</ETag></CopyPartResult>".utf8))
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "<InitiateMultipartUploadResult><UploadId>upload-id</UploadId></InitiateMultipartUploadResult>"),
+			URLProtocolMock.handler(body: "<InitiateMultipartUploadResult><UploadId>upload-id</UploadId></InitiateMultipartUploadResult>"),
 			partCopy,
 			partCopy,
 			partCopy,
-			S3MockResponse.handler(statusCode: 200, body: "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>", onRequest: { request in
-				completionBody.withLock { $0 = String(bytes: S3MockResponse.body(of: request), encoding: .utf8) }
+			URLProtocolMock.handler(body: "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>", onRequest: { request in
+				completionBody.withLock { $0 = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) }
 			})
 		]
 
@@ -58,9 +58,9 @@ class S3CopyTaskUtilityTests: XCTestCase {
 			}
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>upload-id</UploadId></InitiateMultipartUploadResult>"),
-			S3MockResponse.handler(statusCode: 503, onRequest: countAbortRequest),
-			S3MockResponse.handler(statusCode: 204, onRequest: countAbortRequest)
+			URLProtocolMock.handler(body: "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>upload-id</UploadId></InitiateMultipartUploadResult>"),
+			URLProtocolMock.handler(statusCode: 503, onRequest: countAbortRequest),
+			URLProtocolMock.handler(statusCode: 204, onRequest: countAbortRequest)
 		]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {

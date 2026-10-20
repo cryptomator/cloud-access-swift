@@ -22,9 +22,6 @@ private let httpStatusErrorDomains: Set<String> = ["com.google.GTLRErrorObjectDo
 /// The S3 error codes of server errors, throttling and request timeouts.
 private let transientS3ErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 
-/// The case names of pCloud's generic `CallError` that a retry can heal.
-private let transientPCloudCallErrorCases: Set<String> = ["rateLimitError", "serverInternalError"]
-
 /**
  Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 5xx or 429, a failed OAuth token request with such a status, or an eventually consistent provider that didn't catch up in time.
 
@@ -55,11 +52,7 @@ private func isTransient(_ error: Error, depth: Int) -> Bool {
 	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error, isTransient(underlyingError, depth: depth + 1) {
 		return true
 	}
-	let mirror = Mirror(reflecting: error)
-	if String(describing: type(of: error)).hasPrefix("CallError<"), transientPCloudCallErrorCases.contains(mirror.children.first?.label ?? "\(error)") {
-		return true
-	}
-	return mirror.children.contains { child in
+	return Mirror(reflecting: error).children.contains { child in
 		guard let wrappedError = child.value as? Error else {
 			return false
 		}
@@ -89,7 +82,19 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 	case let error as S3Error:
 		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
 	default:
-		return nil
+		return (error as? PCloudError).map(isTransientPCloudError)
+	}
+}
+
+private func isTransientPCloudError(_ error: PCloudError) -> Bool {
+	switch error {
+	case let .apiError(code, _):
+		// Too many login attempts, too many actions, or an internal error.
+		return code == 4000 || code == 4010 || (5000 ..< 6000).contains(code)
+	case let .unexpectedHTTPStatusCode(statusCode):
+		return isTransientHTTPStatusCode(statusCode)
+	default:
+		return false
 	}
 }
 

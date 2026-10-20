@@ -25,10 +25,8 @@ final class S3Client: Sendable {
 	private static let maxErrorBodyLength = 1024 * 1024
 	private static let clockSkewTolerance: TimeInterval = 5 * 60
 	private static let clockSkewErrorCodes: Set<String> = ["RequestTimeTooSkewed", "RequestExpired", "SignatureDoesNotMatch"]
-	private static let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed]
 	private static let transientStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
 	private static let transientErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
-	private static let failingURLKeys = [NSURLErrorFailingURLErrorKey, NSURLErrorFailingURLStringErrorKey, NSURLErrorFailingURLPeerTrustErrorKey]
 
 	let endpoint: S3Endpoint
 	private let signer: S3Signer
@@ -44,26 +42,18 @@ final class S3Client: Sendable {
 	}
 
 	static func foreground(credential: S3Credential) throws -> S3Client {
-		return try S3Client(credential: credential, configuration: hardened(.default), metadataConfiguration: nil)
+		return try S3Client(credential: credential, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
 	}
 
 	/// Creates a client whose downloads and uploads run on a background URL session, which all clients of the account share, and whose other requests run on a foreground URL session.
 	static func background(credential: S3Credential, sharedContainerIdentifier: String?) throws -> S3Client {
-		return try S3Client(credential: credential, configuration: backgroundConfiguration(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: hardened(.default))
+		return try S3Client(credential: credential, configuration: backgroundConfiguration(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
 	}
 
 	static func backgroundConfiguration(credential: S3Credential, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		let configuration = hardened(.background(withIdentifier: "CryptomatorCloudAccess.S3.\(credential.identifier)"))
+		let configuration = HTTPClientSupport.hardened(.background(withIdentifier: "CryptomatorCloudAccess.S3.\(credential.identifier)"))
 		configuration.sharedContainerIdentifier = sharedContainerIdentifier
 		configuration.timeoutIntervalForResource = TimeInterval(presignedURLLifetime)
-		return configuration
-	}
-
-	static func hardened(_ configuration: URLSessionConfiguration) -> URLSessionConfiguration {
-		configuration.httpCookieStorage = HTTPCookieStorage()
-		configuration.urlCredentialStorage = nil
-		// A listing must never be answered from a cached response, e.g., when an upload checks for an existing item.
-		configuration.urlCache = nil
 		return configuration
 	}
 
@@ -135,7 +125,7 @@ final class S3Client: Sendable {
 	func download(key: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let url = signer.presignedURL(method: "GET", url: endpoint.url(forKey: key), headers: [:], expiresIn: S3Client.presignedURLLifetime, date: currentDate())
 		let request = URLRequest(url: url)
-		let outcome = try await session.download(request, route: .transfer, handler: S3Client.downloadHandler(movingTo: stagingURL), bodyLogging: .omitted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.download(request, route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: S3Client.maxErrorBodyLength), bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		do {
 			_ = try S3Client.successfulBody(of: outcome)
 			guard case .file = outcome.body else {
@@ -158,20 +148,6 @@ final class S3Client: Sendable {
 		} catch {
 			S3Client.logFailure(of: request, with: error)
 			throw error
-		}
-	}
-
-	/// Moves the body of a 2xx response to `stagingURL`, and returns a short body of any other response as data, so that its error can be parsed.
-	private static func downloadHandler(movingTo stagingURL: URL) -> SplitURLSession.DownloadHandler {
-		return { location, response in
-			if let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) {
-				try FileManager.default.moveItem(at: location, to: stagingURL)
-				return .file(stagingURL)
-			}
-			guard let length = try? location.resourceValues(forKeys: [.fileSizeKey]).fileSize, length <= maxErrorBodyLength, let body = try? Data(contentsOf: location) else {
-				return .none
-			}
-			return .data(body)
 		}
 	}
 
@@ -209,13 +185,8 @@ final class S3Client: Sendable {
 				throw failure
 			}
 			retryCount += 1
-			try await Task.sleep(for: .seconds(S3Client.retryDelay(forRetry: retryCount)))
+			try await Task.sleep(for: .seconds(HTTPClientSupport.retryDelay(forRetry: retryCount)))
 		}
-	}
-
-	/// Returns a random wait of up to 2^(retry - 1) seconds, as in the legacy retry mode that botocore and the AWS SDK for Swift use by default. The randomness keeps requests that were throttled together from retrying together.
-	static func retryDelay(forRetry retry: Int) -> TimeInterval {
-		return TimeInterval.random(in: 0 ... pow(2, TimeInterval(retry - 1)))
 	}
 
 	private func request(method: String, key: String, query: [URLQueryItem] = [], headers: [String: String] = [:], body: Data? = nil) -> URLRequest {
@@ -252,15 +223,7 @@ final class S3Client: Sendable {
 
 	/// Returns the body of a 2xx response that isn't an `<Error>` document, and throws its error otherwise.
 	static func successfulBody(of outcome: SplitURLSession.Outcome) throws -> Data {
-		if let recordedFailure = outcome.recordedFailure {
-			throw sanitized(recordedFailure)
-		}
-		if let error = outcome.error {
-			throw isCancellationError(error) ? CancellationError() : sanitized(error)
-		}
-		guard let httpResponse = outcome.response as? HTTPURLResponse else {
-			throw URLError(.badServerResponse)
-		}
+		let httpResponse = try HTTPClientSupport.httpResponse(of: outcome)
 		let body = outcome.data ?? Data()
 		guard (200 ... 299).contains(httpResponse.statusCode) else {
 			throw S3Error(statusCode: httpResponse.statusCode, body: body)
@@ -274,26 +237,10 @@ final class S3Client: Sendable {
 		return body
 	}
 
-	/// Returns the error without the URL of its request, which is a credential for a presigned URL. A `URLError` keeps only its code. Any other error keeps its domain, code and the rest of its user info.
-	static func sanitized(_ error: Error) -> Error {
-		if let urlError = error as? URLError {
-			return URLError(urlError.code)
-		}
-		let nsError = error as NSError
-		guard nsError.userInfo.keys.contains(where: { failingURLKeys.contains($0) || $0 == NSUnderlyingErrorKey }) else {
-			return error
-		}
-		var userInfo = nsError.userInfo.filter { !failingURLKeys.contains($0.key) }
-		if let underlyingError = userInfo[NSUnderlyingErrorKey] as? Error {
-			userInfo[NSUnderlyingErrorKey] = sanitized(underlyingError)
-		}
-		return NSError(domain: nsError.domain, code: nsError.code, userInfo: userInfo)
-	}
-
 	private static func isTransient(_ error: Error) -> Bool {
 		switch error {
 		case let urlError as URLError:
-			return transientURLErrorCodes.contains(urlError.code)
+			return HTTPClientSupport.isTransient(urlError)
 		case let s3Error as S3Error:
 			return transientStatusCodes.contains(s3Error.statusCode) || s3Error.code.map(transientErrorCodes.contains) ?? false
 		case S3ResponseError.unparseableResult:

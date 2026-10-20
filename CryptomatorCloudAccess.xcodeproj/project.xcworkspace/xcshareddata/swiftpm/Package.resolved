@@ -92,15 +92,6 @@
       }
     },
     {
-      "identity" : "pcloud-sdk-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pCloud/pcloud-sdk-swift.git",
-      "state" : {
-        "revision" : "cc81e0250a9f378019470c78ce9a8bb501dcaeda",
-        "version" : "3.2.3"
-      }
-    },
-    {
       "identity" : "swift-log",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log",

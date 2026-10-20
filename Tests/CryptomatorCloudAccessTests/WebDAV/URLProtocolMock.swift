@@ -8,6 +8,7 @@
 
 import Foundation
 import os
+import XCTest
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
@@ -54,6 +55,37 @@ class URLProtocolMock: URLProtocol {
 	}
 
 	override func stopLoading() {}
+
+	static func handler(statusCode: Int = 200, body: String = "", headerFields: [String: String]? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+		return { request in
+			onRequest(request)
+			let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headerFields))
+			return (response, Data(body.utf8))
+		}
+	}
+
+	/// The body of a request that a `URLProtocol` receives, which URLSession usually passes as a stream.
+	static func body(of request: URLRequest) -> Data {
+		if let body = request.httpBody {
+			return body
+		}
+		guard let stream = request.httpBodyStream else {
+			return Data()
+		}
+		stream.open()
+		defer {
+			stream.close()
+		}
+		var body = Data()
+		var buffer = [UInt8](repeating: 0, count: 4096)
+		while true {
+			let count = stream.read(&buffer, maxLength: buffer.count)
+			guard count > 0 else {
+				return body
+			}
+			body.append(buffer, count: count)
+		}
+	}
 
 	/// Returns a configuration whose requests this mock answers and that sends the marker in the `X-Session` header, so that a test can tell which session sent a request.
 	static func configuration(marker: String) -> URLSessionConfiguration {

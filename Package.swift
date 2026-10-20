@@ -41,7 +41,6 @@ let package = Package(
 		.package(url: "https://github.com/google/gtm-session-fetcher.git", .upToNextMinor(from: "5.3.1")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.11.1")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "3.0.0")),
-		.package(url: "https://github.com/pCloud/pcloud-sdk-swift.git", .upToNextMinor(from: "3.2.0")),
 		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0-cryptomator.2"),
 		.package(url: "https://github.com/dropbox/SwiftyDropbox.git", .upToNextMinor(from: "10.2.4"))
 	],
@@ -58,7 +57,6 @@ let package = Package(
 				.product(name: "GTMSessionFetcher", package: "gtm-session-fetcher"),
 				.product(name: "JOSESwift", package: "JOSESwift"),
 				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
-				.product(name: "PCloudSDKSwift", package: "pcloud-sdk-swift"),
 				.product(name: "SwiftyDropbox", package: "SwiftyDropbox")
 			],
 			path: "Sources/CryptomatorCloudAccess",

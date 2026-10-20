@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, only the WebDAV provider does, also when a vault provider wraps it. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3 and pCloud providers do, also when a vault provider wraps them. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -278,25 +278,29 @@ let viewController = ... // the presenting `UIViewController`
 do {
   let credential = try await PCloudAuthenticator.authenticate(from: viewController)
   // do something with `PCloudCredential`
-  // you probably want to save `credential.user` to re-create the credential later
+  // you probably want to save `credential.id`, `credential.accessToken`, `credential.apiHostName` and `credential.locationID` to re-create the credential later
 } catch {
   // error handling
 }
 ```
 
-You can then use the credential to create a pCloud provider with a pCloud client:
+Re-create a saved credential:
 
 ```swift
-let client = PCloud.createClient(with: credential.user)
-let provider = try PCloudCloudProvider(client: client)
+let credential = try PCloudCredential(id: id, accessToken: accessToken, apiHostName: apiHostName, locationID: locationID)
 ```
 
-Or create a pCloud provider with a pCloud client using a background URLSession:
+You can then use the credential to create a pCloud provider:
+
+```swift
+let provider = try PCloudCloudProvider(credential: credential)
+```
+
+Or create a pCloud provider whose downloads and uploads run on a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let client = PCloud.createBackgroundClient(with: credential.user, sessionIdentifier: sessionIdentifier)
-let provider = try PCloudCloudProvider(client: client)
+let provider = try PCloudCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
 ### S3

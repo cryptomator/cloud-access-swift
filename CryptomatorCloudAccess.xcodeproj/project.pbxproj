@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1DDCAB9A72B45B0E1AF3E0CB /* PCloudJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1B9F44D5461DA86377DCB4 /* PCloudJSONTests.swift */; };
+		CB9A026A8108D0BEBCF19C30 /* PCloudCredentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2653887634C49E7F728B77E2 /* PCloudCredentialTests.swift */; };
+		4BB648E3C317C06399F0C2D3 /* PCloudClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A40BB44D930DC719B76EAA /* PCloudClientTests.swift */; };
+		E2B496BD99C5AF55CFBFB41A /* PCloudAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E44F82105A71171E34AE68C /* PCloudAuthenticatorTests.swift */; };
+		8155BFE4C275306469C36684 /* HTTPClientSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7472C81AD79F3A3C2E0157A /* HTTPClientSupportTests.swift */; };
+		A8973E1A2268502EA26943EF /* PCloudJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74FEA197838D048C65D46544 /* PCloudJSON.swift */; };
+		5F67C142E521129CAE37B8A4 /* PCloudClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C150458F87C0FE27BB632C64 /* PCloudClient.swift */; };
+		C38912ABE29730CB949178B2 /* HTTPClientSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */; };
 		FEC4BC14AF0B2225D8B0F762 /* S3XMLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B802123FB38CCFB904D1896 /* S3XMLTests.swift */; };
 		9F4B7464D7988D13E9AF90BC /* S3SignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFBF2D54899055AA04B2081 /* S3SignerTests.swift */; };
 		EC9E74C3534B388597634706 /* S3EndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EBC80B60CA644F6C7D60EE /* S3EndpointTests.swift */; };
@@ -107,7 +115,6 @@
 		4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AF0AA7D2844F38400C20B75 /* S3CloudProvider.swift */; };
 		7402B47E27D24D9C00BE9F8B /* PCloudCredentialMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7402B47C27D24C2700BE9F8B /* PCloudCredentialMock.swift */; };
 		7402B48427D2627900BE9F8B /* PCloudIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7402B48327D2627900BE9F8B /* PCloudIdentifierCacheTests.swift */; };
-		74073D1927C9406000A86C9A /* CallTask+Async.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74073D1827C9406000A86C9A /* CallTask+Async.swift */; };
 		740A7FDD24C5DFC9000216E7 /* LocalFileSystemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */; };
 		740C144E249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */; };
 		740C5879262F800A00F63423 /* JOSESwift in Frameworks */ = {isa = PBXBuildFile; productRef = 740C5878262F800A00F63423 /* JOSESwift */; };
@@ -126,7 +133,6 @@
 		746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746AA0DF24BCBCE60051BACC /* WebDAVAuthenticatorTests.swift */; };
 		746AA0E224BDF66A0051BACC /* WebDAVProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746AA0E124BDF66A0051BACC /* WebDAVProviderTests.swift */; };
 		746BE0AB26579D4A00FB674E /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = 746BE0AA26579D4A00FB674E /* MSAL */; };
-		746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 746F090D27BC0932003FCD9F /* PCloudSDKSwift */; };
 		746F091127BC0B98003FCD9F /* PCloudAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746F091027BC0B97003FCD9F /* PCloudAuthenticator.swift */; };
 		746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746F091227BC0DA2003FCD9F /* PCloudCredential.swift */; };
 		746F091527BCF7AA003FCD9F /* PCloudCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 746F091427BCF7AA003FCD9F /* PCloudCloudProvider.swift */; };
@@ -247,6 +253,14 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		1C1B9F44D5461DA86377DCB4 /* PCloudJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudJSONTests.swift; sourceTree = "<group>"; };
+		2653887634C49E7F728B77E2 /* PCloudCredentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudCredentialTests.swift; sourceTree = "<group>"; };
+		A1A40BB44D930DC719B76EAA /* PCloudClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudClientTests.swift; sourceTree = "<group>"; };
+		1E44F82105A71171E34AE68C /* PCloudAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudAuthenticatorTests.swift; sourceTree = "<group>"; };
+		B7472C81AD79F3A3C2E0157A /* HTTPClientSupportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClientSupportTests.swift; sourceTree = "<group>"; };
+		74FEA197838D048C65D46544 /* PCloudJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudJSON.swift; sourceTree = "<group>"; };
+		C150458F87C0FE27BB632C64 /* PCloudClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudClient.swift; sourceTree = "<group>"; };
+		D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClientSupport.swift; sourceTree = "<group>"; };
 		5B802123FB38CCFB904D1896 /* S3XMLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3XMLTests.swift; sourceTree = "<group>"; };
 		AEFBF2D54899055AA04B2081 /* S3SignerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3SignerTests.swift; sourceTree = "<group>"; };
 		A5EBC80B60CA644F6C7D60EE /* S3EndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3EndpointTests.swift; sourceTree = "<group>"; };
@@ -345,7 +359,6 @@
 		556014BB19DB4BF08976E97E /* SDKContinuation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SDKContinuation.swift; sourceTree = "<group>"; };
 		7402B47C27D24C2700BE9F8B /* PCloudCredentialMock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudCredentialMock.swift; sourceTree = "<group>"; };
 		7402B48327D2627900BE9F8B /* PCloudIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PCloudIdentifierCacheTests.swift; sourceTree = "<group>"; };
-		74073D1827C9406000A86C9A /* CallTask+Async.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CallTask+Async.swift"; sourceTree = "<group>"; };
 		740A7FDC24C5DFC9000216E7 /* LocalFileSystemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFileSystemTests.swift; sourceTree = "<group>"; };
 		740C144D249B4F2B008CA3E0 /* VaultFormat7ShorteningProviderDecorator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFormat7ShorteningProviderDecorator.swift; sourceTree = "<group>"; };
 		7416F22224F594B20074DA8E /* TLSCertificate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificate.swift; sourceTree = "<group>"; };
@@ -473,7 +486,6 @@
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
 				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
 				4A75E1CA28806FF000952FE6 /* SwiftyDropbox in Frameworks */,
-				746F090E27BC0932003FCD9F /* PCloudSDKSwift in Frameworks */,
 				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
 				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
 				B3D620D22BFC7B2E007301C1 /* BoxSDK in Frameworks */,
@@ -691,6 +703,7 @@
 				D8A1F0C2E3B44A5D9C6E7F80 /* Date+ISO8601.swift */,
 				4A765CA22878596000794440 /* DirectoryContentCache.swift */,
 				4257D85004FC4A409257C014 /* DownloadOperation.swift */,
+				D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */,
 				CA6257FC8E944BC7AA3947D1 /* Progress+Explicit.swift */,
 				556014BB19DB4BF08976E97E /* SDKContinuation.swift */,
 				B3A1C0E22E9D4F7A00B0C5D1 /* SplitURLSession.swift */,
@@ -716,6 +729,7 @@
 				4A741FF4287C98F300489C23 /* DirectoryContentCacheMock.swift */,
 				45CB69A938F046EDACD40378 /* SDKContinuationTests.swift */,
 				6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */,
+				B7472C81AD79F3A3C2E0157A /* HTTPClientSupportTests.swift */,
 				396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */,
 				93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */,
 				CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */,
@@ -842,6 +856,10 @@
 			isa = PBXGroup;
 			children = (
 				7402B48327D2627900BE9F8B /* PCloudIdentifierCacheTests.swift */,
+				1C1B9F44D5461DA86377DCB4 /* PCloudJSONTests.swift */,
+				2653887634C49E7F728B77E2 /* PCloudCredentialTests.swift */,
+				A1A40BB44D930DC719B76EAA /* PCloudClientTests.swift */,
+				1E44F82105A71171E34AE68C /* PCloudAuthenticatorTests.swift */,
 				E4FC771EB47751E5B943856D /* PCloudCloudProviderTests.swift */,
 			);
 			path = PCloud;
@@ -921,13 +939,14 @@
 		746F090F27BC0B61003FCD9F /* PCloud */ = {
 			isa = PBXGroup;
 			children = (
-				74073D1827C9406000A86C9A /* CallTask+Async.swift */,
 				746F091027BC0B97003FCD9F /* PCloudAuthenticator.swift */,
+				C150458F87C0FE27BB632C64 /* PCloudClient.swift */,
 				746F091427BCF7AA003FCD9F /* PCloudCloudProvider.swift */,
 				746F091227BC0DA2003FCD9F /* PCloudCredential.swift */,
 				746F091A27BD029C003FCD9F /* PCloudError.swift */,
 				746F091827BD0077003FCD9F /* PCloudIdentifierCache.swift */,
 				746F091627BD006D003FCD9F /* PCloudItem.swift */,
+				74FEA197838D048C65D46544 /* PCloudJSON.swift */,
 				749F59A42BD1211500AB299A /* PCloudSetup.swift */,
 			);
 			path = PCloud;
@@ -1150,7 +1169,6 @@
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
 				740C5878262F800A00F63423 /* JOSESwift */,
 				746BE0AA26579D4A00FB674E /* MSAL */,
-				746F090D27BC0932003FCD9F /* PCloudSDKSwift */,
 				4A75E1C928806FF000952FE6 /* SwiftyDropbox */,
 				4A8B872E287D7E77002D676E /* CocoaLumberjackSwift */,
 				B3D620D12BFC7B2E007301C1 /* BoxSDK */,
@@ -1237,7 +1255,6 @@
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
 				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
-				746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */,
 				4A75E1C828806FF000952FE6 /* XCRemoteSwiftPackageReference "SwiftyDropbox" */,
 				4A8B872D287D7E77002D676E /* XCRemoteSwiftPackageReference "CocoaLumberjack" */,
 				B3C72B752BFC798A006F8218 /* XCRemoteSwiftPackageReference "box-ios-sdk" */,
@@ -1383,6 +1400,7 @@
 				4A1A118F262D95E600DAF62F /* MicrosoftGraphItem.swift in Sources */,
 				B3A1C0E52E9D4F7A00B0C5D1 /* MicrosoftGraphAPI.swift in Sources */,
 				746F091527BCF7AA003FCD9F /* PCloudCloudProvider.swift in Sources */,
+				5F67C142E521129CAE37B8A4 /* PCloudClient.swift in Sources */,
 				4A567B712615D946002C4D82 /* DropboxSetup.swift in Sources */,
 				9E969456249B8493000DB743 /* VaultFormat7ShortenedNameCache.swift in Sources */,
 				7471BDAE24865B6F000D05FC /* LocalFileSystemProvider.swift in Sources */,
@@ -1390,13 +1408,13 @@
 				B3FC94A62BA9AA4400D1ECFD /* BoxCloudProvider.swift in Sources */,
 				B3A1C0DF2E9D4F7A00B0C5D1 /* BoxSDKCancellationShield.swift in Sources */,
 				B3A1C0E12E9D4F7A00B0C5D1 /* BoxURLSessionNetworkClient.swift in Sources */,
-				74073D1927C9406000A86C9A /* CallTask+Async.swift in Sources */,
 				4A1A1194262EC46E00DAF62F /* MicrosoftGraphIdentifierCache.swift in Sources */,
 				749D50872D23FD1300427353 /* MicrosoftGraphSite.swift in Sources */,
 				749D50882D23FD1300427353 /* MicrosoftGraphDrive.swift in Sources */,
 				746F091327BC0DA2003FCD9F /* PCloudCredential.swift in Sources */,
 				4A8B8734287D8036002D676E /* CloudAccessDDLog.swift in Sources */,
 				746F091727BD006D003FCD9F /* PCloudItem.swift in Sources */,
+				A8973E1A2268502EA26943EF /* PCloudJSON.swift in Sources */,
 				4A1A11652629A52F00DAF62F /* MicrosoftGraphCloudProvider.swift in Sources */,
 				4AF0AA7E2844F38400C20B75 /* S3CloudProvider.swift in Sources */,
 				5F951A30324595F51E4791B5 /* S3XML.swift in Sources */,
@@ -1421,6 +1439,7 @@
 				F93F0263423442348B37641C /* SDKContinuation.swift in Sources */,
 				C766552960E84D6DB3CC89F3 /* BackgroundURLSessionRegistry.swift in Sources */,
 				B3A1C0E32E9D4F7A00B0C5D1 /* SplitURLSession.swift in Sources */,
+				C38912ABE29730CB949178B2 /* HTTPClientSupport.swift in Sources */,
 				D8A1F0C2E3B44A5D9C6E7F81 /* Date+ISO8601.swift in Sources */,
 				05788765F72F41AFA690C2F3 /* StagingFile.swift in Sources */,
 				746F091927BD0077003FCD9F /* PCloudIdentifierCache.swift in Sources */,
@@ -1467,6 +1486,10 @@
 			files = (
 				74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */,
 				7402B48427D2627900BE9F8B /* PCloudIdentifierCacheTests.swift in Sources */,
+				1DDCAB9A72B45B0E1AF3E0CB /* PCloudJSONTests.swift in Sources */,
+				CB9A026A8108D0BEBCF19C30 /* PCloudCredentialTests.swift in Sources */,
+				4BB648E3C317C06399F0C2D3 /* PCloudClientTests.swift in Sources */,
+				E2B496BD99C5AF55CFBFB41A /* PCloudAuthenticatorTests.swift in Sources */,
 				74E54F6824BCB92E003379FA /* WebDAVClientMock.swift in Sources */,
 				9E969458249B84C5000DB743 /* VaultFormat7ShortenedNameCacheTests.swift in Sources */,
 				7460B782251906F9004AEB56 /* VaultFormat6CryptorMock.swift in Sources */,
@@ -1492,6 +1515,7 @@
 				761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */,
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
 				FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */,
+				8155BFE4C275306469C36684 /* HTTPClientSupportTests.swift in Sources */,
 				10164FF0814246B4BB6353DD /* HTTPDebugLoggerTests.swift in Sources */,
 				58B948C6995149108158C535 /* LogCapture.swift in Sources */,
 				6DAA51063C0D480C9DC87186 /* WebDAVChallengeHandlerTests.swift in Sources */,
@@ -1946,14 +1970,6 @@
 				version = 2.16.0;
 			};
 		};
-		746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pCloud/pcloud-sdk-swift.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 3.2.0;
-			};
-		};
 		74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/cryptomator/cryptolib-swift.git";
@@ -2020,11 +2036,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
 			productName = MSAL;
-		};
-		746F090D27BC0932003FCD9F /* PCloudSDKSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 746F090C27BC0932003FCD9F /* XCRemoteSwiftPackageReference "pcloud-sdk-swift" */;
-			productName = PCloudSDKSwift;
 		};
 		74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */ = {
 			isa = XCSwiftPackageProductDependency;

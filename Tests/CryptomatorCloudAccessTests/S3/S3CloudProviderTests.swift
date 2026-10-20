@@ -99,8 +99,8 @@ class S3CloudProviderTests: XCTestCase {
 		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
 		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			S3MockResponse.handler(statusCode: 200, body: "content", onRequest: { _ in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			URLProtocolMock.handler(body: "content", onRequest: { _ in
 				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 			})
 		]
@@ -127,11 +127,11 @@ class S3CloudProviderTests: XCTestCase {
 		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
 		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
-			S3MockResponse.handler(statusCode: 200, onRequest: { _ in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+			URLProtocolMock.handler(onRequest: { _ in
 				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 			}),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
 				XCTAssertGreaterThan(progress.fractionCompleted, 0.5, "The progress of the upload task isn't part of the upload's progress")
 				XCTAssertLessThan(progress.fractionCompleted, 1, "The progress completed before the upload returned")
 			})
@@ -155,8 +155,8 @@ class S3CloudProviderTests: XCTestCase {
 		let provider: S3CloudProvider = provider
 		let localURL = tmpDirURL.appendingPathComponent("file.txt")
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			S3MockResponse.handler(statusCode: 200, body: "content")
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			URLProtocolMock.handler(body: "content")
 		]
 
 		let download = Task {
@@ -176,8 +176,8 @@ class S3CloudProviderTests: XCTestCase {
 		let provider: S3CloudProvider = provider
 		let localURL = try makeLocalFile()
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
-			S3MockResponse.handler(statusCode: 200)
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+			URLProtocolMock.handler()
 		]
 
 		let upload = Task {
@@ -196,8 +196,8 @@ class S3CloudProviderTests: XCTestCase {
 	func testDownloadFileOfMissingFileThrowsItemNotFound() async throws {
 		let localURL = tmpDirURL.appendingPathComponent("file.txt")
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			S3MockResponse.handler(statusCode: 404)
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+			URLProtocolMock.handler(statusCode: 404)
 		]
 
 		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)) { error in
@@ -213,14 +213,14 @@ class S3CloudProviderTests: XCTestCase {
 		let upload = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
 		let uploadStored = DispatchSemaphore(value: 0)
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []), onRequest: { _ in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: { _ in
 				_ = uploadStored.wait(timeout: .now() + testWaitTimeout)
 			}),
-			S3MockResponse.handler(statusCode: 200, onRequest: { _ in
+			URLProtocolMock.handler(onRequest: { _ in
 				upload.withLock { $0 }?.cancel()
 			}),
-			S3MockResponse.handler(statusCode: 503),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
+			URLProtocolMock.handler(statusCode: 503),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
 		]
 
 		let uploadTask = Task {
@@ -239,7 +239,7 @@ class S3CloudProviderTests: XCTestCase {
 	func testFetchItemListRequestsOnePageOfFolder() async throws {
 		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
 				requests.withLock { $0.append(request) }
 			})
 		]
@@ -261,8 +261,8 @@ class S3CloudProviderTests: XCTestCase {
 			requests.withLock { $0.append(request) }
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
 		]
 
 		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
@@ -280,11 +280,11 @@ class S3CloudProviderTests: XCTestCase {
 		let fetch = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
 		let fetchStored = DispatchSemaphore(value: 0)
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
 				_ = fetchStored.wait(timeout: .now() + testWaitTimeout)
 				fetch.withLock { $0 }?.cancel()
 			}),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"]))
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]))
 		]
 
 		let fetchTask = Task {
@@ -301,8 +301,8 @@ class S3CloudProviderTests: XCTestCase {
 
 	func testFetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: []))
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
 		]
 
 		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/folder"))) { error in
@@ -314,8 +314,8 @@ class S3CloudProviderTests: XCTestCase {
 	func testCreateFolderPutsFolderMarker() async throws {
 		let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: [])),
-			S3MockResponse.handler(statusCode: 200, onRequest: { request in
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+			URLProtocolMock.handler(onRequest: { request in
 				markerRequest.withLock { $0 = request }
 			})
 		]
@@ -332,15 +332,15 @@ class S3CloudProviderTests: XCTestCase {
 	func testDeleteFolderDeletesEveryPage() async throws {
 		let requests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: String)]())
 		let recordRequest: @Sendable (URLRequest) -> Void = { request in
-			let body = String(bytes: S3MockResponse.body(of: request), encoding: .utf8) ?? ""
+			let body = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) ?? ""
 			requests.withLock { $0.append((request, body)) }
 		}
 		URLProtocolMock.requestHandler = [
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
-			S3MockResponse.handler(statusCode: 200, body: "<DeleteResult/>", onRequest: recordRequest),
-			S3MockResponse.handler(statusCode: 200, body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
-			S3MockResponse.handler(statusCode: 200, body: "<DeleteResult/>", onRequest: recordRequest)
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest)
 		]
 
 		try await provider.deleteFolder(at: CloudPath("/folder"))

@@ -8,9 +8,9 @@
 
 import Foundation
 import GRDB
-@preconcurrency import PCloudSDKSwift
 
 struct PCloudItem: Decodable, FetchableRecord, TableRecord, Equatable {
+	static let rootFolderID: UInt64 = 0
 	static let databaseTableName = "CachedEntries"
 	static let cloudPathKey = "cloudPath"
 	static let identifierKey = "identifier"
@@ -22,26 +22,13 @@ struct PCloudItem: Decodable, FetchableRecord, TableRecord, Equatable {
 }
 
 extension PCloudItem {
-	init(cloudPath: CloudPath, content: Content) throws {
-		if let fileMetadata = content.fileMetadata {
-			self.init(cloudPath: cloudPath, metadata: fileMetadata)
-		} else if let folderMetadata = content.folderMetadata {
-			self.init(cloudPath: cloudPath, metadata: folderMetadata)
-		} else {
+	init(cloudPath: CloudPath, metadata: PCloudMetadata) throws {
+		guard let identifier = metadata.identifier else {
 			throw PCloudError.unexpectedContent
 		}
-	}
-
-	init(cloudPath: CloudPath, metadata: File.Metadata) {
 		self.cloudPath = cloudPath
-		self.identifier = metadata.id
-		self.itemType = .file
-	}
-
-	init(cloudPath: CloudPath, metadata: Folder.Metadata) {
-		self.cloudPath = cloudPath
-		self.identifier = metadata.id
-		self.itemType = .folder
+		self.identifier = identifier
+		self.itemType = metadata.isFolder ? .folder : .file
 	}
 }
 

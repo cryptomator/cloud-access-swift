@@ -9,7 +9,6 @@
 @preconcurrency import BoxSdkGen
 import Foundation
 import os
-@preconcurrency import PCloudSDKSwift
 import Testing
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -159,12 +158,6 @@ extension IntegrationTests {
 		}
 
 		@Test
-		func timeoutWrappedByPCloudIsTransient() {
-			let error = CallError<PCloudAPI.ListFolder.Error>.clientError(NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut))
-			#expect(isTransientIntegrationError(error))
-		}
-
-		@Test
 		func tokenEndpointServerErrorOfAppAuthIsTransient() {
 			let httpError = NSError(domain: "org.openid.appauth.remote-http", code: 500, userInfo: [NSLocalizedDescriptionKey: "Internal Server Error"])
 			let error = NSError(domain: "org.openid.appauth.general", code: -6, userInfo: [
@@ -199,8 +192,9 @@ extension IntegrationTests {
 				NSError(domain: "com.google.HTTPStatus", code: 429),
 				S3Error(statusCode: 503, code: "SlowDown"),
 				S3Error(statusCode: 502),
-				CallError<PCloudAPI.ListFolder.Error>.rateLimitError,
-				CallError<PCloudAPI.ListFolder.Error>.serverInternalError(5000, nil)
+				PCloudError.unexpectedHTTPStatusCode(code: 503),
+				PCloudError.apiError(code: 4000, message: nil),
+				PCloudError.apiError(code: 5000, message: nil)
 			]
 			for error in errors {
 				#expect(isTransientIntegrationError(error), "\(error)")
@@ -220,7 +214,8 @@ extension IntegrationTests {
 				URLSessionError.httpError(nil, statusCode: 404),
 				NSError(domain: "com.google.HTTPStatus", code: 404),
 				S3Error(statusCode: 404, code: "NoSuchBucket"),
-				S3Error(statusCode: 400, code: "InvalidArgument")
+				S3Error(statusCode: 400, code: "InvalidArgument"),
+				PCloudError.apiError(code: 2009, message: nil)
 			]
 			for error in errors {
 				#expect(!isTransientIntegrationError(error), "\(error)")

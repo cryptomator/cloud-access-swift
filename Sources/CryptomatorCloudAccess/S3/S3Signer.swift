@@ -15,8 +15,6 @@ struct S3Signer: Sendable {
 	private static let unsignedPayload = "UNSIGNED-PAYLOAD"
 	private static let algorithm = "AWS4-HMAC-SHA256"
 	private static let service = "s3"
-	private static let unreservedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-	private static let unreservedCharactersAndSlash = unreservedCharacters.union(CharacterSet(charactersIn: "/"))
 
 	/// The region names that AWS SDK 2.41.0 accepted for its regions besides their canonical names, e.g., `USEast1` and `AWSRegionUSEast1` for `us-east-1`. Stored credentials may contain them.
 	private static let regionAliases: [String: String] = {
@@ -50,12 +48,6 @@ struct S3Signer: Sendable {
 	/// Maps a region alias that AWS SDK 2.41.0 accepted to its canonical name, so that a stored credential keeps signing with the same region. Any other region is returned unchanged.
 	static func signingRegion(for region: String) -> String {
 		return regionAliases[region] ?? region
-	}
-
-	/// Percent-encodes every byte of the UTF-8 form except the unreserved characters, and except `/` if `encodeSlash` is false. A space becomes `%20`.
-	static func encode(_ string: String, encodeSlash: Bool) -> String {
-		let allowedCharacters = encodeSlash ? unreservedCharacters : unreservedCharactersAndSlash
-		return string.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? string
 	}
 
 	static func sha256Hex(_ data: Data) -> String {
@@ -126,7 +118,7 @@ struct S3Signer: Sendable {
 			let nameAndValue = parameter.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
 			let name = String(nameAndValue[0]).removingPercentEncoding ?? String(nameAndValue[0])
 			let value = nameAndValue.count > 1 ? String(nameAndValue[1]).removingPercentEncoding ?? String(nameAndValue[1]) : ""
-			return (encode(name, encodeSlash: true), encode(value, encodeSlash: true))
+			return (HTTPClientSupport.percentEncoded(name, encodeSlash: true), HTTPClientSupport.percentEncoded(value, encodeSlash: true))
 		}.sorted { $0 < $1 }.map { "\($0.0)=\($0.1)" }.joined(separator: "&")
 	}
 
@@ -157,7 +149,7 @@ private extension URL {
 		guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
 			return self
 		}
-		let query = parameters.map { "\(S3Signer.encode($0.0, encodeSlash: true))=\(S3Signer.encode($0.1, encodeSlash: true))" }.joined(separator: "&")
+		let query = HTTPClientSupport.formEncoded(parameters)
 		components.percentEncodedQuery = [components.percentEncodedQuery, query].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "&")
 		return components.url ?? self
 	}

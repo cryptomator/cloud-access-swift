@@ -7,7 +7,6 @@
 //
 
 import Foundation
-@preconcurrency import PCloudSDKSwift
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
 #else
@@ -21,7 +20,7 @@ private enum SharedCredentials {
 	static let googleDrive = Result { try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest") }
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
 	static let microsoftGraph = MicrosoftGraphCredentialMock()
-	static let pCloudClient = PCloud.createClient(with: PCloudCredentialMock().user)
+	static let pCloud = Result { try PCloudCredential.integrationTest() }
 	static let s3 = IntegrationTestSecrets.s3Credential
 
 	static let webDAVClient = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
@@ -42,7 +41,7 @@ extension IntegrationProvider {
 		case .microsoftGraph:
 			return try MicrosoftGraphCloudProvider(credential: SharedCredentials.microsoftGraph, maxPageSize: maxPageSize)
 		case .pCloud:
-			return try PCloudCloudProvider(client: SharedCredentials.pCloudClient)
+			return try PCloudCloudProvider(credential: SharedCredentials.pCloud.get())
 		case .s3:
 			return try S3CloudProvider(credential: SharedCredentials.s3, maxPageSize: maxPageSize)
 		case .webDAV:
@@ -71,7 +70,7 @@ extension IntegrationProvider {
 			try await credential.deauthenticate()
 			return try MicrosoftGraphCloudProvider(credential: credential)
 		case .pCloud:
-			return try PCloudCloudProvider(client: PCloud.createClient(with: PCloudInvalidCredentialMock().user))
+			return try PCloudCloudProvider(credential: .integrationTestInvalid())
 		case .s3:
 			let credential = SharedCredentials.s3
 			let invalidCredential = S3Credential(accessKey: credential.accessKey, secretKey: credential.secretKey + "Foo", url: credential.url, bucket: credential.bucket, region: credential.region)

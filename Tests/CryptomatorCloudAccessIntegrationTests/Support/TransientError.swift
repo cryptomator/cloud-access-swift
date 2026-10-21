@@ -19,7 +19,7 @@ private let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkCon
 private let transientS3ErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 
 /**
- Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 5xx or 429, a failed OAuth token request with such a status, a Google Drive 403 for an exceeded rate limit, or an eventually consistent provider that didn't catch up in time.
+ Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 408, 429 or 5xx, a failed OAuth token request with such a status, a Google Drive 403 for an exceeded rate limit, or an eventually consistent provider that didn't catch up in time.
 
  Wrapped errors are unwrapped through `NSUnderlyingErrorKey` and through the associated values of Swift errors, because SDKs wrap the errors of their requests. Cancellation is never transient.
  */
@@ -31,7 +31,7 @@ func isTransientIntegrationError(_ error: Error) -> Bool {
 }
 
 private func isTransientHTTPStatusCode(_ statusCode: Int) -> Bool {
-	return statusCode == 429 || (500 ..< 600).contains(statusCode)
+	return statusCode == 408 || statusCode == 429 || (500 ..< 600).contains(statusCode)
 }
 
 private func isTransient(_ error: Error, depth: Int) -> Bool {
@@ -72,7 +72,7 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 	case let MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode), let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
 		return isTransientHTTPStatusCode(statusCode)
 	case let GoogleDriveError.apiError(statusCode, reason, _):
-		return isTransientHTTPStatusCode(statusCode) || (statusCode == 403 && GoogleDriveError.isRetryable(statusCode: statusCode, reason: reason))
+		return isTransientHTTPStatusCode(statusCode) || GoogleDriveError.isRetryable(statusCode: statusCode, reason: reason)
 	case let error as S3Error:
 		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
 	default:

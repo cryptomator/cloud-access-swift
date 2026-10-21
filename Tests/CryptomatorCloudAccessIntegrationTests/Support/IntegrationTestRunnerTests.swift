@@ -175,6 +175,7 @@ extension IntegrationTests {
 				DropboxError.rateLimitError(retryAfter: 1),
 				DropboxError.internalServerError,
 				BoxError.apiError(statusCode: 503, code: nil, message: nil),
+				BoxError.apiError(statusCode: 408, code: nil, message: nil),
 				GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: nil),
 				GoogleDriveError.apiError(statusCode: 429, reason: nil, message: nil),
 				GoogleDriveError.apiError(statusCode: 403, reason: "userRateLimitExceeded", message: nil),

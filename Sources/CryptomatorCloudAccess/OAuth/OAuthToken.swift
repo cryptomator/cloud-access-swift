@@ -17,6 +17,8 @@ public enum OAuthTokenStoreError: Error, Equatable {
 	case unsupportedVersion(Int)
 	/// The token lock directory isn't a file URL.
 	case invalidLockDirectory
+	/// The keychain failed with the status, e.g., `errSecInteractionNotAllowed` before the first unlock. The login is kept.
+	case keychain(status: OSStatus)
 }
 
 struct OAuthToken: Sendable, Equatable {
@@ -24,10 +26,23 @@ struct OAuthToken: Sendable, Equatable {
 	let refreshToken: String?
 	/// When the access token expires, or `nil` if that is unknown, e.g., for a token stored by an SDK.
 	let expiresAt: Date?
+	/// The name of the account, which the app can show without a request.
+	let username: String?
 
-	/// Whether both tokens are the same grant, regardless of the precision of the stored expiry.
+	init(accessToken: String, refreshToken: String?, expiresAt: Date?, username: String? = nil) {
+		self.accessToken = accessToken
+		self.refreshToken = refreshToken
+		self.expiresAt = expiresAt
+		self.username = username
+	}
+
+	/// Whether both tokens are the same grant, regardless of the precision of the stored expiry and of the username.
 	func hasSameTokens(as other: OAuthToken) -> Bool {
 		return accessToken == other.accessToken && refreshToken == other.refreshToken
+	}
+
+	func keepingUsername(of other: OAuthToken) -> OAuthToken {
+		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: other.username)
 	}
 }
 
@@ -45,10 +60,11 @@ enum OAuthTokenEncoding {
 		let refreshToken: String?
 		/// Seconds since 1970.
 		let expiresAt: TimeInterval?
+		let username: String?
 	}
 
 	static func encode(_ token: OAuthToken) throws -> Data {
-		return try JSONEncoder().encode(Envelope(version: currentVersion, accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt?.timeIntervalSince1970))
+		return try JSONEncoder().encode(Envelope(version: currentVersion, accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt?.timeIntervalSince1970, username: token.username))
 	}
 
 	/**
@@ -64,6 +80,6 @@ enum OAuthTokenEncoding {
 			throw OAuthTokenStoreError.unsupportedVersion(version)
 		}
 		let envelope = try JSONDecoder().decode(Envelope.self, from: data)
-		return OAuthToken(accessToken: envelope.accessToken, refreshToken: envelope.refreshToken, expiresAt: envelope.expiresAt.map(Date.init(timeIntervalSince1970:)))
+		return OAuthToken(accessToken: envelope.accessToken, refreshToken: envelope.refreshToken, expiresAt: envelope.expiresAt.map(Date.init(timeIntervalSince1970:)), username: envelope.username)
 	}
 }

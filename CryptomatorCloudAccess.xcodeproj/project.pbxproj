@@ -15,7 +15,7 @@
 		3303393B36AFAD95A07D3F97 /* OAuthTokenStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */; };
 		C3F306A5E841C2BA5A90C12E /* BoxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA01229A2952639CD79FA0C8 /* BoxClient.swift */; };
 		C3B7D61B1237918779389A0F /* BoxJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415E8DF6ED1D17DEE9E15CFD /* BoxJSON.swift */; };
-		556BD667370CAE7F9DF3C7E6 /* BoxTokenSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E87C406F878E332B312E52F /* BoxTokenSource.swift */; };
+		556BD667370CAE7F9DF3C7E6 /* BoxOAuthEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E87C406F878E332B312E52F /* BoxOAuthEndpoint.swift */; };
 		3EB80AFD6411FFAD0CA83FE9 /* CrossProcessFileLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 065CDA17C8B93DEFE1AF364A /* CrossProcessFileLock.swift */; };
 		77168AD1B7D21C89A48BD25C /* ExecutionAssertion.swift in Sources */ = {isa = PBXBuildFile; fileRef = D58BAD1036E3677B1ECEA988 /* ExecutionAssertion.swift */; };
 		358DDE1E84B2BA1AE959FD2C /* OAuthToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = F587B74F053F77051568D3BA /* OAuthToken.swift */; };
@@ -90,19 +90,16 @@
 		4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */; };
 		4A4074A0252F432900D583C3 /* URLProtocolMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A40749F252F432900D583C3 /* URLProtocolMock.swift */; };
 		4A567AED2615C2D7002C4D82 /* DropboxAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567AEC2615C2D7002C4D82 /* DropboxAuthenticator.swift */; };
-		4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */; };
 		4A567B042615C689002C4D82 /* DropboxClientSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B032615C689002C4D82 /* DropboxClientSetup.swift */; };
 		4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B072615C6AF002C4D82 /* DropboxCloudProvider.swift */; };
 		4A567B0C2615C6DA002C4D82 /* DropboxCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0B2615C6DA002C4D82 /* DropboxCredential.swift */; };
 		4A567B102615C6F3002C4D82 /* DropboxError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B0F2615C6F3002C4D82 /* DropboxError.swift */; };
 		B3A1C0ED2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3A1C0EC2E9D4F7A00B0C5D1 /* DropboxKeychainStorage.swift */; };
 		4A567B142615C8B8002C4D82 /* GoogleDriveAuthenticator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */; };
-		4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B192615C917002C4D82 /* GTMAppAuth */; };
 		4A567B222615CA24002C4D82 /* GoogleDriveIdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */; };
 		4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */; };
 		4A567B2E2615CA5C002C4D82 /* GoogleDriveCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */; };
 		4A567B322615CA6E002C4D82 /* GoogleDriveError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */; };
-		4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B362615CAAC002C4D82 /* GTMSessionFetcher */; };
 		4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4A567B3B2615CB00002C4D82 /* AppAuth */; };
 		4A567B402615CD7D002C4D82 /* CloudPath+DatabaseValueConvertible.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B3F2615CD7D002C4D82 /* CloudPath+DatabaseValueConvertible.swift */; };
 		4A567B692615D64E002C4D82 /* GoogleDriveSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */; };
@@ -159,7 +156,6 @@
 		7477BD5C24AE24E6005F2F31 /* TLSCertificateValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */; };
 		7478BA492D82EA0A00BD3250 /* URL+SharePointValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7478BA482D82E9FE00BD3250 /* URL+SharePointValidation.swift */; };
 		747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */; };
-		747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */; };
 		747A7802269882D0005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */; };
 		747B05952D7F0F89000BA015 /* MicrosoftGraphType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */; };
 		748420CB24B8A2A600D84E58 /* empty-folder.xml in Resources */ = {isa = PBXBuildFile; fileRef = 748420C424B8A2A600D84E58 /* empty-folder.xml */; };
@@ -242,6 +238,24 @@
 		8131313EFC45E62181D75C0D /* S3Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5BD182295CCDB1B6D5B29D7 /* S3Tests.swift */; };
 		A5034DDB20F8B1F2CF9ADB64 /* WebDAVTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39C6D0C31A7F33C540CCB249 /* WebDAVTests.swift */; };
 		34D14234D7A14573A0DB058A /* GoogleDriveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671733AB9EF1CB273A5FF350 /* GoogleDriveTests.swift */; };
+		BD52431C4540B5151524A2ED /* OAuthPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41320F25929D974BE16374B1 /* OAuthPersistence.swift */; };
+		66FB26C95607E4104FDC51AD /* KeychainOAuthTokenStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64372081A13A5178616519AA /* KeychainOAuthTokenStorage.swift */; };
+		AAD8CDE4301D3B8347038F33 /* OAuthTokenSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AA2AAAEC4A96E153123A60 /* OAuthTokenSource.swift */; };
+		29C8A87A4AF74ED774C36B1D /* OAuthTokenSourceStub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A3F3B3DE1B11AE4EE9B8D4 /* OAuthTokenSourceStub.swift */; };
+		4C41C9631325A96ECA1C6F29 /* GoogleDriveFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3538F01F1567A7BFD3C9803 /* GoogleDriveFixtures.swift */; };
+		4FDA7FF934A222D4D857D6EE /* GoogleDriveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4878D17BD5EBDD3B64902A9A /* GoogleDriveClient.swift */; };
+		2B1D74C526A138F731ACC465 /* GoogleDriveJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71C1A0433D504632E3EE26D4 /* GoogleDriveJSON.swift */; };
+		F951AB50748971107DE6888C /* GoogleDriveOAuthEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 661B7C506E68F17F47FA3859 /* GoogleDriveOAuthEndpoint.swift */; };
+		100204EB913A386C9DC48D62 /* GoogleDriveAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A67B56D85DDF977B0135595C /* GoogleDriveAuthenticatorTests.swift */; };
+		86B85663D9FD4C138EC1EDC1 /* GoogleDriveClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8DB2BC78769923872C0188 /* GoogleDriveClientTests.swift */; };
+		3EB141AE27BFCF93725C961C /* GoogleDriveCredentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D1472AB4B0A3F33D593AB4 /* GoogleDriveCredentialTests.swift */; };
+		CE5301F245704D22F379A9AD /* GoogleDriveJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78EBEA485A94F0CDE8B61F3A /* GoogleDriveJSONTests.swift */; };
+		59719370D728D1ECE6DDDF8D /* GoogleDriveLegacyTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFBB5CB2169247A0E756085B /* GoogleDriveLegacyTokenTests.swift */; };
+		F5327BD708D09B868EA38D45 /* GoogleDriveOAuthEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6E62028987EA8B31682227C /* GoogleDriveOAuthEndpointTests.swift */; };
+		0019B4E80D01DE6647C3E4C8 /* KeychainOAuthTokenStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6543C7D9174855C299A61BC2 /* KeychainOAuthTokenStorageTests.swift */; };
+		F9A5C6022A4E276B58104EC1 /* OAuthTokenEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4345D45C0585262C62FB1E2 /* OAuthTokenEndpoint.swift */; };
+		8C11F136FEBF1CF5B9BE2406 /* SleepRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D6E80746B3B9E58001C013A /* SleepRecorder.swift */; };
+		B07E9D61F5EC76C3B433301B /* InvalidOAuthTokenSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA74210C216B5F2E68E6134 /* InvalidOAuthTokenSource.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -270,7 +284,7 @@
 		0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthTokenStoreTests.swift; sourceTree = "<group>"; };
 		EA01229A2952639CD79FA0C8 /* BoxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxClient.swift; sourceTree = "<group>"; };
 		415E8DF6ED1D17DEE9E15CFD /* BoxJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxJSON.swift; sourceTree = "<group>"; };
-		1E87C406F878E332B312E52F /* BoxTokenSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxTokenSource.swift; sourceTree = "<group>"; };
+		1E87C406F878E332B312E52F /* BoxOAuthEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxOAuthEndpoint.swift; sourceTree = "<group>"; };
 		065CDA17C8B93DEFE1AF364A /* CrossProcessFileLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossProcessFileLock.swift; sourceTree = "<group>"; };
 		D58BAD1036E3677B1ECEA988 /* ExecutionAssertion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecutionAssertion.swift; sourceTree = "<group>"; };
 		F587B74F053F77051568D3BA /* OAuthToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthToken.swift; sourceTree = "<group>"; };
@@ -410,7 +424,6 @@
 		7477BD5B24AE24E6005F2F31 /* TLSCertificateValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TLSCertificateValidator.swift; sourceTree = "<group>"; };
 		7478BA482D82E9FE00BD3250 /* URL+SharePointValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+SharePointValidation.swift"; sourceTree = "<group>"; };
 		747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveItem.swift; sourceTree = "<group>"; };
-		747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GTLRDrive_File+CloudItemType.swift"; sourceTree = "<group>"; };
 		747A7800269882CA005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphIdentifierCacheTests.swift; sourceTree = "<group>"; };
 		747B05942D7F0F84000BA015 /* MicrosoftGraphType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrosoftGraphType.swift; sourceTree = "<group>"; };
 		748420C424B8A2A600D84E58 /* empty-folder.xml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xml; path = "empty-folder.xml"; sourceTree = "<group>"; };
@@ -491,6 +504,24 @@
 		B5BD182295CCDB1B6D5B29D7 /* S3Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3Tests.swift; sourceTree = "<group>"; };
 		39C6D0C31A7F33C540CCB249 /* WebDAVTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVTests.swift; sourceTree = "<group>"; };
 		671733AB9EF1CB273A5FF350 /* GoogleDriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveTests.swift; sourceTree = "<group>"; };
+		41320F25929D974BE16374B1 /* OAuthPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthPersistence.swift; sourceTree = "<group>"; };
+		64372081A13A5178616519AA /* KeychainOAuthTokenStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainOAuthTokenStorage.swift; sourceTree = "<group>"; };
+		74AA2AAAEC4A96E153123A60 /* OAuthTokenSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthTokenSource.swift; sourceTree = "<group>"; };
+		57A3F3B3DE1B11AE4EE9B8D4 /* OAuthTokenSourceStub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthTokenSourceStub.swift; sourceTree = "<group>"; };
+		F3538F01F1567A7BFD3C9803 /* GoogleDriveFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveFixtures.swift; sourceTree = "<group>"; };
+		4878D17BD5EBDD3B64902A9A /* GoogleDriveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveClient.swift; sourceTree = "<group>"; };
+		71C1A0433D504632E3EE26D4 /* GoogleDriveJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveJSON.swift; sourceTree = "<group>"; };
+		661B7C506E68F17F47FA3859 /* GoogleDriveOAuthEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveOAuthEndpoint.swift; sourceTree = "<group>"; };
+		A67B56D85DDF977B0135595C /* GoogleDriveAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveAuthenticatorTests.swift; sourceTree = "<group>"; };
+		CC8DB2BC78769923872C0188 /* GoogleDriveClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveClientTests.swift; sourceTree = "<group>"; };
+		B6D1472AB4B0A3F33D593AB4 /* GoogleDriveCredentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveCredentialTests.swift; sourceTree = "<group>"; };
+		78EBEA485A94F0CDE8B61F3A /* GoogleDriveJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveJSONTests.swift; sourceTree = "<group>"; };
+		AFBB5CB2169247A0E756085B /* GoogleDriveLegacyTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveLegacyTokenTests.swift; sourceTree = "<group>"; };
+		B6E62028987EA8B31682227C /* GoogleDriveOAuthEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveOAuthEndpointTests.swift; sourceTree = "<group>"; };
+		6543C7D9174855C299A61BC2 /* KeychainOAuthTokenStorageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainOAuthTokenStorageTests.swift; sourceTree = "<group>"; };
+		D4345D45C0585262C62FB1E2 /* OAuthTokenEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthTokenEndpoint.swift; sourceTree = "<group>"; };
+		9D6E80746B3B9E58001C013A /* SleepRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepRecorder.swift; sourceTree = "<group>"; };
+		8BA74210C216B5F2E68E6134 /* InvalidOAuthTokenSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvalidOAuthTokenSource.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -503,10 +534,7 @@
 				74F93562251F6822001F4ADA /* GRDB in Frameworks */,
 				740C5879262F800A00F63423 /* JOSESwift in Frameworks */,
 				4A567B3C2615CB00002C4D82 /* AppAuth in Frameworks */,
-				4A567AFA2615C58F002C4D82 /* GoogleAPIClientForREST_Drive in Frameworks */,
 				4A75E1CA28806FF000952FE6 /* SwiftyDropbox in Frameworks */,
-				4A567B372615CAAC002C4D82 /* GTMSessionFetcher in Frameworks */,
-				4A567B1A2615C917002C4D82 /* GTMAppAuth in Frameworks */,
 				4A8B872F287D7E77002D676E /* CocoaLumberjackSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -535,6 +563,8 @@
 			children = (
 				6EC98BE6B555E67CCDF380B2 /* CrossProcessFileLockTests.swift */,
 				0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */,
+				6543C7D9174855C299A61BC2 /* KeychainOAuthTokenStorageTests.swift */,
+				57A3F3B3DE1B11AE4EE9B8D4 /* OAuthTokenSourceStub.swift */,
 			);
 			path = OAuth;
 			sourceTree = "<group>";
@@ -545,8 +575,12 @@
 				065CDA17C8B93DEFE1AF364A /* CrossProcessFileLock.swift */,
 				D58BAD1036E3677B1ECEA988 /* ExecutionAssertion.swift */,
 				F587B74F053F77051568D3BA /* OAuthToken.swift */,
+				41320F25929D974BE16374B1 /* OAuthPersistence.swift */,
+				64372081A13A5178616519AA /* KeychainOAuthTokenStorage.swift */,
 				48FB142AAF4D12CE77104568 /* OAuthTokenStorage.swift */,
 				E73A266805542DE56AAA2B6C /* OAuthTokenStore.swift */,
+				74AA2AAAEC4A96E153123A60 /* OAuthTokenSource.swift */,
+				D4345D45C0585262C62FB1E2 /* OAuthTokenEndpoint.swift */,
 			);
 			path = OAuth;
 			sourceTree = "<group>";
@@ -701,6 +735,13 @@
 			isa = PBXGroup;
 			children = (
 				4A3A39732615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift */,
+				B6E62028987EA8B31682227C /* GoogleDriveOAuthEndpointTests.swift */,
+				AFBB5CB2169247A0E756085B /* GoogleDriveLegacyTokenTests.swift */,
+				78EBEA485A94F0CDE8B61F3A /* GoogleDriveJSONTests.swift */,
+				B6D1472AB4B0A3F33D593AB4 /* GoogleDriveCredentialTests.swift */,
+				CC8DB2BC78769923872C0188 /* GoogleDriveClientTests.swift */,
+				A67B56D85DDF977B0135595C /* GoogleDriveAuthenticatorTests.swift */,
+				F3538F01F1567A7BFD3C9803 /* GoogleDriveFixtures.swift */,
 				4A3A396D2615F98B00F16B26 /* GoogleDriveIdentifierCacheTests.swift */,
 			);
 			path = GoogleDrive;
@@ -724,13 +765,15 @@
 			isa = PBXGroup;
 			children = (
 				4A567B132615C8B8002C4D82 /* GoogleDriveAuthenticator.swift */,
+				4878D17BD5EBDD3B64902A9A /* GoogleDriveClient.swift */,
 				4A567B252615CA34002C4D82 /* GoogleDriveCloudProvider.swift */,
 				4A567B2D2615CA5C002C4D82 /* GoogleDriveCredential.swift */,
 				4A567B312615CA6E002C4D82 /* GoogleDriveError.swift */,
 				4A567B212615CA24002C4D82 /* GoogleDriveIdentifierCache.swift */,
 				747A77FC269854A6005E5AD4 /* GoogleDriveItem.swift */,
+				71C1A0433D504632E3EE26D4 /* GoogleDriveJSON.swift */,
+				661B7C506E68F17F47FA3859 /* GoogleDriveOAuthEndpoint.swift */,
 				4A567B682615D64E002C4D82 /* GoogleDriveSetup.swift */,
-				747A77FE2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift */,
 			);
 			path = GoogleDrive;
 			sourceTree = "<group>";
@@ -774,6 +817,7 @@
 				45CB69A938F046EDACD40378 /* SDKContinuationTests.swift */,
 				6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */,
 				B7472C81AD79F3A3C2E0157A /* HTTPClientSupportTests.swift */,
+				9D6E80746B3B9E58001C013A /* SleepRecorder.swift */,
 				396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */,
 				93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */,
 				CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */,
@@ -1144,7 +1188,7 @@
 				B3FC94A92BA9AEFC00D1ECFD /* BoxItem.swift */,
 				415E8DF6ED1D17DEE9E15CFD /* BoxJSON.swift */,
 				B3D5138F2BA9A32200DE0D36 /* BoxSetup.swift */,
-				1E87C406F878E332B312E52F /* BoxTokenSource.swift */,
+				1E87C406F878E332B312E52F /* BoxOAuthEndpoint.swift */,
 			);
 			name = Box;
 			path = Sources/CryptomatorCloudAccess/Box;
@@ -1170,6 +1214,7 @@
 				611C3E48BAADCE7C70B7FB21 /* IntegrationTestRunner.swift */,
 				49A2A0DE17144A28AFB9BBB2 /* IntegrationTestRunnerTests.swift */,
 				2AC37E766BA0833A51296AC0 /* TransientError.swift */,
+				8BA74210C216B5F2E68E6134 /* InvalidOAuthTokenSource.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -1207,9 +1252,6 @@
 			packageProductDependencies = (
 				74F9355C251F67A3001F4ADA /* CryptomatorCryptoLib */,
 				74F93561251F6822001F4ADA /* GRDB */,
-				4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */,
-				4A567B192615C917002C4D82 /* GTMAppAuth */,
-				4A567B362615CAAC002C4D82 /* GTMSessionFetcher */,
 				4A567B3B2615CB00002C4D82 /* AppAuth */,
 				740C5878262F800A00F63423 /* JOSESwift */,
 				746BE0AA26579D4A00FB674E /* MSAL */,
@@ -1292,9 +1334,6 @@
 			packageReferences = (
 				74F9355B251F67A3001F4ADA /* XCRemoteSwiftPackageReference "cryptolib-swift" */,
 				74F93560251F6822001F4ADA /* XCRemoteSwiftPackageReference "GRDB.swift" */,
-				4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
-				4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */,
-				4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */,
 				4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */,
 				740C5877262F800A00F63423 /* XCRemoteSwiftPackageReference "JOSESwift" */,
 				746BE0A926579D4A00FB674E /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
@@ -1418,15 +1457,18 @@
 			files = (
 				C3F306A5E841C2BA5A90C12E /* BoxClient.swift in Sources */,
 				C3B7D61B1237918779389A0F /* BoxJSON.swift in Sources */,
-				556BD667370CAE7F9DF3C7E6 /* BoxTokenSource.swift in Sources */,
+				556BD667370CAE7F9DF3C7E6 /* BoxOAuthEndpoint.swift in Sources */,
 				3EB80AFD6411FFAD0CA83FE9 /* CrossProcessFileLock.swift in Sources */,
 				77168AD1B7D21C89A48BD25C /* ExecutionAssertion.swift in Sources */,
 				358DDE1E84B2BA1AE959FD2C /* OAuthToken.swift in Sources */,
+				BD52431C4540B5151524A2ED /* OAuthPersistence.swift in Sources */,
+				66FB26C95607E4104FDC51AD /* KeychainOAuthTokenStorage.swift in Sources */,
 				E0E951CAEDD6E51993806965 /* OAuthTokenStorage.swift in Sources */,
 				FD49809D4598B92ADBA51BF6 /* OAuthTokenStore.swift in Sources */,
+				AAD8CDE4301D3B8347038F33 /* OAuthTokenSource.swift in Sources */,
+				F9A5C6022A4E276B58104EC1 /* OAuthTokenEndpoint.swift in Sources */,
 				748BD4CC24B4D3820001CA8C /* Date+RFC822.swift in Sources */,
 				74C0FB2729B209B6008EF811 /* S3Authenticator.swift in Sources */,
-				747A77FF2698577E005E5AD4 /* GTLRDrive_File+CloudItemType.swift in Sources */,
 				4A1A1183262B078E00DAF62F /* MicrosoftGraphError.swift in Sources */,
 				B3A1C0E72E9D4F7A00B0C5D1 /* MicrosoftGraphHTTPClient.swift in Sources */,
 				B3D513922BA9A32200DE0D36 /* BoxCredential.swift in Sources */,
@@ -1518,6 +1560,8 @@
 				74F4AA1525ED3D2A00FDF2C6 /* VaultConfig.swift in Sources */,
 				4A567B262615CA34002C4D82 /* GoogleDriveCloudProvider.swift in Sources */,
 				747A77FD269854A6005E5AD4 /* GoogleDriveItem.swift in Sources */,
+				2B1D74C526A138F731ACC465 /* GoogleDriveJSON.swift in Sources */,
+				F951AB50748971107DE6888C /* GoogleDriveOAuthEndpoint.swift in Sources */,
 				748A42C024AB424500DEB6D0 /* WebDAVClient.swift in Sources */,
 				B3D513932BA9A32200DE0D36 /* BoxSetup.swift in Sources */,
 				4A567B082615C6AF002C4D82 /* DropboxCloudProvider.swift in Sources */,
@@ -1525,6 +1569,7 @@
 				74C596E824F022AF00FFD17E /* CloudPath.swift in Sources */,
 				4A05900C2451A107008831F9 /* CloudProvider.swift in Sources */,
 				4A567B142615C8B8002C4D82 /* GoogleDriveAuthenticator.swift in Sources */,
+				4FDA7FF934A222D4D857D6EE /* GoogleDriveClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1538,6 +1583,8 @@
 				D31A80BEF959D5D80E2B9ECD /* BoxOAuthEndpointTests.swift in Sources */,
 				EA88707E23CCFDC7EC336C14 /* CrossProcessFileLockTests.swift in Sources */,
 				3303393B36AFAD95A07D3F97 /* OAuthTokenStoreTests.swift in Sources */,
+				0019B4E80D01DE6647C3E4C8 /* KeychainOAuthTokenStorageTests.swift in Sources */,
+				29C8A87A4AF74ED774C36B1D /* OAuthTokenSourceStub.swift in Sources */,
 				74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */,
 				7402B48427D2627900BE9F8B /* PCloudIdentifierCacheTests.swift in Sources */,
 				1DDCAB9A72B45B0E1AF3E0CB /* PCloudJSONTests.swift in Sources */,
@@ -1570,6 +1617,7 @@
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
 				FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */,
 				8155BFE4C275306469C36684 /* HTTPClientSupportTests.swift in Sources */,
+				8C11F136FEBF1CF5B9BE2406 /* SleepRecorder.swift in Sources */,
 				10164FF0814246B4BB6353DD /* HTTPDebugLoggerTests.swift in Sources */,
 				58B948C6995149108158C535 /* LogCapture.swift in Sources */,
 				6DAA51063C0D480C9DC87186 /* WebDAVChallengeHandlerTests.swift in Sources */,
@@ -1601,6 +1649,13 @@
 				4A3A39692615F96900F16B26 /* DropboxExponentialBackOffTests.swift in Sources */,
 				7416F23124F67AD70074DA8E /* CloudProviderMock.swift in Sources */,
 				4A3A39742615F9A600F16B26 /* GoogleDriveCloudProviderTests.swift in Sources */,
+				F5327BD708D09B868EA38D45 /* GoogleDriveOAuthEndpointTests.swift in Sources */,
+				59719370D728D1ECE6DDDF8D /* GoogleDriveLegacyTokenTests.swift in Sources */,
+				CE5301F245704D22F379A9AD /* GoogleDriveJSONTests.swift in Sources */,
+				3EB141AE27BFCF93725C961C /* GoogleDriveCredentialTests.swift in Sources */,
+				86B85663D9FD4C138EC1EDC1 /* GoogleDriveClientTests.swift in Sources */,
+				100204EB913A386C9DC48D62 /* GoogleDriveAuthenticatorTests.swift in Sources */,
+				4C41C9631325A96ECA1C6F29 /* GoogleDriveFixtures.swift in Sources */,
 				7460B76C2518F31B004AEB56 /* VaultFormat6ShortenedNameCacheTests.swift in Sources */,
 				747A7802269882D0005E5AD4 /* MicrosoftGraphIdentifierCacheTests.swift in Sources */,
 				746AA0E024BCBCE60051BACC /* WebDAVAuthenticatorTests.swift in Sources */,
@@ -1624,6 +1679,7 @@
 				4AA95B0A0AEAFDF3390D44DA /* IntegrationTestRunner.swift in Sources */,
 				8BB85DCBF8A1E098B74A2DE5 /* IntegrationTestRunnerTests.swift in Sources */,
 				962890C7A92849886577DF9D /* TransientError.swift in Sources */,
+				B07E9D61F5EC76C3B433301B /* InvalidOAuthTokenSource.swift in Sources */,
 				8131313EFC45E62181D75C0D /* S3Tests.swift in Sources */,
 				A5034DDB20F8B1F2CF9ADB64 /* WebDAVTests.swift in Sources */,
 				34D14234D7A14573A0DB058A /* GoogleDriveTests.swift in Sources */,
@@ -1958,30 +2014,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 5.5.0;
-			};
-		};
-		4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/GTMAppAuth.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 6.0.0;
-			};
-		};
-		4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/google/gtm-session-fetcher.git";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 5.3.1;
-			};
-		};
 		4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/openid/AppAuth-iOS.git";
@@ -2041,21 +2073,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4A567AF92615C58F002C4D82 /* GoogleAPIClientForREST_Drive */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A567AF82615C58F002C4D82 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
-			productName = GoogleAPIClientForREST_Drive;
-		};
-		4A567B192615C917002C4D82 /* GTMAppAuth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A567B182615C917002C4D82 /* XCRemoteSwiftPackageReference "GTMAppAuth" */;
-			productName = GTMAppAuth;
-		};
-		4A567B362615CAAC002C4D82 /* GTMSessionFetcher */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 4A567B352615CAAC002C4D82 /* XCRemoteSwiftPackageReference "gtm-session-fetcher" */;
-			productName = GTMSessionFetcher;
-		};
 		4A567B3B2615CB00002C4D82 /* AppAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4A567B3A2615CB00002C4D82 /* XCRemoteSwiftPackageReference "AppAuth-iOS" */;

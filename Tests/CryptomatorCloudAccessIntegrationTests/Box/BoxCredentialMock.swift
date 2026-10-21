@@ -19,12 +19,12 @@ extension BoxCredential {
 	}
 
 	static func integrationTestInvalid() -> BoxCredential {
-		return BoxCredential(userID: "IntegrationTest-Invalid", tokenSource: BoxInvalidTokenSource())
+		return BoxCredential(userID: "IntegrationTest-Invalid", tokenSource: InvalidOAuthTokenSource())
 	}
 }
 
 /// Gets the tokens of the test enterprise's service account with Box's client credentials grant, so that the tests need no stored login. Concurrent requests for a new token share one token request.
-actor BoxCCGTokenSource: BoxTokenSource {
+actor BoxCCGTokenSource: OAuthTokenSource {
 	private var token: String?
 	private var tokenRequest: Task<String, Error>?
 
@@ -42,6 +42,12 @@ actor BoxCCGTokenSource: BoxTokenSource {
 		token = nil
 		return try await requestToken()
 	}
+
+	nonisolated func storedUsername() throws -> String? {
+		return nil
+	}
+
+	func updateUsername(_ username: String) async throws {}
 
 	func deauthenticate() async throws {
 		token = nil
@@ -63,22 +69,9 @@ actor BoxCCGTokenSource: BoxTokenSource {
 		return token
 	}
 
-	/// - Throws: `BoxError.apiError` for an unsuccessful response, so that a server error counts as transient.
+	/// - Throws: `OAuthTokenEndpointError` for an unsuccessful response, so that a server error counts as transient.
 	private static func fetchToken() async throws -> String {
 		let endpoint = BoxOAuthEndpoint(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret)
 		return try await endpoint.token(for: [("grant_type", "client_credentials"), ("box_subject_type", "enterprise"), ("box_subject_id", IntegrationTestSecrets.boxEnterpriseId)]).accessToken
 	}
-}
-
-/// Always sends an invalid token, so that every request ends in `CloudProviderError.unauthorized`.
-struct BoxInvalidTokenSource: BoxTokenSource {
-	func accessToken() async throws -> String {
-		return "invalid"
-	}
-
-	func refresh(rejecting accessToken: String) async throws -> String {
-		return "invalid"
-	}
-
-	func deauthenticate() async throws {}
 }

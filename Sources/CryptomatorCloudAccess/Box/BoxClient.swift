@@ -19,29 +19,28 @@ import Foundation
  */
 final class BoxClient: Sendable {
 	private static let maxAttemptCount = 5
-	private static let maxRetryDelay: TimeInterval = 60
 	/// The maximum length of a response body that an upload reads, and of an error body that a download reads.
 	private static let maxErrorBodyLength = 1024 * 1024
 	/// The length of the chunks in which a file is copied into a temporary file.
 	static let bufferLength = 64 * 1024
 	private static let listingFields = "name,size,modified_at"
 
-	private let tokenSource: any BoxTokenSource
+	private let tokenSource: any OAuthTokenSource
 	private let session: SplitURLSession
 	private let sleep: @Sendable (Duration) async throws -> Void
 
-	init(tokenSource: any BoxTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+	init(tokenSource: any OAuthTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
 		self.tokenSource = tokenSource
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
 		self.sleep = sleep
 	}
 
-	static func foreground(tokenSource: any BoxTokenSource) -> BoxClient {
+	static func foreground(tokenSource: any OAuthTokenSource) -> BoxClient {
 		return BoxClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
 	}
 
 	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any BoxTokenSource, sessionIdentifier: String) -> BoxClient {
+	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String) -> BoxClient {
 		return BoxClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: BoxSetup.constants?.sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
 	}
 
@@ -64,8 +63,9 @@ final class BoxClient: Sendable {
 		return try await BoxJSON.decode(BoxItems.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/folders/\(BoxClient.pathComponent(id))/items", parameters: parameters))))
 	}
 
+	/// Its response, which carries the account's login email, is never logged.
 	func user() async throws -> BoxUser {
-		return try await BoxJSON.decode(BoxUser.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/users/me"))))
+		return try await BoxJSON.decode(BoxUser.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/users/me")), bodyLogging: .omitted))
 	}
 
 	func createFolder(name: String, parentID: String) async throws -> BoxEntry {
@@ -168,9 +168,9 @@ final class BoxClient: Sendable {
 	// MARK: - Requests
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
-	private func data(_ request: URLRequest) async throws -> Data {
+	private func data(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
 		let (response, outcome) = try await send(request) { request, _ in
-			try await self.session.data(request, bodyLimit: nil, bodyLogging: .logged)
+			try await self.session.data(request, bodyLimit: nil, bodyLogging: bodyLogging)
 		}
 		return try BoxClient.successfulBody(of: response, outcome, for: request)
 	}
@@ -211,22 +211,8 @@ final class BoxClient: Sendable {
 				return (response, outcome)
 			}
 			BoxClient.logFailure(of: request, with: BoxClient.apiError(of: response, outcome))
-			try await sleep(BoxClient.retryDelay(for: response, attempt: attemptCount, now: Date()))
+			try await sleep(HTTPClientSupport.retryDelay(for: response, attempt: attemptCount, now: Date()))
 		}
-	}
-
-	/// Returns the delay of the response's `Retry-After`, in seconds or as an HTTP date, or else a random exponential delay, capped at 60 seconds.
-	static func retryDelay(for response: HTTPURLResponse, attempt: Int, now: Date) -> Duration {
-		let retryAfter = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespaces)
-		let delay: TimeInterval = if let retryAfter, let seconds = TimeInterval(retryAfter), seconds.isFinite, seconds >= 0 {
-			seconds
-		} else if let retryAfter, let date = Date.date(fromRFC822: retryAfter) {
-			max(0, date.timeIntervalSince(now))
-		} else {
-			HTTPClientSupport.retryDelay(forRetry: attempt)
-		}
-		// `Duration.seconds(_:)` traps on an infinite or huge value.
-		return .seconds(min(delay, maxRetryDelay))
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse) -> Bool {
@@ -281,9 +267,8 @@ final class BoxClient: Sendable {
 		return HTTPClientSupport.percentEncoded(identifier, encodeSlash: true)
 	}
 
-	/// Accepts only an HTTPS URL on Box, because the request carries the access token.
 	private static func uploadSessionURL(_ string: String) throws -> URL {
-		guard let url = URL(string: string), url.scheme?.lowercased() == "https", let host = url.host?.lowercased(), host == "box.com" || host.hasSuffix(".box.com") else {
+		guard let url = HTTPClientSupport.httpsURL(string, onDomain: "box.com") else {
 			throw BoxError.unexpectedContent
 		}
 		return url

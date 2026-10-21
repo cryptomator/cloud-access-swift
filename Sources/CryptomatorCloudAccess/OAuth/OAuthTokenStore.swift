@@ -32,7 +32,7 @@ final class OAuthTokenCoordinator: Sendable {
 }
 
 /**
- Keeps the OAuth token of one account in the app's `OAuthTokenStorage` and refreshes it once at a time in this process and, while the process holds an execution assertion, across processes.
+ Keeps the OAuth token of one account in the storage of an `OAuthPersistence` and refreshes it once at a time in this process and, while the process holds an execution assertion, across processes.
 
  A refresh token may be single-use, so two refreshes with the same refresh token would log the user out. Hence, the stores of an account join a running refresh in their process. They refresh only while holding a `CrossProcessFileLock` in the lock directory, after re-reading the stored token. A refresh that finds the stored token already replaced by another process returns that one instead.
 
@@ -52,8 +52,7 @@ final class OAuthTokenStore: Sendable {
 	/// How long before its known expiry an access token is refreshed.
 	private static let refreshMargin: TimeInterval = 5 * 60
 
-	private let provider: String
-	private let account: String
+	private let accountKey: OAuthAccountKey
 	private let storage: any OAuthTokenStorage
 	private let lockDirectory: URL
 	private let legacyDecoder: @Sendable (Data) throws -> OAuthToken
@@ -71,11 +70,10 @@ final class OAuthTokenStore: Sendable {
 	 - Parameter refresher: Sends the refresh grant of the given token once and returns the new token.
 	 - Parameter lockTimeout: Longer than the longest refresh request, so that a waiting process outlasts a healthy refresh in another one.
 	 */
-	init(provider: String, account: String, storage: any OAuthTokenStorage, lockDirectory: URL, legacyDecoder: @escaping @Sendable (Data) throws -> OAuthToken, refresher: @escaping @Sendable (OAuthToken) async throws -> OAuthToken, assertion: ProcessExecutionAssertion = ProcessExecutionAssertion(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(30), lockPollInterval: Duration = .milliseconds(50), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = .shared) {
-		self.provider = provider
-		self.account = account
-		self.storage = storage
-		self.lockDirectory = lockDirectory
+	init(provider: OAuthProvider, account: String, persistence: OAuthPersistence, legacyDecoder: @escaping @Sendable (Data) throws -> OAuthToken, refresher: @escaping @Sendable (OAuthToken) async throws -> OAuthToken, assertion: ProcessExecutionAssertion = ProcessExecutionAssertion(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(30), lockPollInterval: Duration = .milliseconds(50), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = .shared) {
+		self.accountKey = OAuthAccountKey(provider: provider, account: account)
+		self.storage = persistence.storage
+		self.lockDirectory = persistence.tokenLockDirectory
 		self.legacyDecoder = legacyDecoder
 		self.refresher = refresher
 		self.assertion = assertion
@@ -84,7 +82,7 @@ final class OAuthTokenStore: Sendable {
 		self.lockPollInterval = lockPollInterval
 		self.lockEvents = lockEvents
 		self.coordinator = coordinator
-		self.key = "\(lockDirectory.path)|\(provider)|\(account)"
+		self.key = "\(persistence.tokenLockDirectory.path)|\(provider.rawValue)|\(account)"
 	}
 
 	// MARK: - Tokens
@@ -105,7 +103,7 @@ final class OAuthTokenStore: Sendable {
 			guard expiresAt > now() else {
 				throw error
 			}
-			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) refresh before the expiry failed with \(error)")
+			CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) refresh before the expiry failed with \(error)")
 			return token.accessToken
 		}
 	}
@@ -139,6 +137,29 @@ final class OAuthTokenStore: Sendable {
 		}
 	}
 
+	func storedUsername() throws -> String? {
+		return try loadStoredToken()?.username
+	}
+
+	/**
+	 Stores the username with the stored login.
+
+	 The token that this process uses stays as it is, including a rotated token that wasn't saved yet. The next refresh saves that one with the username, because the stored tokens are still those it was rotated from.
+
+	 - Throws: `CloudProviderError.unauthorized` if no login is stored, and `OAuthTokenStoreError` if it couldn't be updated safely now.
+	 */
+	func updateUsername(_ username: String) async throws {
+		try await underLock { slot in
+			guard let storedToken = try self.loadStoredToken() else {
+				throw CloudProviderError.unauthorized
+			}
+			guard storedToken.username != username else {
+				return
+			}
+			try self.save(OAuthToken(accessToken: storedToken.accessToken, refreshToken: storedToken.refreshToken, expiresAt: storedToken.expiresAt, username: username), holding: slot)
+		}
+	}
+
 	/**
 	 Deletes the stored token and then revokes it. The token is deleted also if the revocation fails.
 
@@ -147,7 +168,7 @@ final class OAuthTokenStore: Sendable {
 	 */
 	func delete(revoking revoke: @escaping @Sendable (OAuthToken) async throws -> Void) async throws {
 		let token: OAuthToken? = try await underLock { slot in
-			guard let data = try self.storage.load(forAccount: self.account) else {
+			guard let data = try self.storage.load(self.accountKey) else {
 				self.clearEntry()
 				return nil
 			}
@@ -179,7 +200,7 @@ final class OAuthTokenStore: Sendable {
 		} catch OAuthTokenStoreError.lockTimeout {
 			return try tokenAfterLockTimeout(rejecting: rejectedAccessToken)
 		} catch {
-			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) refresh failed with \(error)")
+			CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) refresh failed with \(error)")
 			throw error
 		}
 		switch outcome {
@@ -194,8 +215,9 @@ final class OAuthTokenStore: Sendable {
 		var storedToken = try loadStoredToken()
 		if let unsaved = withEntry({ $0.unsaved }) {
 			if let token = storedToken, token.hasSameTokens(as: unsaved.source) {
-				try save(unsaved.token, holding: slot)
-				storedToken = unsaved.token
+				let unsavedToken = unsaved.token.keepingUsername(of: token)
+				try save(unsavedToken, holding: slot)
+				storedToken = unsavedToken
 			}
 			// Otherwise, the unsaved token was saved already, or the stored token was replaced or deleted since.
 			withEntry { $0.unsaved = nil }
@@ -205,7 +227,7 @@ final class OAuthTokenStore: Sendable {
 			throw CloudProviderError.unauthorized
 		}
 		if storedToken.accessToken != rejectedAccessToken, !isDue(storedToken) {
-			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) token was refreshed elsewhere")
+			CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) token was refreshed elsewhere")
 			publish(storedToken)
 			return .token(storedToken)
 		}
@@ -216,12 +238,12 @@ final class OAuthTokenStore: Sendable {
 			throw OAuthTokenStoreError.executionTimeUnavailable
 		}
 		// No retry, because a refresh token may already be used up after a failed request.
-		let refreshedToken = try await refresher(storedToken)
+		let refreshedToken = try await refresher(storedToken).keepingUsername(of: storedToken)
 		guard slot.isHeld else {
 			return .lateResponse(refreshedToken, rotatedFrom: storedToken)
 		}
 		saveRotatedToken(refreshedToken, rotatedFrom: storedToken, slot: slot)
-		CloudAccessDDLogDebug("OAuthTokenStore: \(provider) token was refreshed")
+		CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) token was refreshed")
 		return .token(refreshedToken)
 	}
 
@@ -237,13 +259,15 @@ final class OAuthTokenStore: Sendable {
 					self.publish(storedToken)
 					return storedToken
 				}
-				self.saveRotatedToken(refreshedToken, rotatedFrom: source, slot: slot)
-				return refreshedToken
+				// The username may have been stored meanwhile.
+				let token = refreshedToken.keepingUsername(of: storedToken)
+				self.saveRotatedToken(token, rotatedFrom: source, slot: slot)
+				return token
 			}
 		} catch CloudProviderError.unauthorized {
 			throw CloudProviderError.unauthorized
 		} catch {
-			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) saving the late refresh response failed with \(error)")
+			CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) saving the late refresh response failed with \(error)")
 			keepUnsaved(refreshedToken, rotatedFrom: source)
 			return refreshedToken
 		}
@@ -264,7 +288,7 @@ final class OAuthTokenStore: Sendable {
 			try save(token, holding: slot)
 			publish(token)
 		} catch {
-			CloudAccessDDLogDebug("OAuthTokenStore: \(provider) saving the refreshed token failed with \(error)")
+			CloudAccessDDLogDebug("OAuthTokenStore: \(accountKey.provider.rawValue) saving the refreshed token failed with \(error)")
 			keepUnsaved(token, rotatedFrom: source)
 		}
 	}
@@ -274,7 +298,7 @@ final class OAuthTokenStore: Sendable {
 	/// Runs the body while holding the lock and an execution assertion, whose expiry releases the lock.
 	private func underLock<T: Sendable>(_ body: @escaping @Sendable (_ slot: LockHolderSlot) async throws -> T) async throws -> T {
 		let slot = LockHolderSlot()
-		return try await assertion.perform(reason: "Updating the \(provider) login", operation: {
+		return try await assertion.perform(reason: "Updating the \(accountKey.provider.rawValue) login", operation: {
 			let holder = try await self.makeLock().acquire(timeout: self.lockTimeout, pollInterval: self.lockPollInterval)
 			guard slot.install(holder) else {
 				holder.release()
@@ -290,8 +314,8 @@ final class OAuthTokenStore: Sendable {
 	}
 
 	func makeLock() -> CrossProcessFileLock {
-		let accountHash = SHA256.hash(data: Data(account.utf8)).map { String(format: "%02x", $0) }.joined()
-		return CrossProcessFileLock(directory: lockDirectory, name: "\(provider)-\(accountHash)", events: lockEvents)
+		let accountHash = SHA256.hash(data: Data(accountKey.account.utf8)).map { String(format: "%02x", $0) }.joined()
+		return CrossProcessFileLock(directory: lockDirectory, name: "\(accountKey.provider.rawValue)-\(accountHash)", events: lockEvents)
 	}
 
 	// MARK: - Storage
@@ -313,7 +337,7 @@ final class OAuthTokenStore: Sendable {
 	}
 
 	private func loadStoredToken() throws -> OAuthToken? {
-		guard let data = try storage.load(forAccount: account) else {
+		guard let data = try storage.load(accountKey) else {
 			return nil
 		}
 		return try OAuthTokenEncoding.decode(data, legacyDecoder: legacyDecoder)
@@ -322,13 +346,13 @@ final class OAuthTokenStore: Sendable {
 	private func save(_ token: OAuthToken, holding slot: LockHolderSlot) throws {
 		let data = try OAuthTokenEncoding.encode(token)
 		try slot.write {
-			try storage.save(data, forAccount: account)
+			try storage.save(data, for: accountKey)
 		}
 	}
 
 	private func deleteStoredToken(holding slot: LockHolderSlot) throws {
 		try slot.write {
-			try storage.delete(forAccount: account)
+			try storage.delete(accountKey)
 		}
 	}
 

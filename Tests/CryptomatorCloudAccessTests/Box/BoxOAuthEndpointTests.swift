@@ -49,8 +49,8 @@ class BoxOAuthEndpointTests: XCTestCase {
 	/// Only a rejected grant means that the user must log in again, so only it maps to `CloudProviderError.unauthorized`.
 	func testOtherFailuresAreNotUnauthorized() async throws {
 		let cases = [
-			TokenErrorCase(name: "invalid client", response: URLProtocolMock.handler(statusCode: 400, body: #"{"error":"invalid_client","error_description":"The client credentials are invalid"}"#), expectedError: BoxError.apiError(statusCode: 400, code: "invalid_client", message: "The client credentials are invalid")),
-			TokenErrorCase(name: "server error", response: URLProtocolMock.handler(statusCode: 503, body: #"{"error":"temporarily_unavailable"}"#), expectedError: BoxError.apiError(statusCode: 503, code: "temporarily_unavailable", message: nil)),
+			TokenErrorCase(name: "invalid client", response: URLProtocolMock.handler(statusCode: 400, body: #"{"error":"invalid_client","error_description":"The client credentials are invalid"}"#), expectedError: OAuthTokenEndpointError.unsuccessfulResponse(statusCode: 400, error: "invalid_client", errorDescription: "The client credentials are invalid")),
+			TokenErrorCase(name: "server error", response: URLProtocolMock.handler(statusCode: 503, body: #"{"error":"temporarily_unavailable"}"#), expectedError: OAuthTokenEndpointError.unsuccessfulResponse(statusCode: 503, error: "temporarily_unavailable", errorDescription: nil)),
 			TokenErrorCase(name: "offline", response: { _ in throw URLError(.notConnectedToInternet) }, expectedError: CloudProviderError.noInternetConnection)
 		]
 		for testCase in cases {

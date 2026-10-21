@@ -97,31 +97,9 @@ struct BoxUser: Decodable, Sendable {
 	let name: String?
 }
 
-struct BoxTokenResponse: Decodable, Sendable {
-	let accessToken: String
-	let refreshToken: String?
-	let expiresIn: Int64?
-
-	private enum CodingKeys: String, CodingKey {
-		case accessToken = "access_token"
-		case refreshToken = "refresh_token"
-		case expiresIn = "expires_in"
-	}
-}
-
-/// The error body of the API, with `code` and `message`, or of the token endpoint, with `error` and `error_description`.
 struct BoxErrorResponse: Decodable, Sendable {
 	let code: String?
 	let message: String?
-	let error: String?
-	let errorDescription: String?
-
-	private enum CodingKeys: String, CodingKey {
-		case code
-		case message
-		case error
-		case errorDescription = "error_description"
-	}
 }
 
 struct BoxParentReference: Encodable, Sendable {

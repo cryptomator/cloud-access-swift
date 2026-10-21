@@ -46,17 +46,23 @@ To get the access token for Dropbox, generate a token in the Dropbox Developer P
 
 #### Google Drive
 
-To get the refresh token for Google Drive, extract it from the keychain after a successful login. The auth session is stored by GTMAppAuth with the item name `GoogleDriveAuth` + user ID. The following method can be used to extract the refresh token:
+To get the refresh token for Google Drive, sign in once with `GOOGLE_DRIVE_CLIENT_ID` in a debug build of the iOS app that prints what the library saves. For that, its `GoogleDriveSetup` gets `OAuthPersistence.custom(storage:tokenLockDirectory:)` with the following storage. The saved data is JSON, and its `refreshToken` is the token:
 
 ```swift
-import AppAuthCore
-import GTMAppAuth
+import CryptomatorCloudAccessCore
+import Foundation
 
-func extractGoogleDriveRefreshToken(userID: String) {
-  let store = KeychainStore(itemName: "GoogleDriveAuth" + userID)
-  if let authSession = try? store.retrieveAuthSession() {
-    print("GOOGLE_DRIVE_REFRESH_TOKEN=\(authSession.authState.refreshToken ?? "nil")")
+final class PrintingTokenStorage: OAuthTokenStorage {
+  func load(_ key: OAuthAccountKey) throws -> Data? {
+    return nil
   }
+
+  func save(_ data: Data, for key: OAuthAccountKey) throws {
+    let token = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    print("GOOGLE_DRIVE_REFRESH_TOKEN=\(token?["refreshToken"] ?? "nil")")
+  }
+
+  func delete(_ key: OAuthAccountKey) throws {}
 }
 ```
 

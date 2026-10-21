@@ -7,7 +7,6 @@
 //
 
 import Foundation
-@preconcurrency import GoogleAPIClientForREST_Drive
 import GRDB
 
 struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {
@@ -24,15 +23,19 @@ struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {
 }
 
 extension GoogleDriveItem {
-	init(cloudPath: CloudPath, file: GTLRDrive_File) throws {
+	var resolvedIdentifier: String {
+		return shortcut?.targetIdentifier ?? identifier
+	}
+
+	init(cloudPath: CloudPath, file: GoogleDriveFile) throws {
 		self.cloudPath = cloudPath
-		guard let identifier = file.identifier else {
+		guard let identifier = file.id else {
 			throw GoogleDriveError.identifierNotFound
 		}
 		self.identifier = identifier
-		self.itemType = file.getCloudItemType()
-		if let shortcutDetailsTargetId = file.shortcutDetails?.targetId, let shortcutDetailsTargetMimeType = file.shortcutDetails?.targetMimeType {
-			self.shortcut = GoogleDriveShortcut(targetIdentifier: shortcutDetailsTargetId, targetItemType: shortcutDetailsTargetMimeType.convertGoogleDriveMimeTypeToCloudItemType())
+		self.itemType = file.cloudItemType
+		if let targetIdentifier = file.shortcutDetails?.targetId, let targetMimeType = file.shortcutDetails?.targetMimeType {
+			self.shortcut = GoogleDriveShortcut(targetIdentifier: targetIdentifier, targetItemType: GoogleDriveJSON.cloudItemType(ofMimeType: targetMimeType))
 		} else {
 			self.shortcut = nil
 		}

@@ -8,18 +8,41 @@
 
 import Foundation
 
+/// A provider whose OAuth logins the library keeps.
+public struct OAuthProvider: RawRepresentable, Hashable, Sendable {
+	public static let box = OAuthProvider(rawValue: "box")
+	public static let googleDrive = OAuthProvider(rawValue: "googledrive")
+
+	public let rawValue: String
+
+	public init(rawValue: String) {
+		self.rawValue = rawValue
+	}
+}
+
+/// Identifies the login of one account at a provider.
+public struct OAuthAccountKey: Hashable, Sendable {
+	public let provider: OAuthProvider
+	public let account: String
+
+	public init(provider: OAuthProvider, account: String) {
+		self.provider = provider
+		self.account = account
+	}
+}
+
 /**
- The app's persistent storage of the OAuth tokens of a provider, e.g., one keychain service with one item per account.
+ Persistent storage of OAuth tokens, e.g., one keychain item per account. Pass it to `OAuthPersistence.custom(storage:tokenLockDirectory:)` to keep the tokens elsewhere than in the library's keychain storage.
 
  The library decides what the stored bytes contain. The storage keeps them as they are and must hold to this contract:
- - `load(forAccount:)` returns `nil` only if no item exists for the account, and throws for any other failure, e.g., a keychain that is locked.
- - Nothing is cached: every `load(forAccount:)` reads the persisted bytes, because other processes write them, too.
- - `save(_:forAccount:)` returns after the write completed. It replaces an existing item in place.
- - `save(_:forAccount:)` and `delete(forAccount:)` return promptly, e.g., without waiting for user interaction. When the process's background time runs out, the library releases the lock only once a running write returns, and iOS may terminate a process that still holds it.
- - One storage object is one persistence namespace. Every process and every instance that uses the same items must pass the same token lock directory, e.g., to `BoxSetup`. The lock in it serializes token refreshes across processes.
+ - `load(_:)` returns `nil` only if no item exists for the key, and throws for any other failure, e.g., a keychain that is locked.
+ - Nothing is cached: every `load(_:)` reads the persisted bytes, because other processes write them, too.
+ - `save(_:for:)` returns after the write completed. It replaces an existing item in place.
+ - `save(_:for:)` and `delete(_:)` return promptly, e.g., without waiting for user interaction. When the process's background time runs out, the library releases the lock only once a running write returns, and iOS may terminate a process that still holds it.
+ - One storage object is one persistence namespace. Every process and every instance that uses the same items must pass the same token lock directory. The lock in it serializes token refreshes across processes.
  */
 public protocol OAuthTokenStorage: Sendable {
-	func load(forAccount account: String) throws -> Data?
-	func save(_ data: Data, forAccount account: String) throws
-	func delete(forAccount account: String) throws
+	func load(_ key: OAuthAccountKey) throws -> Data?
+	func save(_ data: Data, for key: OAuthAccountKey) throws
+	func delete(_ key: OAuthAccountKey) throws
 }

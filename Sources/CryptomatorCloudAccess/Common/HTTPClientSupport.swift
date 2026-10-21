@@ -13,6 +13,7 @@ enum HTTPClientSupport {
 	private static let failingURLKeys = [NSURLErrorFailingURLErrorKey, NSURLErrorFailingURLStringErrorKey, NSURLErrorFailingURLPeerTrustErrorKey]
 	private static let unreservedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 	private static let unreservedCharactersAndSlash = unreservedCharacters.union(CharacterSet(charactersIn: "/"))
+	private static let maxRetryDelay: TimeInterval = 60
 
 	static func hardened(_ configuration: URLSessionConfiguration) -> URLSessionConfiguration {
 		configuration.httpCookieStorage = HTTPCookieStorage()
@@ -29,9 +30,31 @@ enum HTTPClientSupport {
 		return configuration
 	}
 
+	/// Returns a hardened configuration for the requests of an OAuth token endpoint, whose timeouts bound how long a refresh holds the token lock.
+	static func tokenEndpointConfiguration() -> URLSessionConfiguration {
+		let configuration = hardened(.default)
+		configuration.timeoutIntervalForRequest = 15
+		configuration.timeoutIntervalForResource = 20
+		return configuration
+	}
+
 	/// Returns a random wait of up to 2^(retry - 1) seconds, as in the legacy retry mode that botocore and the AWS SDK for Swift use by default. The randomness keeps requests that were throttled together from retrying together.
 	static func retryDelay(forRetry retry: Int) -> TimeInterval {
 		return TimeInterval.random(in: 0 ... pow(2, TimeInterval(retry - 1)))
+	}
+
+	/// Returns the delay of the response's `Retry-After`, in seconds or as an HTTP date, or else `retryDelay(forRetry:)` of the attempt, capped at 60 seconds.
+	static func retryDelay(for response: HTTPURLResponse, attempt: Int, now: Date) -> Duration {
+		let retryAfter = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespaces)
+		let delay: TimeInterval = if let retryAfter, let seconds = TimeInterval(retryAfter), seconds.isFinite, seconds >= 0 {
+			seconds
+		} else if let retryAfter, let date = Date.date(fromRFC822: retryAfter) {
+			max(0, date.timeIntervalSince(now))
+		} else {
+			retryDelay(forRetry: attempt)
+		}
+		// `Duration.seconds(_:)` traps on an infinite or huge value.
+		return .seconds(min(delay, maxRetryDelay))
 	}
 
 	/// Whether the connection couldn't be made, dropped or timed out, including DNS and TLS failures.
@@ -48,6 +71,14 @@ enum HTTPClientSupport {
 	/// Joins the parameters as `name=value` pairs separated by `&`, with every name and value percent-encoded, so that `+`, `&` and `=` are escaped.
 	static func formEncoded(_ parameters: [(String, String)]) -> String {
 		return parameters.map { "\(percentEncoded($0.0, encodeSlash: true))=\(percentEncoded($0.1, encodeSlash: true))" }.joined(separator: "&")
+	}
+
+	/// Returns the URL of a response if it is an HTTPS URL on the domain or one of its subdomains, because the requests to it carry the access token.
+	static func httpsURL(_ string: String?, onDomain domain: String) -> URL? {
+		guard let string, let url = URL(string: string), url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: true)?.lowercased(), host == domain || host.hasSuffix(".\(domain)") else {
+			return nil
+		}
+		return url
 	}
 
 	/// Moves the body of a 2xx response to `stagingURL`, and returns a short body of any other response as data, so that its error can be parsed.

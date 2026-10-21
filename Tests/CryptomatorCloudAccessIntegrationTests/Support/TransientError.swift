@@ -15,9 +15,6 @@ import Foundation
 
 private let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet]
 
-/// The error domains whose error codes are HTTP status codes: GTLR, GTMSessionFetcher and AppAuth's `OIDHTTPErrorDomain`.
-private let httpStatusErrorDomains: Set<String> = ["com.google.GTLRErrorObjectDomain", "com.google.HTTPStatus", "org.openid.appauth.remote-http"]
-
 /// The S3 error codes of server errors, throttling and request timeouts.
 private let transientS3ErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 
@@ -76,7 +73,7 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return isTransientHTTPStatusCode(statusCode) || underlyingError.map(isTransientIntegrationError) ?? false
 	case DropboxError.tooManyWriteOperations, DropboxError.rateLimitError, DropboxError.internalServerError, DropboxError.clientError:
 		return true
-	case let BoxError.apiError(statusCode, _, _):
+	case let BoxError.apiError(statusCode, _, _), let GoogleDriveError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
 		return isTransientHTTPStatusCode(statusCode)
 	case let error as S3Error:
 		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
@@ -98,24 +95,5 @@ private func isTransientPCloudError(_ error: PCloudError) -> Bool {
 }
 
 private func isTransientNSError(_ error: NSError) -> Bool {
-	if error.domain == NSURLErrorDomain {
-		return transientURLErrorCodes.contains(URLError.Code(rawValue: error.code))
-	}
-	if httpStatusErrorDomains.contains(error.domain) {
-		return isTransientHTTPStatusCode(error.code)
-	}
-	return isAppAuthServerErrorWithTransientStatus(error)
-}
-
-/// AppAuth reports a failed token request as `OIDErrorCodeServerError` whose description carries the HTTP status, e.g. "Non-200 HTTP response (500) making token request to '…'".
-private func isAppAuthServerErrorWithTransientStatus(_ error: NSError) -> Bool {
-	let serverErrorCode = -6
-	guard error.domain == "org.openid.appauth.general", error.code == serverErrorCode else {
-		return false
-	}
-	let description = error.userInfo[NSLocalizedDescriptionKey] as? String ?? ""
-	guard let match = description.firstMatch(of: /HTTP response \((\d{3})\)/), let statusCode = Int(match.1) else {
-		return false
-	}
-	return isTransientHTTPStatusCode(statusCode)
+	return error.domain == NSURLErrorDomain && transientURLErrorCodes.contains(URLError.Code(rawValue: error.code))
 }

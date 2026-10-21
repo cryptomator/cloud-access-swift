@@ -15,13 +15,13 @@ import XCTest
 #endif
 
 class BoxClientTests: XCTestCase {
-	private var tokenSource: BoxTokenSourceStub!
+	private var tokenSource: OAuthTokenSourceStub!
 	private var sleeps: SleepRecorder!
 	private var client: BoxClient!
 	private var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		tokenSource = BoxTokenSourceStub()
+		tokenSource = OAuthTokenSourceStub()
 		sleeps = SleepRecorder()
 		client = BoxClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -31,29 +31,6 @@ class BoxClientTests: XCTestCase {
 	override func tearDownWithError() throws {
 		URLProtocolMock.requestHandler = []
 		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	// MARK: - Retry Delay
-
-	func testRetryDelay() throws {
-		let now = try XCTUnwrap(Date.date(fromRFC822: "Tue, 20 Oct 2026 10:00:00 GMT"))
-		let exactCases: [(String, Double)] = [
-			("7", 7),
-			(" 7 ", 7),
-			("Tue, 20 Oct 2026 10:00:30 GMT", 30),
-			("Tue, 20 Oct 2026 09:00:00 GMT", 0),
-			("3600", 60),
-			("1e30", 60)
-		]
-		for (retryAfter, expectedSeconds) in exactCases {
-			let httpResponse = try response(retryAfter: retryAfter)
-			XCTAssertEqual(.seconds(expectedSeconds), BoxClient.retryDelay(for: httpResponse, attempt: 3, now: now), retryAfter)
-		}
-		for retryAfter in ["abc", "inf", "nan", nil] {
-			let httpResponse = try response(retryAfter: retryAfter)
-			let delay = BoxClient.retryDelay(for: httpResponse, attempt: 3, now: now)
-			XCTAssertTrue((Duration.zero ... .seconds(4)).contains(delay), "\(retryAfter ?? "nil"): \(delay)")
-		}
 	}
 
 	// MARK: - Retries
@@ -126,7 +103,7 @@ class BoxClientTests: XCTestCase {
 
 	func testCancelledTaskGetsNoToken() async throws {
 		let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
-		let client = BoxClient.mocked(tokenSource: BoxTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
+		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: Task {
@@ -140,7 +117,7 @@ class BoxClientTests: XCTestCase {
 	}
 
 	func testCancellationWhileGettingTokenStopsFirstAttempt() async throws {
-		let client = BoxClient.mocked(tokenSource: BoxTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
+		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: Task { try await client.user() })) { error in
@@ -150,7 +127,7 @@ class BoxClientTests: XCTestCase {
 	}
 
 	func testCancellationDuringRefreshStopsRetry() async throws {
-		let client = BoxClient.mocked(tokenSource: BoxTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
+		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: Task { try await client.user() })) { error in
@@ -191,6 +168,21 @@ class BoxClientTests: XCTestCase {
 
 	// MARK: - Logging
 
+	func testUserIsRequestedWithoutLoggingIt() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#)]
+
+		let user = try await client.user()
+
+		XCTAssertEqual("User", user.name)
+		let log = logCapture.joinedMessages
+		XCTAssertTrue(log.contains("https://api.box.com"), log)
+		XCTAssertFalse(log.contains("secret@example.com"), log)
+	}
+
 	func testDownloadLogsOnlyOriginsOfURLs() async throws {
 		let logCapture = LogCapture.start()
 		defer {
@@ -212,61 +204,10 @@ class BoxClientTests: XCTestCase {
 			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")
 		}
 	}
-
-	// MARK: - Helpers
-
-	private func response(retryAfter: String?) throws -> HTTPURLResponse {
-		return try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(URL(string: "https://api.box.com/2.0/users/me")), statusCode: 503, httpVersion: "HTTP/1.1", headerFields: retryAfter.map { ["Retry-After": $0] }))
-	}
-}
-
-/// Hands out `TOKEN` until a refresh rejects it, and `REFRESHED` afterwards.
-final class BoxTokenSourceStub: BoxTokenSource {
-	private let state = OSAllocatedUnfairLock(initialState: (token: "TOKEN", rejectedTokens: [String]()))
-	private let onAccessToken: @Sendable () async -> Void
-	private let onRefresh: @Sendable () async -> Void
-
-	init(onAccessToken: @escaping @Sendable () async -> Void = {}, onRefresh: @escaping @Sendable () async -> Void = {}) {
-		self.onAccessToken = onAccessToken
-		self.onRefresh = onRefresh
-	}
-
-	var rejectedTokens: [String] {
-		return state.withLock { $0.rejectedTokens }
-	}
-
-	func accessToken() async throws -> String {
-		await onAccessToken()
-		return state.withLock { $0.token }
-	}
-
-	func refresh(rejecting accessToken: String) async throws -> String {
-		state.withLock { $0.rejectedTokens.append(accessToken) }
-		await onRefresh()
-		return state.withLock { state in
-			state.token = "REFRESHED"
-			return state.token
-		}
-	}
-
-	func deauthenticate() async throws {}
-}
-
-/// Records the waits before retries instead of waiting.
-final class SleepRecorder: Sendable {
-	private let recordedDurations = OSAllocatedUnfairLock(initialState: [Duration]())
-
-	var durations: [Duration] {
-		return recordedDurations.withLock { $0 }
-	}
-
-	func sleep(for duration: Duration) {
-		recordedDurations.withLock { $0.append(duration) }
-	}
 }
 
 extension BoxClient {
-	static func mocked(tokenSource: any BoxTokenSource = BoxTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> BoxClient {
+	static func mocked(tokenSource: any OAuthTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> BoxClient {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
 		return BoxClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })

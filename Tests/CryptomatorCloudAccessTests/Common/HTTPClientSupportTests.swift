@@ -21,6 +21,27 @@ class HTTPClientSupportTests: XCTestCase {
 		}
 	}
 
+	func testRetryDelayOfResponse() throws {
+		let now = try XCTUnwrap(Date.date(fromRFC822: "Tue, 20 Oct 2026 10:00:00 GMT"))
+		let exactCases: [(String, Double)] = [
+			("7", 7),
+			(" 7 ", 7),
+			("Tue, 20 Oct 2026 10:00:30 GMT", 30),
+			("Tue, 20 Oct 2026 09:00:00 GMT", 0),
+			("3600", 60),
+			("1e30", 60)
+		]
+		for (retryAfter, expectedSeconds) in exactCases {
+			let httpResponse = try response(retryAfter: retryAfter)
+			XCTAssertEqual(.seconds(expectedSeconds), HTTPClientSupport.retryDelay(for: httpResponse, attempt: 3, now: now), retryAfter)
+		}
+		for retryAfter in ["abc", "inf", "nan", nil] {
+			let httpResponse = try response(retryAfter: retryAfter)
+			let delay = HTTPClientSupport.retryDelay(for: httpResponse, attempt: 3, now: now)
+			XCTAssertTrue((Duration.zero ... .seconds(4)).contains(delay), "\(retryAfter ?? "nil"): \(delay)")
+		}
+	}
+
 	func testHardenedConfigurationsCacheNothing() {
 		for configuration in [HTTPClientSupport.hardened(.default), HTTPClientSupport.hardenedBackground(identifier: "test", sharedContainerIdentifier: nil)] {
 			XCTAssertNil(configuration.urlCache)
@@ -60,5 +81,9 @@ class HTTPClientSupportTests: XCTestCase {
 		XCTAssertEqual(Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue), sanitizedError.code)
 		XCTAssertEqual(.timedOut, (sanitizedError.userInfo[NSUnderlyingErrorKey] as? URLError)?.code)
 		XCTAssertFalse(String(describing: sanitizedError).contains("0123abcd"), "\(sanitizedError)")
+	}
+
+	private func response(retryAfter: String?) throws -> HTTPURLResponse {
+		return try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(URL(string: "https://api.box.com/2.0/users/me")), statusCode: 503, httpVersion: "HTTP/1.1", headerFields: retryAfter.map { ["Retry-After": $0] }))
 	}
 }

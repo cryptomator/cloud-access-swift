@@ -22,11 +22,11 @@ public enum BoxAuthenticator {
 	private nonisolated static let redirectHost = "boxsdkoauth2redirect"
 
 	/**
-	 Shows Box's authorize page, and stores the token of the login in `tokenStorage` under the user ID of the account.
+	 Shows Box's authorize page, and stores the token of the login in `BoxSetup.constants.oauth` under the user ID of the account.
 
 	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `BoxAuthenticatorError.authenticationFailed` if the login flow failed, `BoxCredentialErrors.missingSetup` if `BoxSetup.constants` isn't set, and otherwise what completing the authentication throws.
 	 */
-	public static func authenticate(from viewController: UIViewController, tokenStorage: any OAuthTokenStorage) async throws -> BoxCredential {
+	public static func authenticate(from viewController: UIViewController) async throws -> BoxCredential {
 		guard let window = viewController.view.window else {
 			throw authenticationFailed(because: "the view controller isn't part of a window")
 		}
@@ -36,7 +36,7 @@ public enum BoxAuthenticator {
 		let state = UUID().uuidString
 		let callbackURL = try await runLoginFlow(url: authorizeURL(clientId: clientId, state: state), callbackURLScheme: redirectScheme(clientId: clientId), anchor: window)
 		let authorizationCode = try authorizationCode(fromCallbackURL: callbackURL, clientId: clientId, expectedState: state)
-		return try await BoxCredential.completeAuthentication(authorizationCode: authorizationCode, tokenStorage: tokenStorage)
+		return try await BoxCredential.completeAuthentication(authorizationCode: authorizationCode)
 	}
 
 	private static func authorizeURL(clientId: String, state: String) throws -> URL {

@@ -62,9 +62,7 @@ extension IntegrationProvider {
 			credential.deauthenticate()
 			return DropboxCloudProvider(credential: credential)
 		case .googleDrive:
-			let credential = try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest-Unauthorized")
-			credential.deauthenticate()
-			return try GoogleDriveCloudProvider(credential: credential)
+			return try GoogleDriveCloudProvider(credential: GoogleDriveCredential(userID: "IntegrationTest-Unauthorized", tokenSource: InvalidOAuthTokenSource()))
 		case .microsoftGraph:
 			let credential = MicrosoftGraphCredentialMock()
 			try await credential.deauthenticate()

@@ -1,5 +1,5 @@
 {
-  "originHash" : "e4ad50687b0a3eca790117b48b3af94dc5ba8c4a344f1a8e84e36e593bf95e2a",
+  "originHash" : "9a0cf453e00e63343af5dbd6fc3cf5f79ea4544bd3c8fcf48e78c10436d3212d",
   "pins" : [
     {
       "identity" : "appauth-ios",
@@ -29,39 +29,12 @@
       }
     },
     {
-      "identity" : "google-api-objectivec-client-for-rest",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/google-api-objectivec-client-for-rest.git",
-      "state" : {
-        "revision" : "fca2ddc892173d82edf10cefe079d3697ecf4fc9",
-        "version" : "5.5.0"
-      }
-    },
-    {
       "identity" : "grdb.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/groue/GRDB.swift.git",
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
         "version" : "7.11.1"
-      }
-    },
-    {
-      "identity" : "gtm-session-fetcher",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/gtm-session-fetcher.git",
-      "state" : {
-        "revision" : "724a52eea6329b7e12d3ad8300d76ca9f3895fcc",
-        "version" : "5.3.1"
-      }
-    },
-    {
-      "identity" : "gtmappauth",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/google/GTMAppAuth.git",
-      "state" : {
-        "revision" : "57094cd46bc8700d3a887e2a429f42b6e8ea3f0b",
-        "version" : "6.0.0"
       }
     },
     {

@@ -46,17 +46,23 @@ To get the access token for Dropbox, generate a token in the Dropbox Developer P
 
 #### Google Drive
 
-To get the refresh token for Google Drive, extract it from the keychain after a successful login. The auth session is stored by GTMAppAuth with the item name `GoogleDriveAuth` + user ID. The following method can be used to extract the refresh token:
+To get the refresh token for Google Drive, sign in once with `GOOGLE_DRIVE_CLIENT_ID` in a debug build of the iOS app that prints what the library saves. For that, its `GoogleDriveSetup` gets `OAuthPersistence.custom(storage:tokenLockDirectory:)` with the following storage. The saved data is JSON, and its `refreshToken` is the token:
 
 ```swift
-import AppAuthCore
-import GTMAppAuth
+import CryptomatorCloudAccessCore
+import Foundation
 
-func extractGoogleDriveRefreshToken(userID: String) {
-  let store = KeychainStore(itemName: "GoogleDriveAuth" + userID)
-  if let authSession = try? store.retrieveAuthSession() {
-    print("GOOGLE_DRIVE_REFRESH_TOKEN=\(authSession.authState.refreshToken ?? "nil")")
+final class PrintingTokenStorage: OAuthTokenStorage {
+  func load(_ key: OAuthAccountKey) throws -> Data? {
+    return nil
   }
+
+  func save(_ data: Data, for key: OAuthAccountKey) throws {
+    let token = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    print("GOOGLE_DRIVE_REFRESH_TOKEN=\(token?["refreshToken"] ?? "nil")")
+  }
+
+  func delete(_ key: OAuthAccountKey) throws {}
 }
 ```
 
@@ -126,7 +132,7 @@ To add a provider, add a case to `IntegrationProvider`, create its providers in 
 
 ## Retries
 
-An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts, `CloudProviderError.noInternetConnection`, HTTP 5xx and 429, failed OAuth token requests with such a status, and eventually consistent providers that didn't catch up in time. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
+An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts and `CloudProviderError.noInternetConnection`. HTTP 408, 429 and 5xx are transient too, including on a failed OAuth token request. A Google Drive 403 for an exceeded rate limit and an eventually consistent provider that didn't catch up in time count as well. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
 
 An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because a running request doesn't respond to cancellation.
 

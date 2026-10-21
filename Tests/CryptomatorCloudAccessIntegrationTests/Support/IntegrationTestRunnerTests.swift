@@ -157,18 +157,6 @@ extension IntegrationTests {
 		}
 
 		@Test
-		func tokenEndpointServerErrorOfAppAuthIsTransient() {
-			let httpError = NSError(domain: "org.openid.appauth.remote-http", code: 500, userInfo: [NSLocalizedDescriptionKey: "Internal Server Error"])
-			let error = NSError(domain: "org.openid.appauth.general", code: -6, userInfo: [
-				NSUnderlyingErrorKey: httpError,
-				NSLocalizedDescriptionKey: "Non-200 HTTP response (500) making token request to 'https://oauth2.googleapis.com/token'."
-			])
-			#expect(isTransientIntegrationError(error))
-			let errorWithoutUnderlyingError = NSError(domain: error.domain, code: error.code, userInfo: [NSLocalizedDescriptionKey: error.localizedDescription])
-			#expect(isTransientIntegrationError(errorWithoutUnderlyingError))
-		}
-
-		@Test
 		func tokenRequestFailureOfMicrosoftGraphIsTransientOnlyForServerErrors() {
 			#expect(isTransientIntegrationError(MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: 503)))
 			#expect(isTransientIntegrationError(MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: 429)))
@@ -187,8 +175,11 @@ extension IntegrationTests {
 				DropboxError.rateLimitError(retryAfter: 1),
 				DropboxError.internalServerError,
 				BoxError.apiError(statusCode: 503, code: nil, message: nil),
-				NSError(domain: "com.google.GTLRErrorObjectDomain", code: 503),
-				NSError(domain: "com.google.HTTPStatus", code: 429),
+				BoxError.apiError(statusCode: 408, code: nil, message: nil),
+				GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: nil),
+				GoogleDriveError.apiError(statusCode: 429, reason: nil, message: nil),
+				GoogleDriveError.apiError(statusCode: 403, reason: "userRateLimitExceeded", message: nil),
+				OAuthTokenEndpointError.unsuccessfulResponse(statusCode: 500, error: "internal_failure", errorDescription: nil),
 				S3Error(statusCode: 503, code: "SlowDown"),
 				S3Error(statusCode: 502),
 				PCloudError.unexpectedHTTPStatusCode(code: 503),
@@ -211,7 +202,9 @@ extension IntegrationTests {
 				IntegrationTestError.fixtureTimeout(.seconds(600)),
 				IntegrationTestError.budgetExceeded(.seconds(300)),
 				URLSessionError.httpError(nil, statusCode: 404),
-				NSError(domain: "com.google.HTTPStatus", code: 404),
+				GoogleDriveError.apiError(statusCode: 404, reason: "notFound", message: nil),
+				GoogleDriveError.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: nil),
+				OAuthTokenEndpointError.unsuccessfulResponse(statusCode: 400, error: "invalid_request", errorDescription: nil),
 				S3Error(statusCode: 404, code: "NoSuchBucket"),
 				S3Error(statusCode: 400, code: "InvalidArgument"),
 				PCloudError.apiError(code: 2009, message: nil)

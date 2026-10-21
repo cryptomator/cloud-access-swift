@@ -17,22 +17,13 @@ import Testing
 extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.googleDrive)))
 	struct GoogleDriveTests {
-		/// Authorizes a request, because `canAuthorize` returns `true` as soon as any refresh token is set, without checking it online.
+		/// The stored access token has expired, so the first access token comes from a refresh with the refresh token.
 		@Test
-		func authenticationWorksWithoutViewController() async throws {
+		func firstAccessTokenIsRefreshed() async throws {
 			try await withIntegrationRetries(on: .googleDrive) {
-				let credential = try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "GDriveCredentialTest")
-				let authSession = try #require(credential.authSession)
-				let request = try NSMutableURLRequest(url: #require(URL(string: "https://example.com")))
-				try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-					authSession.authorizeRequest(request) { error in
-						if let error {
-							continuation.resume(throwing: error)
-						} else {
-							continuation.resume()
-						}
-					}
-				}
+				let credential = try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "GDriveCredentialTest-\(UUID().uuidString)")
+				let accessToken = try await credential.tokenSource.accessToken()
+				#expect(!accessToken.isEmpty)
 			}
 		}
 	}

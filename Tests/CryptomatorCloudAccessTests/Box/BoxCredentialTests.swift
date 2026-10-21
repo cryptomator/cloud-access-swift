@@ -27,7 +27,7 @@ class BoxCredentialTests: XCTestCase {
 	}
 
 	func testEmptyUserIDThrows() {
-		XCTAssertThrowsError(try BoxCredential(userID: "", tokenStorage: MemoryTokenStorage(buffer: TokenBuffer()))) { error in
+		XCTAssertThrowsError(try BoxCredential(userID: "")) { error in
 			guard case BoxCredentialErrors.missingUserID = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
@@ -47,10 +47,12 @@ class BoxCredentialTests: XCTestCase {
 			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recordRequest)
 		]
 		let buffer = TokenBuffer()
+		let storage = MemoryTokenStorage(buffer: buffer)
 
-		let credential = try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer))
+		let credential = try await completeAuthentication(storage: storage)
 
 		XCTAssertEqual("USER-ID", credential.userID)
+		XCTAssertEqual([OAuthAccountKey(provider: .box, account: "USER-ID")], storage.keys)
 		let sentRequests = requests.withLock { $0 }
 		XCTAssertEqual(2, sentRequests.count)
 		XCTAssertEqual("https://api.box.com/oauth2/token", sentRequests.first?.url?.absoluteString)
@@ -89,7 +91,7 @@ class BoxCredentialTests: XCTestCase {
 		]
 		let buffer = TokenBuffer()
 		buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","token_type":"bearer"}"#.utf8)
-		let tokenSource = BoxOAuthTokenSource(userID: "USER-ID", tokenStorage: MemoryTokenStorage(buffer: buffer), lockDirectory: lockDirectoryURL, endpoint: .mocked(), assertion: ActivityScript().assertion)
+		let tokenSource = try makeTokenSource(buffer: buffer)
 
 		_ = try await BoxClient.mocked(tokenSource: tokenSource).user()
 
@@ -113,7 +115,7 @@ class BoxCredentialTests: XCTestCase {
 
 	func testGetUsernameWithoutNameThrows() async throws {
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID"}"#)]
-		let credential = BoxCredential(userID: "USER-ID", tokenSource: BoxTokenSourceStub())
+		let credential = BoxCredential(userID: "USER-ID", tokenSource: OAuthTokenSourceStub())
 
 		await XCTAssertThrowsErrorAsync(try await credential.getUsername(client: .mocked())) { error in
 			guard case BoxCredentialErrors.noUsername = error else {
@@ -123,11 +125,50 @@ class BoxCredentialTests: XCTestCase {
 		}
 	}
 
+	func testCompleteAuthenticationStoresUsername() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","refresh_token":"NEW-REFRESH"}"#),
+			URLProtocolMock.handler(body: BoxMockResponse.user)
+		]
+		let buffer = TokenBuffer()
+
+		let credential = try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer))
+
+		XCTAssertEqual("User", buffer.token?.username)
+		XCTAssertEqual("User", try credential.cachedUsername())
+	}
+
+	func testGetUsernameStoresChangedName() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
+		let buffer = TokenBuffer()
+		buffer.store(OAuthToken(accessToken: "ACCESS", refreshToken: "REFRESH", expiresAt: nil, username: "Old Name"))
+		let tokenSource = try makeTokenSource(buffer: buffer)
+		let credential = BoxCredential(userID: "USER-ID", tokenSource: tokenSource)
+
+		let username = try await credential.getUsername(client: .mocked(tokenSource: tokenSource))
+
+		XCTAssertEqual("User", username)
+		XCTAssertEqual(OAuthToken(accessToken: "ACCESS", refreshToken: "REFRESH", expiresAt: nil, username: "User"), buffer.token)
+		XCTAssertEqual("User", try credential.cachedUsername())
+	}
+
+	func testCachedUsernameOfLegacySDKItemIsNil() throws {
+		let buffer = TokenBuffer()
+		buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","token_type":"bearer"}"#.utf8)
+		let credential = try BoxCredential(userID: "USER-ID", tokenSource: makeTokenSource(buffer: buffer))
+
+		XCTAssertNil(try credential.cachedUsername())
+	}
+
+	private func makeTokenSource(buffer: TokenBuffer) throws -> StoredOAuthTokenSource {
+		return try BoxCredential.makeTokenSource(userID: "USER-ID", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), endpoint: .mocked(), assertion: ActivityScript().assertion)
+	}
+
 	private func completeAuthentication(storage: MemoryTokenStorage) async throws -> BoxCredential {
 		let endpoint = BoxOAuthEndpoint.mocked()
-		let lockDirectoryURL: URL = lockDirectoryURL
+		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectoryURL)
 		return try await BoxCredential.completeAuthentication(authorizationCode: "CODE", endpoint: endpoint, makeClient: { BoxClient.mocked(tokenSource: $0) }, makeTokenSource: { userID in
-			BoxOAuthTokenSource(userID: userID, tokenStorage: storage, lockDirectory: lockDirectoryURL, endpoint: endpoint, assertion: ActivityScript().assertion)
+			BoxCredential.makeTokenSource(userID: userID, oauth: oauth, endpoint: endpoint, assertion: ActivityScript().assertion)
 		})
 	}
 }

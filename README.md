@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3, pCloud and Box providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, because it uploads such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3, pCloud, Box and Google Drive providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, because it uploads such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -86,6 +86,21 @@ let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: m
 
 :warning: This library supports vault version 6 and higher.
 
+### OAuth Persistence
+
+The library keeps the OAuth logins of Box and Google Drive and refreshes their tokens. Create one `OAuthPersistence` and pass it to the setup of both providers. Every process that uses the same logins, e.g., the app and its extensions, must create it with the same values:
+
+```swift
+let accessGroup = ... // optional: the keychain access group of the logins, `nil` for the first group of the `keychain-access-groups` entitlement
+let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
+let boxService = ... // the keychain service in which your app kept its Box logins so far; without `services`, Box logins go to `CryptomatorCloudAccess.OAuth.box`
+let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService])
+```
+
+The logins are generic passwords in the keychain. An item that the library adds is accessible after the first unlock on this device only. A Box login is the item whose account is the user ID, in the service of `services[.box]`. A Google Drive login uses GTMAppAuth's item, with the service `GoogleDriveAuth` followed by the user ID and the account `OAuth`. Logins stored by the Box SDK or GTMAppAuth keep working without a new login. The library rewrites them in its own format when it first saves them. Every refresh happens only while holding a lock in `tokenLockDirectory`, so that no two processes send the same refresh token, which Box accepts only once.
+
+To keep the logins elsewhere, implement `OAuthTokenStorage` and pass it to `OAuthPersistence.custom(storage:tokenLockDirectory:)`. Its documentation describes the contract that the storage must hold to.
+
 ### Box
 
 The following constants must be set once, e.g. in your app delegate:
@@ -94,25 +109,16 @@ The following constants must be set once, e.g. in your app delegate:
 let clientId = ... // your Box client identifier
 let clientSecret = ... // your Box client secret
 let sharedContainerIdentifier = ... // optional: only needed if you want to create a `BoxCloudProvider` with a background `URLSession` in an app extension
-let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
-BoxSetup.constants = try BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier, tokenLockDirectory: tokenLockDirectory)
+let oauth = ... // your `OAuthPersistence`
+BoxSetup.constants = BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
 ```
-
-The library keeps the Box tokens in an `OAuthTokenStorage` that your app implements, e.g., over the keychain, with one item per Box user ID. The library decides what the stored bytes contain, and it reads an item that the Box SDK stored, too. Your storage must hold to this contract:
-
-- `load(forAccount:)` returns `nil` only if no item exists and throws for any other failure, e.g., a keychain that is locked.
-- Nothing is cached: every load reads the persisted bytes, because other processes write them, too.
-- `save(_:forAccount:)` returns after the write completed and replaces an existing item in place.
-- `save(_:forAccount:)` and `delete(forAccount:)` return promptly, e.g., without waiting for user interaction. When the process's background time runs out, the library releases the lock only once a running write returns, and iOS may terminate a process that still holds it.
-- Every process that uses the same items passes the same `tokenLockDirectory`. The library refreshes a token only while holding a lock in it, because Box refresh tokens can be used only once.
 
 Begin the authentication flow:
 
 ```swift
-let tokenStorage = ... // your `OAuthTokenStorage`
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await BoxAuthenticator.authenticate(from: viewController, tokenStorage: tokenStorage)
+  let credential = try await BoxAuthenticator.authenticate(from: viewController)
   // do something with `BoxCredential`
   // you probably want to save `credential.userID` to re-create the credential later
 } catch {
@@ -123,8 +129,10 @@ do {
 Re-create a saved credential:
 
 ```swift
-let credential = try BoxCredential(userID: userID, tokenStorage: tokenStorage)
+let credential = try BoxCredential(userID: userID)
 ```
+
+`try credential.cachedUsername()` returns the account's name without a request, or `nil` until it is known, e.g., for a login stored by the Box SDK. `try await credential.getUsername()` asks Box for it and stores it if it changed.
 
 You can then use the credential to create a Box provider:
 
@@ -139,7 +147,7 @@ let sessionIdentifier = ...
 let provider = try BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
 
-To log out, call `try await credential.deauthenticate()`. It deletes the stored item and then revokes the token. The item is deleted also if the revocation fails.
+To log out, call `try await credential.deauthenticate()`. It deletes the stored login and then revokes its token, which ends only this login. The login is deleted also if the revocation fails.
 
 ### Dropbox
 
@@ -187,28 +195,36 @@ let provider = DropboxCloudProvider(credential: credential)
 
 ### Google Drive
 
-Modify your app delegate as described in [AppAuth](https://github.com/openid/AppAuth-iOS). In addition, the following constants must be set once, e.g. in your app delegate:
+Modify your app delegate as described in [AppAuth](https://github.com/openid/AppAuth-iOS) to resume `GoogleDriveAuthenticator.currentAuthorizationFlow` with the redirect URL. In addition, the following constants must be set once, e.g. in your app delegate:
 
 ```swift
 let clientId = ... // your Google Drive client identifier
 let redirectURL = ...
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `GoogleDriveCloudProvider` with a background `URLSession` in an app extension 
-GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: redirectURL, sharedContainerIdentifier: sharedContainerIdentifier)
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `GoogleDriveCloudProvider` with a background `URLSession` in an app extension
+let oauth = ... // your `OAuthPersistence`
+GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: redirectURL, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
 ```
 
 Begin the authentication flow:
 
 ```swift
-let userID = ... // optional: the result of `credential.getAccountID()` from an earlier authentication to restore that credential
-let credential = GoogleDriveCredential(userID: userID)
 let viewController = ... // the presenting `UIViewController`
 do {
-  try await GoogleDriveAuthenticator.authenticate(credential: credential, from: viewController)
-  // authentication successful
+  let credential = try await GoogleDriveAuthenticator.authenticate(from: viewController)
+  // do something with `GoogleDriveCredential`
+  // you probably want to save `credential.userID` to re-create the credential later
 } catch {
   // error handling
 }
 ```
+
+Re-create a saved credential:
+
+```swift
+let credential = try GoogleDriveCredential(userID: userID)
+```
+
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` if it wasn't stored with the login. `try await credential.getUsername()` asks Google for it and stores it if it changed.
 
 You can then use the credential to create a Google Drive provider:
 
@@ -216,12 +232,14 @@ You can then use the credential to create a Google Drive provider:
 let provider = try GoogleDriveCloudProvider(credential: credential)
 ```
 
-Or create a Google Drive provider using a background URLSession:
+Or create a Google Drive provider whose downloads and uploads run on a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
 let provider = try GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
 ```
+
+To log out, call `try await credential.deauthenticate()`. It deletes the stored login without revoking its token. Google revokes a token for every device and app of the same Google Cloud project, so revoking it would sign the account out elsewhere, too.
 
 ### Microsoft Graph
 

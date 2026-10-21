@@ -198,7 +198,8 @@ enum HTTPDebugLogger {
 	}
 
 	private static func isExcludedHeader(_ name: String) -> Bool {
-		let excludedNames = ["Authorization", "WWW-Authenticate", "Cookie", "Set-Cookie"]
+		// Google's upload front end may send the `upload_id` of a resumable upload session, which is a credential, as `X-GUploader-UploadID`.
+		let excludedNames = ["Authorization", "WWW-Authenticate", "Cookie", "Set-Cookie", "X-GUploader-UploadID"]
 		return excludedNames
 			.map { $0.caseInsensitiveCompare(name) == .orderedSame }
 			.contains(true)

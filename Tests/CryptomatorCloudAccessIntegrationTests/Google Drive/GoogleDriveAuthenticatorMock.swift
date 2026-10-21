@@ -6,30 +6,38 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-@preconcurrency import AppAuth
 import Foundation
-@preconcurrency import GoogleAPIClientForREST_Drive
-@preconcurrency import GTMAppAuth
+import os
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 
 enum GoogleDriveAuthenticatorMock {
+	/// Creates a credential over an in-memory login with the test account's refresh token. Its access token has expired, so the first request refreshes it.
 	static func generateAuthorizedCredential(withRefreshToken refreshToken: String, tokenUID: String) throws -> GoogleDriveCredential {
-		let authorizationEndpoint = URL(string: "https://accounts.google.com/o/oauth2/v2/auth")!
-		let tokenEndPoint = URL(string: "https://oauth2.googleapis.com/token")!
-		let configuration = OIDServiceConfiguration(authorizationEndpoint: authorizationEndpoint, tokenEndpoint: tokenEndPoint)
-		let authRequest = OIDAuthorizationRequest(configuration: configuration, clientId: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scope: nil, redirectURL: nil, responseType: "code", state: nil, nonce: nil, codeVerifier: nil, codeChallenge: nil, codeChallengeMethod: nil, additionalParameters: nil)
-		let authResponse = OIDAuthorizationResponse(request: authRequest, parameters: [String: NSCopying & NSObjectProtocol]())
+		let storage = GoogleDriveMemoryTokenStorage()
+		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: refreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .googleDrive, account: tokenUID))
+		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("GoogleDriveTokenLocks", isDirectory: true)
+		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
+		let endpoint = GoogleDriveOAuthEndpoint(clientId: IntegrationTestSecrets.googleDriveClientId)
+		return GoogleDriveCredential(userID: tokenUID, tokenSource: GoogleDriveCredential.makeTokenSource(userID: tokenUID, oauth: oauth, endpoint: endpoint))
+	}
+}
 
-		let tokenRequest = OIDTokenRequest(configuration: configuration, grantType: "authorization_code", authorizationCode: nil, redirectURL: URL(string: ".")!, clientID: IntegrationTestSecrets.googleDriveClientId, clientSecret: nil, scopes: nil, refreshToken: nil, codeVerifier: nil, additionalParameters: nil)
-		let tokenParameters = ["refresh_token": refreshToken as NSString]
-		let tokenResponse = OIDTokenResponse(request: tokenRequest, parameters: tokenParameters)
-		let authState = OIDAuthState(authorizationResponse: authResponse, tokenResponse: tokenResponse)
-		let credential = GoogleDriveCredential(userID: tokenUID)
-		try credential.save(authState: authState)
-		return credential
+private final class GoogleDriveMemoryTokenStorage: OAuthTokenStorage {
+	private let items = OSAllocatedUnfairLock(initialState: [OAuthAccountKey: Data]())
+
+	func load(_ key: OAuthAccountKey) throws -> Data? {
+		return items.withLock { $0[key] }
+	}
+
+	func save(_ data: Data, for key: OAuthAccountKey) throws {
+		items.withLock { $0[key] = data }
+	}
+
+	func delete(_ key: OAuthAccountKey) throws {
+		_ = items.withLock { $0.removeValue(forKey: key) }
 	}
 }

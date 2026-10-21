@@ -19,17 +19,13 @@ public final class BoxSetup: Sendable {
 	public let clientId: String
 	public let clientSecret: String
 	public let sharedContainerIdentifier: String?
-	/// The directory of the lock that serializes token refreshes. Every process that uses the same `OAuthTokenStorage` must pass the same directory, e.g., one in the App Group container.
-	public let tokenLockDirectory: URL
+	/// Where the Box logins are kept. Every process that uses the same logins must pass an equal value.
+	public let oauth: OAuthPersistence
 
-	/// - Throws: `OAuthTokenStoreError.invalidLockDirectory` if `tokenLockDirectory` isn't a file URL.
-	public init(clientId: String, clientSecret: String, sharedContainerIdentifier: String?, tokenLockDirectory: URL) throws {
-		guard tokenLockDirectory.isFileURL else {
-			throw OAuthTokenStoreError.invalidLockDirectory
-		}
+	public init(clientId: String, clientSecret: String, sharedContainerIdentifier: String?, oauth: OAuthPersistence) {
 		self.clientId = clientId
 		self.clientSecret = clientSecret
 		self.sharedContainerIdentifier = sharedContainerIdentifier
-		self.tokenLockDirectory = tokenLockDirectory
+		self.oauth = oauth
 	}
 }

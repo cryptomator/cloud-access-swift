@@ -76,14 +76,16 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 
 	// MARK: - Listings
 
-	func testListingSkipsShortcutWhoseTargetFails() async throws {
+	func testListingSkipsShortcutWhoseTargetIsGoneOrPrivate() async throws {
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([
 				GoogleDriveMockResponse.file(id: "F", name: "file.txt"),
 				GoogleDriveMockResponse.shortcut(id: "S1", name: "broken", targetID: "T1", targetMimeType: "text/plain"),
-				GoogleDriveMockResponse.shortcut(id: "S2", name: "link", targetID: "T2", targetMimeType: "application/vnd.google-apps.folder")
+				GoogleDriveMockResponse.shortcut(id: "S2", name: "private", targetID: "T2", targetMimeType: "text/plain"),
+				GoogleDriveMockResponse.shortcut(id: "S3", name: "link", targetID: "T3", targetMimeType: "application/vnd.google-apps.folder")
 			])),
 			URLProtocolMock.handler(statusCode: 404, body: GoogleDriveMockResponse.error(status: 404, reason: "notFound")),
+			URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientFilePermissions")),
 			URLProtocolMock.handler(body: #"{"mimeType":"application/vnd.google-apps.folder","modifiedTime":"\#(GoogleDriveMockResponse.modifiedTime)"}"#)
 		]
 
@@ -93,6 +95,37 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 			CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: 7),
 			CloudItemMetadata(name: "link", cloudPath: CloudPath("/link"), itemType: .folder, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: nil)
 		], itemList.items)
+	}
+
+	/// A shortcut whose target request fails on the connection or through every retry fails the listing, which would otherwise look complete without it.
+	func testListingFailsIfShortcutTargetRequestFails() async throws {
+		let cases = [
+			ShortcutTargetFailureCase(name: "connection", response: { _ in throw URLError(.networkConnectionLost) }, expectedError: CloudProviderError.noInternetConnection),
+			ShortcutTargetFailureCase(name: "rate limit", response: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "rateLimitExceeded")), expectedError: GoogleDriveError.apiError(statusCode: 403, reason: "rateLimitExceeded", message: "Error"))
+		]
+		for testCase in cases {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S1", name: "link", targetID: "T1", targetMimeType: "text/plain")]))
+			] + Array(repeating: testCase.response, count: 5)
+
+			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil), testCase.name) { error in
+				XCTAssertEqual(String(describing: testCase.expectedError), String(describing: error), testCase.name)
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, testCase.name)
+		}
+	}
+
+	/// A 400 on the first page is a bad request, which a restart of the listing wouldn't heal.
+	func testBadRequestIsPageTokenInvalidOnlyWithPageToken() async throws {
+		let badRequest = URLProtocolMock.handler(statusCode: 400, body: GoogleDriveMockResponse.error(status: 400, reason: "invalid"))
+		URLProtocolMock.requestHandler = [badRequest, badRequest]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 400, reason: "invalid", message: "Error"), error as? GoogleDriveError)
+		}
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: "TOKEN")) { error in
+			XCTAssertEqual(.pageTokenInvalid, error as? CloudProviderError)
+		}
 	}
 
 	// MARK: - Shortcuts
@@ -143,6 +176,38 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		XCTAssertEqual(["name": "new", "parents": ["T1"], "mimeType": GoogleDriveJSON.folderMimeType] as NSDictionary, try JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sent[12])) as? NSDictionary)
 		XCTAssertEqual(["/drive/v3/files/F", "root", "T1"], [sent[14].url?.path, GoogleDriveCloudProviderTests.queryParameter("addParents", of: sent[14]), GoogleDriveCloudProviderTests.queryParameter("removeParents", of: sent[14])])
 		XCTAssertEqual(["DELETE", "/drive/v3/files/S1"], [sent[15].httpMethod, sent[15].url?.path])
+	}
+
+	/// Replacing a shortcut writes the content to its target, and the path stays the shortcut, so that deleting it afterwards deletes only the shortcut.
+	func testReplacingShortcutWritesToTargetAndKeepsShortcut() async throws {
+		let requests = RequestRecorder()
+		let record = requests.record
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "link.txt", targetID: "T", targetMimeType: "text/plain")]), onRequest: record),
+			GoogleDriveMockResponse.session(onRequest: record),
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "T", name: "target.txt", size: 12), onRequest: record),
+			URLProtocolMock.handler(statusCode: 204, onRequest: record)
+		]
+
+		_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/link.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+		try await provider.deleteFile(at: CloudPath("/link.txt"))
+
+		let sent = requests.requests
+		XCTAssertEqual(4, sent.count)
+		XCTAssertEqual(["PATCH", "/upload/drive/v3/files/T"], [sent[1].httpMethod, sent[1].url?.path])
+		XCTAssertEqual([:] as NSDictionary, try JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sent[1])) as? NSDictionary)
+		XCTAssertEqual(["DELETE", "/drive/v3/files/S"], [sent[3].httpMethod, sent[3].url?.path])
+	}
+
+	func testReplacingShortcutToFolderThrowsItemAlreadyExists() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "folder", targetID: "T", targetMimeType: GoogleDriveJSON.folderMimeType)]))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder"), replaceExisting: true, progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.itemAlreadyExists, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	// MARK: - Moves
@@ -377,7 +442,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		}
 	}
 
-	/// A shortcut whose target request fails is skipped, but a cancellation while it retries ends the listing.
+	/// A cancellation while a shortcut's target request is retried ends the listing.
 	func testCancellationDuringShortcutResolutionEndsListing() async throws {
 		let provider: GoogleDriveCloudProvider = provider
 		let listing = OSAllocatedUnfairLock<Task<CloudItemList, Error>?>(initialState: nil)
@@ -470,4 +535,10 @@ private struct GoogleDriveMutationCase {
 	/// The response to the retry of the mutation's request.
 	let success: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
 	let operation: @Sendable (GoogleDriveCloudProvider) async throws -> Void
+}
+
+private struct ShortcutTargetFailureCase {
+	let name: String
+	let response: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
+	let expectedError: Error
 }

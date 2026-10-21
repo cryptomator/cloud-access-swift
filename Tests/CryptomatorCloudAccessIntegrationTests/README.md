@@ -132,7 +132,7 @@ To add a provider, add a case to `IntegrationProvider`, create its providers in 
 
 ## Retries
 
-An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts, `CloudProviderError.noInternetConnection`, HTTP 5xx and 429, failed OAuth token requests with such a status, and eventually consistent providers that didn't catch up in time. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
+An attempt that fails with a transient error is retried in-process with a new context, at most twice. Transient errors are connection losses and timeouts, `CloudProviderError.noInternetConnection`, HTTP 5xx and 429, and failed OAuth token requests with such a status. A Google Drive 403 for an exceeded rate limit and an eventually consistent provider that didn't catch up in time count as well. Each retry is logged as `[integration-retry]`. Any other error fails the test without a retry.
 
 An attempt runs while it holds one of its provider's few permits (`IntegrationProvider.concurrencyLimit`), so the account isn't overloaded. It fails once it has held the permit for 5 minutes, and it is left running, because a running request doesn't respond to cancellation.
 

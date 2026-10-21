@@ -73,7 +73,7 @@ struct GoogleDriveErrorResponse: Decodable, Sendable {
 
 /// The metadata of a request that creates, renames or moves an item, or of an upload.
 struct GoogleDriveFileMetadata: Encodable, Sendable {
-	let name: String
+	let name: String?
 	let parents: [String]?
 	let mimeType: String?
 }

@@ -182,7 +182,7 @@ public final class BoxCloudProvider: CloudProvider {
 			let items = try await client.folderItems(id: folderItem.identifier, marker: pageToken, limit: maxPageSize)
 			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) received items: \(items)")
 			return try convertToCloudItemList(items, at: folderItem.cloudPath)
-		} catch BoxError.apiError(statusCode: 400, _, _) {
+		} catch BoxError.apiError(statusCode: 400, _, _) where pageToken != nil {
 			throw CloudProviderError.pageTokenInvalid
 		} catch {
 			CloudAccessDDLogDebug("BoxCloudProvider: fetchItemList(for: \(folderItem.identifier), pageToken: \(pageToken ?? "nil")) failed with error: \(error)")

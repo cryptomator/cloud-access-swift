@@ -27,6 +27,10 @@ extension GoogleDriveItem {
 		return shortcut?.targetIdentifier ?? identifier
 	}
 
+	var resolvedItemType: CloudItemType {
+		return shortcut?.targetItemType ?? itemType
+	}
+
 	init(cloudPath: CloudPath, file: GoogleDriveFile) throws {
 		self.cloudPath = cloudPath
 		guard let identifier = file.id else {

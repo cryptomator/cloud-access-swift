@@ -152,13 +152,13 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) async throws -> CloudItemList {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil")) called")
-		guard item.itemType == .folder || (item.itemType == .symlink && item.shortcut?.targetItemType == .folder) else {
+		guard item.resolvedItemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let fileList: GoogleDriveFileList
 		do {
 			fileList = try await client.files(query: GoogleDriveClient.query(inFolder: item.resolvedIdentifier), pageSize: maxPageSize, pageToken: pageToken, fields: GoogleDriveCloudProvider.listingFields)
-		} catch GoogleDriveError.apiError(statusCode: 400, _, _) {
+		} catch GoogleDriveError.apiError(statusCode: 400, _, _) where pageToken != nil {
 			throw CloudProviderError.pageTokenInvalid
 		} catch {
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil")) failed with error: \(error)")
@@ -178,10 +178,11 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			do {
 				try await items.append(resolveShortcut(shortcut, at: child.cloudPath))
-			} catch let error where isCancellationError(error) {
-				throw CancellationError()
-			} catch {
+			} catch let error where GoogleDriveCloudProvider.isTargetUnavailable(error) {
 				continue
+			} catch {
+				// The listing would otherwise look complete without the shortcut.
+				throw convertStandardError(error)
 			}
 		}
 		return CloudItemList(items: items, nextPageToken: fileList.nextPageToken)
@@ -189,7 +190,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: downloadFile(for: \(item.identifier), to: \(localURL)) called")
-		guard item.itemType == .file || (item.itemType == .symlink && item.shortcut?.targetItemType == .file) else {
+		guard item.resolvedItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let remoteMetadata = try await fetchItemMetadata(for: item)
@@ -208,20 +209,21 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	// swiftlint:disable:next function_parameter_count
 	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) called")
-		let existingFileID: String?
+		let existingItem: GoogleDriveItem?
 		do {
 			let item = try await resolvePath(forItemAt: cloudPath)
-			if !replaceExisting || item.itemType == .folder {
+			if !replaceExisting || item.resolvedItemType == .folder {
 				throw CloudProviderError.itemAlreadyExists
 			}
-			existingFileID = item.identifier
+			existingItem = item
 		} catch CloudProviderError.itemNotFound {
-			existingFileID = nil
+			existingItem = nil
 		}
 		try Task.checkCancellation()
 		do {
-			let file = try await client.upload(from: localURL, name: cloudPath.lastPathComponent, parentID: parentItem.resolvedIdentifier, existingFileID: existingFileID, progress: progress, onTaskCreation: onTaskCreation)
-			try identifierCache.addOrUpdate(GoogleDriveItem(cloudPath: cloudPath, file: file))
+			let file = try await client.upload(from: localURL, name: cloudPath.lastPathComponent, parentID: parentItem.resolvedIdentifier, existingFileID: existingItem?.resolvedIdentifier, progress: progress, onTaskCreation: onTaskCreation)
+			// The cache keeps a replaced shortcut at its path, so that deleting the path deletes the shortcut, not the target that received the content.
+			try identifierCache.addOrUpdate(existingItem ?? GoogleDriveItem(cloudPath: cloudPath, file: file))
 			return try convertToCloudItemMetadata(file, at: cloudPath)
 		} catch {
 			CloudAccessDDLogDebug("GoogleDriveCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) failed with error: \(error)")
@@ -371,6 +373,18 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
+	/// Checks whether a shortcut's target can't be read because it was deleted or isn't shared with the user.
+	private static func isTargetUnavailable(_ error: Error) -> Bool {
+		switch error {
+		case GoogleDriveError.apiError(statusCode: 404, _, _):
+			return true
+		case let GoogleDriveError.apiError(statusCode: 403, reason, _):
+			return !GoogleDriveError.isRetryable(statusCode: 403, reason: reason)
+		default:
+			return false
+		}
+	}
+
 	private func convertToCloudItemMetadata(_ file: GoogleDriveFile, at cloudPath: CloudPath) throws -> CloudItemMetadata {
 		return try CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: file.cloudItemType, lastModifiedDate: file.lastModifiedDate, size: file.sizeValue)
 	}
@@ -383,7 +397,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 			return CloudProviderError.noInternetConnection
 		case GoogleDriveError.apiError(statusCode: 403, reason: "storageQuotaExceeded", _):
 			return CloudProviderError.quotaInsufficient
-		case let GoogleDriveError.apiError(statusCode: 403, reason?, _) where GoogleDriveError.rateLimitReasons.contains(reason):
+		case let GoogleDriveError.apiError(statusCode: 403, reason, _) where GoogleDriveError.isRetryable(statusCode: 403, reason: reason):
 			// The requests were retried until no attempt was left, and a rate limit is no login failure.
 			return error
 		case GoogleDriveError.apiError(statusCode: 401, _, _), GoogleDriveError.apiError(statusCode: 403, _, _):

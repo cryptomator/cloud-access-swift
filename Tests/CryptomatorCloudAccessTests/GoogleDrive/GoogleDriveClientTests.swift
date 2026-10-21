@@ -271,7 +271,7 @@ class GoogleDriveClientTests: XCTestCase {
 		let sessionRequest = try XCTUnwrap(requests.requests.first)
 		XCTAssertEqual("PATCH", sessionRequest.httpMethod)
 		XCTAssertEqual("/upload/drive/v3/files/F", sessionRequest.url?.path)
-		XCTAssertEqual(["name": "file.txt"] as NSDictionary, try JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sessionRequest)) as? NSDictionary)
+		XCTAssertEqual([:] as NSDictionary, try JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sessionRequest)) as? NSDictionary)
 	}
 
 	func testFailedPutIsSentAgainToSameSessionIfNoByteArrived() async throws {
@@ -280,7 +280,7 @@ class GoogleDriveClientTests: XCTestCase {
 		let tasks = TaskRecorder()
 		URLProtocolMock.requestHandler = [
 			GoogleDriveMockResponse.session(onRequest: record),
-			URLProtocolMock.handler(statusCode: 503, onRequest: record),
+			URLProtocolMock.handler(statusCode: 503, headerFields: ["Retry-After": "30"], onRequest: record),
 			URLProtocolMock.handler(statusCode: 308, onRequest: record),
 			URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: record)
 		]
@@ -292,7 +292,7 @@ class GoogleDriveClientTests: XCTestCase {
 		XCTAssertEqual(["POST", "PUT", "PUT", "PUT"], sent.map(\.httpMethod))
 		XCTAssertEqual("bytes */12", sent[2].value(forHTTPHeaderField: "Content-Range"))
 		XCTAssertEqual(Data("file content".utf8), URLProtocolMock.body(of: sent[3]))
-		XCTAssertEqual(1, sleeps.durations.count)
+		XCTAssertEqual([.seconds(30)], sleeps.durations)
 		XCTAssertEqual([GoogleDriveMockResponse.sessionURL], tasks.urls)
 	}
 
@@ -403,7 +403,18 @@ class GoogleDriveClientTests: XCTestCase {
 			XCTAssertEqual(.apiError(statusCode: 503, reason: nil, message: nil), error as? GoogleDriveError)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-		XCTAssertEqual(1, sleeps.durations.count)
+		XCTAssertEqual(2, sleeps.durations.count)
+	}
+
+	func testExhaustedPutDoesNotWaitToQueryStatus() async throws {
+		let localURL = try makeLocalFile(content: "file content")
+		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 3) + [GoogleDriveMockResponse.session(), URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(statusCode: 308)]
+
+		await XCTAssertThrowsErrorAsync(try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 503, reason: nil, message: nil), error as? GoogleDriveError)
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+		XCTAssertEqual(3, sleeps.durations.count)
 	}
 
 	func testUnauthorizedPutIsRefreshedAndSentAgain() async throws {

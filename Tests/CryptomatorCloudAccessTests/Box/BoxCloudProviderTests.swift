@@ -96,6 +96,15 @@ class BoxCloudProviderTests: XCTestCase {
 		}
 	}
 
+	/// A 400 on the first page is a bad request, which a restart of the listing wouldn't heal.
+	func testFirstPageBadRequestIsNotPageTokenInvalid() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400)]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 400, code: nil, message: nil), error as? BoxError)
+		}
+	}
+
 	// MARK: - Mutations
 
 	func testCreateFolderPostsNameAndParent() async throws {

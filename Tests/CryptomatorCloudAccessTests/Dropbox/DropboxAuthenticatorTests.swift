@@ -27,7 +27,7 @@ class DropboxAuthenticatorTests: XCTestCase {
 		try setUpDropbox()
 		let started = XCTestExpectation(description: "started")
 		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { _ in started.fulfill() })
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in started.fulfill() })
 		}
 		await fulfillment(of: [started], timeout: testWaitTimeout)
 
@@ -43,14 +43,14 @@ class DropboxAuthenticatorTests: XCTestCase {
 		let firstStarted = XCTestExpectation(description: "first started")
 		let secondStarted = XCTestExpectation(description: "second started")
 		let first = Task {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { fail in
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { fail in
 				failFirst.withLock { $0 = fail }
 				firstStarted.fulfill()
 			})
 		}
 		await fulfillment(of: [firstStarted], timeout: testWaitTimeout)
 		let second = Task {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { _ in secondStarted.fulfill() })
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in secondStarted.fulfill() })
 		}
 		await fulfillment(of: [secondStarted], timeout: testWaitTimeout)
 
@@ -67,7 +67,7 @@ class DropboxAuthenticatorTests: XCTestCase {
 		try setUpDropbox()
 		let started = XCTestExpectation(description: "started")
 		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { _ in started.fulfill() })
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in started.fulfill() })
 		}
 		await fulfillment(of: [started], timeout: testWaitTimeout)
 
@@ -85,7 +85,7 @@ class DropboxAuthenticatorTests: XCTestCase {
 		started.isInverted = true
 
 		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { _ in started.fulfill() })
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in started.fulfill() })
 		})) { error in
 			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
@@ -98,16 +98,39 @@ class DropboxAuthenticatorTests: XCTestCase {
 		XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL))
 		let started = XCTestExpectation(description: "started")
 		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(startingWith: { _ in started.fulfill() })
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in started.fulfill() })
 		}
 		await fulfillment(of: [started], timeout: testWaitTimeout)
 
-		for url in ["db-appkey://2/token?state=STATE&code=CODE", "db-other://1/connect?state=STATE&oauth_code=CODE"] {
+		let ignoredURLs = [
+			"db-appkey://2/token?state=STATE&code=CODE",
+			"db-other://1/connect?state=STATE&oauth_code=CODE",
+			// `/connect` redirects without the pending hand-off's state, e.g., late ones of an earlier hand-off.
+			"db-appkey://1/connect?state=OTHER&oauth_code=CODE",
+			"db-appkey://1/connect?oauth_code=CODE"
+		]
+		for url in ignoredURLs {
 			try XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(XCTUnwrap(URL(string: url))), url)
 		}
 
 		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL))
-		_ = try await value(of: redirect)
+		let url = try await value(of: redirect)
+		XCTAssertEqual(DropboxAuthenticatorTests.redirectURL, url)
+	}
+
+	func testCancelRedirectWithoutStateCompletesHandOff() async throws {
+		try setUpDropbox()
+		let started = XCTestExpectation(description: "started")
+		let redirect = Task {
+			try await DropboxAuthenticator.awaitRedirect(expectedState: "STATE", startingWith: { _ in started.fulfill() })
+		}
+		await fulfillment(of: [started], timeout: testWaitTimeout)
+		let cancelURL = try XCTUnwrap(URL(string: "db-appkey://1/cancel"))
+
+		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(cancelURL))
+
+		let url = try await value(of: redirect)
+		XCTAssertEqual(cancelURL, url)
 	}
 
 	// MARK: - Callback URLs

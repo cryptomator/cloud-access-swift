@@ -184,7 +184,7 @@ func application(_: UIApplication, open url: URL, options _: [UIApplication.Open
 }
 ```
 
-This completes the pending `authenticate(from:)` call. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`. If the login runs in a web authentication session instead, cancelling also dismisses it.
+This completes the pending `authenticate(from:)` call. A late redirect of an earlier login doesn't complete it: `handleRedirectURL(_:)` ignores it and returns `false`, and the pending call keeps waiting for its own redirect. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`. If the login runs in a web authentication session instead, cancelling also dismisses it.
 
 Re-create a saved credential, whose user ID is the `uid` of the account:
 

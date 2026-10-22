@@ -22,6 +22,13 @@ public enum DropboxAuthenticatorError: Error {
 /// Opening the Dropbox app failed, so the login continues in a web authentication session.
 private struct AppHandOffFailure: Error {}
 
+/// A hand-off to the Dropbox app that waits for its redirect.
+private struct PendingAuthentication {
+	let id: UUID
+	let expectedState: String
+	let continuation: CheckedContinuation<URL, any Error>
+}
+
 /// The PKCE code verifier of a login, and the states of its authorize requests.
 struct DropboxPKCE: Sendable {
 	static let scopes = "files.metadata.read files.metadata.write files.content.read files.content.write account_info.read"
@@ -60,7 +67,7 @@ struct DropboxPKCE: Sendable {
  */
 @MainActor
 public enum DropboxAuthenticator {
-	private nonisolated static let pendingAuthentication = OSAllocatedUnfairLock<(id: UUID, continuation: CheckedContinuation<URL, any Error>)?>(initialState: nil)
+	private nonisolated static let pendingAuthentication = OSAllocatedUnfairLock<PendingAuthentication?>(initialState: nil)
 	private nonisolated static let dAuthSchemes = ["dbapi-2", "dbapi-8-emm"]
 
 	/**
@@ -87,10 +94,18 @@ public enum DropboxAuthenticator {
 	/**
 	 Completes the pending hand-off to the Dropbox app with the redirect URL that the app received.
 
-	 - Returns: Whether the URL was a redirect of the Dropbox app and a hand-off was pending.
+	 A `/connect` redirect, which passes the authorization code, completes the hand-off only if it carries the hand-off's `state`. Otherwise it is ignored, e.g., as the late redirect of an earlier hand-off, and the pending hand-off keeps waiting for its own. Any other path is a cancel, which carries no `state` and completes the hand-off without a check.
+
+	 - Returns: Whether the URL was a redirect of the Dropbox app that completed the pending hand-off.
 	 */
 	public static func handleRedirectURL(_ url: URL) -> Bool {
-		guard let appKey = DropboxSetup.constants?.appKey, url.scheme?.lowercased() == redirectScheme(appKey: appKey).lowercased(), url.host == "1", let pendingAuthentication = takePendingAuthentication() else {
+		guard let appKey = DropboxSetup.constants?.appKey, let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(appKey: appKey).lowercased(), components.host == "1" else {
+			return false
+		}
+		let isConnectRedirect = components.path == "/connect"
+		let state = components.queryItems?.first(where: { $0.name == "state" })?.value
+		guard let pendingAuthentication = takePendingAuthentication(where: { !isConnectRedirect || $0.expectedState == state }) else {
+			CloudAccessDDLogDebug("DropboxAuthenticator: Ignored a redirect of the Dropbox app that no pending hand-off expects.")
 			return false
 		}
 		pendingAuthentication.resume(returning: url)
@@ -102,7 +117,7 @@ public enum DropboxAuthenticator {
 		let dAuthURLs = try dAuthSchemes.map { try dAuthURL(scheme: $0, appKey: appKey, pkce: pkce) }
 		if let dAuthURL = dAuthURLs.first(where: { UIApplication.shared.canOpenURL($0) }) {
 			do {
-				let callbackURL = try await awaitRedirect { fail in
+				let callbackURL = try await awaitRedirect(expectedState: pkce.dAuthState) { fail in
 					UIApplication.shared.open(dAuthURL, options: [:]) { opened in
 						if !opened {
 							fail(AppHandOffFailure())
@@ -122,35 +137,36 @@ public enum DropboxAuthenticator {
 	/**
 	 Waits until `handleRedirectURL(_:)` passes the redirect of the Dropbox app.
 
+	 - Parameter expectedState: The `state` of the hand-off. `handleRedirectURL(_:)` passes a `/connect` redirect only if it carries it.
 	 - Parameter start: Opens the Dropbox app. It gets a function that fails this call, and only this one, e.g., if the app couldn't be opened.
 	 */
-	static func awaitRedirect(startingWith start: (_ fail: @escaping @Sendable (Error) -> Void) -> Void) async throws -> URL {
+	static func awaitRedirect(expectedState: String, startingWith start: (_ fail: @escaping @Sendable (Error) -> Void) -> Void) async throws -> URL {
 		let id = UUID()
 		return try await withTaskCancellationHandler {
 			try await withCheckedThrowingContinuation { continuation in
 				let supersededAuthentication = DropboxAuthenticator.pendingAuthentication.withLock { pendingAuthentication in
-					defer { pendingAuthentication = (id, continuation) }
+					defer { pendingAuthentication = PendingAuthentication(id: id, expectedState: expectedState, continuation: continuation) }
 					return pendingAuthentication?.continuation
 				}
 				supersededAuthentication?.resume(throwing: DropboxAuthenticatorError.authenticationFailed)
 				// The cancellation handler finds nothing to resume if it ran before the authentication was stored.
 				guard !Task.isCancelled else {
-					DropboxAuthenticator.takePendingAuthentication(withID: id)?.resume(throwing: CancellationError())
+					DropboxAuthenticator.takePendingAuthentication(where: { $0.id == id })?.resume(throwing: CancellationError())
 					return
 				}
 				start { error in
-					DropboxAuthenticator.takePendingAuthentication(withID: id)?.resume(throwing: error)
+					DropboxAuthenticator.takePendingAuthentication(where: { $0.id == id })?.resume(throwing: error)
 				}
 			}
 		} onCancel: {
-			DropboxAuthenticator.takePendingAuthentication(withID: id)?.resume(throwing: CancellationError())
+			DropboxAuthenticator.takePendingAuthentication(where: { $0.id == id })?.resume(throwing: CancellationError())
 		}
 	}
 
-	/// Hands out the pending authentication at most once, so that only one of redirect, cancellation, failure and a newer authentication resumes it.
-	private nonisolated static func takePendingAuthentication(withID id: UUID? = nil) -> CheckedContinuation<URL, any Error>? {
+	/// Hands out the pending authentication if `matches` accepts it, at most once, so that only one of redirect, cancellation, failure and a newer authentication resumes it.
+	private nonisolated static func takePendingAuthentication(where matches: @Sendable (PendingAuthentication) -> Bool) -> CheckedContinuation<URL, any Error>? {
 		return pendingAuthentication.withLock { pendingAuthentication in
-			guard let authentication = pendingAuthentication, id == nil || id == authentication.id else {
+			guard let authentication = pendingAuthentication, matches(authentication) else {
 				return nil
 			}
 			pendingAuthentication = nil

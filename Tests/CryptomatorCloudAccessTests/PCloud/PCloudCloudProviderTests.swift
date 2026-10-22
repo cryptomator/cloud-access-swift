@@ -257,7 +257,7 @@ class PCloudCloudProviderTests: XCTestCase {
 	func testDownloadFileReportsBytesOfTask() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try PCloudCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try PCloudCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
 		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: progress, onTaskCreation: nil)
@@ -269,7 +269,7 @@ class PCloudCloudProviderTests: XCTestCase {
 	func testUploadFileReportsBytesOfTask() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try PCloudCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try PCloudCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0)),
 			URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 5))
@@ -303,7 +303,7 @@ private struct ProviderCase<Expected: Error & Equatable>: Sendable {
 	let expected: Expected
 }
 
-enum PCloudProviderTestResponse {
+private enum PCloudProviderTestResponse {
 	static let rootWithFile = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "file.txt")])
 
 	/// The listing, `stat` and `getfilelink` that precede the download of `/file.txt`.
@@ -321,14 +321,5 @@ enum PCloudProviderTestResponse {
 		XCTAssertEqual(itemType, metadata.itemType, file: file, line: line)
 		XCTAssertEqual(Date(timeIntervalSince1970: 1_792_056_600), metadata.lastModifiedDate, file: file, line: line)
 		XCTAssertEqual(size, metadata.size, file: file, line: line)
-	}
-
-	/// Records the fraction of the progress when a transfer task terminated, which is before the provider completes the progress on its return.
-	static func recordingTransferProgress(of progress: Progress, into fractions: OSAllocatedUnfairLock<[Double]>) -> SplitURLSession.Hooks {
-		return SplitURLSession.Hooks(willProcessCompletion: { task in
-			if task is URLSessionUploadTask || task is URLSessionDownloadTask {
-				fractions.withLock { $0.append(progress.fractionCompleted) }
-			}
-		})
 	}
 }

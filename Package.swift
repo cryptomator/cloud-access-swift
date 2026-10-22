@@ -15,7 +15,8 @@ let appExtensionUnsafeSources = [
 	"GoogleDrive/GoogleDriveAuthenticator.swift",
 	"MicrosoftGraph/MicrosoftGraphAuthenticator.swift",
 	"PCloud/PCloudAuthenticator.swift",
-	"Box/BoxAuthenticator.swift"
+	"Box/BoxAuthenticator.swift",
+	"OAuth/WebAuthenticationSession.swift"
 ]
 
 let swiftSettings: [SwiftSetting] = [
@@ -37,8 +38,7 @@ let package = Package(
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
 		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.11.1")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "3.0.0")),
-		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0-cryptomator.2"),
-		.package(url: "https://github.com/dropbox/SwiftyDropbox.git", .upToNextMinor(from: "10.2.4"))
+		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0-cryptomator.2")
 	],
 	targets: [
 		.target(
@@ -49,8 +49,7 @@ let package = Package(
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
 				.product(name: "GRDB", package: "GRDB.swift"),
 				.product(name: "JOSESwift", package: "JOSESwift"),
-				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
-				.product(name: "SwiftyDropbox", package: "SwiftyDropbox")
+				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc")
 			],
 			path: "Sources/CryptomatorCloudAccess",
 			exclude: appExtensionUnsafeSources,

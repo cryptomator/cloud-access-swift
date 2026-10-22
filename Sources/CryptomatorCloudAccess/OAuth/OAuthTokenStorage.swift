@@ -11,6 +11,7 @@ import Foundation
 /// A provider whose OAuth logins the library keeps.
 public struct OAuthProvider: RawRepresentable, Hashable, Sendable {
 	public static let box = OAuthProvider(rawValue: "box")
+	public static let dropbox = OAuthProvider(rawValue: "dropbox")
 	public static let googleDrive = OAuthProvider(rawValue: "googledrive")
 
 	public let rawValue: String

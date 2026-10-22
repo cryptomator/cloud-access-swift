@@ -11,7 +11,8 @@ If you would like to run integration tests that require authentication, you have
 export BOX_CLIENT_ID=...
 export BOX_CLIENT_SECRET=...
 export BOX_ENTERPRISE_ID=...
-export DROPBOX_ACCESS_TOKEN=...
+export DROPBOX_APP_KEY=...
+export DROPBOX_REFRESH_TOKEN=...
 export GOOGLE_DRIVE_CLIENT_ID=...
 export GOOGLE_DRIVE_REFRESH_TOKEN=...
 export MICROSOFT_GRAPH_CLIENT_ID=...
@@ -42,7 +43,13 @@ The Box tests authenticate as the service account of a Box Platform app that use
 
 #### Dropbox
 
-To get the access token for Dropbox, generate a token in the Dropbox Developer Portal. For more detailed instructions, check out the [OAuth Guide from Dropbox](https://developers.dropbox.com/oauth-guide).
+The Dropbox tests refresh `DROPBOX_REFRESH_TOKEN`, a refresh token of the test account, with the app key `DROPBOX_APP_KEY` and no client secret. Dropbox refreshes a token without a client secret only if it came from a PKCE login. So mint it once with the offline code flow with PKCE for that app key (see the [OAuth Guide from Dropbox](https://developers.dropbox.com/oauth-guide)):
+
+1. Create a random code verifier of 43 to 128 characters, and its `S256` code challenge.
+2. Open `https://www.dropbox.com/oauth2/authorize?client_id=<app key>&response_type=code&token_access_type=offline&code_challenge=<challenge>&code_challenge_method=S256` in a browser, sign in with the test account and allow access.
+3. Exchange the shown code with `curl https://api.dropboxapi.com/oauth2/token -d grant_type=authorization_code -d code=<code> -d code_verifier=<verifier> -d client_id=<app key>`. Its `refresh_token` is `DROPBOX_REFRESH_TOKEN`.
+
+Dropbox's refresh tokens don't expire, so the token stays valid until the app is unlinked from the test account.
 
 #### Google Drive
 
@@ -150,7 +157,7 @@ The respective `CloudProvider` is tested here very generally for the specificati
 
 ### Dropbox
 
-- Correct use of the upload session (file size >= 150 MiB).
+- Correct use of the upload session (file size >= 150 MiB), tested with lowered limits in `DropboxTests`.
 
 ### Google Drive
 

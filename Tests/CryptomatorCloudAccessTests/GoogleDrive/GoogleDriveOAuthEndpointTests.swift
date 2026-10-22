@@ -35,7 +35,7 @@ class GoogleDriveOAuthEndpointTests: XCTestCase {
 		XCTAssertEqual("POST", request.httpMethod)
 		XCTAssertEqual("https://oauth2.googleapis.com/token", request.url?.absoluteString)
 		XCTAssertEqual("application/x-www-form-urlencoded", request.value(forHTTPHeaderField: "Content-Type"))
-		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID"], PCloudMockResponse.formParameters(of: request))
+		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID"], URLProtocolMock.formParameters(of: request))
 		let log = logCapture.joinedMessages
 		for secret in ["SECRET-ACCESS", "SECRET-REFRESH"] {
 			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")

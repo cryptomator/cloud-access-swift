@@ -152,7 +152,7 @@ class BoxClientTests: XCTestCase {
 		XCTAssertEqual("/2.0/folders/7/items", url.path)
 		let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
 		XCTAssertTrue(query.contains("marker=a%2Bb%20c"), query)
-		XCTAssertEqual(["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"], PCloudMockResponse.parameters(inFormEncoded: query))
+		XCTAssertEqual(["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"], URLProtocolMock.parameters(inFormEncoded: query))
 	}
 
 	func testUploadSessionURLOutsideBoxIsRejectedWithoutRequest() async throws {

@@ -51,6 +51,8 @@ public final class BoxCredential: Sendable {
 	/**
 	 Exchanges the authorization code of a login for a token, and stores the token with the account's name under its user ID.
 
+	 Nothing is stored if the exchange or the user request fails, or the task was cancelled meanwhile.
+
 	 - Throws: `BoxCredentialErrors.missingSetup` if `BoxSetup.constants` isn't set, `BoxCredentialErrors.missingUserID` if Box returned no user ID, and otherwise what the code exchange, the user request or saving the token throws.
 	 */
 	@concurrent
@@ -70,6 +72,8 @@ public final class BoxCredential: Sendable {
 		guard !user.id.isEmpty else {
 			throw BoxCredentialErrors.missingUserID
 		}
+		// A user request that was under way when the task was cancelled still completes.
+		try Task.checkCancellation()
 		let tokenSource = makeTokenSource(user.id)
 		try await tokenSource.replace(with: OAuthToken(accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt, username: user.name))
 		return BoxCredential(userID: user.id, tokenSource: tokenSource)

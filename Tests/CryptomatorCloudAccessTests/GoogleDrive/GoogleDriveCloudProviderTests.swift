@@ -337,7 +337,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 	func testDownloadReportsBytesOfTask() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
 		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
@@ -348,7 +348,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 	func testUploadReportsBytesOfTask() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 			GoogleDriveMockResponse.session(),
@@ -365,7 +365,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 		let fractionAtRetry = OSAllocatedUnfairLock<Double?>(initialState: nil)
-		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = downloadPreparation() + [
 			URLProtocolMock.handler(statusCode: 503, body: "BACKEND", headerFields: ["Content-Length": "7"]),
 			URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"], onRequest: { _ in
@@ -382,7 +382,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 		let fractionAtRetry = OSAllocatedUnfairLock<Double?>(initialState: nil)
-		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)))
+		let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 			GoogleDriveMockResponse.session(),

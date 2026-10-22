@@ -36,15 +36,10 @@ class BoxCredentialTests: XCTestCase {
 	}
 
 	func testCompleteAuthenticationExchangesCodeAndStoresTokenUnderUserID() async throws {
-		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-		let recordRequest: @Sendable (URLRequest) -> Void = { request in
-			var recordedRequest = request
-			recordedRequest.httpBody = URLProtocolMock.body(of: request)
-			requests.withLock { [recordedRequest] in $0.append(recordedRequest) }
-		}
+		let recorder = RequestRecorder()
 		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#, onRequest: recordRequest),
-			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recordRequest)
+			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#, onRequest: recorder.record),
+			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recorder.record)
 		]
 		let buffer = TokenBuffer()
 		let storage = MemoryTokenStorage(buffer: buffer)
@@ -53,10 +48,10 @@ class BoxCredentialTests: XCTestCase {
 
 		XCTAssertEqual("USER-ID", credential.userID)
 		XCTAssertEqual([OAuthAccountKey(provider: .box, account: "USER-ID")], storage.keys)
-		let sentRequests = requests.withLock { $0 }
+		let sentRequests = recorder.requests
 		XCTAssertEqual(2, sentRequests.count)
 		XCTAssertEqual("https://api.box.com/oauth2/token", sentRequests.first?.url?.absoluteString)
-		XCTAssertEqual(["grant_type": "authorization_code", "code": "CODE", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], sentRequests.first.map(PCloudMockResponse.formParameters))
+		XCTAssertEqual(["grant_type": "authorization_code", "code": "CODE", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], sentRequests.first.map(URLProtocolMock.formParameters))
 		XCTAssertEqual("https://api.box.com/2.0/users/me", sentRequests.last?.url?.absoluteString)
 		XCTAssertEqual("Bearer NEW-ACCESS", sentRequests.last?.value(forHTTPHeaderField: "Authorization"))
 		XCTAssertEqual("NEW-ACCESS", buffer.token?.accessToken)
@@ -76,18 +71,41 @@ class BoxCredentialTests: XCTestCase {
 		}
 	}
 
-	func testStoredSDKLoginIsRefreshedSavedAndRevoked() async throws {
-		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-		let recordRequest: @Sendable (URLRequest) -> Void = { request in
-			var recordedRequest = request
-			recordedRequest.httpBody = URLProtocolMock.body(of: request)
-			requests.withLock { [recordedRequest] in $0.append(recordedRequest) }
-		}
+	/// The user request finishes even though the task was cancelled meanwhile, so the cancellation is checked before the token is stored.
+	func testCancellationDuringUserRequestStoresNothing() async throws {
+		let userRequested = XCTestExpectation(description: "user requested")
+		let release = DispatchSemaphore(value: 0)
 		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(statusCode: 401, onRequest: recordRequest),
-			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#, onRequest: recordRequest),
-			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recordRequest),
-			URLProtocolMock.handler(onRequest: recordRequest)
+			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#),
+			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: { _ in
+				userRequested.fulfill()
+				_ = release.wait(timeout: .now() + testWaitTimeout)
+			})
+		]
+		let buffer = TokenBuffer()
+		let storage = MemoryTokenStorage(buffer: buffer)
+
+		let lockDirectoryURL: URL = lockDirectoryURL
+		let authentication = Task {
+			try await BoxCredentialTests.completeAuthentication(storage: storage, lockDirectoryURL: lockDirectoryURL)
+		}
+		await fulfillment(of: [userRequested], timeout: testWaitTimeout)
+		authentication.cancel()
+		release.signal()
+
+		await XCTAssertThrowsErrorAsync(try await value(of: authentication)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertNil(buffer.token)
+	}
+
+	func testStoredSDKLoginIsRefreshedSavedAndRevoked() async throws {
+		let recorder = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 401, onRequest: recorder.record),
+			URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#, onRequest: recorder.record),
+			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recorder.record),
+			URLProtocolMock.handler(onRequest: recorder.record)
 		]
 		let buffer = TokenBuffer()
 		buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","token_type":"bearer"}"#.utf8)
@@ -95,11 +113,11 @@ class BoxCredentialTests: XCTestCase {
 
 		_ = try await BoxClient.mocked(tokenSource: tokenSource).user()
 
-		let sentRequests = requests.withLock { $0 }
+		let sentRequests = recorder.requests
 		XCTAssertEqual(["Bearer LEGACY", nil, "Bearer NEW-ACCESS"], sentRequests.map { $0.value(forHTTPHeaderField: "Authorization") })
 		let tokenRequest = try XCTUnwrap(sentRequests.dropFirst().first)
 		XCTAssertEqual("https://api.box.com/oauth2/token", tokenRequest.url?.absoluteString)
-		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "LEGACY-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], PCloudMockResponse.formParameters(of: tokenRequest))
+		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "LEGACY-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], URLProtocolMock.formParameters(of: tokenRequest))
 		let storedJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(buffer.data)) as? [String: Any])
 		XCTAssertEqual(1, storedJSON["version"] as? Int)
 		XCTAssertEqual("NEW-ACCESS", storedJSON["accessToken"] as? String)
@@ -107,9 +125,9 @@ class BoxCredentialTests: XCTestCase {
 
 		try await tokenSource.deauthenticate()
 
-		let revocation = try XCTUnwrap(requests.withLock { $0 }.last)
+		let revocation = try XCTUnwrap(recorder.requests.last)
 		XCTAssertEqual("https://api.box.com/oauth2/revoke", revocation.url?.absoluteString)
-		XCTAssertEqual("NEW-ACCESS", PCloudMockResponse.formParameters(of: revocation)["token"])
+		XCTAssertEqual("NEW-ACCESS", URLProtocolMock.formParameters(of: revocation)["token"])
 		XCTAssertNil(buffer.data)
 	}
 
@@ -165,6 +183,10 @@ class BoxCredentialTests: XCTestCase {
 	}
 
 	private func completeAuthentication(storage: MemoryTokenStorage) async throws -> BoxCredential {
+		return try await BoxCredentialTests.completeAuthentication(storage: storage, lockDirectoryURL: lockDirectoryURL)
+	}
+
+	private static func completeAuthentication(storage: MemoryTokenStorage, lockDirectoryURL: URL) async throws -> BoxCredential {
 		let endpoint = BoxOAuthEndpoint.mocked()
 		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectoryURL)
 		return try await BoxCredential.completeAuthentication(authorizationCode: "CODE", endpoint: endpoint, makeClient: { BoxClient.mocked(tokenSource: $0) }, makeTokenSource: { userID in

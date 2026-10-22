@@ -9,11 +9,6 @@
 import Foundation
 import os
 
-/**
- Setup for the Dropbox Cloud Provider
-
- - Important: The `DropboxSetup.constants` must be set only once before any interaction with the `DropboxCloudProvider` or `DropboxCredentials` takes place.
- */
 public final class DropboxSetup: Sendable {
 	private static let lockedConstants = OSAllocatedUnfairLock<DropboxSetup?>(initialState: nil)
 	public static var constants: DropboxSetup! {
@@ -21,21 +16,16 @@ public final class DropboxSetup: Sendable {
 		set { lockedConstants.withLock { $0 = newValue } }
 	}
 
-	let appKey: String
-	let sharedContainerIdentifier: String?
-	let keychainService: String?
-	let forceForegroundSession: Bool
+	/// The app key of the Dropbox app, whose redirect URL scheme is `db-` followed by the app key.
+	public let appKey: String
+	/// The container into which a background URL session downloads files, which an app extension shares with the app.
+	public let sharedContainerIdentifier: String?
+	/// Where the Dropbox logins are kept. Every process that uses the same logins must pass an equal value.
+	public let oauth: OAuthPersistence
 
-	/**
-	 - Parameter appKey: The consumer app key associated with the app that is integrating with the Dropbox API.
-	 - Parameter sharedContainerIdentifier: The identifier for the shared container into which files in background URL sessions should be downloaded. This needs to be set when downloading via an app extension.
-	 - Parameter keychainService: The service name for the keychain. Leave nil to use default
-	 - Parameter forceForegroundSession: If set to true, all network requests are made on foreground sessions (by default, most upload/download operations are performed with a background session).
-	 */
-	public init(appKey: String, sharedContainerIdentifier: String?, keychainService: String?, forceForegroundSession: Bool) {
+	public init(appKey: String, sharedContainerIdentifier: String?, oauth: OAuthPersistence) {
 		self.appKey = appKey
 		self.sharedContainerIdentifier = sharedContainerIdentifier
-		self.keychainService = keychainService
-		self.forceForegroundSession = forceForegroundSession
+		self.oauth = oauth
 	}
 }

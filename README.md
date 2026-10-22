@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. Currently, the WebDAV, S3, pCloud, Box and Google Drive providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, because it uploads such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. The WebDAV, S3, pCloud, Box, Dropbox and Google Drive providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, and Dropbox doesn't for one of 150 MiB or more, because they upload such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -88,16 +88,19 @@ let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: m
 
 ### OAuth Persistence
 
-The library keeps the OAuth logins of Box and Google Drive and refreshes their tokens. Create one `OAuthPersistence` and pass it to the setup of both providers. Every process that uses the same logins, e.g., the app and its extensions, must create it with the same values:
+The library keeps the OAuth logins of Box, Dropbox and Google Drive and refreshes their tokens. Create one `OAuthPersistence` and pass it to the setup of each of these providers. Every process that uses the same logins, e.g., the app and its extensions, must create it with the same values:
 
 ```swift
 let accessGroup = ... // optional: the keychain access group of the logins, `nil` for the first group of the `keychain-access-groups` entitlement
 let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
 let boxService = ... // the keychain service in which your app kept its Box logins so far; without `services`, Box logins go to `CryptomatorCloudAccess.OAuth.box`
-let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService])
+let dropboxService = ... // the keychain service in which your app kept its Dropbox logins so far: the `keychainService` it passed to `DropboxSetup` (by default its bundle identifier) followed by `.dropbox.authv2`; without `services`, Dropbox logins go to `CryptomatorCloudAccess.OAuth.dropbox`
+let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService, .dropbox: dropboxService])
 ```
 
-The logins are generic passwords in the keychain. An item that the library adds is accessible after the first unlock on this device only. A Box login is the item whose account is the user ID, in the service of `services[.box]`. A Google Drive login uses GTMAppAuth's item, with the service `GoogleDriveAuth` followed by the user ID and the account `OAuth`. Logins stored by the Box SDK or GTMAppAuth keep working without a new login. The library rewrites them in its own format when it first saves them. Every refresh happens only while holding a lock in `tokenLockDirectory`, so that no two processes send the same refresh token, which Box accepts only once.
+The logins are generic passwords in the keychain. An item that the library adds is accessible after the first unlock on this device only. A Box or Dropbox login is the item whose account is the user ID, in the service of `services[.box]` or `services[.dropbox]`. A Google Drive login uses GTMAppAuth's item, with the service `GoogleDriveAuth` followed by the user ID and the account `OAuth`.
+
+Logins stored by the Box SDK, the Dropbox SDKs or GTMAppAuth keep working without a new login. The library rewrites them in its own format when it first saves them. Every refresh happens only while holding a lock in `tokenLockDirectory`, so that no two processes send the same refresh token, which Box accepts only once.
 
 To keep the logins elsewhere, implement `OAuthTokenStorage` and pass it to `OAuthPersistence.custom(storage:tokenLockDirectory:)`. Its documentation describes the contract that the storage must hold to.
 
@@ -151,31 +154,29 @@ To log out, call `try await credential.deauthenticate()`. It deletes the stored 
 
 ### Dropbox
 
-Set up the `Info.plist` as described in the [official Dropbox Swift SDK](https://github.com/dropbox/SwiftyDropbox#application-plist-file). In addition, the following constants must be set once, e.g. in your app delegate:
+Declare `dbapi-2` and `dbapi-8-emm` in the `LSApplicationQueriesSchemes` of your `Info.plist`, so that the login can hand off to the Dropbox app. Also add the URL type `db-<app key>`, to which Dropbox redirects. In addition, the following constants must be set once, e.g. in your app delegate:
 
 ```swift
 let appKey = ... // your Dropbox app key
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `DropboxCloudProvider` in an app extension and set `forceForegroundSession = false`
-let keychainService = ... // the service name for the keychain, use `nil` to use default
-let forceForegroundSession = ... // if set to `true`, all network requests are made on foreground sessions (by default, most download/upload operations are performed with a background session)
-DropboxSetup.constants = DropboxSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier, keychainService: keychainService, forceForegroundSession: forceForegroundSession)
+let sharedContainerIdentifier = ... // optional: only needed if you want to create a `DropboxCloudProvider` with a background `URLSession` in an app extension
+let oauth = ... // your `OAuthPersistence`
+DropboxSetup.constants = DropboxSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
 ```
 
 Begin the authentication flow:
 
 ```swift
-let dropboxAuthenticator = DropboxAuthenticator()
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await dropboxAuthenticator.authenticate(from: viewController)
+  let credential = try await DropboxAuthenticator.authenticate(from: viewController)
   // do something with `DropboxCredential`
-  // you probably want to save `credential.tokenUID` to re-create the credential later
+  // you probably want to save `credential.userID` to re-create the credential later
 } catch {
   // error handling
 }
 ```
 
-Handle redirection once the authentication flow is complete in your app delegate:
+If the Dropbox app is installed, the login continues there, and the Dropbox app redirects back to your app. Otherwise, the login runs in a web authentication session. Pass the redirect of the Dropbox app to the authenticator, e.g., in your app delegate:
 
 ```swift
 func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -183,15 +184,30 @@ func application(_: UIApplication, open url: URL, options _: [UIApplication.Open
 }
 ```
 
-This completes the pending `authenticate(from:)` call. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`.
+This completes the pending `authenticate(from:)` call. A late redirect of an earlier login doesn't complete it: `handleRedirectURL(_:)` ignores it and returns `false`, and the pending call keeps waiting for its own redirect. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`. If the login runs in a web authentication session instead, cancelling also dismisses it.
 
-Create a Dropbox provider with a credential:
+Re-create a saved credential, whose user ID is the `uid` of the account:
 
 ```swift
-let tokenUID = ... // the `tokenUID` you saved after the successful authentication flow
-let credential = DropboxCredential(tokenUID: tokenUID)
+let credential = try DropboxCredential(userID: userID)
+```
+
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by a Dropbox SDK. `try await credential.getUsername()` asks Dropbox for it and stores it if it changed.
+
+You can then use the credential to create a Dropbox provider:
+
+```swift
 let provider = DropboxCloudProvider(credential: credential)
 ```
+
+Or create a Dropbox provider whose downloads and uploads run on a background URLSession:
+
+```swift
+let sessionIdentifier = ...
+let provider = DropboxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+```
+
+To log out, call `try await credential.deauthenticate()`. It deletes the stored login and then revokes its tokens, which ends only this login. The login is deleted also if the revocation fails.
 
 ### Google Drive
 

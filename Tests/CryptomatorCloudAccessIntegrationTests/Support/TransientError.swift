@@ -19,7 +19,7 @@ private let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkCon
 private let transientS3ErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 
 /**
- Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 408, 429 or 5xx, a failed OAuth token request with such a status, a Google Drive 403 for an exceeded rate limit, or an eventually consistent provider that didn't catch up in time.
+ Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 408, 429 or 5xx, a failed OAuth token request with such a status, a Google Drive 403 for an exceeded rate limit, a Dropbox 409 for too many write operations, or an eventually consistent provider that didn't catch up in time.
 
  Wrapped errors are unwrapped through `NSUnderlyingErrorKey` and through the associated values of Swift errors, because SDKs wrap the errors of their requests. Cancellation is never transient.
  */
@@ -67,8 +67,8 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return true
 	case let URLSessionError.httpError(underlyingError, statusCode):
 		return isTransientHTTPStatusCode(statusCode) || underlyingError.map(isTransientIntegrationError) ?? false
-	case DropboxError.tooManyWriteOperations, DropboxError.rateLimitError, DropboxError.internalServerError, DropboxError.clientError:
-		return true
+	case let DropboxError.apiError(statusCode, summary):
+		return isTransientHTTPStatusCode(statusCode) || DropboxError.isRetryable(statusCode: statusCode, summary: summary)
 	case let MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode), let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
 		return isTransientHTTPStatusCode(statusCode)
 	case let GoogleDriveError.apiError(statusCode, reason, _):

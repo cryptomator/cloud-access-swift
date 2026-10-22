@@ -35,7 +35,7 @@ class BoxOAuthEndpointTests: XCTestCase {
 		XCTAssertEqual("POST", request.httpMethod)
 		XCTAssertEqual("https://api.box.com/oauth2/token", request.url?.absoluteString)
 		XCTAssertEqual("application/x-www-form-urlencoded", request.value(forHTTPHeaderField: "Content-Type"))
-		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], PCloudMockResponse.formParameters(of: request))
+		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], URLProtocolMock.formParameters(of: request))
 	}
 
 	func testInvalidGrantIsUnauthorized() async throws {
@@ -72,7 +72,7 @@ class BoxOAuthEndpointTests: XCTestCase {
 
 		let request = try XCTUnwrap(sentRequest.withLock { $0 })
 		XCTAssertEqual("https://api.box.com/oauth2/revoke", request.url?.absoluteString)
-		XCTAssertEqual(["client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT", "token": "SECRET-ACCESS"], PCloudMockResponse.formParameters(of: request))
+		XCTAssertEqual(["client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT", "token": "SECRET-ACCESS"], URLProtocolMock.formParameters(of: request))
 	}
 
 	func testTokenRequestsLeaveNoBodiesInLog() async throws {

@@ -68,7 +68,7 @@ class PCloudClientTests: XCTestCase {
 
 			let request = try XCTUnwrap(sentRequest.withLock { $0 }, command.name)
 			XCTAssertEqual("/\(command.name)", request.url?.path, command.name)
-			XCTAssertEqual(command.parameters.merging(["access_token": PCloudCredential.stubAccessToken]) { first, _ in first }, PCloudMockResponse.formParameters(of: request), command.name)
+			XCTAssertEqual(command.parameters.merging(["access_token": PCloudCredential.stubAccessToken]) { first, _ in first }, URLProtocolMock.formParameters(of: request), command.name)
 		}
 	}
 
@@ -88,7 +88,7 @@ class PCloudClientTests: XCTestCase {
 		XCTAssertEqual("application/octet-stream", request.value(forHTTPHeaderField: "Content-Type"))
 		let query = try XCTUnwrap(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery })
 		XCTAssertTrue(query.contains("filename=a%2Bb.txt"), query)
-		XCTAssertEqual(["access_token": PCloudCredential.stubAccessToken, "folderid": "3", "filename": "a+b.txt", "nopartial": "1", "iconformat": "id", "timeformat": "timestamp"], PCloudMockResponse.parameters(inFormEncoded: query))
+		XCTAssertEqual(["access_token": PCloudCredential.stubAccessToken, "folderid": "3", "filename": "a+b.txt", "nopartial": "1", "iconformat": "id", "timeformat": "timestamp"], URLProtocolMock.parameters(inFormEncoded: query))
 		XCTAssertEqual(Data("content".utf8), body)
 	}
 
@@ -424,17 +424,5 @@ enum PCloudMockResponse {
 
 	static func fileLink() -> String {
 		return #"{"result":0,"hosts":["\#(link.hosts[0])"],"path":"\#(link.path)","dwltag":"\#(link.dwltag)","expires":"Mon, 19 Oct 2026 22:00:00 +0000"}"#
-	}
-
-	static func formParameters(of request: URLRequest) -> [String: String] {
-		return parameters(inFormEncoded: String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) ?? "")
-	}
-
-	static func parameters(inFormEncoded string: String) -> [String: String] {
-		let pairs = string.split(separator: "&").map { pair in
-			let nameAndValue = pair.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding ?? "" }
-			return (nameAndValue[0], nameAndValue.count > 1 ? nameAndValue[1] : "")
-		}
-		return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
 	}
 }

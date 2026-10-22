@@ -16,7 +16,7 @@ import Foundation
 /// The credentials that all tests of a provider share, so that each is authorized once per run.
 private enum SharedCredentials {
 	static let box = BoxCredential.integrationTest()
-	static let dropbox = DropboxCredentialMock()
+	static let dropbox = Result { try DropboxCredentialMock.generateAuthorizedCredential() }
 	static let googleDrive = Result { try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest") }
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
 	static let microsoftGraph = MicrosoftGraphCredentialMock()
@@ -35,7 +35,7 @@ extension IntegrationProvider {
 		case .box:
 			return try BoxCloudProvider(credential: SharedCredentials.box, maxPageSize: maxPageSize)
 		case .dropbox:
-			return DropboxCloudProvider(credential: SharedCredentials.dropbox, maxPageSize: maxPageSize)
+			return try DropboxCloudProvider(credential: SharedCredentials.dropbox.get(), maxPageSize: maxPageSize)
 		case .googleDrive:
 			return try GoogleDriveCloudProvider(credential: SharedCredentials.googleDrive.get(), maxPageSize: maxPageSize)
 		case .microsoftGraph:
@@ -58,9 +58,7 @@ extension IntegrationProvider {
 		case .box:
 			return try BoxCloudProvider(credential: .integrationTestInvalid())
 		case .dropbox:
-			let credential = DropboxCredentialMock()
-			credential.deauthenticate()
-			return DropboxCloudProvider(credential: credential)
+			return DropboxCloudProvider(credential: DropboxCredential(userID: "IntegrationTest-Unauthorized", tokenSource: InvalidOAuthTokenSource()))
 		case .googleDrive:
 			return try GoogleDriveCloudProvider(credential: GoogleDriveCredential(userID: "IntegrationTest-Unauthorized", tokenSource: InvalidOAuthTokenSource()))
 		case .microsoftGraph:

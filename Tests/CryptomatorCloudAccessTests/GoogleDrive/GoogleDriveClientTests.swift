@@ -522,24 +522,7 @@ class GoogleDriveClientTests: XCTestCase {
 	}
 
 	private static func queryParameters(of request: URLRequest) -> [String: String] {
-		return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery }.map(PCloudMockResponse.parameters(inFormEncoded:)) ?? [:]
-	}
-}
-
-/// Records the requests that reach `URLProtocolMock`, with their bodies.
-final class RequestRecorder: Sendable {
-	private let recordedRequests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-
-	var requests: [URLRequest] {
-		return recordedRequests.withLock { $0 }
-	}
-
-	var record: @Sendable (URLRequest) -> Void {
-		return { request in
-			var recordedRequest = request
-			recordedRequest.httpBody = URLProtocolMock.body(of: request)
-			self.recordedRequests.withLock { [recordedRequest] in $0.append(recordedRequest) }
-		}
+		return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery }.map(URLProtocolMock.parameters(inFormEncoded:)) ?? [:]
 	}
 }
 

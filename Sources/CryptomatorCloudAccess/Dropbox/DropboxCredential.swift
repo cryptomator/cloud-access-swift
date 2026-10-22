@@ -7,96 +7,102 @@
 //
 
 import Foundation
-import os
-@preconcurrency import SwiftyDropbox
 
 public enum DropboxCredentialErrors: Error {
 	case noUsername
+	case missingUserID
+	/// `DropboxSetup.constants` isn't set.
+	case missingSetup
 }
 
-/**
- The Dropbox clients of an account, which share its access token.
+/// The login of a Dropbox account, which `DropboxSetup.constants.oauth` keeps under the user ID, the account's `uid`. Persist the user ID to re-create the credential later.
+public final class DropboxCredential: Sendable {
+	public let userID: String
+	let tokenSource: any OAuthTokenSource
 
- Downloads and single-request uploads run on `transferClient`, which uses a background session unless `DropboxSetup.constants.forceForegroundSession` is set. All other requests run on `client`, because a background session supports only downloads and uploads from a file, while the chunks of an upload session are uploaded from memory.
- */
-struct DropboxAuthorizedClient {
-	let client: DropboxClient
-	let transferClient: DropboxClient
+	init(userID: String, tokenSource: any OAuthTokenSource) {
+		self.userID = userID
+		self.tokenSource = tokenSource
+	}
 
-	init(accessTokenProvider: AccessTokenProvider) {
-		self.client = DropboxClient(accessTokenProvider: accessTokenProvider)
-		if DropboxSetup.constants.forceForegroundSession {
-			self.transferClient = client
-		} else {
-			let sessionConfiguration = NetworkSessionConfiguration.background(withIdentifier: "CryptomatorCloudAccess.Dropbox.\(UUID().uuidString)", sharedContainerIdentifier: DropboxSetup.constants.sharedContainerIdentifier)
-			self.transferClient = DropboxClient(accessTokenProvider: accessTokenProvider, sessionConfiguration: sessionConfiguration)
+	/**
+	 Creates the credential of a login that `DropboxAuthenticator` or a Dropbox SDK stored. It reads nothing until the first request.
+
+	 - Throws: `DropboxCredentialErrors.missingUserID` for an empty user ID, and `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set.
+	 */
+	public convenience init(userID: String) throws {
+		guard !userID.isEmpty else {
+			throw DropboxCredentialErrors.missingUserID
 		}
-	}
-}
-
-/// `@unchecked Sendable`: `tokenUID` is immutable and `authorizedClient` is replaced under a lock, while the requests of its clients are issued on the main actor. The class is subclassed in tests.
-public class DropboxCredential: @unchecked Sendable {
-	/// The clients of each account with the refresh token, or the long-lived access token, that they were created for. The credentials of an account share them, and with them one token refresh and one set of URL sessions, which are never invalidated.
-	private static let lockedAuthorizedClients = OSAllocatedUnfairLock<[String: (token: String, authorizedClient: DropboxAuthorizedClient)]>(uncheckedState: [:])
-
-	private let lockedAuthorizedClient = OSAllocatedUnfairLock<DropboxAuthorizedClient?>(uncheckedState: nil)
-	var authorizedClient: DropboxAuthorizedClient? {
-		get { lockedAuthorizedClient.withLockUnchecked { $0 } }
-		set { lockedAuthorizedClient.withLockUnchecked { $0 = newValue } }
-	}
-
-	public let tokenUID: String
-	public var isAuthorized: Bool {
-		authorizedClient != nil
-	}
-
-	public init(tokenUID: String) {
-		self.tokenUID = tokenUID
-		DropboxClientSetup.oneTimeSetup()
-		setAuthorizedClient()
-	}
-
-	public func setAuthorizedClient() {
-		guard let accessToken = DropboxOAuthManager.sharedOAuthManager.getAccessToken(tokenUID) else {
-			authorizedClient = nil
-			return
+		guard let setup = DropboxSetup.constants else {
+			throw DropboxCredentialErrors.missingSetup
 		}
-		// A token refresh keeps the refresh token, so only a new login replaces the clients of the account.
-		let token = accessToken.refreshToken ?? accessToken.accessToken
-		authorizedClient = DropboxCredential.lockedAuthorizedClients.withLockUnchecked { authorizedClients in
-			if let cached = authorizedClients[tokenUID], cached.token == token {
-				return cached.authorizedClient
-			}
-			let authorizedClient = DropboxAuthorizedClient(accessTokenProvider: DropboxOAuthManager.sharedOAuthManager.accessTokenProviderForToken(accessToken))
-			authorizedClients[tokenUID] = (token, authorizedClient)
-			return authorizedClient
-		}
+		self.init(userID: userID, tokenSource: DropboxCredential.makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: DropboxOAuthEndpoint(setup: setup)))
 	}
 
-	public func deauthenticate() {
-		authorizedClient = nil
-		DropboxCredential.lockedAuthorizedClients.withLockUnchecked { authorizedClients in
-			authorizedClients[tokenUID] = nil
-		}
-		_ = DropboxClientSetup.keychainStorage.deleteInfo(for: tokenUID)
+	static func makeTokenSource(userID: String, oauth: OAuthPersistence, endpoint: DropboxOAuthEndpoint, assertion: ProcessExecutionAssertion = ProcessExecutionAssertion()) -> StoredOAuthTokenSource {
+		return StoredOAuthTokenSource(provider: .dropbox, account: userID, persistence: oauth, legacyDecoder: DropboxLegacyToken.decode, refresher: { token in
+			try await endpoint.refresh(token)
+		}, revoke: { token in
+			try await endpoint.revoke(token)
+		}, assertion: assertion)
 	}
 
+	/**
+	 Exchanges the authorization code of a login for a token, and stores the token with the account's email under its `uid`.
+
+	 Nothing is stored if the exchange or the account request fails, or the task was cancelled meanwhile.
+
+	 - Parameter codeVerifier: The PKCE code verifier of the login's authorize request.
+	 - Throws: `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set, `DropboxCredentialErrors.missingUserID` if Dropbox returned no `uid`, and otherwise what the code exchange, the account request or saving the token throws.
+	 */
+	@concurrent
+	public static func completeAuthentication(authorizationCode: String, codeVerifier: String) async throws -> DropboxCredential {
+		guard let setup = DropboxSetup.constants else {
+			throw DropboxCredentialErrors.missingSetup
+		}
+		let endpoint = DropboxOAuthEndpoint(setup: setup)
+		return try await completeAuthentication(authorizationCode: authorizationCode, codeVerifier: codeVerifier, endpoint: endpoint, makeClient: { DropboxClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
+			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)
+		})
+	}
+
+	static func completeAuthentication(authorizationCode: String, codeVerifier: String, endpoint: DropboxOAuthEndpoint, makeClient: (any OAuthTokenSource) -> DropboxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> DropboxCredential {
+		let (token, userID) = try await endpoint.exchange(code: authorizationCode, codeVerifier: codeVerifier)
+		let account = try await makeClient(StaticOAuthTokenSource(token: token.accessToken)).currentAccount()
+		// An account request that was under way when the task was cancelled still completes.
+		try Task.checkCancellation()
+		let tokenSource = makeTokenSource(userID)
+		try await tokenSource.replace(with: OAuthToken(accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt, username: account.email))
+		return DropboxCredential(userID: userID, tokenSource: tokenSource)
+	}
+
+	/**
+	 Returns the account's email that was stored with the login, without a request.
+
+	 - Returns: `nil` if no email was stored yet, e.g., for a login that a Dropbox SDK stored, until `getUsername()` stores one.
+	 */
+	public func cachedUsername() throws -> String? {
+		return try tokenSource.storedUsername()
+	}
+
+	/// Asks Dropbox for the account's email, and stores it with the login if it changed.
+	@concurrent
 	public func getUsername() async throws -> String {
-		guard let authorizedClient else {
-			throw CloudProviderError.unauthorized
+		return try await getUsername(client: .foreground(tokenSource: tokenSource))
+	}
+
+	func getUsername(client: DropboxClient) async throws -> String {
+		guard let email = try await client.currentAccount().email, !email.isEmpty else {
+			throw DropboxCredentialErrors.noUsername
 		}
-		return try await withMainActorSDKContinuation { resumer in
-			authorizedClient.client.users.getCurrentAccount().response { result, error in
-				if let error {
-					resumer.resume(throwing: error.converted())
-					return
-				}
-				guard let result else {
-					resumer.resume(throwing: DropboxCredentialErrors.noUsername)
-					return
-				}
-				resumer.resume(returning: result.email)
-			}
-		}
+		await tokenSource.storeUsernameIfChanged(email)
+		return email
+	}
+
+	/// Deletes the stored token and then revokes the tokens of this login only, so that the account stays signed in on the user's other devices. The token is deleted also if the revocation, or the refresh before it, fails.
+	@concurrent
+	public func deauthenticate() async throws {
+		try await tokenSource.deauthenticate()
 	}
 }

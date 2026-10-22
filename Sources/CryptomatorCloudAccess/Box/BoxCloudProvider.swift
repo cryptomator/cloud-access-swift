@@ -305,8 +305,8 @@ public final class BoxCloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			var partHash = Insecure.SHA1()
 			var partLength: Int64 = 0
-			let partFileURL = try BoxClient.writeTemporaryFile { partHandle in
-				while partLength < partSize, let chunk = try fileHandle.read(upToCount: Int(min(Int64(BoxClient.bufferLength), partSize - partLength))), !chunk.isEmpty {
+			let partFileURL = try HTTPClientSupport.writeTemporaryFile { partHandle in
+				while partLength < partSize, let chunk = try fileHandle.read(upToCount: Int(min(Int64(HTTPClientSupport.temporaryFileBufferLength), partSize - partLength))), !chunk.isEmpty {
 					try partHandle.write(contentsOf: chunk)
 					partHash.update(data: chunk)
 					fileHash.update(data: chunk)

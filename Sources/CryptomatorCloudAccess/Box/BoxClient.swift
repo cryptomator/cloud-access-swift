@@ -21,8 +21,6 @@ final class BoxClient: Sendable {
 	private static let maxAttemptCount = 5
 	/// The maximum length of a response body that an upload reads, and of an error body that a download reads.
 	private static let maxErrorBodyLength = 1024 * 1024
-	/// The length of the chunks in which a file is copied into a temporary file.
-	static let bufferLength = 64 * 1024
 	private static let listingFields = "name,size,modified_at"
 
 	private let tokenSource: any OAuthTokenSource
@@ -280,7 +278,7 @@ final class BoxClient: Sendable {
 		let boundary = "Boundary-\(UUID().uuidString)"
 		let attributesData = try JSONEncoder().encode(attributes)
 		// The body is written once, so that every attempt uploads it from the same file.
-		let bodyFileURL = try BoxClient.writeTemporaryFile { fileHandle in
+		let bodyFileURL = try HTTPClientSupport.writeTemporaryFile { fileHandle in
 			try fileHandle.write(contentsOf: Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"attributes\"\r\n\r\n".utf8))
 			try fileHandle.write(contentsOf: attributesData)
 			try fileHandle.write(contentsOf: Data("\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8))
@@ -288,7 +286,7 @@ final class BoxClient: Sendable {
 			defer {
 				try? sourceHandle.close()
 			}
-			while let chunk = try sourceHandle.read(upToCount: BoxClient.bufferLength), !chunk.isEmpty {
+			while let chunk = try sourceHandle.read(upToCount: HTTPClientSupport.temporaryFileBufferLength), !chunk.isEmpty {
 				try fileHandle.write(contentsOf: chunk)
 			}
 			try fileHandle.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
@@ -303,25 +301,6 @@ final class BoxClient: Sendable {
 			try await self.session.upload(request, fromFile: bodyFileURL, bodyLimit: BoxClient.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
 		return try BoxJSON.decode(BoxFiles.self, from: BoxClient.successfulBody(of: response, outcome, for: request))
-	}
-
-	/// The caller deletes the returned file.
-	static func writeTemporaryFile(_ write: (FileHandle) throws -> Void) throws -> URL {
-		let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
-			throw CocoaError(.fileWriteUnknown)
-		}
-		do {
-			let fileHandle = try FileHandle(forWritingTo: url)
-			defer {
-				try? fileHandle.close()
-			}
-			try write(fileHandle)
-		} catch {
-			try? FileManager.default.removeItem(at: url)
-			throw error
-		}
-		return url
 	}
 
 	// MARK: - Outcomes

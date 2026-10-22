@@ -38,13 +38,4 @@ class SDKContinuationTests: XCTestCase {
 			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
 		}
 	}
-
-	func testMainActorVariantStartsOnMainThread() async throws {
-		let startedOnMainThread = try await Task.detached { () -> Bool in
-			try await withMainActorSDKContinuation { resumer in
-				resumer.resume(returning: Thread.isMainThread)
-			}
-		}.value
-		XCTAssertTrue(startedOnMainThread)
-	}
 }

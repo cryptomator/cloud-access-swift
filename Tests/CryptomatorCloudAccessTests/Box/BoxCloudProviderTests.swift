@@ -233,7 +233,7 @@ class BoxCloudProviderTests: XCTestCase {
 	func testDownloadReportsBytesOfTask() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try BoxCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max)
+		let provider = try BoxCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max)
 		URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
 		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
@@ -249,7 +249,7 @@ class BoxCloudProviderTests: XCTestCase {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 		let fractionAtRetry = OSAllocatedUnfairLock<Double?>(initialState: nil)
-		let provider = try BoxCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max)
+		let provider = try BoxCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max)
 		URLProtocolMock.requestHandler = downloadPreparation() + [
 			URLProtocolMock.handler(statusCode: 202, body: "PENDING", headerFields: ["Retry-After": "0", "Content-Length": "7"]),
 			URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"], onRequest: { _ in
@@ -382,7 +382,7 @@ class BoxCloudProviderTests: XCTestCase {
 	func testChunkedUploadReportsBytesOfParts() async throws {
 		let progress = Progress(totalUnitCount: 1)
 		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try BoxCloudProvider(client: .mocked(hooks: PCloudProviderTestResponse.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max, chunkedUploadThreshold: 10)
+		let provider = try BoxCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max, chunkedUploadThreshold: 10)
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
 			URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)

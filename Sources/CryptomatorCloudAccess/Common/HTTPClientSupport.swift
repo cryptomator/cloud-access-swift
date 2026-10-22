@@ -13,7 +13,9 @@ enum HTTPClientSupport {
 	private static let failingURLKeys = [NSURLErrorFailingURLErrorKey, NSURLErrorFailingURLStringErrorKey, NSURLErrorFailingURLPeerTrustErrorKey]
 	private static let unreservedCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 	private static let unreservedCharactersAndSlash = unreservedCharacters.union(CharacterSet(charactersIn: "/"))
-	private static let maxRetryDelay: TimeInterval = 60
+	static let maxRetryDelay: TimeInterval = 60
+	/// The length of the chunks in which a file is copied into a temporary file.
+	static let temporaryFileBufferLength = 64 * 1024
 
 	static func hardened(_ configuration: URLSessionConfiguration) -> URLSessionConfiguration {
 		configuration.httpCookieStorage = HTTPCookieStorage()
@@ -77,6 +79,25 @@ enum HTTPClientSupport {
 	static func httpsURL(_ string: String?, onDomain domain: String) -> URL? {
 		guard let string, let url = URL(string: string), url.scheme?.lowercased() == "https", let host = url.host(percentEncoded: true)?.lowercased(), host == domain || host.hasSuffix(".\(domain)") else {
 			return nil
+		}
+		return url
+	}
+
+	/// The caller deletes the returned file.
+	static func writeTemporaryFile(_ write: (FileHandle) throws -> Void) throws -> URL {
+		let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
+			throw CocoaError(.fileWriteUnknown)
+		}
+		do {
+			let fileHandle = try FileHandle(forWritingTo: url)
+			defer {
+				try? fileHandle.close()
+			}
+			try write(fileHandle)
+		} catch {
+			try? FileManager.default.removeItem(at: url)
+			throw error
 		}
 		return url
 	}

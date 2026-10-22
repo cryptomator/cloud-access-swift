@@ -59,15 +59,3 @@ func withSDKContinuation<T>(_ start: (Resumer<T>) -> Void) async throws -> sendi
 		start(Resumer(continuation))
 	}
 }
-
-/**
- Variant of `withSDKContinuation(_:)` for SDKs without a documented thread-safety guarantee.
-
- - Parameter start: Issues the SDK call on the main actor and hands the `Resumer` to its completion handler. It is not isolated to the main actor itself, so that the SDK can call a completion handler written inside `start` on any thread.
- */
-@MainActor
-func withMainActorSDKContinuation<T>(_ start: @Sendable (Resumer<T>) -> Void) async throws -> sending T {
-	return try await withCheckedThrowingContinuation { continuation in
-		start(Resumer(continuation))
-	}
-}

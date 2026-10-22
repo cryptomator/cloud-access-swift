@@ -66,7 +66,7 @@ public enum DropboxAuthenticator {
 	/**
 	 Hands the login off to the Dropbox app, or shows Dropbox's authorize page if the app isn't installed or can't be opened, and stores the token of the login in `DropboxSetup.constants.oauth` under the `uid` of the account.
 
-	 Only one hand-off can be pending at a time, so a new hand-off fails the previous one with `DropboxAuthenticatorError.authenticationFailed`. Because the Dropbox app may never redirect back, cancelling the task while it is pending ends the call with `CancellationError`.
+	 Only one hand-off can be pending at a time, so a new hand-off fails the previous one with `DropboxAuthenticatorError.authenticationFailed`. Cancelling the task while the hand-off is pending ends the call with `CancellationError`, because the Dropbox app may never redirect back. Cancelling it while Dropbox's authorize page is shown dismisses the page and ends the call with `CancellationError` as well.
 
 	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `DropboxAuthenticatorError.authenticationFailed` if the login flow failed, `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set, and otherwise what completing the authentication throws.
 	 */

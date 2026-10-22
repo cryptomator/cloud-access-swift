@@ -12,6 +12,7 @@
 		53F1D5F0CE37A70A068F5EB8 /* BoxJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42E03B72216A84F2C85972C /* BoxJSONTests.swift */; };
 		D31A80BEF959D5D80E2B9ECD /* BoxOAuthEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 738913C9F313D94C0C50F98B /* BoxOAuthEndpointTests.swift */; };
 		EA88707E23CCFDC7EC336C14 /* CrossProcessFileLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC98BE6B555E67CCDF380B2 /* CrossProcessFileLockTests.swift */; };
+		5CE194A1B28CD121B2173663 /* WebAuthenticationSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD39ED0D1F89E6EFA405D98 /* WebAuthenticationSessionTests.swift */; };
 		3303393B36AFAD95A07D3F97 /* OAuthTokenStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */; };
 		C3F306A5E841C2BA5A90C12E /* BoxClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA01229A2952639CD79FA0C8 /* BoxClient.swift */; };
 		C3B7D61B1237918779389A0F /* BoxJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = 415E8DF6ED1D17DEE9E15CFD /* BoxJSON.swift */; };
@@ -289,6 +290,7 @@
 		B42E03B72216A84F2C85972C /* BoxJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxJSONTests.swift; sourceTree = "<group>"; };
 		738913C9F313D94C0C50F98B /* BoxOAuthEndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxOAuthEndpointTests.swift; sourceTree = "<group>"; };
 		6EC98BE6B555E67CCDF380B2 /* CrossProcessFileLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossProcessFileLockTests.swift; sourceTree = "<group>"; };
+		1AD39ED0D1F89E6EFA405D98 /* WebAuthenticationSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthenticationSessionTests.swift; sourceTree = "<group>"; };
 		0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthTokenStoreTests.swift; sourceTree = "<group>"; };
 		EA01229A2952639CD79FA0C8 /* BoxClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxClient.swift; sourceTree = "<group>"; };
 		415E8DF6ED1D17DEE9E15CFD /* BoxJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxJSON.swift; sourceTree = "<group>"; };
@@ -581,6 +583,7 @@
 				0D0ED9EC21D9A2DC8A02CB4A /* OAuthTokenStoreTests.swift */,
 				6543C7D9174855C299A61BC2 /* KeychainOAuthTokenStorageTests.swift */,
 				57A3F3B3DE1B11AE4EE9B8D4 /* OAuthTokenSourceStub.swift */,
+				1AD39ED0D1F89E6EFA405D98 /* WebAuthenticationSessionTests.swift */,
 			);
 			path = OAuth;
 			sourceTree = "<group>";
@@ -1610,6 +1613,7 @@
 				3303393B36AFAD95A07D3F97 /* OAuthTokenStoreTests.swift in Sources */,
 				0019B4E80D01DE6647C3E4C8 /* KeychainOAuthTokenStorageTests.swift in Sources */,
 				29C8A87A4AF74ED774C36B1D /* OAuthTokenSourceStub.swift in Sources */,
+				5CE194A1B28CD121B2173663 /* WebAuthenticationSessionTests.swift in Sources */,
 				74DF965E24F3DE6400763713 /* CloudPathTests.swift in Sources */,
 				7402B48427D2627900BE9F8B /* PCloudIdentifierCacheTests.swift in Sources */,
 				1DDCAB9A72B45B0E1AF3E0CB /* PCloudJSONTests.swift in Sources */,

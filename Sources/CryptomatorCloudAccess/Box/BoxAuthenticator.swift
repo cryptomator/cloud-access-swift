@@ -24,6 +24,8 @@ public enum BoxAuthenticator {
 	/**
 	 Shows Box's authorize page, and stores the token of the login in `BoxSetup.constants.oauth` under the user ID of the account.
 
+	 Cancelling the task while the authorize page is shown dismisses it and ends the call with `CancellationError`.
+
 	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `BoxAuthenticatorError.authenticationFailed` if the login flow failed, `BoxCredentialErrors.missingSetup` if `BoxSetup.constants` isn't set, and otherwise what completing the authentication throws.
 	 */
 	public static func authenticate(from viewController: UIViewController) async throws -> BoxCredential {

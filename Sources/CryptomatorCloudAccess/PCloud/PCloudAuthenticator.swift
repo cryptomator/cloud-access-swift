@@ -22,6 +22,7 @@ public enum PCloudAuthenticatorError: Error {
 public final class PCloudAuthenticator {
 	private nonisolated static let redirectHost = "oauth2redirect"
 
+	/// Shows pCloud's authorize page. Cancelling the task while the page is shown dismisses it and ends the call with `CancellationError`.
 	public static func authenticate(from viewController: UIViewController) async throws -> PCloudCredential {
 		guard let window = viewController.view.window else {
 			assertionFailure("Cannot present from a view controller that is not part of the view hierarchy.")

@@ -9,7 +9,8 @@
 import Foundation
 
 enum MicrosoftGraphAPI {
-	static let baseURL = "https://graph.microsoft.com/v1.0"
+	static let host = "graph.microsoft.com"
+	static let baseURL = "https://\(host)/v1.0"
 
 	struct DriveItem: Decodable {
 		let id: String

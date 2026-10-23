@@ -11,26 +11,20 @@ import Foundation
 /**
  Sends Box API requests for one account on a `SplitURLSession`.
 
- Every request carries the access token of its token source. A 401 refreshes the token and retries once. A 429, a server error and a 202 with `Retry-After` are retried until 5 attempts were made. Such a 202 means that a download or an upload isn't processed yet. A retry waits for `Retry-After`, capped at 60 seconds, or else for a random exponential delay. Transport errors aren't retried. Every request is retried this way, mutations included.
+ Requests are sent by a `BearerRequestSender`. A 429, a server error and a 202 with `Retry-After` are retried, mutations included. Such a 202 means that a download or an upload isn't processed yet. Transient transport errors are retried only for a `GET`, because a repeated mutation could be applied twice.
 
- A cancelled task stops a request before each attempt, also during the wait before a retry. A running attempt finishes either way.
-
- Downloads log their URLs only as origins, because Box redirects them to a pre-authenticated URL. Thrown errors never contain a request URL.
+ The bodies of metadata responses and of single-request uploads aren't logged, because they name the account, e.g., by its login email. Downloads log their URLs only as origins, because Box redirects them to a pre-authenticated URL. Thrown errors never contain a request URL.
  */
 final class BoxClient: Sendable {
-	private static let maxAttemptCount = 5
-	/// The maximum length of a response body that an upload reads, and of an error body that a download reads.
-	private static let maxErrorBodyLength = 1024 * 1024
+	private static let logLabel = "BoxClient"
 	private static let listingFields = "name,size,modified_at"
 
-	private let tokenSource: any OAuthTokenSource
 	private let session: SplitURLSession
-	private let sleep: @Sendable (Duration) async throws -> Void
+	private let sender: BearerRequestSender
 
 	init(tokenSource: any OAuthTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
-		self.tokenSource = tokenSource
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
-		self.sleep = sleep
+		self.sender = BearerRequestSender(tokenSource: tokenSource, logLabel: BoxClient.logLabel, sleep: sleep)
 	}
 
 	static func foreground(tokenSource: any OAuthTokenSource) -> BoxClient {
@@ -38,18 +32,22 @@ final class BoxClient: Sendable {
 	}
 
 	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String) -> BoxClient {
-		return BoxClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: BoxSetup.constants?.sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
+	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> BoxClient {
+		return BoxClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
+	}
+
+	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
+		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	// MARK: - Operations
 
 	func file(id: String) async throws -> BoxEntry {
-		return try await BoxJSON.decode(BoxEntry.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/files/\(BoxClient.pathComponent(id))"))))
+		return try await BoxJSON.decode(BoxEntry.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))"))))
 	}
 
 	func folder(id: String) async throws -> BoxEntry {
-		return try await BoxJSON.decode(BoxEntry.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/folders/\(BoxClient.pathComponent(id))"))))
+		return try await BoxJSON.decode(BoxEntry.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))"))))
 	}
 
 	func folderItems(id: String, marker: String?, limit: Int) async throws -> BoxItems {
@@ -58,34 +56,33 @@ final class BoxClient: Sendable {
 			parameters.append(("marker", marker))
 		}
 		parameters.append(("limit", String(limit)))
-		return try await BoxJSON.decode(BoxItems.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/folders/\(BoxClient.pathComponent(id))/items", parameters: parameters))))
+		return try await BoxJSON.decode(BoxItems.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))/items", parameters: parameters))))
 	}
 
-	/// Its response, which carries the account's login email, is never logged.
 	func user() async throws -> BoxUser {
-		return try await BoxJSON.decode(BoxUser.self, from: data(BoxClient.request("GET", BoxClient.apiURL("/users/me")), bodyLogging: .omitted))
+		return try await BoxJSON.decode(BoxUser.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/users/me"))))
 	}
 
 	func createFolder(name: String, parentID: String) async throws -> BoxEntry {
-		let request = try BoxClient.request("POST", BoxClient.apiURL("/folders"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
+		let request = try HTTPClientSupport.request("POST", BoxClient.apiURL("/folders"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
 		return try await BoxJSON.decode(BoxEntry.self, from: data(request))
 	}
 
 	func deleteFile(id: String) async throws {
-		_ = try await data(BoxClient.request("DELETE", BoxClient.apiURL("/files/\(BoxClient.pathComponent(id))")))
+		_ = try await data(HTTPClientSupport.request("DELETE", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))")))
 	}
 
 	func deleteFolder(id: String) async throws {
-		_ = try await data(BoxClient.request("DELETE", BoxClient.apiURL("/folders/\(BoxClient.pathComponent(id))", parameters: [("recursive", "true")])))
+		_ = try await data(HTTPClientSupport.request("DELETE", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))", parameters: [("recursive", "true")])))
 	}
 
 	func moveFile(id: String, name: String, parentID: String) async throws -> BoxEntry {
-		let request = try BoxClient.request("PUT", BoxClient.apiURL("/files/\(BoxClient.pathComponent(id))"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
+		let request = try HTTPClientSupport.request("PUT", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
 		return try await BoxJSON.decode(BoxEntry.self, from: data(request))
 	}
 
 	func moveFolder(id: String, name: String, parentID: String) async throws -> BoxEntry {
-		let request = try BoxClient.request("PUT", BoxClient.apiURL("/folders/\(BoxClient.pathComponent(id))"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
+		let request = try HTTPClientSupport.request("PUT", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))"), json: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)))
 		return try await BoxJSON.decode(BoxEntry.self, from: data(request))
 	}
 
@@ -97,12 +94,12 @@ final class BoxClient: Sendable {
 	 - Throws: `BoxError.fileNotReady` if Box still answered that the file isn't ready after the last attempt, in which case nothing is left at `stagingURL`.
 	 */
 	func download(fileID: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
-		let request = try BoxClient.request("GET", BoxClient.apiURL("/files/\(BoxClient.pathComponent(fileID))/content"))
+		let request = try HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"))
 		let handler = BoxClient.downloadHandler(movingTo: stagingURL)
-		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
+		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
 			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		_ = try BoxClient.successfulBody(of: response, outcome, for: request)
+		_ = try BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
 		guard case .file = outcome.body else {
 			throw BoxError.unexpectedContent
 		}
@@ -115,16 +112,16 @@ final class BoxClient: Sendable {
 
 	/// Uploads the file as a new version of an existing file in a single request.
 	func uploadFileVersion(from fileURL: URL, fileID: String, name: String, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxFiles {
-		return try await uploadMultipart(BoxClient.uploadURL("/files/\(BoxClient.pathComponent(fileID))/content"), attributes: BoxItemRequest(name: name, parent: nil), from: fileURL, progress: progress, onTaskCreation: onTaskCreation)
+		return try await uploadMultipart(BoxClient.uploadURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"), attributes: BoxItemRequest(name: name, parent: nil), from: fileURL, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	func createUploadSession(parentID: String, name: String, fileSize: Int64) async throws -> BoxUploadSession {
-		let request = try BoxClient.request("POST", BoxClient.uploadURL("/files/upload_sessions"), json: BoxUploadSessionRequest(folderID: parentID, fileSize: fileSize, fileName: name))
+		let request = try HTTPClientSupport.request("POST", BoxClient.uploadURL("/files/upload_sessions"), json: BoxUploadSessionRequest(folderID: parentID, fileSize: fileSize, fileName: name))
 		return try await BoxJSON.decode(BoxUploadSession.self, from: data(request))
 	}
 
 	func createUploadSession(fileID: String, fileSize: Int64) async throws -> BoxUploadSession {
-		let request = try BoxClient.request("POST", BoxClient.uploadURL("/files/\(BoxClient.pathComponent(fileID))/upload_sessions"), json: BoxUploadSessionRequest(folderID: nil, fileSize: fileSize, fileName: nil))
+		let request = try HTTPClientSupport.request("POST", BoxClient.uploadURL("/files/\(HTTPClientSupport.pathComponent(fileID))/upload_sessions"), json: BoxUploadSessionRequest(folderID: nil, fileSize: fileSize, fileName: nil))
 		return try await BoxJSON.decode(BoxUploadSession.self, from: data(request))
 	}
 
@@ -137,14 +134,14 @@ final class BoxClient: Sendable {
 	 */
 	// swiftlint:disable:next function_parameter_count
 	func uploadPart(url: String, from partFileURL: URL, range: ClosedRange<Int64>, fileSize: Int64, digest: String, progress: Progress?) async throws -> BoxPart {
-		var request = try BoxClient.request("PUT", BoxClient.uploadSessionURL(url))
+		var request = try HTTPClientSupport.request("PUT", HTTPClientSupport.uploadSessionURL(url, onDomain: "box.com", orThrow: BoxError.unexpectedContent))
 		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
 		request.setValue(digest, forHTTPHeaderField: "digest")
 		request.setValue("bytes \(range.lowerBound)-\(range.upperBound)/\(fileSize)", forHTTPHeaderField: "content-range")
-		let (response, outcome) = try await send(request, progress: progress) { request, _ in
-			try await self.session.upload(request, fromFile: partFileURL, bodyLimit: BoxClient.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: nil)
+		let (response, outcome) = try await send(request, urlLogging: .redacted, progress: progress) { request, _ in
+			try await self.session.upload(request, fromFile: partFileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: nil)
 		}
-		guard let part = try BoxJSON.decode(BoxUploadedPart.self, from: BoxClient.successfulBody(of: response, outcome, for: request)).part else {
+		guard let part = try BoxJSON.decode(BoxUploadedPart.self, from: BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)).part else {
 			throw BoxError.unexpectedContent
 		}
 		return part
@@ -158,7 +155,7 @@ final class BoxClient: Sendable {
 	 - Throws: `BoxError.fileNotReady` if Box was still processing the upload after the last attempt.
 	 */
 	func commit(url: String, parts: [BoxPart], digest: String) async throws -> BoxFiles {
-		var request = try BoxClient.request("POST", BoxClient.uploadSessionURL(url), json: BoxCommitRequest(parts: parts))
+		var request = try HTTPClientSupport.request("POST", HTTPClientSupport.uploadSessionURL(url, onDomain: "box.com", orThrow: BoxError.unexpectedContent), json: BoxCommitRequest(parts: parts))
 		request.setValue(digest, forHTTPHeaderField: "digest")
 		return try await BoxJSON.decode(BoxFiles.self, from: data(request))
 	}
@@ -166,51 +163,16 @@ final class BoxClient: Sendable {
 	// MARK: - Requests
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
-	private func data(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, outcome) = try await send(request) { request, _ in
-			try await self.session.data(request, bodyLimit: nil, bodyLogging: bodyLogging)
+	private func data(_ request: URLRequest) async throws -> Data {
+		let (response, outcome) = try await send(request, urlLogging: .redacted) { request, _ in
+			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
 		}
-		return try BoxClient.successfulBody(of: response, outcome, for: request)
+		return try BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)
 	}
 
-	/**
-	 Makes the attempts of a request until one is final, and returns its response, whatever its status.
-
-	 - Parameter progress: Gets the progress of every attempt with a pending unit count of 1. Its total unit count grows by 1 before each further attempt, so that the attempts never push it past complete.
-	 - Parameter attempt: Sends the authorized request once. Gets whether it is the first attempt.
-	 */
-	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		try Task.checkCancellation()
-		var accessToken = try await tokenSource.accessToken()
-		var attemptCount = 0
-		var hasRefreshed = false
-		while true {
-			try Task.checkCancellation()
-			if attemptCount > 0 {
-				progress?.totalUnitCount += 1
-			}
-			attemptCount += 1
-			var authorizedRequest = request
-			authorizedRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-			let outcome = try await attempt(authorizedRequest, attemptCount == 1)
-			let response: HTTPURLResponse
-			do {
-				response = try HTTPClientSupport.httpResponse(of: outcome)
-			} catch {
-				BoxClient.logFailure(of: request, with: error)
-				throw isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
-			}
-			if response.statusCode == 401, !hasRefreshed {
-				hasRefreshed = true
-				accessToken = try await tokenSource.refresh(rejecting: accessToken)
-				continue
-			}
-			guard BoxClient.isRetryable(response), attemptCount < BoxClient.maxAttemptCount else {
-				return (response, outcome)
-			}
-			BoxClient.logFailure(of: request, with: BoxClient.apiError(of: response, outcome))
-			try await sleep(HTTPClientSupport.retryDelay(for: response, attempt: attemptCount, now: Date()))
-		}
+	private func send(_ request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
+		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: { response, _ in BoxClient.isRetryable(response) }, failure: BoxClient.apiError(of:_:))
+		return try await sender.send(request, urlLogging: urlLogging, policy: policy, progress: progress, attempt: attempt)
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse) -> Bool {
@@ -224,52 +186,12 @@ final class BoxClient: Sendable {
 		}
 	}
 
-	private static func request(_ method: String, _ url: URL) -> URLRequest {
-		var request = URLRequest(url: url)
-		request.httpMethod = method
-		return request
-	}
-
-	private static func request(_ method: String, _ url: URL, json body: some Encodable) throws -> URLRequest {
-		var request = BoxClient.request(method, url)
-		request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-		request.httpBody = try JSONEncoder().encode(body)
-		return request
-	}
-
 	private static func apiURL(_ path: String, parameters: [(String, String)] = []) throws -> URL {
-		return try url(host: "api.box.com", percentEncodedPath: "/2.0\(path)", parameters: parameters)
+		return try HTTPClientSupport.url(host: "api.box.com", percentEncodedPath: "/2.0\(path)", parameters: parameters)
 	}
 
 	private static func uploadURL(_ path: String) throws -> URL {
-		return try url(host: "upload.box.com", percentEncodedPath: "/api/2.0\(path)", parameters: [])
-	}
-
-	private static func url(host: String, percentEncodedPath: String, parameters: [(String, String)]) throws -> URL {
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = host
-		components.percentEncodedPath = percentEncodedPath
-		if !parameters.isEmpty {
-			// Unlike `queryItems`, this also escapes `+`, which the server would read as a space.
-			components.percentEncodedQuery = HTTPClientSupport.formEncoded(parameters)
-		}
-		guard let url = components.url else {
-			throw URLError(.badURL)
-		}
-		return url
-	}
-
-	/// Escapes an identifier from a response as one path component.
-	private static func pathComponent(_ identifier: String) -> String {
-		return HTTPClientSupport.percentEncoded(identifier, encodeSlash: true)
-	}
-
-	private static func uploadSessionURL(_ string: String) throws -> URL {
-		guard let url = HTTPClientSupport.httpsURL(string, onDomain: "box.com") else {
-			throw BoxError.unexpectedContent
-		}
-		return url
+		return try HTTPClientSupport.url(host: "upload.box.com", percentEncodedPath: "/api/2.0\(path)", parameters: [])
 	}
 
 	// MARK: - Bodies
@@ -294,20 +216,20 @@ final class BoxClient: Sendable {
 		defer {
 			try? FileManager.default.removeItem(at: bodyFileURL)
 		}
-		var request = BoxClient.request("POST", url)
+		var request = HTTPClientSupport.request("POST", url)
 		request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 		request.setValue("application/json", forHTTPHeaderField: "Accept")
-		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
-			try await self.session.upload(request, fromFile: bodyFileURL, bodyLimit: BoxClient.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+		let (response, outcome) = try await send(request, urlLogging: .redacted, progress: progress) { request, isFirstAttempt in
+			try await self.session.upload(request, fromFile: bodyFileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		return try BoxJSON.decode(BoxFiles.self, from: BoxClient.successfulBody(of: response, outcome, for: request))
+		return try BoxJSON.decode(BoxFiles.self, from: BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted))
 	}
 
 	// MARK: - Outcomes
 
 	/// Moves the body of a 2xx response to `stagingURL`, except that of a 202, which means that the file isn't ready yet. Its body must not take the place of the following 200's.
 	private static func downloadHandler(movingTo stagingURL: URL) -> SplitURLSession.DownloadHandler {
-		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: maxErrorBodyLength)
+		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
 		return { location, response in
 			if (response as? HTTPURLResponse)?.statusCode == 202 {
 				return .none
@@ -321,26 +243,21 @@ final class BoxClient: Sendable {
 
 	 - Throws: `BoxError.fileNotReady` for a 202, which only a download or a commit that isn't processed yet returns, and `BoxError.apiError` for an unsuccessful status.
 	 */
-	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) throws -> Data {
-		let error: BoxError
-		switch response.statusCode {
-		case 202:
-			error = .fileNotReady
-		case 200 ... 299:
-			return outcome.data ?? Data()
-		default:
-			error = apiError(of: response, outcome)
+	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging) throws -> Data {
+		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: urlLogging, label: logLabel) { response, outcome in
+			switch response.statusCode {
+			case 202:
+				return BoxError.fileNotReady
+			case 200 ... 299:
+				return nil
+			default:
+				return apiError(of: response, outcome)
+			}
 		}
-		logFailure(of: request, with: error)
-		throw error
 	}
 
 	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> BoxError {
 		let errorResponse = outcome.data.flatMap { try? JSONDecoder().decode(BoxErrorResponse.self, from: $0) }
 		return .apiError(statusCode: response.statusCode, code: errorResponse?.code, message: errorResponse?.message)
-	}
-
-	private static func logFailure(of request: URLRequest, with error: Error) {
-		CloudAccessDDLogDebug("BoxClient: \(request.httpMethod ?? "GET") \(request.url?.path ?? "") failed with \(error)")
 	}
 }

@@ -9,11 +9,9 @@
 import Foundation
 import GRDB
 
-struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {
-	static let databaseTableName = "CachedEntries"
-	static let cloudPathKey = "cloudPath"
-	static let identifierKey = "identifier"
-	static let itemTypeKey = "itemType"
+struct GoogleDriveItem: Codable, IdentifierCacheItem, Equatable {
+	static let rootItem = GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder, shortcut: nil)
+	static let inconsistentCacheError: Error = GoogleDriveError.inconsistentCache
 	static let shortcutKey = "shortcut"
 
 	let cloudPath: CloudPath
@@ -23,6 +21,10 @@ struct GoogleDriveItem: Codable, PersistableRecord, FetchableRecord, Equatable {
 }
 
 extension GoogleDriveItem {
+	static func addExtraColumns(to table: TableDefinition) {
+		table.column(shortcutKey, .text)
+	}
+
 	var resolvedIdentifier: String {
 		return shortcut?.targetIdentifier ?? identifier
 	}

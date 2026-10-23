@@ -106,3 +106,29 @@ enum PCloudJSON {
 		let email: String
 	}
 }
+
+/// The login that the pCloud SDK stored: its `OAuth.User` as JSON, with `id`, `token`, `serverRegionId` and `httpAPIHostName`.
+enum PCloudLegacyToken {
+	private struct StoredUser: Decodable {
+		let token: String
+		let httpAPIHostName: String
+	}
+
+	/**
+	 Decodes a token without a refresh token or an expiry, because pCloud tokens never expire.
+
+	 - Throws: `PCloudError.unexpectedContent` if the data isn't such a user or its host isn't a host name of pCloud.
+	 */
+	static func decode(_ data: Data) throws -> OAuthToken {
+		let user: StoredUser
+		do {
+			user = try JSONDecoder().decode(StoredUser.self, from: data)
+		} catch {
+			throw PCloudError.unexpectedContent
+		}
+		guard let apiHost = PCloudCredential.apiHost(user.httpAPIHostName) else {
+			throw PCloudError.unexpectedContent
+		}
+		return OAuthToken(accessToken: user.token, refreshToken: nil, expiresAt: nil, apiHost: apiHost)
+	}
+}

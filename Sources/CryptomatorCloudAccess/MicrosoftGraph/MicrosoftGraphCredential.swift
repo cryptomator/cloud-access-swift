@@ -17,22 +17,18 @@ public enum MicrosoftGraphCredentialError: Error {
 public class MicrosoftGraphCredential: @unchecked Sendable {
 	public let identifier: String
 	public let scopes: [String]
-	let accessTokenProvider: MicrosoftGraphAccessTokenProvider
+	let tokenSource: any BearerTokenSource
 	private let clientApplication: MSALPublicClientApplication
 
-	public convenience init(identifier: String, type: MicrosoftGraphType) {
-		self.init(identifier: identifier, scopes: type.scopes)
+	public convenience init(identifier: String, type: MicrosoftGraphType, setup: MicrosoftGraphSetup) {
+		let tokenSource = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: setup.clientApplication, scopes: type.scopes)
+		self.init(identifier: identifier, scopes: type.scopes, tokenSource: tokenSource, clientApplication: setup.clientApplication)
 	}
 
-	public convenience init(identifier: String, scopes: [String]) {
-		let accessTokenProvider = MicrosoftGraphAuthenticationProvider(identifier: identifier, clientApplication: MicrosoftGraphSetup.constants.clientApplication, scopes: scopes)
-		self.init(identifier: identifier, scopes: scopes, accessTokenProvider: accessTokenProvider, clientApplication: MicrosoftGraphSetup.constants.clientApplication)
-	}
-
-	init(identifier: String, scopes: [String], accessTokenProvider: MicrosoftGraphAccessTokenProvider, clientApplication: MSALPublicClientApplication) {
+	init(identifier: String, scopes: [String], tokenSource: any BearerTokenSource, clientApplication: MSALPublicClientApplication) {
 		self.identifier = identifier
 		self.scopes = scopes
-		self.accessTokenProvider = accessTokenProvider
+		self.tokenSource = tokenSource
 		self.clientApplication = clientApplication
 	}
 

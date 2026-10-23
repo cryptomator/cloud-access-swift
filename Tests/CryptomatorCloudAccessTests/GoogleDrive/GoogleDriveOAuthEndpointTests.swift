@@ -75,6 +75,6 @@ extension GoogleDriveOAuthEndpoint {
 	static func mocked() -> GoogleDriveOAuthEndpoint {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return GoogleDriveOAuthEndpoint(clientId: "CLIENT-ID", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
+		return GoogleDriveOAuthEndpoint(clientID: "CLIENT-ID", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
 	}
 }

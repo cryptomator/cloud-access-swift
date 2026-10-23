@@ -53,14 +53,17 @@ class OAuthTokenStoreTests: XCTestCase {
 	}
 
 	func testVersionedTokenKeepsItsStoredFormat() throws {
-		let storedJSON = #"{"version":1,"accessToken":"A","refreshToken":"RA","expiresAt":1800000000}"#
-		let token = OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: Date(timeIntervalSince1970: 1_800_000_000))
+		let cases = [
+			(#"{"version":1,"accessToken":"A","refreshToken":"RA","expiresAt":1800000000}"#, OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: Date(timeIntervalSince1970: 1_800_000_000))),
+			(#"{"version":1,"accessToken":"A","apiHost":"eapi.pcloud.com"}"#, OAuthToken(accessToken: "A", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com"))
+		]
+		for (storedJSON, token) in cases {
+			let decodedToken = try OAuthTokenEncoding.decode(Data(storedJSON.utf8), legacyDecoder: { _ in throw CocoaError(.coderReadCorrupt) })
+			let encodedJSON = try JSONSerialization.jsonObject(with: OAuthTokenEncoding.encode(token)) as? NSDictionary
 
-		let decodedToken = try OAuthTokenEncoding.decode(Data(storedJSON.utf8), legacyDecoder: { _ in throw CocoaError(.coderReadCorrupt) })
-		let encodedJSON = try JSONSerialization.jsonObject(with: OAuthTokenEncoding.encode(token)) as? NSDictionary
-
-		XCTAssertEqual(token, decodedToken)
-		XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(storedJSON.utf8)) as? NSDictionary, encodedJSON)
+			XCTAssertEqual(token, decodedToken, storedJSON)
+			XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(storedJSON.utf8)) as? NSDictionary, encodedJSON, storedJSON)
+		}
 	}
 
 	func testNewerVersionThrowsWithoutOverwritingIt() async throws {

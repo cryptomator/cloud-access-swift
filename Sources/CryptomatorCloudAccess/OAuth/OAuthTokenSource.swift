@@ -9,10 +9,7 @@
 import Foundation
 
 /// Supplies the access token of the requests of an OAuth provider's client, and keeps the login's username.
-protocol OAuthTokenSource: Sendable {
-	func accessToken() async throws -> String
-	/// Returns a token that replaces the rejected one.
-	func refresh(rejecting accessToken: String) async throws -> String
+protocol OAuthTokenSource: BearerTokenSource {
 	func storedUsername() throws -> String?
 	func updateUsername(_ username: String) async throws
 	func deauthenticate() async throws
@@ -41,8 +38,8 @@ final class StoredOAuthTokenSource: OAuthTokenSource {
 	 - Parameter refresher: Sends the refresh grant of the given token once and returns the new token.
 	 - Parameter revoke: Revokes the token of the login when it is deauthenticated, after it was deleted.
 	 */
-	init(provider: OAuthProvider, account: String, persistence: OAuthPersistence, legacyDecoder: @escaping @Sendable (Data) throws -> OAuthToken, refresher: @escaping @Sendable (OAuthToken) async throws -> OAuthToken, revoke: @escaping @Sendable (OAuthToken) async throws -> Void, assertion: ProcessExecutionAssertion = ProcessExecutionAssertion()) {
-		self.store = OAuthTokenStore(provider: provider, account: account, persistence: persistence, legacyDecoder: legacyDecoder, refresher: refresher, assertion: assertion)
+	init(provider: OAuthProvider, account: String, persistence: OAuthPersistence, legacyDecoder: @escaping @Sendable (Data) throws -> OAuthToken, refresher: @escaping @Sendable (OAuthToken) async throws -> OAuthToken, revoke: @escaping @Sendable (OAuthToken) async throws -> Void, assertion: ProcessExecutionAssertion = ProcessExecutionAssertion(), coordinator: OAuthTokenCoordinator = .shared) {
+		self.store = OAuthTokenStore(provider: provider, account: account, persistence: persistence, legacyDecoder: legacyDecoder, refresher: refresher, assertion: assertion, coordinator: coordinator)
 		self.revoke = revoke
 	}
 
@@ -66,6 +63,10 @@ final class StoredOAuthTokenSource: OAuthTokenSource {
 		try await store.replace(with: token)
 	}
 
+	func storedToken() throws -> OAuthToken {
+		return try store.storedToken()
+	}
+
 	func deauthenticate() async throws {
 		try await store.delete(revoking: revoke)
 	}
@@ -74,6 +75,8 @@ final class StoredOAuthTokenSource: OAuthTokenSource {
 /// The token of a login that isn't stored yet, for the request that reads the account.
 struct StaticOAuthTokenSource: OAuthTokenSource {
 	let token: String
+	/// The host of the API that the token is valid for, if the provider binds tokens to one.
+	var apiHost: String?
 
 	func accessToken() async throws -> String {
 		return token

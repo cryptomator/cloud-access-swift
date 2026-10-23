@@ -7,20 +7,15 @@
 //
 
 import Foundation
-import os
 
-public final class PCloudSetup: Sendable {
-	private static let lockedConstants = OSAllocatedUnfairLock<PCloudSetup?>(initialState: nil)
-	public static var constants: PCloudSetup! {
-		get { lockedConstants.withLock { $0 } }
-		set { lockedConstants.withLock { $0 = newValue } }
-	}
-
+/// The registration of the app at pCloud, and where the pCloud logins are kept.
+public struct PCloudSetup: Sendable {
 	public let appKey: String
-	public let sharedContainerIdentifier: String?
+	/// Where the pCloud logins are kept. Every process that uses the same logins must pass an equal value.
+	public let oauth: OAuthPersistence
 
-	public init(appKey: String, sharedContainerIdentifier: String?) {
+	public init(appKey: String, oauth: OAuthPersistence) {
 		self.appKey = appKey
-		self.sharedContainerIdentifier = sharedContainerIdentifier
+		self.oauth = oauth
 	}
 }

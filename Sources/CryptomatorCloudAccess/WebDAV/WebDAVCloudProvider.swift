@@ -1,5 +1,5 @@
 //
-//  WebDAVProvider.swift
+//  WebDAVCloudProvider.swift
 //  CryptomatorCloudAccess
 //
 //  Created by Tobias Hagemann on 29.06.20.
@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-public enum WebDAVProviderError: Error {
+enum WebDAVProviderError: Error {
 	case resolvingURLFailed
 	case invalidResponse
 }
@@ -27,14 +27,28 @@ extension CloudItemMetadata {
 /**
  Cloud provider for WebDAV.
  */
-public final class WebDAVProvider: CloudProvider {
+public final class WebDAVCloudProvider: CloudProvider {
 	private static let defaultPropertyNames = ["getlastmodified", "getcontentlength", "resourcetype"]
 
 	private let client: WebDAVClient
 	private let directoryContentCache: DirectoryContentCache
 	private let tmpDirURL: URL
 
-	public init(with client: WebDAVClient, maxPageSize: Int = .max) throws {
+	public convenience init(credential: WebDAVCredential, maxPageSize: Int = .max) throws {
+		try self.init(client: WebDAVClient(credential: credential), maxPageSize: maxPageSize)
+	}
+
+	/**
+	 Creates a WebDAV provider whose file downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests, including streamed folder listings, run on a foreground URL session.
+
+	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
+	 */
+	public static func withBackgroundSession(credential: WebDAVCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> WebDAVCloudProvider {
+		let session = WebDAVSession.createBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+		return try WebDAVCloudProvider(client: WebDAVClient(credential: credential, session: session), maxPageSize: maxPageSize)
+	}
+
+	init(client: WebDAVClient, maxPageSize: Int = .max) throws {
 		self.client = client
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
@@ -60,7 +74,7 @@ public final class WebDAVProvider: CloudProvider {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
 		do {
-			let (response, data) = try await client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVProvider.defaultPropertyNames)
+			let (response, data) = try await client.PROPFIND(url: url, depth: .zero, propertyNames: WebDAVCloudProvider.defaultPropertyNames)
 			guard let data else {
 				throw WebDAVProviderError.invalidResponse
 			}
@@ -69,7 +83,7 @@ public final class WebDAVProvider: CloudProvider {
 				throw WebDAVProviderError.invalidResponse
 			}
 			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
-		} catch URLSessionError.httpError(_, statusCode: 405) {
+		} catch WebDAVError.httpError(statusCode: 405) {
 			// Workaround for: https://github.com/nextcloud/server/issues/34574
 			throw CloudProviderError.itemNotFound
 		} catch {
@@ -85,7 +99,7 @@ public final class WebDAVProvider: CloudProvider {
 				try await updatePropfindResponseCache(forFolderAt: cloudPath)
 			}
 			return try getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
-		} catch URLSessionError.httpError(_, statusCode: 405) {
+		} catch WebDAVError.httpError(statusCode: 405) {
 			// Workaround for: https://github.com/nextcloud/server/issues/34574
 			throw CloudProviderError.itemNotFound
 		} catch {
@@ -102,7 +116,7 @@ public final class WebDAVProvider: CloudProvider {
 		defer {
 			try? FileManager.default.removeItem(at: tmpFileURL)
 		}
-		let response = try await client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVProvider.defaultPropertyNames)
+		let response = try await client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVCloudProvider.defaultPropertyNames)
 		try Task.checkCancellation()
 		let responseURL = response.url ?? url
 		guard let inputStream = InputStream(url: tmpFileURL) else {
@@ -174,9 +188,9 @@ public final class WebDAVProvider: CloudProvider {
 			_ = try await client.PUT(url: url, fileURL: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
 		} catch {
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 409), URLSessionError.httpError(_, statusCode: 404):
+			case WebDAVError.httpError(statusCode: 409), WebDAVError.httpError(statusCode: 404):
 				throw CloudProviderError.parentFolderDoesNotExist
-			case URLSessionError.httpError(_, statusCode: 507):
+			case WebDAVError.httpError(statusCode: 507):
 				throw CloudProviderError.quotaInsufficient
 			default:
 				throw convertStandardError(error)
@@ -197,13 +211,13 @@ public final class WebDAVProvider: CloudProvider {
 			_ = try await client.MKCOL(url: url)
 		} catch {
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
+			case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
 				throw CloudProviderError.unauthorized
-			case URLSessionError.httpError(_, statusCode: 405):
+			case WebDAVError.httpError(statusCode: 405):
 				throw CloudProviderError.itemAlreadyExists
-			case URLSessionError.httpError(_, statusCode: 409):
+			case WebDAVError.httpError(statusCode: 409):
 				throw CloudProviderError.parentFolderDoesNotExist
-			case URLSessionError.httpError(_, statusCode: 507):
+			case WebDAVError.httpError(statusCode: 507):
 				throw CloudProviderError.quotaInsufficient
 			default:
 				if isNetworkConnectionError(error) {
@@ -257,15 +271,15 @@ public final class WebDAVProvider: CloudProvider {
 			_ = try await client.MOVE(sourceURL: sourceURL, destinationURL: targetURL)
 		} catch {
 			switch error {
-			case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
+			case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
 				throw CloudProviderError.unauthorized
-			case URLSessionError.httpError(_, statusCode: 404):
+			case WebDAVError.httpError(statusCode: 404):
 				throw CloudProviderError.itemNotFound
-			case URLSessionError.httpError(_, statusCode: 409):
+			case WebDAVError.httpError(statusCode: 409):
 				throw CloudProviderError.parentFolderDoesNotExist
-			case URLSessionError.httpError(_, statusCode: 412):
+			case WebDAVError.httpError(statusCode: 412):
 				throw CloudProviderError.itemAlreadyExists
-			case URLSessionError.httpError(_, statusCode: 507):
+			case WebDAVError.httpError(statusCode: 507):
 				throw CloudProviderError.quotaInsufficient
 			default:
 				if isNetworkConnectionError(error) {
@@ -278,9 +292,9 @@ public final class WebDAVProvider: CloudProvider {
 
 	func convertStandardError(_ error: Error) -> Error {
 		switch error {
-		case URLSessionError.httpError(_, statusCode: 401), URLSessionError.httpError(_, statusCode: 403):
+		case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
 			return CloudProviderError.unauthorized
-		case URLSessionError.httpError(_, statusCode: 404):
+		case WebDAVError.httpError(statusCode: 404):
 			return CloudProviderError.itemNotFound
 		default:
 			if isNetworkConnectionError(error) {

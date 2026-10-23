@@ -81,11 +81,11 @@ class BackgroundURLSessionRegistryTests: XCTestCase {
 		let owner = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)
 		let otherOwner = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)
 
-		let (response, _) = try await owner.upload(URLRequest(url: url), fromFile: fileURL)
-		let (otherResponse, _) = try await otherOwner.upload(URLRequest(url: url), fromFile: fileURL)
+		let outcome = try await owner.upload(URLRequest(url: url), fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		let otherOutcome = try await otherOwner.upload(URLRequest(url: url), fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
 
-		XCTAssertEqual(200, response.statusCode)
-		XCTAssertEqual(200, otherResponse.statusCode)
+		XCTAssertEqual(200, try HTTPClientSupport.httpResponse(of: outcome).statusCode)
+		XCTAssertEqual(200, try HTTPClientSupport.httpResponse(of: otherOutcome).statusCode)
 		XCTAssertEqual(1, sessionCreationCount.withLock { $0 })
 	}
 }

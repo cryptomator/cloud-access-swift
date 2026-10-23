@@ -17,31 +17,54 @@ public enum MicrosoftGraphAuthenticatorError: Error {
 	case serverDeclinedScopes
 }
 
+/// Logs in to a Microsoft account with MSAL's interactive token acquisition.
 @MainActor
-public final class MicrosoftGraphAuthenticator {
-	public static func authenticate(from viewController: UIViewController, with scopes: [String]) async throws -> MicrosoftGraphCredential {
+public enum MicrosoftGraphAuthenticator {
+	/**
+	 Shows Microsoft's sign-in sheet for the scopes of the account type.
+
+	 Cancelling the task while the sheet is shown dismisses it and ends the call with `CancellationError`.
+
+	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `MicrosoftGraphAuthenticatorError` if the login didn't grant the scopes or named no account, and otherwise MSAL's error.
+	 */
+	public static func authenticate(from viewController: UIViewController, for type: MicrosoftGraphType, setup: MicrosoftGraphSetup) async throws -> MicrosoftGraphCredential {
 		let webviewParameters = MSALWebviewParameters(authPresentationViewController: viewController)
-		let interactiveParameters = MSALInteractiveTokenParameters(scopes: scopes, webviewParameters: webviewParameters)
+		let interactiveParameters = MSALInteractiveTokenParameters(scopes: type.scopes, webviewParameters: webviewParameters)
 		interactiveParameters.promptType = .login
-		do {
-			let result = try await MicrosoftGraphSetup.constants.clientApplication.acquireToken(with: interactiveParameters)
-			guard let identifier = result.account.identifier else {
-				throw MicrosoftGraphAuthenticatorError.missingAccountIdentifier
+		let identifier = try await acquireAccountIdentifier(acquire: { completion in
+			setup.clientApplication.acquireToken(with: interactiveParameters) { result, error in
+				completion(result?.account.identifier, error)
 			}
-			return MicrosoftGraphCredential(identifier: identifier, scopes: scopes)
-		} catch {
-			if let error = error as NSError?, error.domain == MSALErrorDomain {
-				if error.code == MSALError.serverDeclinedScopes.rawValue {
-					throw MicrosoftGraphAuthenticatorError.serverDeclinedScopes
-				} else if error.code == MSALError.userCanceled.rawValue {
-					throw CocoaError(.userCancelled)
-				}
+		}, cancel: {
+			_ = MSALPublicClientApplication.cancelCurrentWebAuthSession()
+		})
+		return MicrosoftGraphCredential(identifier: identifier, type: type, setup: setup)
+	}
+
+	/**
+	 Runs the token acquisition that `acquire` starts, and waits until it completes or the task is cancelled. Cancelling the task calls `cancel`, which dismisses MSAL's sheet, and ends the call with `CancellationError`.
+
+	 - Parameter acquire: Starts the acquisition with its completion, which gets the identifier of the account or else the error.
+	 */
+	static func acquireAccountIdentifier(acquire: @escaping @MainActor (_ completion: @escaping @Sendable (String?, Error?) -> Void) -> Void, cancel: @escaping @MainActor () -> Void) async throws -> String {
+		return try await runWebAuthenticationSession(logPrefix: "MicrosoftGraphAuthenticator", convertError: convertLoginFlowError) { completion in
+			SDKLoginSession {
+				acquire(completion)
+				return cancel
 			}
-			throw error
 		}
 	}
 
-	public static func authenticate(from viewController: UIViewController, for type: MicrosoftGraphType) async throws -> MicrosoftGraphCredential {
-		return try await authenticate(from: viewController, with: type.scopes)
+	nonisolated static func convertLoginFlowError(_ error: Error?) -> Error {
+		guard let error = error as NSError?, error.domain == MSALErrorDomain else {
+			return error ?? MicrosoftGraphAuthenticatorError.missingAccountIdentifier
+		}
+		if error.code == MSALError.serverDeclinedScopes.rawValue {
+			return MicrosoftGraphAuthenticatorError.serverDeclinedScopes
+		} else if error.code == MSALError.userCanceled.rawValue {
+			CloudAccessDDLogDebug("MicrosoftGraphAuthenticator: Login flow canceled by the user.")
+			return CocoaError(.userCancelled)
+		}
+		return error
 	}
 }

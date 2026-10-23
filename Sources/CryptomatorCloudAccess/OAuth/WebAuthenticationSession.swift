@@ -13,7 +13,7 @@ import AuthenticationServices
 import os
 import UIKit
 
-/// A login in a browser that `runWebAuthenticationSession(logPrefix:convertError:makeSession:)` starts, and cancels when the calling task is cancelled.
+/// A login in a browser or an SDK's sheet that `runWebAuthenticationSession(logPrefix:convertError:makeSession:)` starts, and cancels when the calling task is cancelled.
 @MainActor
 protocol WebLoginSession: AnyObject {
 	/// - Returns: Whether the session started.
@@ -22,6 +22,27 @@ protocol WebLoginSession: AnyObject {
 }
 
 extension ASWebAuthenticationSession: WebLoginSession {}
+
+/// A login that an SDK runs, e.g., AppAuth or MSAL.
+@MainActor
+final class SDKLoginSession: WebLoginSession {
+	private let begin: @MainActor () -> @MainActor () -> Void
+	private var end: (@MainActor () -> Void)?
+
+	/// - Parameter begin: Begins the login and returns the function that cancels it.
+	init(begin: @escaping @MainActor () -> @MainActor () -> Void) {
+		self.begin = begin
+	}
+
+	func start() -> Bool {
+		end = begin()
+		return true
+	}
+
+	func cancel() {
+		end?()
+	}
+}
 
 /**
  Runs a web authentication session and returns its callback URL.
@@ -39,7 +60,7 @@ func runWebAuthenticationSession(url: URL, callbackURLScheme: String, anchor: AS
 	defer {
 		withExtendedLifetime(contextProvider) {}
 	}
-	return try await runWebAuthenticationSession(logPrefix: logPrefix, convertError: convertError) { completion in
+	return try await runWebAuthenticationSession(logPrefix: logPrefix, convertError: convertError) { (completion: @escaping @Sendable (URL?, Error?) -> Void) in
 		let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, completionHandler: completion)
 		session.presentationContextProvider = contextProvider
 		session.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
@@ -48,25 +69,26 @@ func runWebAuthenticationSession(url: URL, callbackURLScheme: String, anchor: AS
 }
 
 /**
- Starts the session that `makeSession` creates, and waits until it completes or the task is cancelled.
+ Starts the session that `makeSession` creates, and waits until it completes or the task is cancelled. Cancelling the task cancels the session, which dismisses its page, and ends the call with `CancellationError`.
 
- - Parameter makeSession: Creates the session with its completion handler. Of the session's completion, a failed start and the task's cancellation, only the first ends this call.
+ - Parameter convertError: Converts the error that the session completed with without a result, or `nil` if it didn't start or completed without either.
+ - Parameter makeSession: Creates the session with its completion handler, which gets the session's result or else its error. Of the session's completion, a failed start and the task's cancellation, only the first ends this call.
  */
 @MainActor
-func runWebAuthenticationSession(logPrefix: String, convertError: @escaping @Sendable (Error?) -> Error, makeSession: (_ completion: @escaping @Sendable (URL?, Error?) -> Void) -> any WebLoginSession) async throws -> URL {
-	let pendingContinuation = OSAllocatedUnfairLock<CheckedContinuation<URL, Error>?>(initialState: nil)
-	let takeContinuation: @Sendable () -> CheckedContinuation<URL, Error>? = {
+func runWebAuthenticationSession<Output: Sendable>(logPrefix: String, convertError: @escaping @Sendable (Error?) -> Error, makeSession: (_ completion: @escaping @Sendable (Output?, Error?) -> Void) -> any WebLoginSession) async throws -> Output {
+	let pendingContinuation = OSAllocatedUnfairLock<CheckedContinuation<Output, Error>?>(initialState: nil)
+	let takeContinuation: @Sendable () -> CheckedContinuation<Output, Error>? = {
 		pendingContinuation.withLock { continuation in
 			defer { continuation = nil }
 			return continuation
 		}
 	}
-	let session = makeSession { callbackURL, error in
+	let session = makeSession { output, error in
 		guard let continuation = takeContinuation() else {
 			return
 		}
-		if let callbackURL {
-			continuation.resume(returning: callbackURL)
+		if let output {
+			continuation.resume(returning: output)
 		} else {
 			continuation.resume(throwing: convertError(error))
 		}

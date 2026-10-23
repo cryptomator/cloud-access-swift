@@ -53,7 +53,7 @@ public struct HubConfig: Equatable, Codable, Sendable {
 	}
 }
 
-public class UnverifiedVaultConfig {
+public final class UnverifiedVaultConfig {
 	public var keyId: String? {
 		return jws.header.kid
 	}
@@ -100,7 +100,7 @@ public class UnverifiedVaultConfig {
 	}
 }
 
-public class VaultConfig {
+public final class VaultConfig: Sendable {
 	public let id: String
 	public let format: Int
 	public let cipherCombo: CryptorScheme

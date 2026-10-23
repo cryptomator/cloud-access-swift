@@ -14,18 +14,18 @@ import Foundation
  Its bodies carry the tokens, so they are never logged. Its timeouts bound how long a refresh holds the token lock.
  */
 struct GoogleDriveOAuthEndpoint: Sendable {
-	private let clientId: String
+	private let clientID: String
 	private let session: SplitURLSession
 	private let now: @Sendable () -> Date
 
-	init(clientId: String, configuration: URLSessionConfiguration = HTTPClientSupport.tokenEndpointConfiguration(), now: @escaping @Sendable () -> Date = Date.init) {
-		self.clientId = clientId
+	init(clientID: String, configuration: URLSessionConfiguration = HTTPClientSupport.tokenEndpointConfiguration(), now: @escaping @Sendable () -> Date = Date.init) {
+		self.clientID = clientID
 		self.session = SplitURLSession(configuration: configuration)
 		self.now = now
 	}
 
 	init(setup: GoogleDriveSetup) {
-		self.init(clientId: setup.clientId)
+		self.init(clientID: setup.clientID)
 	}
 
 	/**
@@ -37,7 +37,7 @@ struct GoogleDriveOAuthEndpoint: Sendable {
 		guard let refreshToken = token.refreshToken else {
 			throw CloudProviderError.unauthorized
 		}
-		let body = try await OAuthTokenEndpoint.post([("grant_type", "refresh_token"), ("refresh_token", refreshToken), ("client_id", clientId)], host: "oauth2.googleapis.com", path: "/token", on: session)
+		let body = try await OAuthTokenEndpoint.post([("grant_type", "refresh_token"), ("refresh_token", refreshToken), ("client_id", clientID)], host: "oauth2.googleapis.com", path: "/token", on: session)
 		return try GoogleDriveJSON.decode(OAuthTokenResponse.self, from: body).token(now: now(), fallbackRefreshToken: refreshToken)
 	}
 }

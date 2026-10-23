@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum VaultFormatError: Error {
+enum VaultFormatError: Error {
 	case encounteredUnrelatedFile
 	case invalidNameFile
 }

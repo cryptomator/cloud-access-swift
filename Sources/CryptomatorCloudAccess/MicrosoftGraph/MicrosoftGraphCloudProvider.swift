@@ -13,31 +13,27 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private let client: MicrosoftGraphHTTPClient
 	private let driveIdentifier: String?
-	private let identifierCache: MicrosoftGraphIdentifierCache
-	private let tmpDirURL: URL
+	private let identifierCache: IdentifierCache<MicrosoftGraphItem>
 	private let maxPageSize: Int
 
-	init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, urlSessionConfiguration: URLSessionConfiguration) throws {
-		self.client = MicrosoftGraphHTTPClient(accessTokenProvider: credential.accessTokenProvider, configuration: urlSessionConfiguration)
+	init(client: MicrosoftGraphHTTPClient, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
+		self.client = client
 		self.driveIdentifier = driveIdentifier
-		self.identifierCache = try MicrosoftGraphIdentifierCache()
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		self.identifierCache = try IdentifierCache<MicrosoftGraphItem>()
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
 	public convenience init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
-		try self.init(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: .default)
+		try self.init(client: .foreground(tokenSource: credential.tokenSource), driveIdentifier: driveIdentifier, maxPageSize: maxPageSize)
 	}
 
-	public static func withBackgroundSession(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, sessionIdentifier: String) throws -> MicrosoftGraphCloudProvider {
-		let configuration = URLSessionConfiguration.background(withIdentifier: sessionIdentifier)
-		configuration.sharedContainerIdentifier = MicrosoftGraphSetup.constants.sharedContainerIdentifier
-		return try MicrosoftGraphCloudProvider(credential: credential, driveIdentifier: driveIdentifier, maxPageSize: maxPageSize, urlSessionConfiguration: configuration)
-	}
+	/**
+	 Creates a Microsoft Graph provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 
-	deinit {
-		try? FileManager.default.removeItem(at: tmpDirURL)
+	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
+	 */
+	public static func withBackgroundSession(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> MicrosoftGraphCloudProvider {
+		return try MicrosoftGraphCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), driveIdentifier: driveIdentifier, maxPageSize: maxPageSize)
 	}
 
 	@concurrent
@@ -66,7 +62,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let phases = Progress.phases(of: progress, 999)
 		let item = try await resolvePath(forItemAt: cloudPath)
 		try Task.checkCancellation()
-		let metadata = try await downloadFile(for: item, to: localURL)
+		let metadata = try await downloadFile(for: item, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -98,7 +94,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			// no-op
 		}
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize)
+		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -174,19 +170,15 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return try await fetchItemList(forFolderAt: item.cloudPath, with: request)
 	}
 
+	/// Accepts only a page token on a Graph host, because its request carries the access token.
 	private func fetchItemList(forFolderAt cloudPath: CloudPath, with urlString: String) async throws -> CloudItemList {
-		guard let url = URL(string: urlString) else {
+		guard let url = HTTPClientSupport.httpsURL(urlString, onDomain: MicrosoftGraphAPI.host) else {
 			throw CloudProviderError.pageTokenInvalid
 		}
 		do {
 			return try await fetchItemList(forFolderAt: cloudPath, with: URLRequest(url: url))
-		} catch {
-			if let error = error as NSError? {
-				if error.domain == NSURLErrorDomain, error.code == NSURLErrorUnsupportedURL {
-					throw CloudProviderError.pageTokenInvalid
-				}
-			}
-			throw error
+		} catch MicrosoftGraphError.unexpectedHTTPStatusCode(code: 400) {
+			throw CloudProviderError.pageTokenInvalid
 		}
 	}
 
@@ -204,7 +196,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return try convertToCloudItemList(collection, at: cloudPath)
 	}
 
-	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL) async throws -> CloudItemMetadata {
+	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		guard item.itemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
@@ -212,15 +204,16 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let remoteMetadata = try await fetchItemMetadata(for: item)
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
-			try await download(request, to: stagedFile)
+			try await download(request, to: stagedFile, progress: progress, onTaskCreation: onTaskCreation)
 			return remoteMetadata
 		})
 	}
 
-	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int) async throws -> CloudItemMetadata {
+	// swiftlint:disable:next function_parameter_count
+	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
 		let uploadURL = try await createUploadSession(for: parentItem, with: cloudPath.lastPathComponent)
-		let driveItem = try await uploadFileChunks(from: localURL, to: uploadURL, totalFileSize: fileSize)
+		let driveItem = try await uploadFileChunks(from: localURL, to: uploadURL, totalFileSize: fileSize, progress: progress, onTaskCreation: onTaskCreation)
 		let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
 		try identifierCache.addOrUpdate(item)
 		return try convertToCloudItemMetadata(driveItem, at: cloudPath)
@@ -228,8 +221,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private func createUploadSession(for parentItem: MicrosoftGraphItem, with filename: String) async throws -> URL {
 		let request = try createUploadSessionRequest(for: parentItem, with: filename)
-		// The upload URL in the response is pre-authenticated.
-		let data = try await sendExpectingOK(request, bodyLogging: .omitted)
+		let data = try await sendExpectingOK(request)
 		let uploadSession = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.UploadSession.self, from: data)
 		guard let uploadSessionURLString = uploadSession.uploadUrl, let uploadSessionURL = URL(string: uploadSessionURLString) else {
 			throw MicrosoftGraphError.invalidURL
@@ -237,24 +229,35 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return uploadSessionURL
 	}
 
-	private func uploadFileChunks(from localURL: URL, to uploadURL: URL, totalFileSize: Int) async throws -> MicrosoftGraphAPI.DriveItem {
+	/**
+	 Uploads the chunks one by one, each from a temporary file, so that no chunk is held in memory. The progress counts bytes, and each chunk gets a share of its length.
+
+	 - Parameter onTaskCreation: Gets the task only if the file fits in one chunk, so that the task it gets uploads the whole file.
+	 */
+	private func uploadFileChunks(from localURL: URL, to uploadURL: URL, totalFileSize: Int, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> MicrosoftGraphAPI.DriveItem {
+		progress?.totalUnitCount = Int64(totalFileSize)
+		let taskHook = totalFileSize <= MicrosoftGraphCloudProvider.maxUploadFileChunkLength ? onTaskCreation : nil
+		let fileHandle = try FileHandle(forReadingFrom: localURL)
+		defer {
+			try? fileHandle.close()
+		}
 		var offset = 0
 		while true {
 			try Task.checkCancellation()
-			let localFileChunkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let (chunkFileURL, chunkLength) = try HTTPClientSupport.writeTemporaryFile(copyingUpTo: MicrosoftGraphCloudProvider.maxUploadFileChunkLength, from: fileHandle)
 			defer {
-				try? FileManager.default.removeItem(at: localFileChunkURL)
+				try? FileManager.default.removeItem(at: chunkFileURL)
 			}
-			let chunkLength = try createFileChunk(at: localFileChunkURL, from: localURL, offset: offset, maxChunkLength: MicrosoftGraphCloudProvider.maxUploadFileChunkLength)
 			let request = fileChunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: offset, totalLength: totalFileSize)
-			let (response, data) = try await upload(request, fromFile: localFileChunkURL)
+			let chunkProgress = progress?.makeExplicitChild(pendingUnitCount: Int64(chunkLength))
+			let (response, data) = try await upload(request, fromFile: chunkFileURL, progress: chunkProgress, onTaskCreation: taskHook)
 			switch response.statusCode {
 			case 202:
 				offset += chunkLength
 			case 200, 201:
 				return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
 			default:
-				throw mapStatusCodeToError(response.statusCode)
+				throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
 			}
 		}
 	}
@@ -263,7 +266,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let request = try createFolderRequest(for: parentItem, with: name)
 		let (response, data) = try await send(request)
 		guard response.statusCode == 201 || response.statusCode == 200 else {
-			throw mapStatusCodeToError(response.statusCode)
+			throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
 		}
 		let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
 		let driveItem = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
@@ -275,7 +278,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let request = try deleteItemRequest(for: item)
 		let (response, _) = try await send(request)
 		guard response.statusCode == 204 else {
-			throw mapStatusCodeToError(response.statusCode)
+			throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
 		}
 		try identifierCache.invalidate(item)
 	}
@@ -364,37 +367,37 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Execution
 
-	private func send(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> (HTTPURLResponse, Data) {
+	private func send(_ request: URLRequest) async throws -> (HTTPURLResponse, Data) {
 		do {
-			return try await client.data(for: request, bodyLogging: bodyLogging)
+			return try await client.data(request)
 		} catch {
 			throw convertStandardError(error)
 		}
 	}
 
-	private func sendExpectingOK(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, data) = try await send(request, bodyLogging: bodyLogging)
-		guard response.statusCode == 200 else {
-			throw mapStatusCodeToError(response.statusCode)
+	private func sendExpectingOK(_ request: URLRequest) async throws -> Data {
+		do {
+			return try await client.dataExpectingOK(request)
+		} catch {
+			throw convertStandardError(error)
 		}
-		return data
 	}
 
-	private func download(_ request: URLRequest, to localURL: URL) async throws {
+	private func download(_ request: URLRequest, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let response: HTTPURLResponse
 		do {
-			response = try await client.download(request, to: localURL)
+			response = try await client.download(request, to: localURL, progress: progress, onTaskCreation: onTaskCreation)
 		} catch {
 			throw convertStandardError(error)
 		}
 		guard response.statusCode == 200 else {
-			throw mapStatusCodeToError(response.statusCode)
+			throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
 		}
 	}
 
-	private func upload(_ request: URLRequest, fromFile localURL: URL) async throws -> (HTTPURLResponse, Data) {
+	private func upload(_ request: URLRequest, fromFile localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data) {
 		do {
-			return try await client.upload(request, fromFile: localURL)
+			return try await client.upload(request, fromFile: localURL, progress: progress, onTaskCreation: onTaskCreation)
 		} catch {
 			throw convertStandardError(error)
 		}
@@ -403,42 +406,11 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	// MARK: - Resolve Path
 
 	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
-		var pathToCheckForCache = cloudPath
-		var cachedItem = identifierCache.get(pathToCheckForCache)
-		while cachedItem == nil, !pathToCheckForCache.pathComponents.isEmpty {
-			pathToCheckForCache = pathToCheckForCache.deletingLastPathComponent()
-			cachedItem = identifierCache.get(pathToCheckForCache)
-		}
-		guard let item = cachedItem else {
-			throw MicrosoftGraphError.inconsistentCache
-		}
-		if pathToCheckForCache != cloudPath {
-			return try await traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
-		}
-		return item
+		return try await identifierCache.resolvePath(forItemAt: cloudPath, lookUpChild: getMicrosoftGraphItem(for:withParentItem:))
 	}
 
 	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
-		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		do {
-			return try await resolvePath(forItemAt: parentCloudPath)
-		} catch CloudProviderError.itemNotFound {
-			throw CloudProviderError.parentFolderDoesNotExist
-		}
-	}
-
-	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem {
-		assert(startCloudPath.pathComponents.count < endCloudPath.pathComponents.count)
-		let startIndex = startCloudPath.pathComponents.count
-		let endIndex = endCloudPath.pathComponents.count
-		var parentItem = startItem
-		for i in startIndex ..< endIndex {
-			let itemName = endCloudPath.pathComponents[i]
-			try Task.checkCancellation()
-			parentItem = try await getMicrosoftGraphItem(for: itemName, withParentItem: parentItem)
-			try identifierCache.addOrUpdate(parentItem)
-		}
-		return parentItem
+		return try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getMicrosoftGraphItem(for:withParentItem:))
 	}
 
 	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem {
@@ -489,19 +461,6 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 	}
 
-	private func mapStatusCodeToError(_ statusCode: Int) -> Error {
-		switch statusCode {
-		case 401, 403:
-			return CloudProviderError.unauthorized
-		case 404:
-			return CloudProviderError.itemNotFound
-		case 507:
-			return CloudProviderError.quotaInsufficient
-		default:
-			return MicrosoftGraphError.unexpectedHTTPStatusCode(code: statusCode)
-		}
-	}
-
 	func convertStandardError(_ error: Error) -> Error {
 		if isCancellationError(error) {
 			return CancellationError()
@@ -510,23 +469,5 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			return CloudProviderError.noInternetConnection
 		}
 		return error
-	}
-
-	private func createFileChunk(at targetURL: URL, from sourceURL: URL, offset: Int, maxChunkLength: Int) throws -> Int {
-		let bufferLength = 320 * 1024
-		let inputFile = try FileHandle(forReadingFrom: sourceURL)
-		inputFile.seek(toFileOffset: UInt64(offset))
-		FileManager.default.createFile(atPath: targetURL.path, contents: nil, attributes: nil)
-		let outputFile = try FileHandle(forWritingTo: targetURL)
-		var readCount = 0
-		var buffer: Data
-		repeat {
-			buffer = inputFile.readData(ofLength: bufferLength)
-			outputFile.write(buffer)
-			readCount += buffer.count
-		} while !buffer.isEmpty && readCount + bufferLength <= maxChunkLength
-		try outputFile.close()
-		try inputFile.close()
-		return readCount
 	}
 }

@@ -8,11 +8,10 @@
 
 import Foundation
 
-public enum MicrosoftGraphError: Error {
+enum MicrosoftGraphError: Error {
 	case invalidURL
 	case inconsistentCache
 	case missingItemName
 	case unexpectedHTTPStatusCode(code: Int)
-	case invalidFileHandle
 	case missingFileSize
 }

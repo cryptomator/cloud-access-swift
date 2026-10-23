@@ -12,11 +12,9 @@ import Foundation
 public enum GoogleDriveCredentialError: Error {
 	case noUsername
 	case missingUserID
-	/// `GoogleDriveSetup.constants` isn't set.
-	case missingSetup
 }
 
-/// The login of a Google account, which `GoogleDriveSetup.constants.oauth` keeps under the user ID, the `sub` of the login's ID token. Persist the user ID to re-create the credential later.
+/// The login of a Google account, which the `oauth` of its `GoogleDriveSetup` keeps under the user ID, the `sub` of the login's ID token. Persist the user ID to re-create the credential later.
 public final class GoogleDriveCredential: Sendable {
 	public let userID: String
 	let tokenSource: any OAuthTokenSource
@@ -29,14 +27,11 @@ public final class GoogleDriveCredential: Sendable {
 	/**
 	 Creates the credential of a login that `GoogleDriveAuthenticator` stored, or that GTMAppAuth stored for this user ID. It reads nothing until the first request.
 
-	 - Throws: `GoogleDriveCredentialError.missingUserID` for an empty user ID, and `GoogleDriveCredentialError.missingSetup` if `GoogleDriveSetup.constants` isn't set.
+	 - Throws: `GoogleDriveCredentialError.missingUserID` for an empty user ID.
 	 */
-	public convenience init(userID: String) throws {
+	public convenience init(userID: String, setup: GoogleDriveSetup) throws {
 		guard !userID.isEmpty else {
 			throw GoogleDriveCredentialError.missingUserID
-		}
-		guard let setup = GoogleDriveSetup.constants else {
-			throw GoogleDriveCredentialError.missingSetup
 		}
 		self.init(userID: userID, tokenSource: GoogleDriveCredential.makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: GoogleDriveOAuthEndpoint(setup: setup)))
 	}
@@ -52,13 +47,10 @@ public final class GoogleDriveCredential: Sendable {
 	 Stores the token of a login with the account's email, under the `sub` of its ID token.
 
 	 - Parameter idToken: The ID token of the token response, which names the account.
-	 - Throws: `GoogleDriveCredentialError.missingSetup` if `GoogleDriveSetup.constants` isn't set, `GoogleDriveCredentialError.missingUserID` if the ID token can't be read or has no `sub`, and otherwise what saving the token throws.
+	 - Throws: `GoogleDriveCredentialError.missingUserID` if the ID token can't be read or has no `sub`, and otherwise what saving the token throws.
 	 */
 	@concurrent
-	public static func completeAuthentication(accessToken: String, refreshToken: String, expiresAt: Date?, idToken: String) async throws -> GoogleDriveCredential {
-		guard let setup = GoogleDriveSetup.constants else {
-			throw GoogleDriveCredentialError.missingSetup
-		}
+	@_spi(Authentication) public static func completeAuthentication(accessToken: String, refreshToken: String, expiresAt: Date?, idToken: String, setup: GoogleDriveSetup) async throws -> GoogleDriveCredential {
 		let endpoint = GoogleDriveOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, idToken: idToken, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)
@@ -69,6 +61,7 @@ public final class GoogleDriveCredential: Sendable {
 		guard let token = OIDIDToken(idTokenString: idToken), !token.subject.isEmpty else {
 			throw GoogleDriveCredentialError.missingUserID
 		}
+		try Task.checkCancellation()
 		let tokenSource = makeTokenSource(token.subject)
 		try await tokenSource.replace(with: OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: token.claims["email"] as? String))
 		return GoogleDriveCredential(userID: token.subject, tokenSource: tokenSource)

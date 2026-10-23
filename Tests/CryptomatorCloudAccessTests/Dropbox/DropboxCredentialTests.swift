@@ -29,21 +29,11 @@ class DropboxCredentialTests: XCTestCase {
 		try? FileManager.default.removeItem(at: lockDirectoryURL)
 	}
 
-	func testInitThrowsForEmptyUserIDAndMissingSetup() throws {
-		let setup = DropboxSetup.constants
-		defer {
-			DropboxSetup.constants = setup
-		}
-		DropboxSetup.constants = nil
+	func testEmptyUserIDThrows() throws {
+		let setup = try DropboxSetup(appKey: "appkey", oauth: .custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: lockDirectoryURL))
 
-		XCTAssertThrowsError(try DropboxCredential(userID: "")) { error in
-			guard case DropboxCredentialErrors.missingUserID = error else {
-				XCTFail("Unexpected error: \(error)")
-				return
-			}
-		}
-		XCTAssertThrowsError(try DropboxCredential(userID: "12345")) { error in
-			guard case DropboxCredentialErrors.missingSetup = error else {
+		XCTAssertThrowsError(try DropboxCredential(userID: "", setup: setup)) { error in
+			guard case DropboxCredentialError.missingUserID = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}

@@ -71,7 +71,7 @@ actor BoxCCGTokenSource: OAuthTokenSource {
 
 	/// - Throws: `OAuthTokenEndpointError` for an unsuccessful response, so that a server error counts as transient.
 	private static func fetchToken() async throws -> String {
-		let endpoint = BoxOAuthEndpoint(clientId: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret)
+		let endpoint = BoxOAuthEndpoint(clientID: IntegrationTestSecrets.boxClientId, clientSecret: IntegrationTestSecrets.boxClientSecret)
 		return try await endpoint.token(for: [("grant_type", "client_credentials"), ("box_subject_type", "enterprise"), ("box_subject_id", IntegrationTestSecrets.boxEnterpriseId)]).accessToken
 	}
 }

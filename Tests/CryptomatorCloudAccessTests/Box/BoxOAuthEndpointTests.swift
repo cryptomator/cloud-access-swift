@@ -38,6 +38,18 @@ class BoxOAuthEndpointTests: XCTestCase {
 		XCTAssertEqual(["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"], URLProtocolMock.formParameters(of: request))
 	}
 
+	func testTokenResponseOverMetadataLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await BoxOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "RT", expiresAt: nil))) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
+	}
+
 	func testInvalidGrantIsUnauthorized() async throws {
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: #"{"error":"invalid_grant","error_description":"Refresh token has expired"}"#)]
 
@@ -101,7 +113,7 @@ extension BoxOAuthEndpoint {
 	static func mocked() -> BoxOAuthEndpoint {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return BoxOAuthEndpoint(clientId: "CLIENT-ID", clientSecret: "SECRET-CLIENT", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
+		return BoxOAuthEndpoint(clientID: "CLIENT-ID", clientSecret: "SECRET-CLIENT", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
 	}
 }
 

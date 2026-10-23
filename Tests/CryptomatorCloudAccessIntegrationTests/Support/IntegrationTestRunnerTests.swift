@@ -158,9 +158,9 @@ extension IntegrationTests {
 
 		@Test
 		func tokenRequestFailureOfMicrosoftGraphIsTransientOnlyForServerErrors() {
-			#expect(isTransientIntegrationError(MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: 503)))
-			#expect(isTransientIntegrationError(MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: 429)))
-			#expect(!isTransientIntegrationError(MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: 400)))
+			#expect(isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 503)))
+			#expect(isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 429)))
+			#expect(!isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 400)))
 		}
 
 		@Test
@@ -170,8 +170,7 @@ extension IntegrationTests {
 				CloudProviderError.noInternetConnection,
 				IntegrationTestError.consistencyTimeout,
 				MicrosoftGraphError.unexpectedHTTPStatusCode(code: 502),
-				URLSessionError.httpError(nil, statusCode: 503),
-				URLSessionError.httpError(URLError(.networkConnectionLost), statusCode: 200),
+				WebDAVError.httpError(statusCode: 503),
 				DropboxError.apiError(statusCode: 429, summary: "too_many_requests/.."),
 				DropboxError.apiError(statusCode: 503, summary: nil),
 				DropboxError.apiError(statusCode: 409, summary: "path_write/too_many_write_operations/.."),
@@ -202,7 +201,7 @@ extension IntegrationTests {
 				IntegrationTestError.itemNotVisible(CloudPath("/item")),
 				IntegrationTestError.fixtureTimeout(.seconds(600)),
 				IntegrationTestError.budgetExceeded(.seconds(300)),
-				URLSessionError.httpError(nil, statusCode: 404),
+				WebDAVError.httpError(statusCode: 404),
 				DropboxError.apiError(statusCode: 409, summary: "path/not_found/.."),
 				GoogleDriveError.apiError(statusCode: 404, reason: "notFound", message: nil),
 				GoogleDriveError.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: nil),

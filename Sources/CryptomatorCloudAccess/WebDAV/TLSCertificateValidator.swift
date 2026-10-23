@@ -20,7 +20,7 @@ private extension Sequence<UInt8> {
 	}
 }
 
-private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate {
+private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate, Sendable {
 	private let lockedTestedCertificate = OSAllocatedUnfairLock<TLSCertificate?>(initialState: nil)
 	var testedCertificate: TLSCertificate? {
 		get { lockedTestedCertificate.withLock { $0 } }
@@ -60,10 +60,10 @@ private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSess
 	}
 }
 
-public class TLSCertificateValidator {
+public final class TLSCertificateValidator: Sendable {
 	private let baseURL: URL
 	private let urlSession: URLSession
-	private weak var urlSessionDelegate: TLSCertificateValidatorURLSessionDelegate?
+	private let urlSessionDelegate: TLSCertificateValidatorURLSessionDelegate
 
 	public init(baseURL: URL) {
 		self.baseURL = baseURL
@@ -73,9 +73,7 @@ public class TLSCertificateValidator {
 	}
 
 	private static func createURLSession(delegate: URLSessionDelegate) -> URLSession {
-		let configuration = URLSessionConfiguration.default
-		configuration.httpCookieStorage = HTTPCookieStorage()
-		return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+		return URLSession(configuration: HTTPClientSupport.hardened(.default), delegate: delegate, delegateQueue: nil)
 	}
 
 	/**
@@ -94,7 +92,7 @@ public class TLSCertificateValidator {
 			transportError = error
 		}
 		try Task.checkCancellation()
-		guard let testedCertificate = urlSessionDelegate?.testedCertificate else {
+		guard let testedCertificate = urlSessionDelegate.testedCertificate else {
 			// The delegate cancels every challenge, so a cancelled request means that a challenge without a certificate was received.
 			if let transportError, !isCancellationError(transportError) {
 				throw transportError

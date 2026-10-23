@@ -37,6 +37,13 @@ class GoogleDriveClientTests: XCTestCase {
 
 	// MARK: - Requests
 
+	func testBackgroundConfiguration() {
+		let configuration = GoogleDriveClient.backgroundConfiguration(sessionIdentifier: "GoogleDriveClientTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("GoogleDriveClientTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
+	}
+
 	func testRequestShapes() async throws {
 		let record = requests.record
 		URLProtocolMock.requestHandler = [
@@ -169,6 +176,18 @@ class GoogleDriveClientTests: XCTestCase {
 
 	// MARK: - Cancellation
 
+	func testMetadataBodyOverLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await client.about()) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
+	}
+
 	func testCancelledTaskGetsNoToken() async throws {
 		let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
 		let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
@@ -212,6 +231,53 @@ class GoogleDriveClientTests: XCTestCase {
 		await XCTAssertThrowsErrorAsync(try await value(of: Task { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) })) { error in
 			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
+		XCTAssertEqual(2, URLProtocolMock.requestHandler.count)
+	}
+
+	func testTaskCancelledDuringAttemptIsNotRefreshed() async throws {
+		let refreshCount = OSAllocatedUnfairLock(initialState: 0)
+		let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { refreshCount.withLock { $0 += 1 } }), sleeps: sleeps)
+		let filesTask = OSAllocatedUnfairLock<Task<Void, Error>?>(initialState: nil)
+		let started = XCTestExpectation(description: "files started")
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401, onRequest: { _ in
+			filesTask.withLock { $0 }?.cancel()
+		}), URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
+
+		let task = Task {
+			_ = await XCTWaiter().fulfillment(of: [started], timeout: testWaitTimeout)
+			_ = try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)")
+		}
+		filesTask.withLock { $0 = task }
+		started.fulfill()
+
+		await XCTAssertThrowsErrorAsync(try await value(of: task)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(0, refreshCount.withLock { $0 })
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testUploadCancelledDuringAttemptIsNotRefreshed() async throws {
+		let localURL = try makeLocalFile(content: "file content")
+		let refreshCount = OSAllocatedUnfairLock(initialState: 0)
+		let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { refreshCount.withLock { $0 += 1 } }), sleeps: sleeps)
+		let uploadTask = OSAllocatedUnfairLock<Task<Void, Error>?>(initialState: nil)
+		let started = XCTestExpectation(description: "upload started")
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401, onRequest: { _ in
+			uploadTask.withLock { $0 }?.cancel()
+		}), GoogleDriveMockResponse.session(), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))]
+
+		let task = Task {
+			_ = await XCTWaiter().fulfillment(of: [started], timeout: testWaitTimeout)
+			_ = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+		}
+		uploadTask.withLock { $0 = task }
+		started.fulfill()
+
+		await XCTAssertThrowsErrorAsync(try await value(of: task)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(0, refreshCount.withLock { $0 })
 		XCTAssertEqual(2, URLProtocolMock.requestHandler.count)
 	}
 

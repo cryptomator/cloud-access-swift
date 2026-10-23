@@ -1,5 +1,5 @@
 //
-//  WebDAVProviderTests.swift
+//  WebDAVCloudProviderTests.swift
 //  CryptomatorCloudAccessTests
 //
 //  Created by Tobias Hagemann on 14.07.20.
@@ -19,18 +19,18 @@ enum WebDAVProviderTestsError: Error {
 	case missingTestResource
 }
 
-class WebDAVProviderTests: XCTestCase {
+class WebDAVCloudProviderTests: XCTestCase {
 	var tmpDirURL: URL!
 	var baseURL: URL!
 	var client: WebDAVClientMock!
-	var provider: WebDAVProvider!
+	var provider: WebDAVCloudProvider!
 
 	override func setUpWithError() throws {
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		baseURL = URL(string: "/cloud/remote.php/webdav/")
 		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
-		provider = try WebDAVProvider(with: client)
+		provider = try WebDAVCloudProvider(client: client)
 	}
 
 	override func tearDownWithError() throws {
@@ -82,7 +82,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testFetchItemMetadataWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -187,7 +187,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testFetchItemListWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 		let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
@@ -238,7 +238,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let getData = try getTestData(forResource: "item-data", withExtension: "txt")
@@ -264,7 +264,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -290,7 +290,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileWithCancellationDuringOnTaskCreation() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
@@ -310,7 +310,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithCancellationDuringOnTaskCreation() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -331,7 +331,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	/// A task that is cancelled before the session resumed it terminates without the session having registered it, so the session has to complete the call itself.
 	func testDownloadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
@@ -351,7 +351,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	/// See the rationale on the download variant.
 	func testUploadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -429,7 +429,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testDownloadFileWithTransportError() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
@@ -452,7 +452,7 @@ class WebDAVProviderTests: XCTestCase {
 	}
 
 	func testUploadFileWithTransportError() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -559,7 +559,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testDownloadFileWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
@@ -620,7 +620,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	/// The upload is committed once the `PUT` request was sent, so a cancellation after that must not hide its result.
 	func testUploadFileWithCancellationDuringTransfer() async throws {
-		let provider: WebDAVProvider = provider
+		let provider: WebDAVCloudProvider = provider
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
@@ -843,7 +843,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testUploadFileWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
@@ -909,7 +909,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testCreateFolderWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 
 		let responseURL = try XCTUnwrap(URL(string: "foo/", relativeTo: baseURL))
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -957,7 +957,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testDeleteFileWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -1043,7 +1043,7 @@ class WebDAVProviderTests: XCTestCase {
 
 	func testMoveFileWithUnauthorizedError() async throws {
 		let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-		let unauthorizedProvider = try WebDAVProvider(with: unauthorizedClient)
+		let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
 
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 		let failureResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -1087,7 +1087,7 @@ class WebDAVProviderTests: XCTestCase {
 		})
 	}
 
-	private func makeGatedProvider() throws -> (WebDAVProvider, TransferGate) {
+	private func makeGatedProvider() throws -> (WebDAVCloudProvider, TransferGate) {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
 		let gate = TransferGate()
 		let configuration = URLSessionConfiguration.default
@@ -1095,7 +1095,7 @@ class WebDAVProviderTests: XCTestCase {
 		configuration.urlCredentialStorage = nil
 		configuration.protocolClasses = [URLProtocolSequenceMock.self]
 		let client = WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: gate.hooks))
-		let provider = try WebDAVProvider(with: client)
+		let provider = try WebDAVCloudProvider(client: client)
 		return (provider, gate)
 	}
 }

@@ -8,21 +8,14 @@
 
 import Foundation
 @preconcurrency import MSAL
-import os
 
+/// The MSAL application of the app, which keeps the Microsoft logins.
+///
 /// `@unchecked Sendable`: `MSALPublicClientApplication` is not `Sendable`. This class only stores the reference immutably and never calls into it.
 public final class MicrosoftGraphSetup: @unchecked Sendable {
-	private static let lockedConstants = OSAllocatedUnfairLock<MicrosoftGraphSetup?>(initialState: nil)
-	public static var constants: MicrosoftGraphSetup! {
-		get { lockedConstants.withLock { $0 } }
-		set { lockedConstants.withLock { $0 = newValue } }
-	}
-
 	public let clientApplication: MSALPublicClientApplication
-	public let sharedContainerIdentifier: String?
 
-	public init(clientApplication: MSALPublicClientApplication, sharedContainerIdentifier: String?) {
+	public init(clientApplication: MSALPublicClientApplication) {
 		self.clientApplication = clientApplication
-		self.sharedContainerIdentifier = sharedContainerIdentifier
 	}
 }

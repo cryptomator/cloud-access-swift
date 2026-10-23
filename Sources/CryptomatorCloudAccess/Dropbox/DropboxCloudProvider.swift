@@ -32,10 +32,10 @@ public final class DropboxCloudProvider: CloudProvider {
 	/**
 	 Creates a Dropbox provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 
-	 If the provider is used in an app extension, set `DropboxSetup.constants.sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
 	 */
-	public static func withBackgroundSession(credential: DropboxCredential, maxPageSize: Int = .max, sessionIdentifier: String) -> DropboxCloudProvider {
-		return DropboxCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier), maxPageSize: maxPageSize)
+	public static func withBackgroundSession(credential: DropboxCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) -> DropboxCloudProvider {
+		return DropboxCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
 	}
 
 	@concurrent
@@ -245,19 +245,13 @@ public final class DropboxCloudProvider: CloudProvider {
 	 */
 	private func writeChunk(of fileHandle: FileHandle, at offset: Int64, length: Int64) throws -> (URL, Int64) {
 		try fileHandle.seek(toOffset: UInt64(offset))
-		var writtenLength: Int64 = 0
-		let chunkFileURL = try HTTPClientSupport.writeTemporaryFile { chunkHandle in
-			while writtenLength < length, let data = try fileHandle.read(upToCount: Int(min(Int64(HTTPClientSupport.temporaryFileBufferLength), length - writtenLength))), !data.isEmpty {
-				try chunkHandle.write(contentsOf: data)
-				writtenLength += Int64(data.count)
-			}
-		}
+		let (chunkFileURL, writtenLength) = try HTTPClientSupport.writeTemporaryFile(copyingUpTo: Int(length), from: fileHandle)
 		guard writtenLength > 0 else {
 			// The file got shorter during the upload.
 			try? FileManager.default.removeItem(at: chunkFileURL)
 			throw DropboxError.unexpectedContent
 		}
-		return (chunkFileURL, writtenLength)
+		return (chunkFileURL, Int64(writtenLength))
 	}
 
 	// MARK: - Helpers

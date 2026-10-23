@@ -9,11 +9,9 @@
 import Foundation
 import GRDB
 
-struct BoxItem: Decodable, FetchableRecord, TableRecord, Equatable {
-	static let databaseTableName = "CachedEntries"
-	static let cloudPathKey = "cloudPath"
-	static let identifierKey = "identifier"
-	static let itemTypeKey = "itemType"
+struct BoxItem: Decodable, IdentifierCacheItem, Equatable {
+	static let rootItem = BoxItem(cloudPath: CloudPath("/"), identifier: "0", itemType: .folder)
+	static let inconsistentCacheError: Error = BoxError.inconsistentCache
 
 	let cloudPath: CloudPath
 	let identifier: String
@@ -32,7 +30,7 @@ extension BoxItem {
 	}
 }
 
-extension BoxItem: PersistableRecord {
+extension BoxItem {
 	func encode(to container: inout PersistenceContainer) throws {
 		container[BoxItem.cloudPathKey] = cloudPath
 		container[BoxItem.identifierKey] = identifier

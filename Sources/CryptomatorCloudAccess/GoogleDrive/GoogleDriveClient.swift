@@ -11,25 +11,23 @@ import Foundation
 /**
  Sends Google Drive API requests for one account on a `SplitURLSession`.
 
- Every request carries the access token of its token source. A 401 refreshes the token and retries once. A 408, 429, 500, 502, 503, 504 and a 403 for exceeded rate limits are retried until 5 attempts were made, the retry after a refresh included. A retry waits for `Retry-After`, capped at 60 seconds, or else for a random exponential delay. Transport errors are retried only for a `GET` and for the requests of an upload that create nothing, because a repeated `POST` could create an item twice.
-
- A cancelled task stops a request before each attempt, also during the wait before a retry. A running attempt finishes either way.
+ Requests are sent by a `BearerRequestSender`. The requests of an upload follow the sender's rules in a loop of their own. A 408, 429, 500, 502, 503, 504 and a 403 for exceeded rate limits are retried. Transport errors are retried only for a `GET` and for the requests of an upload that create nothing, because a repeated `POST` could create an item twice.
 
  Downloads log their URLs only as origins, and an upload logs its session URL, which is a credential, only as origin or with its query redacted. Thrown errors never contain a request URL.
  */
 final class GoogleDriveClient: Sendable {
-	fileprivate static let maxAttemptCount = 5
-	/// The maximum length of a response body that an upload reads, and of an error body that a download reads.
-	private static let maxErrorBodyLength = 1024 * 1024
+	private static let logLabel = "GoogleDriveClient"
 	private static let uploadFields = "id,name,modifiedTime,size,mimeType"
 
 	private let tokenSource: any OAuthTokenSource
 	private let session: SplitURLSession
+	private let sender: BearerRequestSender
 	private let sleep: @Sendable (Duration) async throws -> Void
 
 	init(tokenSource: any OAuthTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
 		self.tokenSource = tokenSource
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
+		self.sender = BearerRequestSender(tokenSource: tokenSource, logLabel: GoogleDriveClient.logLabel, sleep: sleep)
 		self.sleep = sleep
 	}
 
@@ -38,15 +36,19 @@ final class GoogleDriveClient: Sendable {
 	}
 
 	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String) -> GoogleDriveClient {
-		return GoogleDriveClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: GoogleDriveSetup.constants?.sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
+	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> GoogleDriveClient {
+		return GoogleDriveClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
+	}
+
+	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
+		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	// MARK: - Operations
 
 	func file(id: String, fields: String) async throws -> GoogleDriveFile {
-		let url = try GoogleDriveClient.apiURL("/files/\(GoogleDriveClient.pathComponent(id))", parameters: [("supportsAllDrives", "true"), ("fields", fields)])
-		return try await GoogleDriveJSON.decode(GoogleDriveFile.self, from: data(GoogleDriveClient.request("GET", url)))
+		let url = try GoogleDriveClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))", parameters: [("supportsAllDrives", "true"), ("fields", fields)])
+		return try await GoogleDriveJSON.decode(GoogleDriveFile.self, from: data(HTTPClientSupport.request("GET", url)))
 	}
 
 	/// - Parameter query: A search query, see `query(inFolder:named:)`.
@@ -59,16 +61,16 @@ final class GoogleDriveClient: Sendable {
 			parameters.append(("pageToken", pageToken))
 		}
 		parameters.append(("fields", fields))
-		return try await GoogleDriveJSON.decode(GoogleDriveFileList.self, from: data(GoogleDriveClient.request("GET", GoogleDriveClient.apiURL("/files", parameters: parameters))))
+		return try await GoogleDriveJSON.decode(GoogleDriveFileList.self, from: data(HTTPClientSupport.request("GET", GoogleDriveClient.apiURL("/files", parameters: parameters))))
 	}
 
 	func createFolder(name: String, parentID: String) async throws -> GoogleDriveFile {
-		let request = try GoogleDriveClient.request("POST", GoogleDriveClient.apiURL("/files", parameters: [("supportsAllDrives", "true")]), json: GoogleDriveFileMetadata(name: name, parents: [parentID], mimeType: GoogleDriveJSON.folderMimeType))
+		let request = try HTTPClientSupport.request("POST", GoogleDriveClient.apiURL("/files", parameters: [("supportsAllDrives", "true")]), json: GoogleDriveFileMetadata(name: name, parents: [parentID], mimeType: GoogleDriveJSON.folderMimeType), charset: "UTF-8")
 		return try await GoogleDriveJSON.decode(GoogleDriveFile.self, from: data(request))
 	}
 
 	func delete(id: String) async throws {
-		_ = try await data(GoogleDriveClient.request("DELETE", GoogleDriveClient.apiURL("/files/\(GoogleDriveClient.pathComponent(id))", parameters: [("supportsAllDrives", "true")])))
+		_ = try await data(HTTPClientSupport.request("DELETE", GoogleDriveClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))", parameters: [("supportsAllDrives", "true")])))
 	}
 
 	/// Renames the item, and moves it if `addParents` and `removeParents` are given.
@@ -78,13 +80,13 @@ final class GoogleDriveClient: Sendable {
 			parameters += [("addParents", addParents), ("removeParents", removeParents)]
 		}
 		parameters.append(("fields", fields))
-		let request = try GoogleDriveClient.request("PATCH", GoogleDriveClient.apiURL("/files/\(GoogleDriveClient.pathComponent(id))", parameters: parameters), json: GoogleDriveFileMetadata(name: name, parents: nil, mimeType: nil))
+		let request = try HTTPClientSupport.request("PATCH", GoogleDriveClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))", parameters: parameters), json: GoogleDriveFileMetadata(name: name, parents: nil, mimeType: nil), charset: "UTF-8")
 		return try await GoogleDriveJSON.decode(GoogleDriveFile.self, from: data(request))
 	}
 
 	/// Its response, which carries the account's email, is never logged.
 	func about() async throws -> GoogleDriveAbout {
-		let request = try GoogleDriveClient.request("GET", GoogleDriveClient.apiURL("/about", parameters: [("fields", "user(emailAddress)")]))
+		let request = try HTTPClientSupport.request("GET", GoogleDriveClient.apiURL("/about", parameters: [("fields", "user(emailAddress)")]))
 		return try await GoogleDriveJSON.decode(GoogleDriveAbout.self, from: data(request, bodyLogging: .omitted))
 	}
 
@@ -105,12 +107,12 @@ final class GoogleDriveClient: Sendable {
 
 	/// Downloads the content of the file to `stagingURL`, at which no item may exist.
 	func download(fileID: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
-		let request = try GoogleDriveClient.request("GET", GoogleDriveClient.url(path: "/download/drive/v3/files/\(GoogleDriveClient.pathComponent(fileID))", parameters: [("alt", "media"), ("supportsAllDrives", "true")]))
-		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: GoogleDriveClient.maxErrorBodyLength)
-		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
+		let request = try HTTPClientSupport.request("GET", GoogleDriveClient.url(path: "/download/drive/v3/files/\(HTTPClientSupport.pathComponent(fileID))", parameters: [("alt", "media"), ("supportsAllDrives", "true")]))
+		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
+		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
 			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
+		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
 		guard case .file = outcome.body else {
 			throw GoogleDriveError.unexpectedContent
 		}
@@ -151,9 +153,9 @@ final class GoogleDriveClient: Sendable {
 		// The session is of no use without an attempt left for its `PUT`.
 		try upload.startAttempt(reserving: 1)
 		let request = upload.sessionRequest
-		let outcome = try await session.data(upload.authorized(request), bodyLimit: GoogleDriveClient.maxErrorBodyLength, bodyLogging: .logged)
+		let outcome = try await session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
 		if let response = try await handleOutcome(outcome, of: request, reserving: 1, in: &upload) {
-			upload.step = try .put(GoogleDriveClient.uploadSessionURL(response.value(forHTTPHeaderField: "Location")))
+			upload.step = try .put(HTTPClientSupport.uploadSessionURL(response.value(forHTTPHeaderField: "Location"), onDomain: "googleapis.com", orThrow: GoogleDriveError.unexpectedContent))
 		}
 	}
 
@@ -166,9 +168,9 @@ final class GoogleDriveClient: Sendable {
 			progress?.totalUnitCount += 1
 		}
 		upload.hasSentFile = true
-		var request = GoogleDriveClient.request("PUT", sessionURL)
+		var request = HTTPClientSupport.request("PUT", sessionURL)
 		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-		let outcome = try await session.upload(upload.authorized(request), fromFile: fileURL, bodyLimit: GoogleDriveClient.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: taskHook)
+		let outcome = try await session.upload(upload.authorized(request), fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: taskHook)
 		guard let response = try await handleOutcome(outcome, of: request, reserving: 0, in: &upload) else {
 			upload.step = .queryStatus(sessionURL)
 			return nil
@@ -184,10 +186,10 @@ final class GoogleDriveClient: Sendable {
 	/// - Returns: The uploaded file, or `nil` if the upload continues.
 	private func queryStatus(of sessionURL: URL, fileSize: Int64, _ upload: inout ResumableUpload) async throws -> GoogleDriveFile? {
 		try upload.startAttempt()
-		var request = GoogleDriveClient.request("PUT", sessionURL)
+		var request = HTTPClientSupport.request("PUT", sessionURL)
 		request.setValue("bytes */\(fileSize)", forHTTPHeaderField: "Content-Range")
 		request.httpBody = Data()
-		let outcome = try await session.data(upload.authorized(request), bodyLimit: GoogleDriveClient.maxErrorBodyLength, bodyLogging: .logged)
+		let outcome = try await session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
 		guard let response = try await handleOutcome(outcome, of: request, reserving: 0, in: &upload) else {
 			return nil
 		}
@@ -247,6 +249,7 @@ final class GoogleDriveClient: Sendable {
 
 	private func refresh(_ upload: inout ResumableUpload) async throws {
 		upload.hasRefreshed = true
+		try Task.checkCancellation()
 		upload.accessToken = try await tokenSource.refresh(rejecting: upload.accessToken)
 	}
 
@@ -254,58 +257,15 @@ final class GoogleDriveClient: Sendable {
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
 	private func data(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, outcome) = try await send(request) { request, _ in
-			try await self.session.data(request, bodyLimit: nil, bodyLogging: bodyLogging)
+		let (response, outcome) = try await send(request, urlLogging: .redacted) { request, _ in
+			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: bodyLogging)
 		}
-		return try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
+		return try GoogleDriveClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)
 	}
 
-	/**
-	 Makes the attempts of a request until one is final, and returns its response, whatever its status.
-
-	 - Parameter progress: Gets the progress of every attempt with a pending unit count of 1. Its total unit count grows by 1 before each further attempt, so that the attempts never push it past complete.
-	 - Parameter attempt: Sends the authorized request once. Gets whether it is the first attempt.
-	 */
-	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		try Task.checkCancellation()
-		var accessToken = try await tokenSource.accessToken()
-		var attemptCount = 0
-		var hasRefreshed = false
-		while true {
-			try Task.checkCancellation()
-			if attemptCount > 0 {
-				progress?.totalUnitCount += 1
-			}
-			attemptCount += 1
-			var authorizedRequest = request
-			authorizedRequest.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-			let outcome = try await attempt(authorizedRequest, attemptCount == 1)
-			let response: HTTPURLResponse
-			do {
-				response = try HTTPClientSupport.httpResponse(of: outcome)
-			} catch {
-				GoogleDriveClient.logFailure(of: request, with: error)
-				// The retry decision reads the raw error, because most transient connection errors are also network connection errors.
-				guard request.httpMethod == "GET", attemptCount < GoogleDriveClient.maxAttemptCount, GoogleDriveClient.isTransient(error) else {
-					throw GoogleDriveClient.converted(error)
-				}
-				try await sleep(.seconds(HTTPClientSupport.retryDelay(forRetry: attemptCount)))
-				continue
-			}
-			guard attemptCount < GoogleDriveClient.maxAttemptCount else {
-				return (response, outcome)
-			}
-			if response.statusCode == 401, !hasRefreshed {
-				hasRefreshed = true
-				accessToken = try await tokenSource.refresh(rejecting: accessToken)
-				continue
-			}
-			guard GoogleDriveClient.isRetryable(response, outcome) else {
-				return (response, outcome)
-			}
-			GoogleDriveClient.logFailure(of: request, with: GoogleDriveClient.apiError(of: response, outcome))
-			try await sleep(HTTPClientSupport.retryDelay(for: response, attempt: attemptCount, now: Date()))
-		}
+	private func send(_ request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
+		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome) })
+		return try await sender.send(request, urlLogging: urlLogging, policy: policy, progress: progress, attempt: attempt)
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> Bool {
@@ -321,25 +281,12 @@ final class GoogleDriveClient: Sendable {
 		return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
 	}
 
-	private static func request(_ method: String, _ url: URL) -> URLRequest {
-		var request = URLRequest(url: url)
-		request.httpMethod = method
-		return request
-	}
-
-	private static func request(_ method: String, _ url: URL, json body: some Encodable) throws -> URLRequest {
-		var request = GoogleDriveClient.request(method, url)
-		request.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
-		request.httpBody = try JSONEncoder().encode(body)
-		return request
-	}
-
 	private static func uploadSessionRequest(name: String, parentID: String, existingFileID: String?, fileSize: Int64) throws -> URLRequest {
 		let parameters = [("uploadType", "resumable"), ("supportsAllDrives", "true"), ("fields", uploadFields)]
 		var request = if let existingFileID {
-			try GoogleDriveClient.request("PATCH", url(path: "/upload/drive/v3/files/\(pathComponent(existingFileID))", parameters: parameters), json: GoogleDriveFileMetadata(name: nil, parents: nil, mimeType: nil))
+			try HTTPClientSupport.request("PATCH", url(path: "/upload/drive/v3/files/\(HTTPClientSupport.pathComponent(existingFileID))", parameters: parameters), json: GoogleDriveFileMetadata(name: nil, parents: nil, mimeType: nil), charset: "UTF-8")
 		} else {
-			try GoogleDriveClient.request("POST", url(path: "/upload/drive/v3/files", parameters: parameters), json: GoogleDriveFileMetadata(name: name, parents: [parentID], mimeType: nil))
+			try HTTPClientSupport.request("POST", url(path: "/upload/drive/v3/files", parameters: parameters), json: GoogleDriveFileMetadata(name: name, parents: [parentID], mimeType: nil), charset: "UTF-8")
 		}
 		request.setValue("application/octet-stream", forHTTPHeaderField: "X-Upload-Content-Type")
 		request.setValue(String(fileSize), forHTTPHeaderField: "X-Upload-Content-Length")
@@ -351,37 +298,15 @@ final class GoogleDriveClient: Sendable {
 	}
 
 	private static func url(path percentEncodedPath: String, parameters: [(String, String)]) throws -> URL {
-		var components = URLComponents()
-		components.scheme = "https"
-		components.host = "www.googleapis.com"
-		components.percentEncodedPath = percentEncodedPath
-		// Unlike `queryItems`, this also escapes `+`, which the server would read as a space.
-		components.percentEncodedQuery = HTTPClientSupport.formEncoded(parameters)
-		guard let url = components.url else {
-			throw URLError(.badURL)
-		}
-		return url
-	}
-
-	/// Escapes an identifier from a response as one path component.
-	private static func pathComponent(_ identifier: String) -> String {
-		return HTTPClientSupport.percentEncoded(identifier, encodeSlash: true)
-	}
-
-	private static func uploadSessionURL(_ string: String?) throws -> URL {
-		guard let url = HTTPClientSupport.httpsURL(string, onDomain: "googleapis.com") else {
-			throw GoogleDriveError.unexpectedContent
-		}
-		return url
+		return try HTTPClientSupport.url(host: "www.googleapis.com", percentEncodedPath: percentEncodedPath, parameters: parameters)
 	}
 
 	// MARK: - Outcomes
 
-	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) throws -> Data {
-		guard (200 ... 299).contains(response.statusCode) else {
-			throw apiError(of: response, outcome, for: request)
+	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging) throws -> Data {
+		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: urlLogging, label: logLabel) { response, outcome in
+			(200 ... 299).contains(response.statusCode) ? nil : apiError(of: response, outcome)
 		}
-		return outcome.data ?? Data()
 	}
 
 	/// Returns the error of an unsuccessful response, and logs it if a request is given.
@@ -398,8 +323,9 @@ final class GoogleDriveClient: Sendable {
 		return outcome.data.flatMap { try? JSONDecoder().decode(GoogleDriveErrorResponse.self, from: $0) }
 	}
 
+	/// An upload's requests go to its session URL, which is a credential, so their URLs are logged only as origins.
 	private static func logFailure(of request: URLRequest, with failure: Any) {
-		CloudAccessDDLogDebug("GoogleDriveClient: \(request.httpMethod ?? "GET") \(request.url?.path ?? "") failed with \(failure)")
+		HTTPClientSupport.logFailure(of: request, urlLogging: .originOnly, with: failure, label: logLabel)
 	}
 }
 
@@ -438,7 +364,7 @@ private struct ResumableUpload {
 	 - Throws: The last failure if not enough attempts are left.
 	 */
 	func checkAttemptLeft(reserving reservedAttemptCount: Int = 0) throws {
-		guard attemptCount + 1 + reservedAttemptCount <= GoogleDriveClient.maxAttemptCount else {
+		guard attemptCount + 1 + reservedAttemptCount <= BearerRequestSender.maxAttemptCount else {
 			throw lastFailure.map(GoogleDriveClient.converted) ?? GoogleDriveError.unexpectedContent
 		}
 	}

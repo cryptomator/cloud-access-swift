@@ -8,17 +8,14 @@
 
 import Foundation
 
-/// A provider whose OAuth logins the library keeps.
-public struct OAuthProvider: RawRepresentable, Hashable, Sendable {
+/// A provider whose OAuth logins the library keeps. Its raw value names the provider in the persisted locations of the logins, e.g., keychain services.
+public struct OAuthProvider: Hashable, Sendable {
 	public static let box = OAuthProvider(rawValue: "box")
 	public static let dropbox = OAuthProvider(rawValue: "dropbox")
 	public static let googleDrive = OAuthProvider(rawValue: "googledrive")
+	public static let pCloud = OAuthProvider(rawValue: "pcloud")
 
 	public let rawValue: String
-
-	public init(rawValue: String) {
-		self.rawValue = rawValue
-	}
 }
 
 /// Identifies the login of one account at a provider.

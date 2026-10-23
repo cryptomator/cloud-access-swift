@@ -14,7 +14,7 @@ import CryptomatorCloudAccessCore
 #endif
 
 class BoxAuthenticatorTests: XCTestCase {
-	private let clientId = "clientid"
+	private let clientID = "clientid"
 	private let state = "STATE"
 
 	func testAuthorizationCodeFromCallbackURL() throws {
@@ -27,14 +27,21 @@ class BoxAuthenticatorTests: XCTestCase {
 			"boxsdk-clientid://other?state=STATE&code=CODE",
 			"boxsdk-clientid://boxsdkoauth2redirect?state=OTHER&code=CODE",
 			"boxsdk-clientid://boxsdkoauth2redirect?code=CODE",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=access_denied",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=access_denied&code=CODE",
+			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=server_error",
 			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE",
 			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&code="
 		]
 		for callbackURL in callbackURLs {
 			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
 				XCTAssertEqual(.authenticationFailed, error as? BoxAuthenticatorError, callbackURL)
+			}
+		}
+	}
+
+	func testDeniedAccessIsUserCancellation() {
+		for callbackURL in ["boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=access_denied", "boxsdk-clientid://boxsdkoauth2redirect?error=access_denied&error_description=The+user+denied+access"] {
+			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
+				XCTAssertEqual(.userCancelled, (error as? CocoaError)?.code, callbackURL)
 			}
 		}
 	}
@@ -52,6 +59,6 @@ class BoxAuthenticatorTests: XCTestCase {
 	}
 
 	private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
-		return try BoxAuthenticator.authorizationCode(fromCallbackURL: XCTUnwrap(URL(string: callbackURL)), clientId: clientId, expectedState: state)
+		return try BoxAuthenticator.authorizationCode(fromCallbackURL: XCTUnwrap(URL(string: callbackURL)), clientID: clientID, expectedState: state)
 	}
 }

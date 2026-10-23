@@ -14,7 +14,16 @@ public enum WebDAVAuthenticatorError: Error {
 }
 
 public enum WebDAVAuthenticator {
-	public static func verifyClient(client: WebDAVClient) async throws {
+	/**
+	 Checks that the server of the credential speaks WebDAV and accepts the credential.
+
+	 - Throws: `WebDAVAuthenticatorError.unsupportedProtocol` if the server isn't a WebDAV server, `WebDAVAuthenticatorError.untrustedCertificate` if its certificate isn't trusted, and otherwise the error of the failed request, e.g., `WebDAVError.httpError` with status 401 for a rejected credential.
+	 */
+	public static func verifyCredential(_ credential: WebDAVCredential) async throws {
+		try await verifyClient(client: WebDAVClient(credential: credential))
+	}
+
+	static func verifyClient(client: WebDAVClient) async throws {
 		do {
 			try await checkServerCompatibility(client: client)
 			try await tryAuthenticatedRequest(client: client)

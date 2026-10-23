@@ -28,21 +28,29 @@ struct OAuthToken: Sendable, Equatable {
 	let expiresAt: Date?
 	/// The name of the account, which the app can show without a request.
 	let username: String?
+	/// The host of the API that the token is valid for, for a provider whose accounts are bound to a regional API host.
+	let apiHost: String?
 
-	init(accessToken: String, refreshToken: String?, expiresAt: Date?, username: String? = nil) {
+	init(accessToken: String, refreshToken: String?, expiresAt: Date?, username: String? = nil, apiHost: String? = nil) {
 		self.accessToken = accessToken
 		self.refreshToken = refreshToken
 		self.expiresAt = expiresAt
 		self.username = username
+		self.apiHost = apiHost
 	}
 
-	/// Whether both tokens are the same grant, regardless of the precision of the stored expiry and of the username.
+	/// Whether both tokens are the same grant, regardless of the precision of the stored expiry, the username and the API host.
 	func hasSameTokens(as other: OAuthToken) -> Bool {
 		return accessToken == other.accessToken && refreshToken == other.refreshToken
 	}
 
+	/// Returns the token with the username of `other`, and with its API host if the token has none, because a refreshed token stays bound to the host of its login.
 	func keepingUsername(of other: OAuthToken) -> OAuthToken {
-		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: other.username)
+		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: other.username, apiHost: apiHost ?? other.apiHost)
+	}
+
+	func replacingUsername(with username: String) -> OAuthToken {
+		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: username, apiHost: apiHost)
 	}
 }
 
@@ -61,10 +69,12 @@ enum OAuthTokenEncoding {
 		/// Seconds since 1970.
 		let expiresAt: TimeInterval?
 		let username: String?
+		/// `nil` for providers whose tokens aren't bound to an API host.
+		let apiHost: String?
 	}
 
 	static func encode(_ token: OAuthToken) throws -> Data {
-		return try JSONEncoder().encode(Envelope(version: currentVersion, accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt?.timeIntervalSince1970, username: token.username))
+		return try JSONEncoder().encode(Envelope(version: currentVersion, accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt?.timeIntervalSince1970, username: token.username, apiHost: token.apiHost))
 	}
 
 	/**
@@ -80,6 +90,6 @@ enum OAuthTokenEncoding {
 			throw OAuthTokenStoreError.unsupportedVersion(version)
 		}
 		let envelope = try JSONDecoder().decode(Envelope.self, from: data)
-		return OAuthToken(accessToken: envelope.accessToken, refreshToken: envelope.refreshToken, expiresAt: envelope.expiresAt.map(Date.init(timeIntervalSince1970:)), username: envelope.username)
+		return OAuthToken(accessToken: envelope.accessToken, refreshToken: envelope.refreshToken, expiresAt: envelope.expiresAt.map(Date.init(timeIntervalSince1970:)), username: envelope.username, apiHost: envelope.apiHost)
 	}
 }

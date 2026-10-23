@@ -8,14 +8,12 @@
 
 import Foundation
 
-public enum DropboxCredentialErrors: Error {
+public enum DropboxCredentialError: Error {
 	case noUsername
 	case missingUserID
-	/// `DropboxSetup.constants` isn't set.
-	case missingSetup
 }
 
-/// The login of a Dropbox account, which `DropboxSetup.constants.oauth` keeps under the user ID, the account's `uid`. Persist the user ID to re-create the credential later.
+/// The login of a Dropbox account, which the `oauth` of its `DropboxSetup` keeps under the user ID, the account's `uid`. Persist the user ID to re-create the credential later.
 public final class DropboxCredential: Sendable {
 	public let userID: String
 	let tokenSource: any OAuthTokenSource
@@ -28,14 +26,11 @@ public final class DropboxCredential: Sendable {
 	/**
 	 Creates the credential of a login that `DropboxAuthenticator` or a Dropbox SDK stored. It reads nothing until the first request.
 
-	 - Throws: `DropboxCredentialErrors.missingUserID` for an empty user ID, and `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set.
+	 - Throws: `DropboxCredentialError.missingUserID` for an empty user ID.
 	 */
-	public convenience init(userID: String) throws {
+	public convenience init(userID: String, setup: DropboxSetup) throws {
 		guard !userID.isEmpty else {
-			throw DropboxCredentialErrors.missingUserID
-		}
-		guard let setup = DropboxSetup.constants else {
-			throw DropboxCredentialErrors.missingSetup
+			throw DropboxCredentialError.missingUserID
 		}
 		self.init(userID: userID, tokenSource: DropboxCredential.makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: DropboxOAuthEndpoint(setup: setup)))
 	}
@@ -54,13 +49,10 @@ public final class DropboxCredential: Sendable {
 	 Nothing is stored if the exchange or the account request fails, or the task was cancelled meanwhile.
 
 	 - Parameter codeVerifier: The PKCE code verifier of the login's authorize request.
-	 - Throws: `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set, `DropboxCredentialErrors.missingUserID` if Dropbox returned no `uid`, and otherwise what the code exchange, the account request or saving the token throws.
+	 - Throws: `DropboxCredentialError.missingUserID` if Dropbox returned no `uid`, and otherwise what the code exchange, the account request or saving the token throws.
 	 */
 	@concurrent
-	public static func completeAuthentication(authorizationCode: String, codeVerifier: String) async throws -> DropboxCredential {
-		guard let setup = DropboxSetup.constants else {
-			throw DropboxCredentialErrors.missingSetup
-		}
+	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, codeVerifier: String, setup: DropboxSetup) async throws -> DropboxCredential {
 		let endpoint = DropboxOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(authorizationCode: authorizationCode, codeVerifier: codeVerifier, endpoint: endpoint, makeClient: { DropboxClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)
@@ -94,7 +86,7 @@ public final class DropboxCredential: Sendable {
 
 	func getUsername(client: DropboxClient) async throws -> String {
 		guard let email = try await client.currentAccount().email, !email.isEmpty else {
-			throw DropboxCredentialErrors.noUsername
+			throw DropboxCredentialError.noUsername
 		}
 		await tokenSource.storeUsernameIfChanged(email)
 		return email

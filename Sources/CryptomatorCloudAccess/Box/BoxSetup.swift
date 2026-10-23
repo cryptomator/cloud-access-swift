@@ -7,25 +7,17 @@
 //
 
 import Foundation
-import os
 
-public final class BoxSetup: Sendable {
-	private static let lockedConstants = OSAllocatedUnfairLock<BoxSetup?>(initialState: nil)
-	public static var constants: BoxSetup! {
-		get { lockedConstants.withLock { $0 } }
-		set { lockedConstants.withLock { $0 = newValue } }
-	}
-
-	public let clientId: String
+/// The registration of the app at Box, and where the Box logins are kept.
+public struct BoxSetup: Sendable {
+	public let clientID: String
 	public let clientSecret: String
-	public let sharedContainerIdentifier: String?
 	/// Where the Box logins are kept. Every process that uses the same logins must pass an equal value.
 	public let oauth: OAuthPersistence
 
-	public init(clientId: String, clientSecret: String, sharedContainerIdentifier: String?, oauth: OAuthPersistence) {
-		self.clientId = clientId
+	public init(clientID: String, clientSecret: String, oauth: OAuthPersistence) {
+		self.clientID = clientID
 		self.clientSecret = clientSecret
-		self.sharedContainerIdentifier = sharedContainerIdentifier
 		self.oauth = oauth
 	}
 }

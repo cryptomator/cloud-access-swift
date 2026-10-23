@@ -31,7 +31,7 @@ class WebDAVChallengeHandlerTests: XCTestCase {
 		for authenticationMethod in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodDefault] {
 			let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 1, serverTrust: nil, credential: makeCredential(allowedCertificate: nil))
 			XCTAssertEqual(.cancelAuthenticationChallenge, decision.disposition, authenticationMethod)
-			guard case URLSessionError.httpError(nil, statusCode: 401)? = decision.failure else {
+			guard case WebDAVError.httpError(statusCode: 401)? = decision.failure else {
 				XCTFail("\(authenticationMethod) recorded \(String(describing: decision.failure))")
 				continue
 			}

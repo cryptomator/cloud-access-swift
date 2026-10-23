@@ -211,45 +211,43 @@ class SplitURLSessionTests: XCTestCase {
 		XCTAssertTrue(try isCancellationError(XCTUnwrap(outcome.error)))
 	}
 
-	// MARK: - Compatibility
+	// MARK: - Downloads
 
-	func testDownloadReplacesExistingDestination() async throws {
-		let destinationURL = tmpDirURL.appendingPathComponent("file.txt")
-		try Data("old".utf8).write(to: destinationURL)
+	func testDownloadMovesBodyOfSuccessfulResponse() async throws {
+		let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
 		URLProtocolMock.requestHandler = [{ [url] _ in
 			(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("new".utf8))
 		}]
 
-		let (response, data) = try await session.download(URLRequest(url: url), to: destinationURL)
+		let outcome = try await download(to: stagingURL)
 
-		XCTAssertEqual(200, response.statusCode)
-		XCTAssertEqual(Data(), data)
-		XCTAssertEqual(Data("new".utf8), try Data(contentsOf: destinationURL))
+		XCTAssertEqual(200, try HTTPClientSupport.httpResponse(of: outcome).statusCode)
+		XCTAssertEqual(.file(stagingURL), outcome.body)
+		XCTAssertEqual(Data("new".utf8), try Data(contentsOf: stagingURL))
 	}
 
 	func testUnsuccessfulDownloadReturnsBodyAsData() async throws {
-		let destinationURL = tmpDirURL.appendingPathComponent("file.txt")
-		try Data("old".utf8).write(to: destinationURL)
+		let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
 		URLProtocolMock.requestHandler = [{ [url] _ in
 			(HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data("not found".utf8))
 		}]
 
-		let (response, data) = try await session.download(URLRequest(url: url), to: destinationURL)
+		let outcome = try await download(to: stagingURL)
 
-		XCTAssertEqual(404, response.statusCode)
-		XCTAssertEqual(Data("not found".utf8), data)
-		XCTAssertEqual(Data("old".utf8), try Data(contentsOf: destinationURL))
+		XCTAssertEqual(404, try HTTPClientSupport.httpResponse(of: outcome).statusCode)
+		XCTAssertEqual(.data(Data("not found".utf8)), outcome.body)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: stagingURL.path))
 	}
 
-	func testDownloadThrowsMoveError() async throws {
-		let destinationURL = tmpDirURL.appendingPathComponent("missing", isDirectory: true).appendingPathComponent("file.txt")
+	func testDownloadRecordsMoveError() async throws {
+		let stagingURL = tmpDirURL.appendingPathComponent("missing", isDirectory: true).appendingPathComponent("file.txt")
 		URLProtocolMock.requestHandler = [{ [url] _ in
 			(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("content".utf8))
 		}]
 
-		await XCTAssertThrowsErrorAsync(try await session.download(URLRequest(url: url), to: destinationURL)) { error in
-			XCTAssertTrue(error is CocoaError, "Unexpected error: \(error)")
-		}
+		let outcome = try await download(to: stagingURL)
+
+		XCTAssertTrue(outcome.recordedFailure is CocoaError, "Unexpected failure: \(String(describing: outcome.recordedFailure))")
 	}
 
 	// MARK: - Redirects
@@ -267,6 +265,10 @@ class SplitURLSessionTests: XCTestCase {
 	}
 
 	// MARK: - Helpers
+
+	private func download(to stagingURL: URL) async throws -> SplitURLSession.Outcome {
+		return try await session.download(URLRequest(url: url), route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: 1024), bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+	}
 
 	/// Returns a session whose transfer session the test registry backs with `URLProtocolMock`, because the hostless test bundle can't create background sessions.
 	private func makeBackgroundSession() -> SplitURLSession {
@@ -298,10 +300,10 @@ class SplitURLSessionTests: XCTestCase {
 		var request = URLRequest(url: url)
 		request.setValue("Bearer token", forHTTPHeaderField: "Authorization")
 
-		let (response, data) = try await session.data(for: request)
+		let outcome = try await session.data(request, bodyLimit: nil, bodyLogging: .logged)
 
-		XCTAssertEqual(200, response.statusCode)
-		XCTAssertEqual(Data("content".utf8), data)
+		XCTAssertEqual(200, try HTTPClientSupport.httpResponse(of: outcome).statusCode)
+		XCTAssertEqual(Data("content".utf8), outcome.data)
 		return authorizationHeaders.withLock { $0 }
 	}
 }

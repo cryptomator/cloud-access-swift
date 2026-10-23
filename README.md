@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. The WebDAV, S3, pCloud, Box, Dropbox and Google Drive providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, and Dropbox doesn't for one of 150 MiB or more, because they upload such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. The WebDAV, S3, pCloud, Box, Dropbox, Google Drive and Microsoft Graph providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, Dropbox doesn't for one of 150 MiB or more, and Microsoft Graph doesn't for one of more than 5 MiB, because they upload such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -86,34 +86,42 @@ let cryptoDecorator = try VaultProviderFactory.createLegacyVaultProvider(from: m
 
 :warning: This library supports vault version 6 and higher.
 
+### Setups
+
+The providers that need the app's registration at the cloud service take it as a setup value: `BoxSetup`, `DropboxSetup`, `GoogleDriveSetup`, `MicrosoftGraphSetup` and `PCloudSetup`. The library keeps no global configuration, so pass the setup wherever a credential or a login is created. Create the setups once per process, e.g., in your app delegate and in each extension, with equal values in every process.
+
+### Background Sessions
+
+Every network provider can run its downloads and uploads on a background URLSession, created with `withBackgroundSession(credential:…, sessionIdentifier:sharedContainerIdentifier:)`. Its other requests run on a foreground URLSession. In an app extension, pass the identifier of a container that the extension shares with the app as `sharedContainerIdentifier`, and `nil` in the app. Use a session identifier of its own for each account, because the providers created with an identifier share one session, configured by the first of them.
+
 ### OAuth Persistence
 
-The library keeps the OAuth logins of Box, Dropbox and Google Drive and refreshes their tokens. Create one `OAuthPersistence` and pass it to the setup of each of these providers. Every process that uses the same logins, e.g., the app and its extensions, must create it with the same values:
+The library keeps the OAuth logins of Box, Dropbox, Google Drive and pCloud, and refreshes the tokens of those that expire. Create one `OAuthPersistence` and pass it to the setup of each of these providers. Every process that uses the same logins, e.g., the app and its extensions, must create it with the same values:
 
 ```swift
 let accessGroup = ... // optional: the keychain access group of the logins, `nil` for the first group of the `keychain-access-groups` entitlement
 let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
 let boxService = ... // the keychain service in which your app kept its Box logins so far; without `services`, Box logins go to `CryptomatorCloudAccess.OAuth.box`
-let dropboxService = ... // the keychain service in which your app kept its Dropbox logins so far: the `keychainService` it passed to `DropboxSetup` (by default its bundle identifier) followed by `.dropbox.authv2`; without `services`, Dropbox logins go to `CryptomatorCloudAccess.OAuth.dropbox`
-let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService, .dropbox: dropboxService])
+let dropboxService = ... // the keychain service in which your app kept its Dropbox logins so far: the `keychainService` it passed to SwiftyDropbox (by default its bundle identifier) followed by `.dropbox.authv2`; without `services`, Dropbox logins go to `CryptomatorCloudAccess.OAuth.dropbox`
+let pCloudService = ... // the keychain service in which your app kept the pCloud SDK's logins so far; without `services`, pCloud logins go to `CryptomatorCloudAccess.OAuth.pcloud`
+let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService, .dropbox: dropboxService, .pCloud: pCloudService])
 ```
 
-The logins are generic passwords in the keychain. An item that the library adds is accessible after the first unlock on this device only. A Box or Dropbox login is the item whose account is the user ID, in the service of `services[.box]` or `services[.dropbox]`. A Google Drive login uses GTMAppAuth's item, with the service `GoogleDriveAuth` followed by the user ID and the account `OAuth`.
+The logins are generic passwords in the keychain. An item that the library adds is accessible after the first unlock on this device only. A Box, Dropbox or pCloud login is the item whose account is the user ID, in the service of `services[.box]`, `services[.dropbox]` or `services[.pCloud]`. A Google Drive login uses GTMAppAuth's item, with the service `GoogleDriveAuth` followed by the user ID and the account `OAuth`.
 
-Logins stored by the Box SDK, the Dropbox SDKs or GTMAppAuth keep working without a new login. The library rewrites them in its own format when it first saves them. Every refresh happens only while holding a lock in `tokenLockDirectory`, so that no two processes send the same refresh token, which Box accepts only once.
+Logins stored by the Box SDK, the Dropbox SDKs, GTMAppAuth or the pCloud SDK (its `OAuth.User` as JSON) keep working without a new login. The library rewrites them in its own format when it first saves them. Every refresh happens only while holding a lock in `tokenLockDirectory`, so that no two processes send the same refresh token, which Box accepts only once.
 
 To keep the logins elsewhere, implement `OAuthTokenStorage` and pass it to `OAuthPersistence.custom(storage:tokenLockDirectory:)`. Its documentation describes the contract that the storage must hold to.
 
 ### Box
 
-The following constants must be set once, e.g. in your app delegate:
+Create the setup, e.g., in your app delegate:
 
 ```swift
-let clientId = ... // your Box client identifier
+let clientID = ... // your Box client identifier
 let clientSecret = ... // your Box client secret
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `BoxCloudProvider` with a background `URLSession` in an app extension
 let oauth = ... // your `OAuthPersistence`
-BoxSetup.constants = BoxSetup(clientId: clientId, clientSecret: clientSecret, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
+let setup = BoxSetup(clientID: clientID, clientSecret: clientSecret, oauth: oauth)
 ```
 
 Begin the authentication flow:
@@ -121,7 +129,7 @@ Begin the authentication flow:
 ```swift
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await BoxAuthenticator.authenticate(from: viewController)
+  let credential = try await BoxAuthenticator.authenticate(from: viewController, setup: setup)
   // do something with `BoxCredential`
   // you probably want to save `credential.userID` to re-create the credential later
 } catch {
@@ -129,10 +137,12 @@ do {
 }
 ```
 
+Cancelling the task of the call dismisses the sign-in page and ends the call with `CancellationError`.
+
 Re-create a saved credential:
 
 ```swift
-let credential = try BoxCredential(userID: userID)
+let credential = try BoxCredential(userID: userID, setup: setup)
 ```
 
 `try credential.cachedUsername()` returns the account's name without a request, or `nil` until it is known, e.g., for a login stored by the Box SDK. `try await credential.getUsername()` asks Box for it and stores it if it changed.
@@ -147,20 +157,20 @@ Or create a Box provider whose downloads and uploads run on a background URLSess
 
 ```swift
 let sessionIdentifier = ...
-let provider = try BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try BoxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 To log out, call `try await credential.deauthenticate()`. It deletes the stored login and then revokes its token, which ends only this login. The login is deleted also if the revocation fails.
 
 ### Dropbox
 
-Declare `dbapi-2` and `dbapi-8-emm` in the `LSApplicationQueriesSchemes` of your `Info.plist`, so that the login can hand off to the Dropbox app. Also add the URL type `db-<app key>`, to which Dropbox redirects. In addition, the following constants must be set once, e.g. in your app delegate:
+Declare `dbapi-2` and `dbapi-8-emm` in the `LSApplicationQueriesSchemes` of your `Info.plist`, so that the login can hand off to the Dropbox app. Also add the URL type `db-<app key>`, to which Dropbox redirects. Then create the setup, e.g., in your app delegate:
 
 ```swift
 let appKey = ... // your Dropbox app key
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `DropboxCloudProvider` with a background `URLSession` in an app extension
 let oauth = ... // your `OAuthPersistence`
-DropboxSetup.constants = DropboxSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
+let setup = DropboxSetup(appKey: appKey, oauth: oauth)
 ```
 
 Begin the authentication flow:
@@ -168,7 +178,7 @@ Begin the authentication flow:
 ```swift
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await DropboxAuthenticator.authenticate(from: viewController)
+  let credential = try await DropboxAuthenticator.authenticate(from: viewController, setup: setup)
   // do something with `DropboxCredential`
   // you probably want to save `credential.userID` to re-create the credential later
 } catch {
@@ -180,16 +190,16 @@ If the Dropbox app is installed, the login continues there, and the Dropbox app 
 
 ```swift
 func application(_: UIApplication, open url: URL, options _: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-  return DropboxAuthenticator.handleRedirectURL(url)
+  return DropboxAuthenticator.handleRedirectURL(url, setup: setup)
 }
 ```
 
-This completes the pending `authenticate(from:)` call. A late redirect of an earlier login doesn't complete it: `handleRedirectURL(_:)` ignores it and returns `false`, and the pending call keeps waiting for its own redirect. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`. If the login runs in a web authentication session instead, cancelling also dismisses it.
+This completes the pending `authenticate(from:setup:)` call. A late redirect of an earlier login doesn't complete it: `handleRedirectURL(_:setup:)` ignores it and returns `false`, and the pending call keeps waiting for its own redirect. Because the redirect may never arrive, you can cancel the task of that call, which ends it with `CancellationError`. If the login runs in a web authentication session instead, cancelling also dismisses it.
 
 Re-create a saved credential, whose user ID is the `uid` of the account:
 
 ```swift
-let credential = try DropboxCredential(userID: userID)
+let credential = try DropboxCredential(userID: userID, setup: setup)
 ```
 
 `try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by a Dropbox SDK. `try await credential.getUsername()` asks Dropbox for it and stores it if it changed.
@@ -204,29 +214,29 @@ Or create a Dropbox provider whose downloads and uploads run on a background URL
 
 ```swift
 let sessionIdentifier = ...
-let provider = DropboxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = DropboxCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 To log out, call `try await credential.deauthenticate()`. It deletes the stored login and then revokes its tokens, which ends only this login. The login is deleted also if the revocation fails.
 
 ### Google Drive
 
-Modify your app delegate as described in [AppAuth](https://github.com/openid/AppAuth-iOS) to resume `GoogleDriveAuthenticator.currentAuthorizationFlow` with the redirect URL. In addition, the following constants must be set once, e.g. in your app delegate:
+Create the setup, e.g., in your app delegate:
 
 ```swift
-let clientId = ... // your Google Drive client identifier
-let redirectURL = ...
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `GoogleDriveCloudProvider` with a background `URLSession` in an app extension
+let clientID = ... // your Google Drive client identifier
+let redirectURL = ... // the redirect URL of your client identifier
 let oauth = ... // your `OAuthPersistence`
-GoogleDriveSetup.constants = GoogleDriveSetup(clientId: clientId, redirectURL: redirectURL, sharedContainerIdentifier: sharedContainerIdentifier, oauth: oauth)
+let setup = GoogleDriveSetup(clientID: clientID, redirectURL: redirectURL, oauth: oauth)
 ```
 
-Begin the authentication flow:
+Begin the authentication flow, which runs in a web authentication session:
 
 ```swift
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await GoogleDriveAuthenticator.authenticate(from: viewController)
+  let credential = try await GoogleDriveAuthenticator.authenticate(from: viewController, setup: setup)
   // do something with `GoogleDriveCredential`
   // you probably want to save `credential.userID` to re-create the credential later
 } catch {
@@ -234,10 +244,12 @@ do {
 }
 ```
 
+Cancelling the task of the call dismisses Google's sign-in page and ends the call with `CancellationError`.
+
 Re-create a saved credential:
 
 ```swift
-let credential = try GoogleDriveCredential(userID: userID)
+let credential = try GoogleDriveCredential(userID: userID, setup: setup)
 ```
 
 `try credential.cachedUsername()` returns the account's email without a request, or `nil` if it wasn't stored with the login. `try await credential.getUsername()` asks Google for it and stores it if it changed.
@@ -252,7 +264,8 @@ Or create a Google Drive provider whose downloads and uploads run on a backgroun
 
 ```swift
 let sessionIdentifier = ...
-let provider = try GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try GoogleDriveCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 To log out, call `try await credential.deauthenticate()`. It deletes the stored login without revoking its token. Google revokes a token for every device and app of the same Google Cloud project, so revoking it would sign the account out elsewhere, too.
@@ -261,27 +274,34 @@ To log out, call `try await credential.deauthenticate()`. It deletes the stored 
 
 Accessing OneDrive and SharePoint can both be done via Microsoft Graph.
 
-Set up the `Info.plist` and your app delegate as described in [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-objc). In addition, the following constants must be set once, e.g. in your app delegate:
+Set up the `Info.plist` and your app delegate as described in [MSAL](https://github.com/AzureAD/microsoft-authentication-library-for-objc). Then create the setup, e.g., in your app delegate:
 
 ```swift
 let clientApplication = ... // your `MSALPublicClientApplication`
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `MicrosoftGraphCloudProvider` with a background `URLSession` in an app extension
-MicrosoftGraphSetup.constants = MicrosoftGraphSetup(clientApplication: clientApplication, sharedContainerIdentifier: sharedContainerIdentifier)
+let setup = MicrosoftGraphSetup(clientApplication: clientApplication)
 ```
 
-In this example, we will use OneDrive. You can also use SharePoint by replacing `.oneDrive` with `.sharePoint` in the following code snippet. Internally, the only difference is the scopes that are requested. If you want, you can also request custom scopes by using the method `MicrosoftGraphAuthenticator.authenticate(from viewController: UIViewController, with scopes: [String])`.
+In this example, we will use OneDrive. You can also use SharePoint by replacing `.oneDrive` with `.sharePoint` in the following code snippets. Internally, the only difference is the scopes that are requested.
 
 Begin the authentication flow:
 
 ```swift
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive)
+  let credential = try await MicrosoftGraphAuthenticator.authenticate(from: viewController, for: .oneDrive, setup: setup)
   // do something with `MicrosoftGraphCredential`
   // you probably want to save `credential.identifier` to re-create the credential later
 } catch {
   // error handling
 }
+```
+
+Cancelling the task of the call while Microsoft's sign-in sheet is shown dismisses it and ends the call with `CancellationError`.
+
+Re-create a saved credential:
+
+```swift
+let credential = MicrosoftGraphCredential(identifier: identifier, type: .oneDrive, setup: setup)
 ```
 
 You can then use the credential to create a Microsoft Graph provider:
@@ -290,11 +310,12 @@ You can then use the credential to create a Microsoft Graph provider:
 let provider = try MicrosoftGraphCloudProvider(credential: credential)
 ```
 
-Or create a Microsoft Graph provider using a background URLSession:
+Or create a Microsoft Graph provider whose downloads and uploads run on a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let provider = try MicrosoftGraphCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try MicrosoftGraphCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 For SharePoint, it could be useful to do some discovery first:
@@ -314,12 +335,12 @@ do {
 
 ### pCloud
 
-The following constants must be set once, e.g. in your app delegate:
+Create the setup, e.g., in your app delegate:
 
 ```swift
 let appKey = ... // your pCloud app key
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `PCloudCloudProvider` with a background `URLSession` in an app extension
-PCloudSetup.constants = PCloudSetup(appKey: appKey, sharedContainerIdentifier: sharedContainerIdentifier)
+let oauth = ... // your `OAuthPersistence`
+let setup = PCloudSetup(appKey: appKey, oauth: oauth)
 ```
 
 Begin the authentication flow:
@@ -327,19 +348,23 @@ Begin the authentication flow:
 ```swift
 let viewController = ... // the presenting `UIViewController`
 do {
-  let credential = try await PCloudAuthenticator.authenticate(from: viewController)
+  let credential = try await PCloudAuthenticator.authenticate(from: viewController, setup: setup)
   // do something with `PCloudCredential`
-  // you probably want to save `credential.id`, `credential.accessToken`, `credential.apiHostName` and `credential.locationID` to re-create the credential later
+  // you probably want to save `credential.userID` to re-create the credential later
 } catch {
   // error handling
 }
 ```
 
+Cancelling the task of the call dismisses the sign-in page and ends the call with `CancellationError`.
+
 Re-create a saved credential:
 
 ```swift
-let credential = try PCloudCredential(id: id, accessToken: accessToken, apiHostName: apiHostName, locationID: locationID)
+let credential = try PCloudCredential(userID: userID, setup: setup)
 ```
+
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by the pCloud SDK. `try await credential.getUsername()` asks pCloud for it and stores it if it changed.
 
 You can then use the credential to create a pCloud provider:
 
@@ -351,8 +376,11 @@ Or create a pCloud provider whose downloads and uploads run on a background URLS
 
 ```swift
 let sessionIdentifier = ...
-let provider = try PCloudCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try PCloudCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
+
+To log out, call `try await credential.deauthenticate()`. It deletes the stored login, after which every process's provider of the account throws `CloudProviderError.unauthorized`. pCloud offers no revocation of an OAuth token, so the token itself stays valid.
 
 ### S3
 
@@ -374,11 +402,12 @@ You can then use the credential to create a S3 provider:
 let provider = try S3CloudProvider(credential: credential)
 ```
 
-Or create a S3 provider using a background URLSession:
+Or create a S3 provider whose downloads and uploads run on a background URLSession:
 
 ```swift
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `S3CloudProvider` in an app extension 
-let provider = try S3CloudProvider.withBackgroundSession(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier)
+let sessionIdentifier = ...
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try S3CloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
 In theory, you could use the provider without further checks. However, you should verify the S3 credential using the S3 authenticator:
@@ -406,33 +435,35 @@ let identifier = ... // optional: you might want to give this credential an iden
 let credential = WebDAVCredential(baseURL: baseURL, username: username, password: password, allowedCertificate: allowedCertificate, identifier: identifier)
 ```
 
-You can then use the credential to create a WebDAV provider with a WebDAV client:
+You can then use the credential to create a WebDAV provider:
 
 ```swift
-let client = WebDAVClient(credential: credential)
-let provider = try WebDAVProvider(with: client)
+let provider = try WebDAVCloudProvider(credential: credential)
 ```
 
-Or create a WebDAV provider with a WebDAV client using a background URLSession:
+Or create a WebDAV provider whose downloads and uploads run on a background URLSession:
 
 ```swift
 let sessionIdentifier = ...
-let sharedContainerIdentifier = ... // optional: only needed if you want to create a `WebDAVProvider` in an app extension 
-let client = WebDAVClient.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
-let provider = try WebDAVProvider(with: client)
+let sharedContainerIdentifier = ... // the App Group container in an app extension, `nil` in the app
+let provider = try WebDAVCloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
-In theory, you could use the provider without further checks. However, you should verify the WebDAV client and its credential using the WebDAV authenticator:
+In theory, you could use the provider without further checks. However, you should verify the WebDAV credential using the WebDAV authenticator:
 
 ```swift
-let client = ...
+let credential = ...
 do {
-  try await WebDAVAuthenticator.verifyClient(client: client)
-  // client validation successful
+  try await WebDAVAuthenticator.verifyCredential(credential)
+  // credential validation successful
+} catch WebDAVError.httpError(statusCode: 401) {
+  // the server rejected the credential
 } catch {
   // error handling
 }
 ```
+
+A failed WebDAV request throws `WebDAVError.httpError(statusCode:)` for a status other than 2xx, and `WebDAVError.unexpectedResponse` for a response it can't read. The provider maps them to a `CloudProviderError` where one applies.
 
 Furthermore, for allowlisting a certificate, you can use the TLS certificate validator:
 

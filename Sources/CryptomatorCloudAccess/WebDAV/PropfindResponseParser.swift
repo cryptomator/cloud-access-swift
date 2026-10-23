@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 
-public enum PropfindResponseParserError: Error {
+enum PropfindResponseParserError: Error {
 	case parsingAborted
 }
 

@@ -9,12 +9,10 @@
 import Foundation
 import GRDB
 
-struct PCloudItem: Decodable, FetchableRecord, TableRecord, Equatable {
+struct PCloudItem: Decodable, IdentifierCacheItem, Equatable {
 	static let rootFolderID: UInt64 = 0
-	static let databaseTableName = "CachedEntries"
-	static let cloudPathKey = "cloudPath"
-	static let identifierKey = "identifier"
-	static let itemTypeKey = "itemType"
+	static let rootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: rootFolderID, itemType: .folder)
+	static let inconsistentCacheError: Error = PCloudError.inconsistentCache
 
 	let cloudPath: CloudPath
 	let identifier: UInt64
@@ -32,7 +30,7 @@ extension PCloudItem {
 	}
 }
 
-extension PCloudItem: PersistableRecord {
+extension PCloudItem {
 	func encode(to container: inout PersistenceContainer) throws {
 		container[PCloudItem.cloudPathKey] = cloudPath
 		container[PCloudItem.identifierKey] = identifier

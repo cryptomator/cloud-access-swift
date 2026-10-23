@@ -142,6 +142,18 @@ final class OAuthTokenStore: Sendable {
 	}
 
 	/**
+	 Returns the stored token, read from storage on every call rather than from this process's state.
+
+	 - Throws: `CloudProviderError.unauthorized` if no token is stored.
+	 */
+	func storedToken() throws -> OAuthToken {
+		guard let token = try loadStoredToken() else {
+			throw CloudProviderError.unauthorized
+		}
+		return token
+	}
+
+	/**
 	 Stores the username with the stored login.
 
 	 The token that this process uses stays as it is, including a rotated token that wasn't saved yet. The next refresh saves that one with the username, because the stored tokens are still those it was rotated from.
@@ -156,7 +168,7 @@ final class OAuthTokenStore: Sendable {
 			guard storedToken.username != username else {
 				return
 			}
-			try self.save(OAuthToken(accessToken: storedToken.accessToken, refreshToken: storedToken.refreshToken, expiresAt: storedToken.expiresAt, username: username), holding: slot)
+			try self.save(storedToken.replacingUsername(with: username), holding: slot)
 		}
 	}
 

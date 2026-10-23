@@ -9,11 +9,6 @@
 import Foundation
 import GRDB
 
-public enum LocalFileSystemProviderError: Error {
-	case resolvingURLFailed
-	case invalidState
-}
-
 private extension FileManager {
 	func copyItemWithOverwrite(at srcURL: URL, to dstURL: URL) throws {
 		let tmpDstURL = dstURL.appendingPathExtension(UUID().uuidString)

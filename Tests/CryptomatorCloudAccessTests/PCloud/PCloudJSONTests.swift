@@ -74,4 +74,24 @@ class PCloudJSONTests: XCTestCase {
 			}
 		}
 	}
+
+	// MARK: - Legacy Token
+
+	func testLegacyTokenDecodesUserOfSDK() throws {
+		let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"eapi.pcloud.com"}"#.utf8))
+
+		XCTAssertEqual(OAuthToken(accessToken: "LEGACY", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com"), token)
+	}
+
+	func testLegacyTokenLowercasesHost() throws {
+		let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"EAPI.PCLOUD.COM"}"#.utf8))
+
+		XCTAssertEqual("eapi.pcloud.com", token.apiHost)
+	}
+
+	func testLegacyTokenWithHostOutsidePCloudThrows() {
+		XCTAssertThrowsError(try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"evil.example"}"#.utf8))) { error in
+			XCTAssertEqual(.unexpectedContent, error as? PCloudError)
+		}
+	}
 }

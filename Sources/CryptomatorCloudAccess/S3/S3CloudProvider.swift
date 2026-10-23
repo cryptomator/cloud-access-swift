@@ -23,14 +23,13 @@ public final class S3CloudProvider: CloudProvider {
 	}
 
 	/**
-	 Creates an S3 provider whose downloads and uploads run on a background URL session, and whose other requests run on a foreground URL session.
+	 Creates an S3 provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 
-	 If the provider is used in an app extension, set the `sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
-
+	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
 	 - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
 	 */
-	public static func withBackgroundSession(credential: S3Credential, sharedContainerIdentifier: String?, maxPageSize: Int = .max) throws -> S3CloudProvider {
-		return try S3CloudProvider(client: .background(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
+	public static func withBackgroundSession(credential: S3Credential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> S3CloudProvider {
+		return try S3CloudProvider(client: .background(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
 	}
 
 	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
@@ -92,6 +91,7 @@ public final class S3CloudProvider: CloudProvider {
 
 	@concurrent
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) called")
 		let key = getKey(for: cloudPath)
@@ -122,6 +122,7 @@ public final class S3CloudProvider: CloudProvider {
 
 	@concurrent
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called")
 		var isDirectory: ObjCBool = false

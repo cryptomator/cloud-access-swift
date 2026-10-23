@@ -20,7 +20,7 @@ enum GoogleDriveAuthenticatorMock {
 		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: refreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .googleDrive, account: tokenUID))
 		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("GoogleDriveTokenLocks", isDirectory: true)
 		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
-		let endpoint = GoogleDriveOAuthEndpoint(clientId: IntegrationTestSecrets.googleDriveClientId)
+		let endpoint = GoogleDriveOAuthEndpoint(clientID: IntegrationTestSecrets.googleDriveClientId)
 		return GoogleDriveCredential(userID: tokenUID, tokenSource: GoogleDriveCredential.makeTokenSource(userID: tokenUID, oauth: oauth, endpoint: endpoint))
 	}
 }

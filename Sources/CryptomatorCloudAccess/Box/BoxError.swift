@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum BoxError: Error, Equatable {
+enum BoxError: Error, Equatable {
 	/// The API answered with a status that the method doesn't map to a `CloudProviderError`, with the `code` and `message` of its error body.
 	case apiError(statusCode: Int, code: String?, message: String?)
 	/// The file still wasn't ready to download, or the upload still wasn't processed, after the last attempt.

@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum DropboxError: Error, Equatable {
+enum DropboxError: Error, Equatable {
 	/// The API answered with a status that the method doesn't map to a `CloudProviderError`. The summary is the body's `error_summary`, e.g., `path/malformed_path/..`, or the first line of a plain-text 400 body.
 	case apiError(statusCode: Int, summary: String?)
 	/// A response had content that the library can't use, e.g., a malformed body or an offset that the upload can't continue from. It is also thrown if the local file got shorter during an upload.

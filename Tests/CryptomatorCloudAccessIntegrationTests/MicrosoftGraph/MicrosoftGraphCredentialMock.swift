@@ -16,14 +16,14 @@ import Foundation
 /// `@unchecked Sendable`: restates the conformance of `MicrosoftGraphCredential`; this subclass adds no state.
 class MicrosoftGraphCredentialMock: MicrosoftGraphCredential, @unchecked Sendable {
 	init() {
-		let accessTokenProvider = MicrosoftGraphAccessTokenProviderMock()
+		let tokenSource = MicrosoftGraphTokenSourceMock()
 		let clientApplication = MSALPublicClientApplicationStub()
-		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, accessTokenProvider: accessTokenProvider, clientApplication: clientApplication)
+		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, tokenSource: tokenSource, clientApplication: clientApplication)
 	}
 
 	override func deauthenticate() throws {
 		// swiftlint:disable:next force_cast
-		let accessTokenProvider = accessTokenProvider as! MicrosoftGraphAccessTokenProviderMock
-		accessTokenProvider.overrideAccessToken = "InvalidToken"
+		let tokenSource = tokenSource as! MicrosoftGraphTokenSourceMock
+		tokenSource.overrideAccessToken = "InvalidToken"
 	}
 }

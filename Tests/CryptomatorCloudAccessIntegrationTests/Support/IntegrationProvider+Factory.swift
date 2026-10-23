@@ -22,8 +22,6 @@ private enum SharedCredentials {
 	static let microsoftGraph = MicrosoftGraphCredentialMock()
 	static let pCloud = Result { try PCloudCredential.integrationTest() }
 	static let s3 = IntegrationTestSecrets.s3Credential
-
-	static let webDAVClient = WebDAVClient(credential: IntegrationTestSecrets.webDAVCredential)
 }
 
 extension IntegrationProvider {
@@ -45,7 +43,7 @@ extension IntegrationProvider {
 		case .s3:
 			return try S3CloudProvider(credential: SharedCredentials.s3, maxPageSize: maxPageSize)
 		case .webDAV:
-			return try WebDAVProvider(with: SharedCredentials.webDAVClient, maxPageSize: maxPageSize)
+			return try WebDAVCloudProvider(credential: IntegrationTestSecrets.webDAVCredential, maxPageSize: maxPageSize)
 		case .localFileSystem:
 			try FileManager.default.createDirectory(at: IntegrationProvider.localFileSystemRootURL, withIntermediateDirectories: true)
 			return try LocalFileSystemProvider(rootURL: IntegrationProvider.localFileSystemRootURL, maxPageSize: maxPageSize)
@@ -74,7 +72,7 @@ extension IntegrationProvider {
 		case .webDAV:
 			let credential = IntegrationTestSecrets.webDAVCredential
 			let invalidCredential = WebDAVCredential(baseURL: credential.baseURL, username: credential.username, password: credential.password + "Foo", allowedCertificate: credential.allowedCertificate)
-			return try WebDAVProvider(with: WebDAVClient(credential: invalidCredential))
+			return try WebDAVCloudProvider(credential: invalidCredential)
 		case .localFileSystem:
 			preconditionFailure("The local file system has no credential")
 		}

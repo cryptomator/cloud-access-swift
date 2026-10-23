@@ -39,13 +39,13 @@ struct DropboxOAuthEndpoint: Sendable {
 	 Exchanges the authorization code of a login.
 
 	 - Returns: The token and the `uid` of the account.
-	 - Throws: `DropboxCredentialErrors.missingUserID` if the response has no `uid`, `DropboxError.unexpectedContent` if it has no refresh token, `CloudProviderError.unauthorized` if Dropbox rejected the code, and `OAuthTokenEndpointError` for any other unsuccessful response.
+	 - Throws: `DropboxCredentialError.missingUserID` if the response has no `uid`, `DropboxError.unexpectedContent` if it has no refresh token, `CloudProviderError.unauthorized` if Dropbox rejected the code, and `OAuthTokenEndpointError` for any other unsuccessful response.
 	 */
 	func exchange(code: String, codeVerifier: String) async throws -> (token: OAuthToken, userID: String) {
 		let body = try await OAuthTokenEndpoint.post([("grant_type", "authorization_code"), ("code", code), ("code_verifier", codeVerifier), ("client_id", appKey), ("redirect_uri", DropboxOAuthEndpoint.redirectURI(appKey: appKey))], host: DropboxOAuthEndpoint.host, path: "/oauth2/token", on: session)
 		let token = try DropboxJSON.decode(OAuthTokenResponse.self, from: body).token(now: now())
 		guard let userID = try DropboxJSON.decode(DropboxAccountID.self, from: body).uid, !userID.isEmpty else {
-			throw DropboxCredentialErrors.missingUserID
+			throw DropboxCredentialError.missingUserID
 		}
 		guard token.refreshToken != nil else {
 			throw DropboxError.unexpectedContent
@@ -84,7 +84,7 @@ struct DropboxOAuthEndpoint: Sendable {
 		}
 		var request = try DropboxClient.rpcRequest("auth/token/revoke", body: Data("null".utf8))
 		request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-		let outcome = try await session.data(request, bodyLimit: nil, bodyLogging: .omitted)
+		let outcome = try await session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
 		do {
 			let response = try HTTPClientSupport.httpResponse(of: outcome)
 			if response.statusCode == 401, DropboxErrorResponse.tags(of: DropboxErrorResponse.decode(from: outcome.data)?.errorSummary).first == "invalid_access_token" {

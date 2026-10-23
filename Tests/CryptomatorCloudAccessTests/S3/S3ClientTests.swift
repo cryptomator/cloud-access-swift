@@ -16,11 +16,13 @@ import XCTest
 #endif
 
 class S3ClientTests: XCTestCase {
+	private var sleeps: SleepRecorder!
 	private var client: S3Client!
 	private var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		client = try S3Client.mocked()
+		sleeps = SleepRecorder()
+		client = try S3Client.mocked(sleeps: sleeps)
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
@@ -95,6 +97,29 @@ class S3ClientTests: XCTestCase {
 
 		XCTAssertEqual(["a.txt"], result.contents.map(\.key))
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testRetryWaitsForRetryAfter() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 503, headerFields: ["Retry-After": "2"]),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"]))
+		]
+
+		_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
+
+		XCTAssertEqual([.seconds(2)], sleeps.durations)
+	}
+
+	func testMetadataBodyOverLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
 	}
 
 	func testDoesNotRetryWithoutInternetConnection() async throws {
@@ -246,9 +271,9 @@ class S3ClientTests: XCTestCase {
 	// MARK: - Sessions
 
 	func testBackgroundConfiguration() {
-		let configuration = S3Client.backgroundConfiguration(credential: .stub, sharedContainerIdentifier: "group.test")
+		let configuration = S3Client.backgroundConfiguration(sessionIdentifier: "S3ClientTests", sharedContainerIdentifier: "group.test")
 
-		XCTAssertEqual("CryptomatorCloudAccess.S3.\(S3Credential.stub.identifier)", configuration.identifier)
+		XCTAssertEqual("S3ClientTests", configuration.identifier)
 		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
 		XCTAssertEqual(50 * 60, configuration.timeoutIntervalForResource)
 		XCTAssertNil(configuration.urlCache)
@@ -371,10 +396,10 @@ class S3ClientTests: XCTestCase {
 
 extension S3Client {
 	/// Returns a client whose requests `URLProtocolMock` answers.
-	static func mocked(credential: S3Credential = .stub) throws -> S3Client {
+	static func mocked(credential: S3Credential = .stub, sleeps: SleepRecorder = SleepRecorder()) throws -> S3Client {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil)
+		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

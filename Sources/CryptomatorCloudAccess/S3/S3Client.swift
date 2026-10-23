@@ -18,11 +18,10 @@ import os
  Thrown errors never contain a request URL, and log lines contain request URLs only with their query values redacted. Neither contains a signature or a response body, because S3 error bodies echo the string to sign and the canonical request.
  */
 final class S3Client: Sendable {
+	private static let logLabel = "S3Client"
 	private static let maxRetryCount = 3
 	/// How long a presigned URL is valid, in seconds. It is also the resource timeout of a background transfer, as with AWS SDK 2.41.0.
 	private static let presignedURLLifetime = 50 * 60
-	/// The maximum length of an error body that is read from a download or an upload.
-	private static let maxErrorBodyLength = 1024 * 1024
 	private static let clockSkewTolerance: TimeInterval = 5 * 60
 	private static let clockSkewErrorCodes: Set<String> = ["RequestTimeTooSkewed", "RequestExpired", "SignatureDoesNotMatch"]
 	private static let transientStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
@@ -31,27 +30,29 @@ final class S3Client: Sendable {
 	let endpoint: S3Endpoint
 	private let signer: S3Signer
 	private let session: SplitURLSession
+	private let sleep: @Sendable (Duration) async throws -> Void
 	/// The offset of the server's clock from the device's clock, which every signature adds to the current date.
 	private let clockOffset = OSAllocatedUnfairLock<TimeInterval>(initialState: 0)
 
 	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
-	init(credential: S3Credential, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, registry: BackgroundURLSessionRegistry = .shared) throws {
+	init(credential: S3Credential, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) throws {
 		self.endpoint = try S3Endpoint(credential: credential)
 		self.signer = S3Signer(credential: credential)
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, registry: registry)
+		self.sleep = sleep
 	}
 
 	static func foreground(credential: S3Credential) throws -> S3Client {
 		return try S3Client(credential: credential, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
 	}
 
-	/// Creates a client whose downloads and uploads run on a background URL session, which all clients of the account share, and whose other requests run on a foreground URL session.
-	static func background(credential: S3Credential, sharedContainerIdentifier: String?) throws -> S3Client {
-		return try S3Client(credential: credential, configuration: backgroundConfiguration(credential: credential, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
+	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
+	static func background(credential: S3Credential, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> S3Client {
+		return try S3Client(credential: credential, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
 	}
 
-	static func backgroundConfiguration(credential: S3Credential, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		let configuration = HTTPClientSupport.hardenedBackground(identifier: "CryptomatorCloudAccess.S3.\(credential.identifier)", sharedContainerIdentifier: sharedContainerIdentifier)
+	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
+		let configuration = HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 		configuration.timeoutIntervalForResource = TimeInterval(presignedURLLifetime)
 		return configuration
 	}
@@ -124,14 +125,14 @@ final class S3Client: Sendable {
 	func download(key: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let url = signer.presignedURL(method: "GET", url: endpoint.url(forKey: key), headers: [:], expiresIn: S3Client.presignedURLLifetime, date: currentDate())
 		let request = URLRequest(url: url)
-		let outcome = try await session.download(request, route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: S3Client.maxErrorBodyLength), bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.download(request, route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength), bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		do {
 			_ = try S3Client.successfulBody(of: outcome)
 			guard case .file = outcome.body else {
 				throw URLError(.badServerResponse)
 			}
 		} catch {
-			S3Client.logFailure(of: request, with: error)
+			HTTPClientSupport.logFailure(of: request, urlLogging: .redacted, with: error, label: S3Client.logLabel)
 			throw error
 		}
 	}
@@ -141,11 +142,11 @@ final class S3Client: Sendable {
 		var request = URLRequest(url: url)
 		request.httpMethod = "PUT"
 		request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: S3Client.maxErrorBodyLength, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
+		let outcome = try await session.upload(request, fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: onTaskCreation)
 		do {
 			_ = try S3Client.successfulBody(of: outcome)
 		} catch {
-			S3Client.logFailure(of: request, with: error)
+			HTTPClientSupport.logFailure(of: request, urlLogging: .redacted, with: error, label: S3Client.logLabel)
 			throw error
 		}
 	}
@@ -155,7 +156,7 @@ final class S3Client: Sendable {
 	/**
 	 Sends a metadata request, signing each attempt afresh, and returns the result that `result` reads from the body of a successful response.
 
-	 A failed attempt is retried up to three times if its failure is transient. That is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`). A request that failed because of the device's clock is retried once with the server's clock.
+	 A failed attempt is retried up to three times if its failure is transient. A transient failure is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`). A retry waits for the response's `Retry-After`, capped at 60 seconds, or else for a random exponential delay. A request that failed because of the device's clock is retried once with the server's clock.
 
 	 A cancelled task stops the request instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
 	 */
@@ -167,14 +168,14 @@ final class S3Client: Sendable {
 			var signedRequest = request
 			let signingOffset = clockOffset.withLock { $0 }
 			signer.sign(&signedRequest, payloadHash: payloadHash, date: Date().addingTimeInterval(signingOffset))
-			let outcome = try await session.data(signedRequest, bodyLimit: nil, bodyLogging: .omitted)
+			let outcome = try await session.data(signedRequest, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
 			let failure: Error
 			do {
 				return try result(S3Client.successfulBody(of: outcome))
 			} catch {
 				failure = error
 			}
-			S3Client.logFailure(of: request, with: failure)
+			HTTPClientSupport.logFailure(of: request, urlLogging: .redacted, with: failure, label: S3Client.logLabel)
 			if !hasCorrectedClockSkew, correctClockSkew(after: failure, response: outcome.response, signingOffset: signingOffset) {
 				hasCorrectedClockSkew = true
 				try Task.checkCancellation()
@@ -184,7 +185,8 @@ final class S3Client: Sendable {
 				throw failure
 			}
 			retryCount += 1
-			try await Task.sleep(for: .seconds(HTTPClientSupport.retryDelay(forRetry: retryCount)))
+			try Task.checkCancellation()
+			try await sleep(HTTPClientSupport.retryDelay(of: outcome, retry: retryCount))
 		}
 	}
 
@@ -247,9 +249,5 @@ final class S3Client: Sendable {
 		default:
 			return false
 		}
-	}
-
-	private static func logFailure(of request: URLRequest, with error: Error) {
-		CloudAccessDDLogDebug("S3Client: \(request.httpMethod ?? "GET") \(HTTPDebugLogger.redactedURLString(request.url)) failed with \(error)")
 	}
 }

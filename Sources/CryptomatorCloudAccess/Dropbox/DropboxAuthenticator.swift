@@ -7,7 +7,7 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@_spi(Authentication) import CryptomatorCloudAccessCore
 #endif
 import AuthenticationServices
 import CryptoKit
@@ -25,6 +25,8 @@ private struct AppHandOffFailure: Error {}
 /// A hand-off to the Dropbox app that waits for its redirect.
 private struct PendingAuthentication {
 	let id: UUID
+	/// The app key of the setup that the hand-off started with.
+	let appKey: String
 	let expectedState: String
 	let continuation: CheckedContinuation<URL, any Error>
 }
@@ -63,7 +65,7 @@ struct DropboxPKCE: Sendable {
 /**
  Logs in to Dropbox with the OAuth 2 authorization code grant with PKCE: in the Dropbox app if it is installed, or else in a web authentication session.
 
- The app must declare `dbapi-2` and `dbapi-8-emm` in `LSApplicationQueriesSchemes` and the URL scheme `db-<app key>`, and pass the URLs that it opens to `handleRedirectURL(_:)`.
+ The app must declare `dbapi-2` and `dbapi-8-emm` in `LSApplicationQueriesSchemes` and the URL scheme `db-<app key>`, and pass the URLs that it opens to `handleRedirectURL(_:setup:)`.
  */
 @MainActor
 public enum DropboxAuthenticator {
@@ -71,40 +73,39 @@ public enum DropboxAuthenticator {
 	private nonisolated static let dAuthSchemes = ["dbapi-2", "dbapi-8-emm"]
 
 	/**
-	 Hands the login off to the Dropbox app, or shows Dropbox's authorize page if the app isn't installed or can't be opened, and stores the token of the login in `DropboxSetup.constants.oauth` under the `uid` of the account.
+	 Hands the login off to the Dropbox app, or shows Dropbox's authorize page if the app isn't installed or can't be opened, and stores the token of the login in the setup's `oauth` under the `uid` of the account.
 
 	 Only one hand-off can be pending at a time, so a new hand-off fails the previous one with `DropboxAuthenticatorError.authenticationFailed`. Cancelling the task while the hand-off is pending ends the call with `CancellationError`, because the Dropbox app may never redirect back. Cancelling it while Dropbox's authorize page is shown dismisses the page and ends the call with `CancellationError` as well.
 
-	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `DropboxAuthenticatorError.authenticationFailed` if the login flow failed, `DropboxCredentialErrors.missingSetup` if `DropboxSetup.constants` isn't set, and otherwise what completing the authentication throws.
+	 - Throws: `CocoaError(.userCancelled)` if the user cancelled the login, `DropboxAuthenticatorError.authenticationFailed` if the login flow failed, and otherwise what completing the authentication throws.
 	 */
 	@available(iOSApplicationExtension, unavailable)
-	public static func authenticate(from viewController: UIViewController) async throws -> DropboxCredential {
+	public static func authenticate(from viewController: UIViewController, setup: DropboxSetup) async throws -> DropboxCredential {
 		guard let window = viewController.view.window else {
 			throw authenticationFailed(because: "the view controller isn't part of a window")
 		}
-		guard let appKey = DropboxSetup.constants?.appKey else {
-			throw DropboxCredentialErrors.missingSetup
-		}
+		let appKey = setup.appKey
 		let pkce = DropboxPKCE.random()
 		let (callbackURL, expectedState) = try await runLoginFlow(appKey: appKey, pkce: pkce, anchor: window)
 		let authorizationCode = try authorizationCode(fromCallbackURL: callbackURL, appKey: appKey, expectedState: expectedState)
-		return try await DropboxCredential.completeAuthentication(authorizationCode: authorizationCode, codeVerifier: pkce.codeVerifier)
+		return try await DropboxCredential.completeAuthentication(authorizationCode: authorizationCode, codeVerifier: pkce.codeVerifier, setup: setup)
 	}
 
 	/**
 	 Completes the pending hand-off to the Dropbox app with the redirect URL that the app received.
 
-	 A `/connect` redirect, which passes the authorization code, completes the hand-off only if it carries the hand-off's `state`. Otherwise it is ignored, e.g., as the late redirect of an earlier hand-off, and the pending hand-off keeps waiting for its own. Any other path is a cancel, which carries no `state` and completes the hand-off without a check.
+	 A `/connect` redirect, which passes the authorization code, completes the hand-off only if it carries the hand-off's `state`. Otherwise it is ignored, e.g., as the late redirect of an earlier hand-off, and the pending hand-off keeps waiting for its own. Any other path is a cancel, which carries no `state` and completes the hand-off without a check. A hand-off that started with another app key ignores the redirect.
 
 	 - Returns: Whether the URL was a redirect of the Dropbox app that completed the pending hand-off.
 	 */
-	public static func handleRedirectURL(_ url: URL) -> Bool {
-		guard let appKey = DropboxSetup.constants?.appKey, let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(appKey: appKey).lowercased(), components.host == "1" else {
+	public static func handleRedirectURL(_ url: URL, setup: DropboxSetup) -> Bool {
+		let appKey = setup.appKey
+		guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(appKey: appKey).lowercased(), components.host == "1" else {
 			return false
 		}
 		let isConnectRedirect = components.path == "/connect"
 		let state = components.queryItems?.first(where: { $0.name == "state" })?.value
-		guard let pendingAuthentication = takePendingAuthentication(where: { !isConnectRedirect || $0.expectedState == state }) else {
+		guard let pendingAuthentication = takePendingAuthentication(where: { $0.appKey == appKey && (!isConnectRedirect || $0.expectedState == state) }) else {
 			CloudAccessDDLogDebug("DropboxAuthenticator: Ignored a redirect of the Dropbox app that no pending hand-off expects.")
 			return false
 		}
@@ -117,7 +118,7 @@ public enum DropboxAuthenticator {
 		let dAuthURLs = try dAuthSchemes.map { try dAuthURL(scheme: $0, appKey: appKey, pkce: pkce) }
 		if let dAuthURL = dAuthURLs.first(where: { UIApplication.shared.canOpenURL($0) }) {
 			do {
-				let callbackURL = try await awaitRedirect(expectedState: pkce.dAuthState) { fail in
+				let callbackURL = try await awaitRedirect(appKey: appKey, expectedState: pkce.dAuthState) { fail in
 					UIApplication.shared.open(dAuthURL, options: [:]) { opened in
 						if !opened {
 							fail(AppHandOffFailure())
@@ -135,17 +136,18 @@ public enum DropboxAuthenticator {
 	}
 
 	/**
-	 Waits until `handleRedirectURL(_:)` passes the redirect of the Dropbox app.
+	 Waits until `handleRedirectURL(_:setup:)` passes the redirect of the Dropbox app.
 
-	 - Parameter expectedState: The `state` of the hand-off. `handleRedirectURL(_:)` passes a `/connect` redirect only if it carries it.
+	 - Parameter appKey: The app key of the login's setup. `handleRedirectURL(_:setup:)` passes only a redirect for a setup of this app key.
+	 - Parameter expectedState: The `state` of the hand-off. `handleRedirectURL(_:setup:)` passes a `/connect` redirect only if it carries it.
 	 - Parameter start: Opens the Dropbox app. It gets a function that fails this call, and only this one, e.g., if the app couldn't be opened.
 	 */
-	static func awaitRedirect(expectedState: String, startingWith start: (_ fail: @escaping @Sendable (Error) -> Void) -> Void) async throws -> URL {
+	static func awaitRedirect(appKey: String, expectedState: String, startingWith start: (_ fail: @escaping @Sendable (Error) -> Void) -> Void) async throws -> URL {
 		let id = UUID()
 		return try await withTaskCancellationHandler {
 			try await withCheckedThrowingContinuation { continuation in
 				let supersededAuthentication = DropboxAuthenticator.pendingAuthentication.withLock { pendingAuthentication in
-					defer { pendingAuthentication = PendingAuthentication(id: id, expectedState: expectedState, continuation: continuation) }
+					defer { pendingAuthentication = PendingAuthentication(id: id, appKey: appKey, expectedState: expectedState, continuation: continuation) }
 					return pendingAuthentication?.continuation
 				}
 				supersededAuthentication?.resume(throwing: DropboxAuthenticatorError.authenticationFailed)

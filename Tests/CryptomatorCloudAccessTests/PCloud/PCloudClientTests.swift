@@ -15,11 +15,13 @@ import XCTest
 #endif
 
 class PCloudClientTests: XCTestCase {
+	private var sleeps: SleepRecorder!
 	private var client: PCloudClient!
 	private var tmpDirURL: URL!
 
 	override func setUpWithError() throws {
-		client = try PCloudClient.mocked()
+		sleeps = SleepRecorder()
+		client = PCloudClient.mocked(sleeps: sleeps)
 		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
@@ -43,6 +45,23 @@ class PCloudClientTests: XCTestCase {
 		XCTAssertEqual("POST", request.httpMethod)
 		XCTAssertEqual("https://eapi.pcloud.com/listfolder", request.url?.absoluteString)
 		XCTAssertEqual("application/x-www-form-urlencoded", request.value(forHTTPHeaderField: "Content-Type"))
+	}
+
+	func testCallGoesToHostOfStoredLogin() async throws {
+		let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		defer {
+			try? FileManager.default.removeItem(at: lockDirectoryURL)
+		}
+		let buffer = TokenBuffer()
+		buffer.store(OAuthToken(accessToken: "STORED", refreshToken: nil, expiresAt: nil, apiHost: "api.pcloud.com"))
+		let client = try PCloudClient.mocked(tokenSource: PCloudCredential.makeTokenSource(userID: "1", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL)))
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3), onRequest: requests.record)]
+
+		_ = try await client.listFolder(3)
+
+		XCTAssertEqual("https://api.pcloud.com/listfolder", requests.requests.first?.url?.absoluteString)
+		XCTAssertEqual("STORED", requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"])
 	}
 
 	func testCallPercentEncodesParameters() async throws {
@@ -225,6 +244,51 @@ class PCloudClientTests: XCTestCase {
 		}
 	}
 
+	func testRetryReadsLoginAgain() async throws {
+		let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		defer {
+			try? FileManager.default.removeItem(at: lockDirectoryURL)
+		}
+		let buffer = TokenBuffer()
+		buffer.store(OAuthToken(accessToken: "STORED", refreshToken: nil, expiresAt: nil, apiHost: "api.pcloud.com"))
+		let client = try PCloudClient.mocked(tokenSource: PCloudCredential.makeTokenSource(userID: "1", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL)), sleeps: sleeps)
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503, onRequest: { _ in buffer.data = nil }), URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
+
+		await XCTAssertThrowsErrorAsync(try await client.listFolder(0)) { error in
+			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testRetryWaitsForRetryAfter() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503, headerFields: ["Retry-After": "2"]), URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
+
+		_ = try await client.listFolder(0)
+
+		XCTAssertEqual([.seconds(2)], sleeps.durations)
+	}
+
+	func testMetadataBodyOverLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await client.stat(fileID: 1)) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
+	}
+
+	func testListingOverMetadataLimitSucceeds() async throws {
+		let body = PCloudMockResponse.folder(id: 0) + String(repeating: " ", count: HTTPClientSupport.maxMetadataBodyLength)
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: body)]
+
+		let metadata = try await client.listFolder(0)
+
+		XCTAssertEqual(0, metadata.identifier)
+	}
+
 	func testDoesNotRetryTooManyLoginAttempts() async throws {
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: PCloudMockResponse.result(4000)),
@@ -269,9 +333,16 @@ class PCloudClientTests: XCTestCase {
 
 	// MARK: - Sessions
 
+	func testBackgroundConfiguration() {
+		let configuration = PCloudClient.backgroundConfiguration(sessionIdentifier: "PCloudClientTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("PCloudClientTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
+	}
+
 	func testBackgroundClientRunsOnlyTransfersOnBackgroundSession() async throws {
 		let registry = BackgroundURLSessionRegistry { _ in URLProtocolMock.configuration(marker: "transfer") }
-		let backgroundClient = try PCloudClient(credential: .stub(), configuration: .background(withIdentifier: "PCloudClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)
+		let backgroundClient = PCloudClient(tokenSource: PCloudCredential.stubTokenSource, configuration: .background(withIdentifier: "PCloudClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)
 		let markers = OSAllocatedUnfairLock(initialState: [String?]())
 		let recordMarker: @Sendable (URLRequest) -> Void = { request in
 			markers.withLock { $0.append(request.value(forHTTPHeaderField: "X-Session")) }
@@ -381,17 +452,14 @@ class PCloudClientTests: XCTestCase {
 
 extension PCloudCredential {
 	static let stubAccessToken = "TOKEN123"
-
-	static func stub() throws -> PCloudCredential {
-		return try PCloudCredential(id: 1, accessToken: stubAccessToken, apiHostName: "eapi.pcloud.com", locationID: 2)
-	}
+	static let stubTokenSource = StaticOAuthTokenSource(token: stubAccessToken, apiHost: "eapi.pcloud.com")
 }
 
 extension PCloudClient {
-	static func mocked(hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) throws -> PCloudClient {
+	static func mocked(tokenSource: any PCloudTokenSource = PCloudCredential.stubTokenSource, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), sleeps: SleepRecorder = SleepRecorder()) -> PCloudClient {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return try PCloudClient(credential: .stub(), configuration: configuration, metadataConfiguration: nil, hooks: hooks)
+		return PCloudClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

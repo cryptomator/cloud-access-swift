@@ -8,14 +8,12 @@
 
 import Foundation
 
-public enum BoxCredentialErrors: Error {
+public enum BoxCredentialError: Error {
 	case noUsername
 	case missingUserID
-	/// `BoxSetup.constants` isn't set.
-	case missingSetup
 }
 
-/// The login of a Box account, which `BoxSetup.constants.oauth` keeps under the user ID. Persist the user ID to re-create the credential later.
+/// The login of a Box account, which the `oauth` of its `BoxSetup` keeps under the user ID. Persist the user ID to re-create the credential later.
 public final class BoxCredential: Sendable {
 	public let userID: String
 	let tokenSource: any OAuthTokenSource
@@ -28,14 +26,11 @@ public final class BoxCredential: Sendable {
 	/**
 	 Creates the credential of a login that `BoxAuthenticator` or the Box SDK stored. It reads nothing until the first request.
 
-	 - Throws: `BoxCredentialErrors.missingUserID` for an empty user ID, and `BoxCredentialErrors.missingSetup` if `BoxSetup.constants` isn't set.
+	 - Throws: `BoxCredentialError.missingUserID` for an empty user ID.
 	 */
-	public convenience init(userID: String) throws {
+	public convenience init(userID: String, setup: BoxSetup) throws {
 		guard !userID.isEmpty else {
-			throw BoxCredentialErrors.missingUserID
-		}
-		guard let setup = BoxSetup.constants else {
-			throw BoxCredentialErrors.missingSetup
+			throw BoxCredentialError.missingUserID
 		}
 		self.init(userID: userID, tokenSource: BoxCredential.makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: BoxOAuthEndpoint(setup: setup)))
 	}
@@ -53,13 +48,10 @@ public final class BoxCredential: Sendable {
 
 	 Nothing is stored if the exchange or the user request fails, or the task was cancelled meanwhile.
 
-	 - Throws: `BoxCredentialErrors.missingSetup` if `BoxSetup.constants` isn't set, `BoxCredentialErrors.missingUserID` if Box returned no user ID, and otherwise what the code exchange, the user request or saving the token throws.
+	 - Throws: `BoxCredentialError.missingUserID` if Box returned no user ID, and otherwise what the code exchange, the user request or saving the token throws.
 	 */
 	@concurrent
-	public static func completeAuthentication(authorizationCode: String) async throws -> BoxCredential {
-		guard let setup = BoxSetup.constants else {
-			throw BoxCredentialErrors.missingSetup
-		}
+	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, setup: BoxSetup) async throws -> BoxCredential {
 		let endpoint = BoxOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(authorizationCode: authorizationCode, endpoint: endpoint, makeClient: { BoxClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)
@@ -70,7 +62,7 @@ public final class BoxCredential: Sendable {
 		let token = try await endpoint.exchange(authorizationCode: authorizationCode)
 		let user = try await makeClient(StaticOAuthTokenSource(token: token.accessToken)).user()
 		guard !user.id.isEmpty else {
-			throw BoxCredentialErrors.missingUserID
+			throw BoxCredentialError.missingUserID
 		}
 		// A user request that was under way when the task was cancelled still completes.
 		try Task.checkCancellation()
@@ -96,7 +88,7 @@ public final class BoxCredential: Sendable {
 
 	func getUsername(client: BoxClient) async throws -> String {
 		guard let name = try await client.user().name else {
-			throw BoxCredentialErrors.noUsername
+			throw BoxCredentialError.noUsername
 		}
 		await tokenSource.storeUsernameIfChanged(name)
 		return name

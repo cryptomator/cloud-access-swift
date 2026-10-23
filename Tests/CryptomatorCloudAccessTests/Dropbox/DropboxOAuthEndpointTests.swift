@@ -41,8 +41,8 @@ class DropboxOAuthEndpointTests: XCTestCase {
 
 	func testExchangeWithoutUserIDOrRefreshTokenThrows() async throws {
 		let cases: [(body: String, isExpectedError: @Sendable (Error) -> Bool)] = [
-			(#"{"access_token":"SECRET-ACCESS","expires_in":14400,"refresh_token":"SECRET-REFRESH"}"#, { $0 as? DropboxCredentialErrors == .missingUserID }),
-			(#"{"access_token":"SECRET-ACCESS","expires_in":14400,"refresh_token":"SECRET-REFRESH","uid":""}"#, { $0 as? DropboxCredentialErrors == .missingUserID }),
+			(#"{"access_token":"SECRET-ACCESS","expires_in":14400,"refresh_token":"SECRET-REFRESH"}"#, { $0 as? DropboxCredentialError == .missingUserID }),
+			(#"{"access_token":"SECRET-ACCESS","expires_in":14400,"refresh_token":"SECRET-REFRESH","uid":""}"#, { $0 as? DropboxCredentialError == .missingUserID }),
 			(#"{"access_token":"SECRET-ACCESS","expires_in":14400,"uid":"12345"}"#, { $0 as? DropboxError == .unexpectedContent })
 		]
 		for (body, isExpectedError) in cases {
@@ -117,6 +117,18 @@ class DropboxOAuthEndpointTests: XCTestCase {
 		let request = try XCTUnwrap(sentRequest.withLock { $0 })
 		XCTAssertEqual("https://api.dropboxapi.com/2/auth/token/revoke", request.url?.absoluteString)
 		XCTAssertEqual("Bearer SECRET-LONG-LIVED", request.value(forHTTPHeaderField: "Authorization"))
+	}
+
+	func testRevocationResponseOverMetadataLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await DropboxOAuthEndpoint.mocked().revoke(OAuthToken(accessToken: "LONG-LIVED", refreshToken: nil, expiresAt: nil))) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
 	}
 
 	func testRevokeTreatsRejectedTokenAsRevokedAndThrowsOtherFailures() async throws {

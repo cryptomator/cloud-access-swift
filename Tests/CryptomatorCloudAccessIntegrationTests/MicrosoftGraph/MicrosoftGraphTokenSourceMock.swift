@@ -1,5 +1,5 @@
 //
-//  MicrosoftGraphAccessTokenProviderMock.swift
+//  MicrosoftGraphTokenSourceMock.swift
 //  CryptomatorCloudAccessIntegrationTests
 //
 //  Created by Tobias Hagemann on 20.05.21.
@@ -14,11 +14,11 @@ import os
 @testable import CryptomatorCloudAccess
 #endif
 
-enum MicrosoftGraphAccessTokenProviderMockError: Error {
+enum MicrosoftGraphTokenSourceMockError: Error {
 	case tokenRequestFailed(statusCode: Int)
 }
 
-final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProvider {
+final class MicrosoftGraphTokenSourceMock: BearerTokenSource {
 	private let lockedOverrideAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
 	var overrideAccessToken: String? {
 		get { lockedOverrideAccessToken.withLock { $0 } }
@@ -28,7 +28,7 @@ final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProv
 	/// The request for the access token, shared by concurrent callers so that the refresh token is redeemed once.
 	private let lockedAccessTokenTask = OSAllocatedUnfairLock<Task<String, Error>?>(initialState: nil)
 
-	func getAccessToken() async throws -> String {
+	func accessToken() async throws -> String {
 		if let overrideAccessToken {
 			return overrideAccessToken
 		}
@@ -52,11 +52,19 @@ final class MicrosoftGraphAccessTokenProviderMock: MicrosoftGraphAccessTokenProv
 		}
 	}
 
+	/// A token that was invalidated stays invalid, so that a refresh can't hand an unauthorized provider a valid token.
+	func refresh(rejecting accessToken: String) async throws -> String {
+		guard overrideAccessToken == nil else {
+			throw CloudProviderError.unauthorized
+		}
+		return try await self.accessToken()
+	}
+
 	private func requestAccessToken() async throws -> String {
 		let (data, response) = try await URLSession.shared.data(for: getAccessTokenRequest())
 		let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
 		guard statusCode == 200 else {
-			throw MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode: statusCode)
+			throw MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: statusCode)
 		}
 		return try getAccessTokenResponse(from: data).accessToken
 	}

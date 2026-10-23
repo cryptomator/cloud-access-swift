@@ -8,11 +8,10 @@
 
 import Foundation
 
-public enum GoogleDriveError: Error, Equatable {
+enum GoogleDriveError: Error, Equatable {
 	case identifierNotFound
 	case missingItemName
 	case inconsistentCache
-	case unexpectedError
 	/// Google answered with an unsuccessful status, the first `reason` of the error body and its `message`.
 	case apiError(statusCode: Int, reason: String?, message: String?)
 	/// A response didn't have the expected content.

@@ -19,24 +19,24 @@ public final class PCloudCloudProvider: CloudProvider {
 	}
 
 	private let client: PCloudClient
-	private let identifierCache: PCloudIdentifierCache
+	private let identifierCache: IdentifierCache<PCloudItem>
 
 	init(client: PCloudClient) throws {
 		self.client = client
-		self.identifierCache = try PCloudIdentifierCache()
+		self.identifierCache = try IdentifierCache<PCloudItem>()
 	}
 
 	public convenience init(credential: PCloudCredential) throws {
-		try self.init(client: .foreground(credential: credential))
+		try self.init(client: .foreground(tokenSource: credential.tokenSource))
 	}
 
 	/**
 	 Creates a pCloud provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 
-	 If the provider is used in an app extension, set `PCloudSetup.constants.sharedContainerIdentifier` to a valid identifier for a container that will be shared between the app and the extension.
+	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
 	 */
-	public static func withBackgroundSession(credential: PCloudCredential, sessionIdentifier: String) throws -> PCloudCloudProvider {
-		return try PCloudCloudProvider(client: .background(credential: credential, sessionIdentifier: sessionIdentifier))
+	public static func withBackgroundSession(credential: PCloudCredential, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> PCloudCloudProvider {
+		return try PCloudCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier))
 	}
 
 	@concurrent
@@ -392,19 +392,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	// MARK: - Resolve Path
 
 	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> PCloudItem {
-		var pathToCheckForCache = cloudPath
-		var cachedItem = identifierCache.get(pathToCheckForCache)
-		while cachedItem == nil, !pathToCheckForCache.pathComponents.isEmpty {
-			pathToCheckForCache = pathToCheckForCache.deletingLastPathComponent()
-			cachedItem = identifierCache.get(pathToCheckForCache)
-		}
-		guard let item = cachedItem else {
-			throw PCloudError.inconsistentCache
-		}
-		if pathToCheckForCache != cloudPath {
-			return try await traverseThroughPath(from: pathToCheckForCache, to: cloudPath, withStartItem: item)
-		}
-		return item
+		return try await identifierCache.resolvePath(forItemAt: cloudPath, lookUpChild: getPCloudItem(for:withParentItem:))
 	}
 
 	private func resolveForMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws -> (PCloudItem, PCloudItem) {
@@ -416,26 +404,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	}
 
 	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> PCloudItem {
-		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		do {
-			return try await resolvePath(forItemAt: parentCloudPath)
-		} catch CloudProviderError.itemNotFound {
-			throw CloudProviderError.parentFolderDoesNotExist
-		}
-	}
-
-	private func traverseThroughPath(from startCloudPath: CloudPath, to endCloudPath: CloudPath, withStartItem startItem: PCloudItem) async throws -> PCloudItem {
-		assert(startCloudPath.pathComponents.count < endCloudPath.pathComponents.count)
-		let startIndex = startCloudPath.pathComponents.count
-		let endIndex = endCloudPath.pathComponents.count
-		var parentItem = startItem
-		for i in startIndex ..< endIndex {
-			let itemName = endCloudPath.pathComponents[i]
-			try Task.checkCancellation()
-			parentItem = try await getPCloudItem(for: itemName, withParentItem: parentItem)
-			try identifierCache.addOrUpdate(parentItem)
-		}
-		return parentItem
+		return try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getPCloudItem(for:withParentItem:))
 	}
 
 	private func getPCloudItem(for name: String, withParentItem parentItem: PCloudItem) async throws -> PCloudItem {

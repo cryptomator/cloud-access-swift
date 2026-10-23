@@ -65,11 +65,11 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return error == .noInternetConnection
 	case IntegrationTestError.consistencyTimeout:
 		return true
-	case let URLSessionError.httpError(underlyingError, statusCode):
-		return isTransientHTTPStatusCode(statusCode) || underlyingError.map(isTransientIntegrationError) ?? false
+	case let WebDAVError.httpError(statusCode):
+		return isTransientHTTPStatusCode(statusCode)
 	case let DropboxError.apiError(statusCode, summary):
 		return isTransientHTTPStatusCode(statusCode) || DropboxError.isRetryable(statusCode: statusCode, summary: summary)
-	case let MicrosoftGraphAccessTokenProviderMockError.tokenRequestFailed(statusCode), let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
+	case let MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode), let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
 		return isTransientHTTPStatusCode(statusCode)
 	case let GoogleDriveError.apiError(statusCode, reason, _):
 		return isTransientHTTPStatusCode(statusCode) || GoogleDriveError.isRetryable(statusCode: statusCode, reason: reason)

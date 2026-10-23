@@ -33,6 +33,13 @@ class DropboxClientTests: XCTestCase {
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
+	func testBackgroundConfiguration() {
+		let configuration = DropboxClient.backgroundConfiguration(sessionIdentifier: "DropboxClientTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("DropboxClientTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
+	}
+
 	// MARK: - Requests
 
 	func testRPCRoutesSendJSONArguments() async throws {
@@ -269,6 +276,18 @@ class DropboxClientTests: XCTestCase {
 			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testMetadataBodyOverLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await client.currentAccount()) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
 	}
 
 	func testCancelledTaskGetsNoToken() async throws {

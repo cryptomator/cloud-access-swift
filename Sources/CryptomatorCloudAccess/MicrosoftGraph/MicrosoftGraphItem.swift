@@ -9,12 +9,10 @@
 import Foundation
 import GRDB
 
-struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
-	static let databaseTableName = "CachedEntries"
-	static let cloudPathKey = "cloudPath"
-	static let identifierKey = "identifier"
+struct MicrosoftGraphItem: Decodable, IdentifierCacheItem, Equatable {
+	static let rootItem = MicrosoftGraphItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder)
+	static let inconsistentCacheError: Error = MicrosoftGraphError.inconsistentCache
 	static let driveIdentifierKey = "driveIdentifier"
-	static let itemTypeKey = "itemType"
 
 	let cloudPath: CloudPath
 	let identifier: String
@@ -40,7 +38,11 @@ struct MicrosoftGraphItem: Decodable, FetchableRecord, TableRecord, Equatable {
 	}
 }
 
-extension MicrosoftGraphItem: PersistableRecord {
+extension MicrosoftGraphItem {
+	static func addExtraColumns(to table: TableDefinition) {
+		table.column(driveIdentifierKey, .text)
+	}
+
 	func encode(to container: inout PersistenceContainer) throws {
 		container[MicrosoftGraphItem.cloudPathKey] = cloudPath
 		container[MicrosoftGraphItem.identifierKey] = identifier

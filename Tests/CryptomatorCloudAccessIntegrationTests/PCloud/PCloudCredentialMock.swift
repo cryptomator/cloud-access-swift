@@ -15,10 +15,17 @@ import Foundation
 
 extension PCloudCredential {
 	static func integrationTest() throws -> PCloudCredential {
-		return try PCloudCredential(id: 0, accessToken: IntegrationTestSecrets.pCloudAccessToken, apiHostName: IntegrationTestSecrets.pCloudHTTPAPIHostName, locationID: 0)
+		return try PCloudCredential(userID: "IntegrationTest", tokenSource: StaticOAuthTokenSource(token: IntegrationTestSecrets.pCloudAccessToken, apiHost: integrationTestAPIHost()))
 	}
 
 	static func integrationTestInvalid() throws -> PCloudCredential {
-		return try PCloudCredential(id: 0, accessToken: "Foo", apiHostName: IntegrationTestSecrets.pCloudHTTPAPIHostName, locationID: 0)
+		return try PCloudCredential(userID: "IntegrationTest", tokenSource: StaticOAuthTokenSource(token: "Foo", apiHost: integrationTestAPIHost()))
+	}
+
+	private static func integrationTestAPIHost() throws -> String {
+		guard let apiHost = apiHost(IntegrationTestSecrets.pCloudHTTPAPIHostName) else {
+			throw URLError(.badURL)
+		}
+		return apiHost
 	}
 }

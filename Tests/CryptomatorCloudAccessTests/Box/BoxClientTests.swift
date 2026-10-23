@@ -86,10 +86,27 @@ class BoxClientTests: XCTestCase {
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
 	}
 
-	func testTransportErrorsAreNotRetried() async throws {
-		URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.user)]
+	func testUnauthorizedLastAttemptIsNotRefreshed() async throws {
+		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
 
 		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
+			XCTAssertEqual(.apiError(statusCode: 401, code: nil, message: nil), error as? BoxError)
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+		XCTAssertTrue(tokenSource.rejectedTokens.isEmpty)
+	}
+
+	func testTransportErrorsAreRetriedOnlyForGet() async throws {
+		URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.user)]
+
+		_ = try await client.user()
+
+		XCTAssertEqual(1, sleeps.durations.count)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+
+		URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "1", name: "folder"))]
+
+		await XCTAssertThrowsErrorAsync(try await client.createFolder(name: "folder", parentID: "0")) { error in
 			XCTAssertEqual(.timedOut, (error as? URLError)?.code)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
@@ -98,6 +115,28 @@ class BoxClientTests: XCTestCase {
 
 		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
 			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
+		}
+	}
+
+	func testCommitThatStaysNotReadyThrowsFileNotReady() async throws {
+		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 202, headerFields: ["Retry-After": "1"]), count: 5)
+
+		await XCTAssertThrowsErrorAsync(try await client.commit(url: "https://upload.box.com/api/2.0/files/upload_sessions/S/commit", parts: [], digest: "sha=")) { error in
+			XCTAssertEqual(.fileNotReady, error as? BoxError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		XCTAssertEqual(4, sleeps.durations.count)
+	}
+
+	func testMetadataBodyOverLimitFails() async throws {
+		URLProtocolMock.requestHandler = [{ request in
+			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+		}]
+
+		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
+			guard case SplitURLSessionError.responseBodyTooLarge = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
 		}
 	}
 
@@ -136,6 +175,13 @@ class BoxClientTests: XCTestCase {
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
 	}
 
+	func testBackgroundConfiguration() {
+		let configuration = BoxClient.backgroundConfiguration(sessionIdentifier: "BoxClientTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("BoxClientTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
+	}
+
 	// MARK: - Requests
 
 	func testListingSendsFieldsAndEscapedMarker() async throws {
@@ -168,19 +214,30 @@ class BoxClientTests: XCTestCase {
 
 	// MARK: - Logging
 
-	func testUserIsRequestedWithoutLoggingIt() async throws {
+	func testResponseBodiesAreNotLogged() async throws {
 		let logCapture = LogCapture.start()
 		defer {
 			logCapture.stop()
 		}
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#)]
+		let fileURL = tmpDirURL.appendingPathComponent("upload")
+		try Data("content".utf8).write(to: fileURL)
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#),
+			URLProtocolMock.handler(body: #"{"type":"folder","id":"7","name":"folder","owned_by":{"login":"owner@example.com"}}"#),
+			URLProtocolMock.handler(statusCode: 201, body: #"{"entries":[{"type":"file","id":"9","name":"file.txt","size":7,"owned_by":{"login":"uploader@example.com"}}]}"#)
+		]
 
 		let user = try await client.user()
+		_ = try await client.folder(id: "7")
+		_ = try await client.uploadNewFile(from: fileURL, name: "file.txt", parentID: "7", progress: nil, onTaskCreation: nil)
 
 		XCTAssertEqual("User", user.name)
 		let log = logCapture.joinedMessages
 		XCTAssertTrue(log.contains("https://api.box.com"), log)
-		XCTAssertFalse(log.contains("secret@example.com"), log)
+		XCTAssertTrue(log.contains("https://upload.box.com"), log)
+		for email in ["secret@example.com", "owner@example.com", "uploader@example.com"] {
+			XCTAssertFalse(log.contains(email), "\(email) in \(log)")
+		}
 	}
 
 	func testDownloadLogsOnlyOriginsOfURLs() async throws {

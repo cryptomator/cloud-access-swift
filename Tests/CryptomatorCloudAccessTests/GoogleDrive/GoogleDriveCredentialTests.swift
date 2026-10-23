@@ -31,8 +31,10 @@ class GoogleDriveCredentialTests: XCTestCase {
 		try? FileManager.default.removeItem(at: lockDirectoryURL)
 	}
 
-	func testEmptyUserIDThrows() {
-		XCTAssertThrowsError(try GoogleDriveCredential(userID: "")) { error in
+	func testEmptyUserIDThrows() throws {
+		let setup = try GoogleDriveSetup(clientID: "CLIENT", redirectURL: XCTUnwrap(URL(string: "com.example:/oauth2redirect")), oauth: oauth)
+
+		XCTAssertThrowsError(try GoogleDriveCredential(userID: "", setup: setup)) { error in
 			guard case GoogleDriveCredentialError.missingUserID = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
@@ -59,6 +61,21 @@ class GoogleDriveCredentialTests: XCTestCase {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}
+		}
+		XCTAssertNil(buffer.data)
+	}
+
+	func testCancelledTaskStoresNothing() async throws {
+		let idToken = GoogleDriveCredentialTests.idToken(claims: #"{"iss":"https://accounts.google.com","aud":"CLIENT-ID","iat":1792000000,"exp":1792003600,"sub":"112233","email":"user@example.com"}"#)
+		let oauth: OAuthPersistence = oauth
+		let authentication = cancelledTask {
+			try await GoogleDriveCredential.completeAuthentication(accessToken: "ACCESS", refreshToken: "REFRESH", expiresAt: nil, idToken: idToken, makeTokenSource: { userID in
+				GoogleDriveCredential.makeTokenSource(userID: userID, oauth: oauth, endpoint: .mocked(), assertion: ActivityScript().assertion)
+			})
+		}
+
+		await XCTAssertThrowsErrorAsync(try await value(of: authentication)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
 		XCTAssertNil(buffer.data)
 	}

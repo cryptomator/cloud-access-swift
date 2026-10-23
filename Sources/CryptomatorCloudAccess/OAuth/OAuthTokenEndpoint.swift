@@ -61,7 +61,7 @@ enum OAuthTokenEndpoint {
 		request.httpMethod = "POST"
 		request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 		request.httpBody = Data(HTTPClientSupport.formEncoded(parameters).utf8)
-		let outcome = try await session.data(request, bodyLimit: nil, bodyLogging: .omitted)
+		let outcome = try await session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
 		do {
 			let httpResponse = try HTTPClientSupport.httpResponse(of: outcome)
 			guard (200 ... 299).contains(httpResponse.statusCode) else {

@@ -55,6 +55,38 @@ class DirectoryIdCacheTests: XCTestCase {
 		XCTAssertEqual(dirId, try cache.get(siblingPath))
 	}
 
+	func testInvalidateMatchesPathsLiterally() throws {
+		let dirId = Data("foobar".utf8)
+		let cases: [(invalidated: String, kept: [String])] = [
+			("/a", ["/ab", "/A/x", "/a_b"]),
+			("/a_b", ["/aXb/x"]),
+			("/a%", ["/abc"])
+		]
+		for (invalidated, kept) in cases {
+			let cache = try DirectoryIdCache()
+			for path in [invalidated, invalidated + "/x"] + kept {
+				try cache.addOrUpdate(CloudPath(path), dirId: dirId)
+			}
+
+			try cache.invalidate(CloudPath(invalidated))
+
+			XCTAssertNil(try cache.get(CloudPath(invalidated)), invalidated)
+			XCTAssertNil(try cache.get(CloudPath(invalidated + "/x")), invalidated)
+			for path in kept {
+				XCTAssertEqual(dirId, try cache.get(CloudPath(path)), "\(path) after invalidating \(invalidated)")
+			}
+		}
+	}
+
+	func testInvalidateRootRemovesEveryPath() throws {
+		try cache.addOrUpdate(CloudPath("/foo/bar"), dirId: Data("foobar".utf8))
+
+		try cache.invalidate(CloudPath("/"))
+
+		XCTAssertNil(try cache.get(CloudPath("/")))
+		XCTAssertNil(try cache.get(CloudPath("/foo/bar")))
+	}
+
 	func testRecursiveGet() async throws {
 		let path = CloudPath("/one/two/three")
 

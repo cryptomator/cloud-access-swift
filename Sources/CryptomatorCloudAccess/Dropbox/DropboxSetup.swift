@@ -7,25 +7,16 @@
 //
 
 import Foundation
-import os
 
-public final class DropboxSetup: Sendable {
-	private static let lockedConstants = OSAllocatedUnfairLock<DropboxSetup?>(initialState: nil)
-	public static var constants: DropboxSetup! {
-		get { lockedConstants.withLock { $0 } }
-		set { lockedConstants.withLock { $0 = newValue } }
-	}
-
+/// The registration of the app at Dropbox, and where the Dropbox logins are kept.
+public struct DropboxSetup: Sendable {
 	/// The app key of the Dropbox app, whose redirect URL scheme is `db-` followed by the app key.
 	public let appKey: String
-	/// The container into which a background URL session downloads files, which an app extension shares with the app.
-	public let sharedContainerIdentifier: String?
 	/// Where the Dropbox logins are kept. Every process that uses the same logins must pass an equal value.
 	public let oauth: OAuthPersistence
 
-	public init(appKey: String, sharedContainerIdentifier: String?, oauth: OAuthPersistence) {
+	public init(appKey: String, oauth: OAuthPersistence) {
 		self.appKey = appKey
-		self.sharedContainerIdentifier = sharedContainerIdentifier
 		self.oauth = oauth
 	}
 }

@@ -42,6 +42,22 @@ class WebDAVClientTests: XCTestCase {
 		XCTAssertEqual(URL(string: "/cloud/remote.php/webdav/"), client.baseURL)
 	}
 
+	func testBackgroundConfiguration() {
+		let configuration = WebDAVSession.backgroundConfiguration(sessionIdentifier: "WebDAVClientTests", sharedContainerIdentifier: "group.test")
+
+		XCTAssertEqual("WebDAVClientTests", configuration.identifier)
+		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
+	}
+
+	func testConfigurationsAreHardened() {
+		for configuration in [WebDAVSession.foregroundConfiguration(), WebDAVSession.backgroundConfiguration(sessionIdentifier: "WebDAVClientTests", sharedContainerIdentifier: nil)] {
+			XCTAssertNil(configuration.urlCache)
+			XCTAssertNil(configuration.urlCredentialStorage)
+			XCTAssertNotNil(configuration.httpCookieStorage)
+			XCTAssertFalse(configuration.httpCookieStorage === HTTPCookieStorage.shared)
+		}
+	}
+
 	// MARK: - Routing
 
 	func testTransfersRunOnTransferSessionAndOtherRequestsOnMetadataSession() async throws {
@@ -96,7 +112,7 @@ class WebDAVClientTests: XCTestCase {
 		URLProtocolSequenceMock.steps = [.chunkedResponse(response, [Data(count: 1024 * 1024), Data(count: 1)])]
 
 		await XCTAssertThrowsErrorAsync(try await client.PROPFIND(url: baseURL, depth: .zero)) { error in
-			guard case URLSessionError.unexpectedResponse = error else {
+			guard case WebDAVError.unexpectedResponse = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}
@@ -111,23 +127,37 @@ class WebDAVClientTests: XCTestCase {
 		URLProtocolSequenceMock.steps = [.chunkedResponse(response, [Data(count: 1024 * 1024), Data(count: 1)])]
 
 		await XCTAssertThrowsErrorAsync(try await client.PUT(url: baseURL.appendingPathComponent("file.txt"), fileURL: fileURL, progress: nil, onTaskCreation: nil)) { error in
-			guard case URLSessionError.unexpectedResponse = error else {
+			guard case WebDAVError.unexpectedResponse = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}
 		}
 	}
 
-	func testTransportErrorWithResponseThrowsHTTPError() throws {
+	func testTransportErrorWithSuccessfulResponseIsThrownWithoutURL() throws {
 		let response = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: nil, headerFields: nil))
+		let outcome = SplitURLSession.Outcome(response: response, body: .none, error: URLError(.networkConnectionLost, userInfo: [NSURLErrorFailingURLErrorKey: baseURL]), recordedFailure: nil)
+
+		XCTAssertThrowsError(try WebDAVSession.successfulResponse(of: outcome)) { error in
+			XCTAssertEqual(URLError(.networkConnectionLost), error as? URLError)
+		}
+	}
+
+	func testTransportErrorWithUnsuccessfulResponseThrowsHTTPError() throws {
+		let response = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 503, httpVersion: nil, headerFields: nil))
 		let outcome = SplitURLSession.Outcome(response: response, body: .none, error: URLError(.networkConnectionLost), recordedFailure: nil)
 
 		XCTAssertThrowsError(try WebDAVSession.successfulResponse(of: outcome)) { error in
-			guard case let URLSessionError.httpError(underlyingError as URLError, statusCode: 200) = error else {
-				XCTFail("Unexpected error: \(error)")
-				return
-			}
-			XCTAssertEqual(.networkConnectionLost, underlyingError.code)
+			XCTAssertEqual(.httpError(statusCode: 503), error as? WebDAVError)
+		}
+	}
+
+	func testCancellationTakesPrecedenceOverStatus() throws {
+		let response = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 503, httpVersion: nil, headerFields: nil))
+		let outcome = SplitURLSession.Outcome(response: response, body: .none, error: URLError(.cancelled), recordedFailure: nil)
+
+		XCTAssertThrowsError(try WebDAVSession.successfulResponse(of: outcome)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
 	}
 
@@ -136,7 +166,7 @@ class WebDAVClientTests: XCTestCase {
 		let outcome = SplitURLSession.Outcome(response: response, body: .none, error: nil, recordedFailure: nil)
 
 		XCTAssertThrowsError(try WebDAVSession.successfulDownloadResponse(of: outcome)) { error in
-			guard case URLSessionError.unexpectedResponse = error else {
+			guard case WebDAVError.unexpectedResponse = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}
@@ -153,10 +183,7 @@ class WebDAVClientTests: XCTestCase {
 		XCTAssertEqual(SplitURLSession.Outcome.Body.none, body)
 		XCTAssertTrue(FileManager.default.fileExists(atPath: location.path))
 		XCTAssertThrowsError(try WebDAVSession.successfulDownloadResponse(of: SplitURLSession.Outcome(response: response, body: body, error: nil, recordedFailure: nil))) { error in
-			guard case URLSessionError.httpError(nil, statusCode: 404) = error else {
-				XCTFail("Unexpected error: \(error)")
-				return
-			}
+			XCTAssertEqual(.httpError(statusCode: 404), error as? WebDAVError)
 		}
 	}
 

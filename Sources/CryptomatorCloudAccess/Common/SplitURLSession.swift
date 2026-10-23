@@ -163,7 +163,7 @@ private extension URLSessionTask {
 
  Downloads and uploads run on a transfer session with the given configuration, as download and upload tasks. Uploads are sent from a file, which is the only kind of upload a background session supports. Other requests run as data tasks on a foreground metadata session, because a background session doesn't support them. A download can also run on the metadata session. Background sessions are shared per identifier through `BackgroundURLSessionRegistry` and live for the process.
 
- Each call makes one attempt and returns its raw outcome, whatever its status code. Authentication, retries and the mapping of statuses to errors are up to the caller. The compatibility methods that return `(HTTPURLResponse, Data)` return every response, too.
+ Each call makes one attempt and returns its raw outcome, whatever its status code. Authentication, retries and the mapping of statuses to errors are up to the caller.
 
  Task cancellation is not forwarded to a running request, so a request returns only after its `URLSessionTask` has terminated. With `cancelsBeforeResume`, a cancellation that arrives before the task is resumed cancels the task instead.
  */
@@ -235,7 +235,7 @@ final class SplitURLSession: Sendable {
 
 	/**
 	 - Parameter configuration: The configuration of the transfer session. A background configuration gets its session from `registry`.
-	 - Parameter metadataConfiguration: Without one, a background `configuration` gets a `.default` metadata session, and a foreground one shares its session with the metadata requests.
+	 - Parameter metadataConfiguration: Without one, a background `configuration` gets a hardened `.default` metadata session, and a foreground one shares its session with the metadata requests.
 	 - Parameter challengeHandler: Decides every authentication challenge of the requests. Without one, the system handles them.
 	 */
 	init(configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration? = nil, challengeHandler: ChallengeHandler? = nil, hooks: Hooks = Hooks(), registry: BackgroundURLSessionRegistry = .shared) {
@@ -253,7 +253,7 @@ final class SplitURLSession: Sendable {
 			self.metadataSession = URLSession(configuration: metadataConfiguration, delegate: delegate, delegateQueue: nil)
 			ownedSessions.append(metadataSession)
 		} else if configuration.identifier != nil {
-			self.metadataSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+			self.metadataSession = URLSession(configuration: HTTPClientSupport.hardened(.default), delegate: delegate, delegateQueue: nil)
 			ownedSessions.append(metadataSession)
 		} else {
 			self.metadataSession = transferSession
@@ -314,42 +314,6 @@ final class SplitURLSession: Sendable {
 			} else {
 				task.resume()
 			}
-		}
-	}
-
-	// MARK: - Compatibility
-
-	func data(for request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> (HTTPURLResponse, Data) {
-		return try await SplitURLSession.result(of: data(request, bodyLimit: nil, bodyLogging: bodyLogging))
-	}
-
-	/// Moves the body of a 2xx response to `destinationURL`, replacing any item there. Any other body is returned as data instead, so that an error response never ends up at the destination.
-	func download(_ request: URLRequest, to destinationURL: URL) async throws -> (HTTPURLResponse, Data) {
-		let outcome = try await download(request, route: .transfer, handler: { location, response in
-			if let httpResponse = response as? HTTPURLResponse, (200 ... 299).contains(httpResponse.statusCode) {
-				try? FileManager.default.removeItem(at: destinationURL)
-				try FileManager.default.moveItem(at: location, to: destinationURL)
-				return .file(destinationURL)
-			} else {
-				return try .data(Data(contentsOf: location))
-			}
-		}, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
-		return try SplitURLSession.result(of: outcome)
-	}
-
-	func upload(_ request: URLRequest, fromFile fileURL: URL, urlLogging: HTTPDebugLogger.URLLogging = .redacted) async throws -> (HTTPURLResponse, Data) {
-		return try await SplitURLSession.result(of: upload(request, fromFile: fileURL, bodyLimit: nil, bodyLogging: .logged, urlLogging: urlLogging, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil))
-	}
-
-	private static func result(of outcome: Outcome) throws -> (HTTPURLResponse, Data) {
-		if let recordedFailure = outcome.recordedFailure {
-			throw recordedFailure
-		} else if let error = outcome.error {
-			throw error
-		} else if let httpResponse = outcome.response as? HTTPURLResponse {
-			return (httpResponse, outcome.data ?? Data())
-		} else {
-			throw URLError(.badServerResponse)
 		}
 	}
 }

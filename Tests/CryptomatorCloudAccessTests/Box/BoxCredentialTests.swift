@@ -26,9 +26,11 @@ class BoxCredentialTests: XCTestCase {
 		try? FileManager.default.removeItem(at: lockDirectoryURL)
 	}
 
-	func testEmptyUserIDThrows() {
-		XCTAssertThrowsError(try BoxCredential(userID: "")) { error in
-			guard case BoxCredentialErrors.missingUserID = error else {
+	func testEmptyUserIDThrows() throws {
+		let setup = try BoxSetup(clientID: "CLIENT", clientSecret: "SECRET", oauth: .custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: lockDirectoryURL))
+
+		XCTAssertThrowsError(try BoxCredential(userID: "", setup: setup)) { error in
+			guard case BoxCredentialError.missingUserID = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}
@@ -136,7 +138,7 @@ class BoxCredentialTests: XCTestCase {
 		let credential = BoxCredential(userID: "USER-ID", tokenSource: OAuthTokenSourceStub())
 
 		await XCTAssertThrowsErrorAsync(try await credential.getUsername(client: .mocked())) { error in
-			guard case BoxCredentialErrors.noUsername = error else {
+			guard case BoxCredentialError.noUsername = error else {
 				XCTFail("Unexpected error: \(error)")
 				return
 			}

@@ -8,7 +8,7 @@
 
 import Foundation
 
-public enum VaultFormat7ShorteningError: Error {
+enum VaultFormat7ShorteningError: Error {
 	case c9sItemNotFound
 }
 

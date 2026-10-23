@@ -16,6 +16,10 @@ enum HTTPClientSupport {
 	static let maxRetryDelay: TimeInterval = 60
 	/// The length of the chunks in which a file is copied into a temporary file.
 	static let temporaryFileBufferLength = 64 * 1024
+	/// The maximum length of the body of a metadata response, e.g., a listing. A page of 1000 Microsoft Graph items without `$select` is about 1.5 MB.
+	static let maxMetadataBodyLength = 16 * 1024 * 1024
+	/// The maximum length of a response body that an upload reads, and of an error body that a download reads.
+	static let maxErrorBodyLength = 1024 * 1024
 
 	static func hardened(_ configuration: URLSessionConfiguration) -> URLSessionConfiguration {
 		configuration.httpCookieStorage = HTTPCookieStorage()
@@ -59,6 +63,14 @@ enum HTTPClientSupport {
 		return .seconds(min(delay, maxRetryDelay))
 	}
 
+	/// Returns the delay of the attempt's response as `retryDelay(for:attempt:now:)` does, or else `retryDelay(forRetry:)`, e.g., after a transport error.
+	static func retryDelay(of outcome: SplitURLSession.Outcome, retry: Int) -> Duration {
+		guard let response = outcome.response as? HTTPURLResponse else {
+			return .seconds(retryDelay(forRetry: retry))
+		}
+		return retryDelay(for: response, attempt: retry, now: Date())
+	}
+
 	/// Whether the connection couldn't be made, dropped or timed out, including DNS and TLS failures.
 	static func isTransient(_ urlError: URLError) -> Bool {
 		return transientURLErrorCodes.contains(urlError.code)
@@ -83,6 +95,49 @@ enum HTTPClientSupport {
 		return url
 	}
 
+	static func uploadSessionURL(_ string: String?, onDomain domain: String, orThrow error: @autoclosure () -> Error) throws -> URL {
+		guard let url = httpsURL(string, onDomain: domain) else {
+			throw error()
+		}
+		return url
+	}
+
+	// MARK: - Requests
+
+	static func request(_ method: String, _ url: URL) -> URLRequest {
+		var request = URLRequest(url: url)
+		request.httpMethod = method
+		return request
+	}
+
+	/// - Parameter charset: The `charset` parameter of the `Content-Type`, if the server expects one.
+	static func request(_ method: String, _ url: URL, json body: some Encodable, charset: String? = nil) throws -> URLRequest {
+		var request = request(method, url)
+		request.setValue("application/json\(charset.map { "; charset=\($0)" } ?? "")", forHTTPHeaderField: "Content-Type")
+		request.httpBody = try JSONEncoder().encode(body)
+		return request
+	}
+
+	static func url(host: String, percentEncodedPath: String, parameters: [(String, String)]) throws -> URL {
+		var components = URLComponents()
+		components.scheme = "https"
+		components.host = host
+		components.percentEncodedPath = percentEncodedPath
+		if !parameters.isEmpty {
+			// Unlike `queryItems`, this also escapes `+`, which the server would read as a space.
+			components.percentEncodedQuery = formEncoded(parameters)
+		}
+		guard let url = components.url else {
+			throw URLError(.badURL)
+		}
+		return url
+	}
+
+	/// Escapes an identifier from a response as one path component.
+	static func pathComponent(_ identifier: String) -> String {
+		return percentEncoded(identifier, encodeSlash: true)
+	}
+
 	/// The caller deletes the returned file.
 	static func writeTemporaryFile(_ write: (FileHandle) throws -> Void) throws -> URL {
 		let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -102,6 +157,22 @@ enum HTTPClientSupport {
 		return url
 	}
 
+	/**
+	 Copies up to `maxLength` bytes from the current offset of the file handle into a temporary file, which the caller deletes.
+
+	 - Returns: The temporary file and the number of bytes copied, which is 0 at the end of the file.
+	 */
+	static func writeTemporaryFile(copyingUpTo maxLength: Int, from fileHandle: FileHandle) throws -> (URL, Int) {
+		var writtenLength = 0
+		let url = try writeTemporaryFile { temporaryFileHandle in
+			while writtenLength < maxLength, let data = try fileHandle.read(upToCount: min(temporaryFileBufferLength, maxLength - writtenLength)), !data.isEmpty {
+				try temporaryFileHandle.write(contentsOf: data)
+				writtenLength += data.count
+			}
+		}
+		return (url, writtenLength)
+	}
+
 	/// Moves the body of a 2xx response to `stagingURL`, and returns a short body of any other response as data, so that its error can be parsed.
 	static func downloadHandler(movingTo stagingURL: URL, maxErrorBodyLength: Int) -> SplitURLSession.DownloadHandler {
 		return { location, response in
@@ -114,6 +185,22 @@ enum HTTPClientSupport {
 			}
 			return .data(body)
 		}
+	}
+
+	// MARK: - Outcomes
+
+	/// Returns the body of a response for which `failure` returns `nil`. Otherwise it logs the request's failure and throws the error that `failure` returns.
+	// swiftlint:disable:next function_parameter_count
+	static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, label: String, failure: (HTTPURLResponse, SplitURLSession.Outcome) -> Error?) throws -> Data {
+		if let error = failure(response, outcome) {
+			logFailure(of: request, urlLogging: urlLogging, with: error, label: label)
+			throw error
+		}
+		return outcome.data ?? Data()
+	}
+
+	static func logFailure(of request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, with failure: Any, label: String) {
+		CloudAccessDDLogDebug("\(label): \(request.httpMethod ?? "GET") \(HTTPDebugLogger.redactedURLString(request.url, urlLogging: urlLogging)) failed with \(failure)")
 	}
 
 	/// Returns the HTTP response of an attempt. Otherwise it throws the attempt's recorded failure, or else its transport error, sanitized. A cancellation throws `CancellationError`.

@@ -10,7 +10,8 @@ import Foundation
 
 struct S3Object: Equatable {
 	let key: String
-	let lastModified: Date?
+	/// Parsed only for the metadata of an item, because folder moves and deletions read only keys and sizes.
+	let lastModified: String?
 	let size: Int?
 }
 
@@ -36,7 +37,7 @@ struct S3ListObjectsResult: Equatable {
 			guard let key = content.text(of: "Key") else {
 				return nil
 			}
-			return S3Object(key: key, lastModified: content.text(of: "LastModified").flatMap(Date.date(fromISO8601:)), size: content.text(of: "Size").flatMap { Int($0) })
+			return S3Object(key: key, lastModified: content.text(of: "LastModified"), size: content.text(of: "Size").flatMap { Int($0) })
 		}
 		self.commonPrefixes = root.children("CommonPrefixes").compactMap { $0.text(of: "Prefix") }
 		let nextContinuationToken = root.text(of: "NextContinuationToken").flatMap { $0.isEmpty ? nil : $0 }

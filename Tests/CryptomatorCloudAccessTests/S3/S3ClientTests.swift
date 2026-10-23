@@ -404,8 +404,8 @@ extension S3Client {
 }
 
 enum S3MockResponse {
-	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = 7) -> String {
-		let contents = keys.map { "<Contents><Key>\($0)</Key><LastModified>2026-10-18T12:34:56.000Z</LastModified><Size>\(size)</Size></Contents>" }.joined()
+	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = 7, lastModified: String = "2026-10-18T12:34:56.000Z") -> String {
+		let contents = keys.map { "<Contents><Key>\($0)</Key><LastModified>\(lastModified)</LastModified><Size>\(size)</Size></Contents>" }.joined()
 		let prefixes = commonPrefixes.map { "<CommonPrefixes><Prefix>\($0)</Prefix></CommonPrefixes>" }.joined()
 		let continuation = nextContinuationToken.map { "<IsTruncated>true</IsTruncated><NextContinuationToken>\($0)</NextContinuationToken>" } ?? "<IsTruncated>false</IsTruncated>"
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\(continuation)\(contents)\(prefixes)</ListBucketResult>"

@@ -34,8 +34,8 @@ class S3XMLTests: XCTestCase {
 		let result = try S3ListObjectsResult(xml: body)
 
 		XCTAssertEqual([
-			S3Object(key: "folder/a & b.txt", lastModified: Date(timeIntervalSince1970: 1_792_326_896.5), size: 42),
-			S3Object(key: "folder/c.txt", lastModified: Date(timeIntervalSince1970: 1_792_326_896), size: 0)
+			S3Object(key: "folder/a & b.txt", lastModified: "2026-10-18T12:34:56.500Z", size: 42),
+			S3Object(key: "folder/c.txt", lastModified: "2026-10-18T12:34:56Z", size: 0)
 		], result.contents)
 		XCTAssertEqual(["folder/sub/"], result.commonPrefixes)
 		XCTAssertEqual("a+b/c=", result.nextContinuationToken)

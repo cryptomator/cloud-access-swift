@@ -61,12 +61,14 @@
 		4A0590122451A180008831F9 /* CloudItemMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0590112451A180008831F9 /* CloudItemMetadata.swift */; };
 		4A05901D2451DD26008831F9 /* CloudProviderError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A05901C2451DD26008831F9 /* CloudProviderError.swift */; };
 		A1D2C3B4E5F60718293A4B5C /* AllSettled.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E8F9A0C1D243E5A6B7C8D9 /* AllSettled.swift */; };
+		3B05084259919742C6F3ED1D /* MapConcurrently.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B4E66A3B057404B418F1FB3 /* MapConcurrently.swift */; };
 		C3A4B5D6E7F8490A1B2C3D4E /* VaultCryptor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F0A1B2C3D44E5F6A7B8C9D /* VaultCryptor.swift */; };
 		7C1E5A0B93D44F6E8B2A61C4 /* CancellationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B07D2F5A6C4819B3F0D7A2 /* CancellationError.swift */; };
 		BA054C1AAD2F468ABF404168 /* DownloadOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4257D85004FC4A409257C014 /* DownloadOperation.swift */; };
 		2744BEBC3BCFAD7A35797B38 /* XCTestCase+Task.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AE52EA6353BE2CF30C3A46 /* XCTestCase+Task.swift */; };
 		761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */; };
 		FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */; };
+		78B3BCA70FA67D10B68EDC07 /* MapConcurrentlyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71CDDBB1355FAFF6C563413A /* MapConcurrentlyTests.swift */; };
 		A24B06589C535B534CD7BD69 /* BoxCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2D031BBA94F13E30DE041C /* BoxCloudProviderTests.swift */; };
 		1F038C6D355B0DC27988A380 /* BoxAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */; };
 		7AC1892CD04F8134D4B15675 /* DropboxCloudProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */; };
@@ -328,12 +330,14 @@
 		2E120D3B0EDB528750E0A77D /* WebDAVClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDAVClientTests.swift; sourceTree = "<group>"; };
 		31D69812AD1449F79B4AF702 /* StagingFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingFile.swift; sourceTree = "<group>"; };
 		B7E8F9A0C1D243E5A6B7C8D9 /* AllSettled.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSettled.swift; sourceTree = "<group>"; };
+		1B4E66A3B057404B418F1FB3 /* MapConcurrently.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapConcurrently.swift; sourceTree = "<group>"; };
 		D9F0A1B2C3D44E5F6A7B8C9D /* VaultCryptor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultCryptor.swift; sourceTree = "<group>"; };
 		E4B07D2F5A6C4819B3F0D7A2 /* CancellationError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancellationError.swift; sourceTree = "<group>"; };
 		4257D85004FC4A409257C014 /* DownloadOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOperation.swift; sourceTree = "<group>"; };
 		76AE52EA6353BE2CF30C3A46 /* XCTestCase+Task.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "XCTestCase+Task.swift"; sourceTree = "<group>"; };
 		6254FDC3E3ACFAE955AC10E6 /* DownloadOperationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOperationTests.swift; sourceTree = "<group>"; };
 		396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllSettledTests.swift; sourceTree = "<group>"; };
+		71CDDBB1355FAFF6C563413A /* MapConcurrentlyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapConcurrentlyTests.swift; sourceTree = "<group>"; };
 		BC2D031BBA94F13E30DE041C /* BoxCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxCloudProviderTests.swift; sourceTree = "<group>"; };
 		F821B3645C5429D3B1E9B487 /* BoxAuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoxAuthenticatorTests.swift; sourceTree = "<group>"; };
 		7D27D9D37F3D8FD430D78D2F /* DropboxCloudProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropboxCloudProviderTests.swift; sourceTree = "<group>"; };
@@ -806,6 +810,7 @@
 				4257D85004FC4A409257C014 /* DownloadOperation.swift */,
 				D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */,
 				C9983B91D46699A6476D90AA /* IdentifierCache.swift */,
+				1B4E66A3B057404B418F1FB3 /* MapConcurrently.swift */,
 				CA6257FC8E944BC7AA3947D1 /* Progress+Explicit.swift */,
 				556014BB19DB4BF08976E97E /* SDKContinuation.swift */,
 				B3A1C0E22E9D4F7A00B0C5D1 /* SplitURLSession.swift */,
@@ -839,6 +844,7 @@
 				9D6E80746B3B9E58001C013A /* SleepRecorder.swift */,
 				FAF3242ACCAFE841837D9DB1 /* URLProtocolMock+Helpers.swift */,
 				396EBC4352B80CF80F2D2C37 /* AllSettledTests.swift */,
+				71CDDBB1355FAFF6C563413A /* MapConcurrentlyTests.swift */,
 				93F75A0EFA548A2579AC1E8D /* SplitURLSessionTests.swift */,
 				CDADD56D8BA144A79ECA1E32 /* BackgroundURLSessionRegistryTests.swift */,
 			);
@@ -1541,6 +1547,7 @@
 				E00861F84DC147ECB9B19E34 /* NetworkConnectionError.swift in Sources */,
 				4A765CA32878596000794440 /* DirectoryContentCache.swift in Sources */,
 				A1D2C3B4E5F60718293A4B5C /* AllSettled.swift in Sources */,
+				3B05084259919742C6F3ED1D /* MapConcurrently.swift in Sources */,
 				7C1E5A0B93D44F6E8B2A61C4 /* CancellationError.swift in Sources */,
 				BA054C1AAD2F468ABF404168 /* DownloadOperation.swift in Sources */,
 				1A76A2AB4075408FA398277B /* Progress+Explicit.swift in Sources */,
@@ -1631,6 +1638,7 @@
 				2744BEBC3BCFAD7A35797B38 /* XCTestCase+Task.swift in Sources */,
 				761B43A58AED9555FA6D6C2D /* DownloadOperationTests.swift in Sources */,
 				FC5C2147EE0D5F94665A12B0 /* AllSettledTests.swift in Sources */,
+				78B3BCA70FA67D10B68EDC07 /* MapConcurrentlyTests.swift in Sources */,
 				FAA8D48DB405F4CD925B4A8D /* SplitURLSessionTests.swift in Sources */,
 				8155BFE4C275306469C36684 /* HTTPClientSupportTests.swift in Sources */,
 				90DBEAD8DBF449FB2C9285AF /* IdentifierCacheTests.swift in Sources */,

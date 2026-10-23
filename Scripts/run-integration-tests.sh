@@ -160,7 +160,7 @@ run_pass() {
 # without a failed test. It then writes why to $WORK_DIR/<name>.incomplete.
 parse_pass() {
   local name="$1"
-  if ! xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json" 2> "$WORK_DIR/$name.parse-error"; then
+  if ! xcrun xcresulttool get test-results tests --path "$WORK_DIR/$name.xcresult" > "$WORK_DIR/$name.json"; then
     echo "its results can't be read" > "$WORK_DIR/$name.incomplete"
     return 1
   fi

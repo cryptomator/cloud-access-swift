@@ -102,7 +102,7 @@ The library keeps the OAuth logins of Box, Dropbox, Google Drive and pCloud, and
 let accessGroup = ... // optional: the keychain access group of the logins, `nil` for the first group of the `keychain-access-groups` entitlement
 let tokenLockDirectory = ... // a directory in the App Group container, the same in the app and every extension
 let boxService = ... // the keychain service in which your app kept its Box logins so far; without `services`, Box logins go to `CryptomatorCloudAccess.OAuth.box`
-let dropboxService = ... // the keychain service in which your app kept its Dropbox logins so far: the `keychainService` it passed to SwiftyDropbox (by default its bundle identifier) followed by `.dropbox.authv2`; without `services`, Dropbox logins go to `CryptomatorCloudAccess.OAuth.dropbox`
+let dropboxService = OAuthPersistence.legacyDropboxService(keychainService: ...) // the `keychainService` that your app passed to `DropboxSetup` so far, or its bundle identifier if it passed `nil`, so that its Dropbox logins are read in place; without `services`, Dropbox logins go to `CryptomatorCloudAccess.OAuth.dropbox`
 let pCloudService = ... // the keychain service in which your app kept the pCloud SDK's logins so far; without `services`, pCloud logins go to `CryptomatorCloudAccess.OAuth.pcloud`
 let oauth = try OAuthPersistence.keychain(accessGroup: accessGroup, tokenLockDirectory: tokenLockDirectory, services: [.box: boxService, .dropbox: dropboxService, .pCloud: pCloudService])
 ```

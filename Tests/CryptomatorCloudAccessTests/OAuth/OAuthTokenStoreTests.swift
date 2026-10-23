@@ -746,6 +746,10 @@ class OAuthTokenStoreTests: XCTestCase {
 		}
 	}
 
+	func testLegacyDropboxService() {
+		XCTAssertEqual("org.cryptomator.ios.dropbox.authv2", OAuthPersistence.legacyDropboxService(keychainService: "org.cryptomator.ios"))
+	}
+
 	// MARK: - Helpers
 
 	private struct LateRefresh {

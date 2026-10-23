@@ -31,6 +31,13 @@ final class S3CopyTaskUtility: Sendable {
 		}
 	}
 
+	/// Copies the objects with at most `concurrencyLimit` of them at a time.
+	func copy(_ requests: [S3CopyRequest]) async throws {
+		_ = try await mapConcurrently(requests, limit: concurrencyLimit) { request in
+			try await self.copy(request)
+		}
+	}
+
 	private func regularCopy(_ request: S3CopyRequest) async throws {
 		CloudAccessDDLogDebug("S3CopyTaskUtility: regularCopy(\(request)) called")
 		try await client.copyObject(sourceKey: request.sourceKey, targetKey: request.targetKey)
@@ -46,24 +53,11 @@ final class S3CopyTaskUtility: Sendable {
 		CloudAccessDDLogDebug("S3CopyTaskUtility: multipartCopy(\(request)) finished")
 	}
 
-	/// Aborts the multipart upload if it fails or is cancelled. The abort waits until the task group finished the parts that were already started, because S3 may keep a part that completes after the abort. The abort runs without cancellation, so that its retries after a transient failure still run when the copy was cancelled.
+	/// Aborts the multipart upload if it fails or is cancelled. The abort runs only after the parts that were already started finished, which `mapConcurrently` waits for, because S3 may keep a part that completes after the abort. The abort runs without cancellation, so that its retries after a transient failure still run when the copy was cancelled.
 	private func execute(_ task: S3MultiPartCopyTask) async throws {
 		do {
-			let completedParts = try await withThrowingTaskGroup(of: S3CompletedPart.self) { group in
-				var completedParts = [S3CompletedPart]()
-				for (index, part) in task.parts.enumerated() {
-					if index >= concurrencyLimit, let completedPart = try await group.next() {
-						completedParts.append(completedPart)
-					}
-					try Task.checkCancellation()
-					group.addTask {
-						return try await (part.partNumber, self.execute(part, of: task))
-					}
-				}
-				for try await completedPart in group {
-					completedParts.append(completedPart)
-				}
-				return completedParts.sorted { $0.partNumber < $1.partNumber }
+			let completedParts = try await mapConcurrently(task.parts, limit: concurrencyLimit) { part in
+				return try await (partNumber: part.partNumber, eTag: self.execute(part, of: task))
 			}
 			try Task.checkCancellation()
 			try await completeTask(task, parts: completedParts)

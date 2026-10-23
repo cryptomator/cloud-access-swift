@@ -255,6 +255,16 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual("next", itemList.nextPageToken)
 	}
 
+	func testFetchItemListParsesLastModified() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+
+		XCTAssertEqual([Date(timeIntervalSince1970: 1_792_326_896.5)], itemList.items.map(\.lastModifiedDate))
+	}
+
 	func testFetchItemMetadataOfFolderListedAfterSibling() async throws {
 		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
 		let recordRequest: @Sendable (URLRequest) -> Void = { request in

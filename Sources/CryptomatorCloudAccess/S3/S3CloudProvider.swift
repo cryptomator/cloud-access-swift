@@ -276,14 +276,7 @@ public final class S3CloudProvider: CloudProvider {
 				let targetKey = parentTargetKey + name
 				return .init(sourceKey: $0.key, targetKey: targetKey, itemSize: itemSize)
 			}
-			try await withThrowingTaskGroup(of: Void.self) { group in
-				for copyRequest in copyRequests {
-					group.addTask {
-						try await self.copyUtility.copy(copyRequest)
-					}
-				}
-				try await group.waitForAll()
-			}
+			try await copyUtility.copy(copyRequests)
 
 			try await deleteObjects(keys: listObjects.contents.map(\.key))
 
@@ -478,7 +471,7 @@ extension CloudItemMetadata {
 		let itemType: CloudItemType = object.key.hasSuffix("/") ? .folder : .file
 		let path = object.key.hasPrefix("/") ? object.key : "/" + object.key
 		let cloudPath = CloudPath(path)
-		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified, size: object.size)
+		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified.flatMap(Date.date(fromISO8601:)), size: object.size)
 	}
 }
 

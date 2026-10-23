@@ -24,7 +24,6 @@ class S3CopyTaskUtilityTests: XCTestCase {
 		let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
 		let requests = RequestRecorder()
 		let ranges = OSAllocatedUnfairLock(initialState: [String: String]())
-		let completionBody = OSAllocatedUnfairLock<String?>(initialState: nil)
 		let partCopy: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
 			requests.record(request)
 			let url = try XCTUnwrap(request.url)
@@ -37,10 +36,7 @@ class S3CopyTaskUtilityTests: XCTestCase {
 			partCopy,
 			partCopy,
 			partCopy,
-			URLProtocolMock.handler(body: S3MockResponse.completeMultipartUploadResult, onRequest: { request in
-				requests.record(request)
-				completionBody.withLock { $0 = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) }
-			})
+			URLProtocolMock.handler(body: S3MockResponse.completeMultipartUploadResult, onRequest: requests.record)
 		]
 
 		try await copyTaskUtility.copy(S3CopyRequest(sourceKey: "a.txt", targetKey: "b.txt", itemSize: 25))
@@ -50,7 +46,7 @@ class S3CopyTaskUtilityTests: XCTestCase {
 		XCTAssertEqual(Array(repeating: "/exampleBucket/b.txt", count: 5), sent.map { $0.url?.path })
 		XCTAssertEqual(Array(repeating: "copy-upload-id", count: 4), sent.dropFirst().map(S3CopyTaskUtilityTests.uploadID(of:)))
 		XCTAssertEqual(Array(repeating: "exampleBucket/a.txt", count: 3), sent[1 ... 3].map { $0.value(forHTTPHeaderField: "x-amz-copy-source") })
-		let body = try XCTUnwrap(completionBody.withLock { $0 })
+		let body = try XCTUnwrap(sent.last?.httpBody.flatMap { String(bytes: $0, encoding: .utf8) })
 		XCTAssertTrue(body.contains("<Part><PartNumber>1</PartNumber><ETag>&quot;etag-1&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;etag-2&quot;</ETag></Part><Part><PartNumber>3</PartNumber><ETag>&quot;etag-3&quot;</ETag></Part></CompleteMultipartUpload>"), body)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}

@@ -334,7 +334,7 @@ class DropboxCloudProviderTests: XCTestCase {
 		})
 		let provider = DropboxCloudProvider(client: .mocked(hooks: hooks), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
 		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try DropboxCloudProviderTests.temporaryFiles()
+		let temporaryFiles = try uuidNamedTemporaryFiles()
 		let log = RequestRecorder()
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart, onRequest: log.record)]
 			+ Array(repeating: URLProtocolMock.handler(body: "null", onRequest: log.record), count: 3)
@@ -343,7 +343,7 @@ class DropboxCloudProviderTests: XCTestCase {
 		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
 		XCTAssertEqual(10, metadata.size)
-		XCTAssertEqual(temporaryFiles, try DropboxCloudProviderTests.temporaryFiles())
+		XCTAssertEqual(temporaryFiles, try uuidNamedTemporaryFiles())
 		let requests = log.requests
 		XCTAssertEqual(["start", "append_v2", "append_v2", "append_v2", "finish"], requests.map { $0.url?.lastPathComponent })
 		XCTAssertEqual([0, 4, 8], try requests[1 ... 3].map(DropboxCloudProviderTests.appendOffset))
@@ -403,14 +403,14 @@ class DropboxCloudProviderTests: XCTestCase {
 		for (name, appends) in cases {
 			let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
 			let localURL = try makeLocalFile(content: "0123456789ABCDEF")
-			let temporaryFiles = try DropboxCloudProviderTests.temporaryFiles()
+			let temporaryFiles = try uuidNamedTemporaryFiles()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart)] + appends + [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 16, tagged: false))]
 
 			await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil), name) { error in
 				XCTAssertEqual(.unexpectedContent, error as? DropboxError, name)
 			}
 			XCTAssertEqual(1, URLProtocolMock.requestHandler.count, name)
-			XCTAssertEqual(temporaryFiles, try DropboxCloudProviderTests.temporaryFiles(), name)
+			XCTAssertEqual(temporaryFiles, try uuidNamedTemporaryFiles(), name)
 		}
 	}
 
@@ -433,7 +433,7 @@ class DropboxCloudProviderTests: XCTestCase {
 	func testFileThatGetsShorterDuringUploadThrows() async throws {
 		let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
 		let localURL = try makeLocalFile(content: "0123456789ABCDEF")
-		let temporaryFiles = try DropboxCloudProviderTests.temporaryFiles()
+		let temporaryFiles = try uuidNamedTemporaryFiles()
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart, onRequest: { _ in
 				try? Data("0123".utf8).write(to: localURL)
@@ -448,7 +448,7 @@ class DropboxCloudProviderTests: XCTestCase {
 			XCTAssertEqual(.unexpectedContent, error as? DropboxError)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-		XCTAssertEqual(temporaryFiles, try DropboxCloudProviderTests.temporaryFiles())
+		XCTAssertEqual(temporaryFiles, try uuidNamedTemporaryFiles())
 	}
 
 	func testUploadSessionReportsBytesOfAppends() async throws {
@@ -560,12 +560,6 @@ class DropboxCloudProviderTests: XCTestCase {
 
 	private static func appendOffset(of request: URLRequest) throws -> Int {
 		return try XCTUnwrap((argument(of: request)?["cursor"] as? [String: Any])?["offset"] as? Int)
-	}
-
-	/// The files with a UUID name in the temporary directory, like the chunk files of an upload session. System services of the simulator write other items there.
-	private static func temporaryFiles() throws -> Set<String> {
-		let urls = try FileManager.default.contentsOfDirectory(at: FileManager.default.temporaryDirectory, includingPropertiesForKeys: [.isRegularFileKey])
-		return try Set(urls.filter { try UUID(uuidString: $0.lastPathComponent) != nil && $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true }.map(\.lastPathComponent))
 	}
 
 	private func makeLocalFile(content: String) throws -> URL {

@@ -11,7 +11,7 @@ import Foundation
 /**
  Builds the URLs of a bucket's requests.
 
- The scheme, host, port and path of the credential's URL are used. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Any other bucket, and every bucket of an IP address host, is addressed in the path (path style). As in the S3 endpoint rules of the AWS SDKs, the URL's path precedes the key in virtual-hosted style and the bucket in path style.
+ The scheme, host, port and path of the credential's URL are used. A bucket is addressed in the host (virtual-hosted style) if it passes the bucket name rule of AWS SDK 2.41.0 and contains only characters that are valid in a host. Path style, with the bucket in the path, is used for any other bucket, for every bucket of an IP address host, and for every bucket of a credential that forces path style. As in the S3 endpoint rules of the AWS SDKs, the URL's path precedes the key in virtual-hosted style and the bucket in path style.
  */
 struct S3Endpoint: Sendable {
 	private static let hostLabelCharacters = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
@@ -22,7 +22,7 @@ struct S3Endpoint: Sendable {
 	private let port: Int?
 	/// The path of the credential's URL without a trailing slash. Each segment is decoded and re-encoded with the SigV4 rules, slash included, so that an escaped slash stays distinct from a separator. A segment that isn't valid percent-encoded UTF-8 is kept as it is.
 	private let basePath: String
-	private let isVirtualHosted: Bool
+	let isVirtualHosted: Bool
 	let bucket: String
 
 	/// - Throws: `URLError(.badURL)` if the credential's URL isn't an absolute HTTP or HTTPS URL with a host.
@@ -47,7 +47,7 @@ struct S3Endpoint: Sendable {
 			segment.removingPercentEncoding.map { HTTPClientSupport.percentEncoded($0, encodeSlash: true) } ?? String(segment)
 		}.joined(separator: "/")
 		self.bucket = credential.bucket
-		self.isVirtualHosted = S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
+		self.isVirtualHosted = credential.forcePathStyle != true && S3Endpoint.isVirtualHostedStyleCompliant(bucket: credential.bucket) && credential.bucket.allSatisfy(S3Endpoint.hostLabelCharacters.contains) && !S3Endpoint.isIPAddress(host)
 	}
 
 	/// Whether the host is an IPv6 address in brackets or a string that URLSession connects to as an IPv4 address. `inet_aton` covers the short, hex and octal forms such as `127.1`, and `inet_pton` covers dotted quads with a zero-padded `08` or `09`, which `inet_aton` reads as invalid octal.
@@ -61,6 +61,25 @@ struct S3Endpoint: Sendable {
 			return false
 		}
 		return !bucket.contains(".")
+	}
+
+	/**
+	 Returns the URL with its host moved to the region, if the host is an ordinary AWS S3 host: `s3.amazonaws.com`, `s3.<region>.amazonaws.com` or `s3.dualstack.<region>.amazonaws.com`, the latter two also with the suffix `amazonaws.com.cn`. The scheme, port, path and query are kept.
+
+	 - Returns: `nil` for any other host, e.g., a FIPS, accelerate, legacy `s3-<region>` or PrivateLink host, whose routing is deliberate, and for a region that isn't valid.
+	 */
+	static func relocatedURL(_ url: URL, toRegion region: String) -> URL? {
+		guard S3Signer.isValidRegion(region), var components = URLComponents(url: url, resolvingAgainstBaseURL: false), let host = components.encodedHost?.lowercased() else {
+			return nil
+		}
+		if host == "s3.amazonaws.com" {
+			components.encodedHost = "s3.\(region).amazonaws.com"
+		} else if let match = host.wholeMatch(of: /s3\.(dualstack\.)?([a-z0-9-]+)\.(amazonaws\.com(?:\.cn)?)/), match.output.2 != "dualstack", S3Signer.isValidRegion(String(match.output.2)) {
+			components.encodedHost = "s3.\(match.output.1 ?? "")\(region).\(match.output.3)"
+		} else {
+			return nil
+		}
+		return components.url
 	}
 
 	/// Returns the URL of the object with the given key, or of the bucket for an empty key. The query is sent percent-encoded exactly as it is signed.

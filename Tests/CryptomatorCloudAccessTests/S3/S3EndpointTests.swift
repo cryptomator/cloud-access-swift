@@ -56,6 +56,13 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("https://example.com/my%23bucket/file.txt", try url(endpointURL: "https://example.com", bucket: "my#bucket", key: "file.txt"))
 	}
 
+	func testForcedPathStyleForDNSCompatibleBucket() throws {
+		XCTAssertEqual("https://example.com/mybucket/file.txt", try url(endpointURL: "https://example.com", bucket: "mybucket", key: "file.txt", forcePathStyle: true))
+		XCTAssertEqual("https://example.com/prefix/mybucket/file.txt", try url(endpointURL: "https://example.com/prefix", bucket: "mybucket", key: "file.txt", forcePathStyle: true))
+		XCTAssertEqual("https://mybucket.example.com/file.txt", try url(endpointURL: "https://example.com", bucket: "mybucket", key: "file.txt", forcePathStyle: false))
+		XCTAssertEqual("https://mybucket.example.com/file.txt", try url(endpointURL: "https://example.com", bucket: "mybucket", key: "file.txt", forcePathStyle: nil))
+	}
+
 	func testKeepsSchemeAndNonDefaultPort() throws {
 		XCTAssertEqual("http://mybucket.nas:9000/file.txt", try url(endpointURL: "http://nas:9000", bucket: "mybucket", key: "file.txt"))
 		XCTAssertEqual("https://mybucket.example.com:8443/file.txt", try url(endpointURL: "https://example.com:8443", bucket: "mybucket", key: "file.txt"))
@@ -100,13 +107,51 @@ class S3EndpointTests: XCTestCase {
 		XCTAssertEqual("prefix=a%2Bb%2Fc%3Dd%3Fe%3Bf%3Ag%40h%20i&uploads", URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
 	}
 
-	// MARK: - Helpers
+	// MARK: - Relocation
 
-	private func url(endpointURL: String, bucket: String, key: String) throws -> String {
-		return try makeEndpoint(endpointURL: endpointURL, bucket: bucket).url(forKey: key).absoluteString
+	func testRelocatesOnlyOrdinaryAWSHosts() throws {
+		let cases: [(endpointURL: String, relocatedURL: String?)] = [
+			("https://s3.amazonaws.com", "https://s3.eu-central-1.amazonaws.com"),
+			("https://s3.us-east-1.amazonaws.com", "https://s3.eu-central-1.amazonaws.com"),
+			("https://S3.US-EAST-1.AMAZONAWS.COM", "https://s3.eu-central-1.amazonaws.com"),
+			("https://s3.dualstack.us-east-1.amazonaws.com", "https://s3.dualstack.eu-central-1.amazonaws.com"),
+			("https://s3.cn-north-1.amazonaws.com.cn", "https://s3.eu-central-1.amazonaws.com.cn"),
+			("https://s3.dualstack.cn-north-1.amazonaws.com.cn", "https://s3.dualstack.eu-central-1.amazonaws.com.cn"),
+			("https://s3.dualstack.amazonaws.com", nil),
+			("https://s3.amazonaws.com.cn", nil),
+			("https://s3-fips.us-east-1.amazonaws.com", nil),
+			("https://s3.fips.us-east-1.amazonaws.com", nil),
+			("https://s3-accelerate.amazonaws.com", nil),
+			("https://s3-us-west-2.amazonaws.com", nil),
+			("https://bucket.vpce-1a2b3c4d-5e6f.s3.us-east-1.vpce.amazonaws.com", nil),
+			("https://s3.us-east-1.amazonaws.com.evil.com", nil),
+			("https://s3.fr-par.scw.cloud", nil),
+			("https://minio.example.com", nil)
+		]
+		for (endpointURL, relocatedURL) in cases {
+			XCTAssertEqual(relocatedURL, try S3Endpoint.relocatedURL(XCTUnwrap(URL(string: endpointURL)), toRegion: "eu-central-1")?.absoluteString, endpointURL)
+		}
 	}
 
-	private func makeEndpoint(endpointURL: String, bucket: String) throws -> S3Endpoint {
-		return try S3Endpoint(credential: S3Credential(accessKey: "", secretKey: "", url: XCTUnwrap(URL(string: endpointURL)), bucket: bucket, region: "us-east-1"))
+	func testDoesNotRelocateToInvalidRegion() throws {
+		let endpointURL = try XCTUnwrap(URL(string: "https://s3.us-east-1.amazonaws.com"))
+		for region in ["eu-west-1/x", "", "eu-west-1.evil.com"] {
+			XCTAssertNil(S3Endpoint.relocatedURL(endpointURL, toRegion: region), region)
+		}
+	}
+
+	func testRelocationKeepsSchemePortPathAndQuery() throws {
+		let endpointURL = try XCTUnwrap(URL(string: "http://s3.us-east-1.amazonaws.com:8080/prefix?x=1"))
+		XCTAssertEqual("http://s3.eu-central-1.amazonaws.com:8080/prefix?x=1", S3Endpoint.relocatedURL(endpointURL, toRegion: "eu-central-1")?.absoluteString)
+	}
+
+	// MARK: - Helpers
+
+	private func url(endpointURL: String, bucket: String, key: String, forcePathStyle: Bool? = nil) throws -> String {
+		return try makeEndpoint(endpointURL: endpointURL, bucket: bucket, forcePathStyle: forcePathStyle).url(forKey: key).absoluteString
+	}
+
+	private func makeEndpoint(endpointURL: String, bucket: String, forcePathStyle: Bool? = nil) throws -> S3Endpoint {
+		return try S3Endpoint(credential: S3Credential(accessKey: "", secretKey: "", url: XCTUnwrap(URL(string: endpointURL)), bucket: bucket, region: "us-east-1", forcePathStyle: forcePathStyle))
 	}
 }

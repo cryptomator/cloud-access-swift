@@ -85,6 +85,14 @@ class S3ClientTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	func testErrorCarriesBucketRegionHeader() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 301, body: "<Error><Code>PermanentRedirect</Code></Error>", headerFields: ["x-amz-bucket-region": "eu-central-1"])]
+
+		await XCTAssertThrowsErrorAsync(try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)) { error in
+			XCTAssertEqual(S3Error(statusCode: 301, code: "PermanentRedirect", bucketRegion: "eu-central-1"), error as? S3Error)
+		}
+	}
+
 	// MARK: - Retries
 
 	func testRetriesTransientStatus() async throws {
@@ -165,6 +173,74 @@ class S3ClientTests: XCTestCase {
 		try await client.deleteObject(key: "a.txt")
 
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	// MARK: - Multipart Upload Parts
+
+	func testUploadPartReturnsETagOfPresignedPut() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(headerFields: ["ETag": "\"etag-2\""], onRequest: requests.record)]
+
+		let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 2, fromFile: makeLocalFile(), progress: nil)
+
+		XCTAssertEqual("\"etag-2\"", eTag)
+		let request = try XCTUnwrap(requests.requests.first)
+		XCTAssertEqual("PUT", request.httpMethod)
+		XCTAssertEqual(Data("content".utf8), request.httpBody)
+		XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+		let query = try XCTUnwrap(request.url?.query)
+		for parameter in ["partNumber=2", "uploadId=upload-id", "X-Amz-Expires=3000", "X-Amz-Signature="] {
+			XCTAssertTrue(query.contains(parameter), query)
+		}
+	}
+
+	/// The retry is a further task, which gets its own unit of the progress before it starts, so that the finished first task counts only half.
+	func testUploadPartRetriesTransientFailure() async throws {
+		let progress = Progress(totalUnitCount: 1)
+		let fractionAtRetry = OSAllocatedUnfairLock<Double?>(initialState: nil)
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 503),
+			URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""], onRequest: { _ in
+				fractionAtRetry.withLock { $0 = progress.fractionCompleted }
+			})
+		]
+
+		let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: progress)
+
+		XCTAssertEqual("\"etag-1\"", eTag)
+		XCTAssertEqual(1, sleeps.durations.count)
+		XCTAssertEqual(0.5, try XCTUnwrap(fractionAtRetry.withLock { $0 }), accuracy: 0.01)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testUploadPartStopsAfterThreeRetries() async throws {
+		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""])]
+
+		await XCTAssertThrowsErrorAsync(try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil)) { error in
+			XCTAssertEqual(503, (error as? S3Error)?.statusCode)
+		}
+		XCTAssertEqual(3, sleeps.durations.count)
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testUploadPartDoesNotRetryAccessDenied() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>"),
+			URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""])
+		]
+
+		await XCTAssertThrowsErrorAsync(try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil)) { error in
+			XCTAssertEqual("AccessDenied", (error as? S3Error)?.code)
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testUploadPartWithoutETagThrows() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler()]
+
+		await XCTAssertThrowsErrorAsync(try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil)) { error in
+			XCTAssertEqual(.badServerResponse, (error as? URLError)?.code)
+		}
 	}
 
 	// MARK: - Clock Skew
@@ -337,7 +413,7 @@ class S3ClientTests: XCTestCase {
 			logCapture.stop()
 		}
 		let secretKey = "SECRETKEY123"
-		let client = try S3Client.mocked(credential: S3Credential(accessKey: "access", secretKey: secretKey, url: S3Credential.stub.url, bucket: S3Credential.stub.bucket, region: S3Credential.stub.region))
+		let client = try S3Client.mocked(credential: S3Credential(accessKey: "access", secretKey: secretKey, url: S3Credential.stub.url, bucket: S3Credential.stub.bucket, region: S3Credential.stub.region, forcePathStyle: S3Credential.stub.forcePathStyle))
 		let presignedSignature = OSAllocatedUnfairLock<String?>(initialState: nil)
 		let signingDetails = "<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided.</Message><AWSAccessKeyId>access</AWSAccessKeyId><StringToSign>STRINGTOSIGN</StringToSign><SignatureProvided>PROVIDEDSIGNATURE</SignatureProvided><CanonicalRequest>CANONICALREQUEST</CanonicalRequest></Error>"
 		URLProtocolMock.requestHandler = [
@@ -385,6 +461,12 @@ class S3ClientTests: XCTestCase {
 
 	// MARK: - Helpers
 
+	private func makeLocalFile() throws -> URL {
+		let fileURL = tmpDirURL.appendingPathComponent("part.bin")
+		try Data("content".utf8).write(to: fileURL)
+		return fileURL
+	}
+
 	private static let dateFormatter = {
 		let formatter = DateFormatter()
 		formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -396,14 +478,20 @@ class S3ClientTests: XCTestCase {
 
 extension S3Client {
 	/// Returns a client whose requests `URLProtocolMock` answers.
-	static func mocked(credential: S3Credential = .stub, sleeps: SleepRecorder = SleepRecorder()) throws -> S3Client {
+	static func mocked(credential: S3Credential = .stub, sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) throws -> S3Client {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
-		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil, sleep: { sleeps.sleep(for: $0) })
+		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 
 enum S3MockResponse {
+	static let completeMultipartUploadResult = "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>"
+
+	static func initiateMultipartUploadResult(uploadID: String = "upload-id") -> String {
+		return "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>\(uploadID)</UploadId></InitiateMultipartUploadResult>"
+	}
+
 	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = 7, lastModified: String = "2026-10-18T12:34:56.000Z") -> String {
 		let contents = keys.map { "<Contents><Key>\($0)</Key><LastModified>\(lastModified)</LastModified><Size>\(size)</Size></Contents>" }.joined()
 		let prefixes = commonPrefixes.map { "<CommonPrefixes><Prefix>\($0)</Prefix></CommonPrefixes>" }.joined()

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -24,6 +25,26 @@ func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async th
 	return Task {
 		withUnsafeCurrentTask { $0?.cancel() }
 		return try await operation()
+	}
+}
+
+/// Cancels a task from a request handler, once the test stored the task.
+final class TaskCanceller<Value: Sendable>: Sendable {
+	private let task = OSAllocatedUnfairLock<Task<Value, Error>?>(initialState: nil)
+	private let taskStored = DispatchSemaphore(value: 0)
+
+	func start(_ operation: @escaping @Sendable () async throws -> Value) -> Task<Value, Error> {
+		let task = Task {
+			try await operation()
+		}
+		self.task.withLock { $0 = task }
+		taskStored.signal()
+		return task
+	}
+
+	func cancel() {
+		_ = taskStored.wait(timeout: .now() + testWaitTimeout)
+		task.withLock { $0 }?.cancel()
 	}
 }
 
@@ -49,6 +70,12 @@ extension XCTestCase {
 			throw UnfinishedTaskError()
 		}
 		return try await task.value
+	}
+
+	/// The files with a UUID name in the temporary directory, like the temporary files of the parts of an upload. System services of the simulator write other items there.
+	func uuidNamedTemporaryFiles() throws -> Set<String> {
+		let urls = try FileManager.default.contentsOfDirectory(at: FileManager.default.temporaryDirectory, includingPropertiesForKeys: [.isRegularFileKey])
+		return try Set(urls.filter { try UUID(uuidString: $0.lastPathComponent) != nil && $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true }.map(\.lastPathComponent))
 	}
 
 	func assertThrowsCancellationErrorInCancelledTask(_ provider: CloudProvider, file: StaticString = #filePath, line: UInt = #line) async {

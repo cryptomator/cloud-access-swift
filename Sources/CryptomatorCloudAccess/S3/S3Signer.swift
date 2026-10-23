@@ -50,6 +50,11 @@ struct S3Signer: Sendable {
 		return regionAliases[region] ?? region
 	}
 
+	/// Whether the region is a valid host label, as the S3 endpoint rules of the AWS SDKs require of a region. A region from a response that fails it isn't used, because it would go into the signing scope and possibly the host.
+	static func isValidRegion(_ region: String) -> Bool {
+		return region.wholeMatch(of: /[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?/) != nil
+	}
+
 	static func sha256Hex(_ data: Data) -> String {
 		return hex(SHA256.hash(data: data))
 	}

@@ -13,10 +13,8 @@ final class S3CopyTaskUtility: Sendable {
 
 	private let concurrencyLimit: Int
 	private let maxPartSize: Int
-	/// The size of a copied part and of the largest object copied in one request. AWS allows 5 GiB and Cloudflare R2 5 MiB less, while Backblaze B2 allows less than 5 GB, so this is rclone's limit of 4768 MiB.
-	private static let maxPartSize = 4768 * 1024 * 1024
 
-	init(client: S3Client, concurrencyLimit: Int = 4, maxPartSize: Int = S3CopyTaskUtility.maxPartSize) {
+	init(client: S3Client, concurrencyLimit: Int = 4, maxPartSize: Int = S3Client.maxPartSize) {
 		self.client = client
 		self.concurrencyLimit = concurrencyLimit
 		self.maxPartSize = maxPartSize
@@ -46,46 +44,20 @@ final class S3CopyTaskUtility: Sendable {
 
 	private func multipartCopy(_ request: S3CopyRequest) async throws {
 		CloudAccessDDLogDebug("S3CopyTaskUtility: multipartCopy(\(request)) called")
-		let uploadID = try await client.createMultipartUpload(key: request.targetKey)
 		let parts = constructParts(itemSize: request.itemSize)
-		let task = S3MultiPartCopyTask(parts: parts, sourceKey: request.sourceKey, key: request.targetKey, uploadID: uploadID)
-		try await execute(task)
+		try await client.multipartUpload(key: request.targetKey, contentType: nil) { uploadID in
+			try await mapConcurrently(parts, limit: concurrencyLimit) { part in
+				try await (partNumber: part.partNumber, eTag: self.copyPart(part, of: request, uploadID: uploadID))
+			}
+		}
 		CloudAccessDDLogDebug("S3CopyTaskUtility: multipartCopy(\(request)) finished")
 	}
 
-	/// Aborts the multipart upload if it fails or is cancelled. The abort runs only after the parts that were already started finished, which `mapConcurrently` waits for, because S3 may keep a part that completes after the abort. The abort runs without cancellation, so that its retries after a transient failure still run when the copy was cancelled.
-	private func execute(_ task: S3MultiPartCopyTask) async throws {
-		do {
-			let completedParts = try await mapConcurrently(task.parts, limit: concurrencyLimit) { part in
-				return try await (partNumber: part.partNumber, eTag: self.execute(part, of: task))
-			}
-			try Task.checkCancellation()
-			try await completeTask(task, parts: completedParts)
-		} catch {
-			try? await withoutCancellation {
-				try await self.abortTask(task)
-			}
-			throw error
-		}
-	}
-
-	private func execute(_ part: S3CopyPart, of task: S3MultiPartCopyTask) async throws -> String {
-		CloudAccessDDLogDebug("S3CopyTaskUtility: execute(\(part.partNumber)) called")
-		let eTag = try await client.uploadPartCopy(sourceKey: task.sourceKey, range: part.range, key: task.key, uploadID: task.uploadID, partNumber: part.partNumber)
-		CloudAccessDDLogDebug("S3CopyTaskUtility: execute(\(part.partNumber)) finished")
+	private func copyPart(_ part: S3CopyPart, of request: S3CopyRequest, uploadID: String) async throws -> String {
+		CloudAccessDDLogDebug("S3CopyTaskUtility: copyPart(\(part.partNumber)) called")
+		let eTag = try await client.uploadPartCopy(sourceKey: request.sourceKey, range: part.range, key: request.targetKey, uploadID: uploadID, partNumber: part.partNumber)
+		CloudAccessDDLogDebug("S3CopyTaskUtility: copyPart(\(part.partNumber)) finished")
 		return eTag
-	}
-
-	private func completeTask(_ task: S3MultiPartCopyTask, parts: [S3CompletedPart]) async throws {
-		CloudAccessDDLogDebug("S3CopyTaskUtility: completeTask(\(task.uploadID)) called")
-		try await client.completeMultipartUpload(key: task.key, uploadID: task.uploadID, parts: parts)
-		CloudAccessDDLogDebug("S3CopyTaskUtility: completeTask(\(task.uploadID)) finished")
-	}
-
-	private func abortTask(_ task: S3MultiPartCopyTask) async throws {
-		CloudAccessDDLogDebug("S3CopyTaskUtility: abortTask(\(task.uploadID)) called")
-		try await client.abortMultipartUpload(key: task.key, uploadID: task.uploadID)
-		CloudAccessDDLogDebug("S3CopyTaskUtility: abortTask(\(task.uploadID)) finished")
 	}
 
 	private func constructParts(itemSize: Int) -> [S3CopyPart] {
@@ -113,13 +85,6 @@ final class S3CopyTaskUtility: Sendable {
 	private struct S3CopyPart {
 		let partNumber: Int
 		let range: String
-	}
-
-	private struct S3MultiPartCopyTask {
-		let parts: [S3CopyPart]
-		let sourceKey: String
-		let key: String
-		let uploadID: String
 	}
 }
 

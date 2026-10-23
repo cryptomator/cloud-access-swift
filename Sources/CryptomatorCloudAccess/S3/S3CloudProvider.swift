@@ -12,14 +12,21 @@ public final class S3CloudProvider: CloudProvider {
 	private let client: S3Client
 	private let copyUtility: S3CopyTaskUtility
 	private let maxPageSize: Int
+	/// The file size above which an upload is a multipart upload. It defaults to the largest part, so that every file up to that size is uploaded in a single task, which can run on while an app extension is suspended.
+	private let multipartUploadThreshold: Int
+	private let minPartSize: Int
+	private let maxPartCount: Int
 	private static let delimiter = "/"
 	private static let folderContentType = "application/x-directory"
 	private static let s3MaxPageSize = 1000
 
-	init(client: S3Client, maxPageSize: Int) {
+	init(client: S3Client, maxPageSize: Int, multipartUploadThreshold: Int = S3Client.maxPartSize, minPartSize: Int = 32 * 1024 * 1024, maxPartCount: Int = S3Client.maxPartCount) {
 		self.client = client
 		self.copyUtility = S3CopyTaskUtility(client: client)
 		self.maxPageSize = min(max(1, maxPageSize), S3CloudProvider.s3MaxPageSize)
+		self.multipartUploadThreshold = multipartUploadThreshold
+		self.minPartSize = minPartSize
+		self.maxPartCount = maxPartCount
 	}
 
 	/**
@@ -120,6 +127,7 @@ public final class S3CloudProvider: CloudProvider {
 		}
 	}
 
+	/// A file of more than 4768 MiB is uploaded as a multipart upload, whose part tasks aren't passed to `onTaskCreation`.
 	@concurrent
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
@@ -133,6 +141,9 @@ public final class S3CloudProvider: CloudProvider {
 		if isDirectory.boolValue {
 			throw CloudProviderError.itemTypeMismatch
 		}
+		// The attributes of a symbolic link describe the link, whose size isn't the file's.
+		let fileSize = try FileManager.default.attributesOfItem(atPath: localURL.resolvingSymlinksInPath().path)[.size] as? Int ?? 0
+		let partSize = try multipartUploadPartSize(forFileSize: fileSize)
 		let resourceKey: URLResourceKey = if #available(iOS 14.0, *) {
 			.contentTypeKey
 		} else {
@@ -154,9 +165,13 @@ public final class S3CloudProvider: CloudProvider {
 			}
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) precondition done, uploading file…")
-			try await client.upload(key: key, fromFile: localURL, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
+			if let partSize {
+				try await uploadLargeFile(from: localURL, key: key, contentType: contentType, fileSize: fileSize, partSize: partSize, progress: phases[0])
+			} else {
+				try await client.upload(key: key, fromFile: localURL, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
+			}
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, fetching metadata…")
-			// The upload committed with its PUT, so the metadata is fetched even if the task is cancelled meanwhile.
+			// The upload committed with its PUT or its completion, so the metadata is fetched even if the task is cancelled meanwhile.
 			let metadata = try await withoutCancellation {
 				try await self.getItemMetadata(at: cloudPath)
 			}
@@ -324,6 +339,66 @@ public final class S3CloudProvider: CloudProvider {
 		let metadata = try await fetchItemMetadata(at: folderPath)
 		guard metadata.itemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
+		}
+	}
+
+	// - MARK: Multipart Upload
+
+	/**
+	 Returns the part size of a multipart upload of a file with the given size, or `nil` if the file is uploaded with one request.
+
+	 - Throws: `URLError(.dataLengthExceedsMaximum)` if the file needs parts larger than `S3Client.maxPartSize`.
+	 */
+	private func multipartUploadPartSize(forFileSize fileSize: Int) throws -> Int? {
+		guard fileSize > multipartUploadThreshold else {
+			return nil
+		}
+		let partSize = S3CloudProvider.partSize(forFileSize: fileSize, minPartSize: minPartSize, maxPartCount: maxPartCount)
+		guard partSize <= S3Client.maxPartSize else {
+			throw URLError(.dataLengthExceedsMaximum)
+		}
+		return partSize
+	}
+
+	/// Returns the part size of a multipart upload of a file with the given size: `minPartSize`, or, if the file needs more than `maxPartCount` parts of that size, the smallest whole number of MiB that fits it into `maxPartCount` parts.
+	static func partSize(forFileSize fileSize: Int, minPartSize: Int, maxPartCount: Int) -> Int {
+		let mebibyte = 1024 * 1024
+		let partSize = (fileSize + maxPartCount - 1) / maxPartCount
+		guard partSize > minPartSize else {
+			return minPartSize
+		}
+		return (partSize + mebibyte - 1) / mebibyte * mebibyte
+	}
+
+	/// Uploads the file as a multipart upload, one part after the other, each from a temporary file, so that no part is held in memory. The progress counts bytes, so each part's share is its length.
+	// swiftlint:disable:next function_parameter_count
+	private func uploadLargeFile(from localURL: URL, key: String, contentType: String, fileSize: Int, partSize: Int, progress: Progress?) async throws {
+		progress?.totalUnitCount = Int64(fileSize)
+		try await client.multipartUpload(key: key, contentType: contentType) { uploadID in
+			let fileHandle = try FileHandle(forReadingFrom: localURL)
+			defer {
+				try? fileHandle.close()
+			}
+			var parts = [S3CompletedPart]()
+			var offset = 0
+			while offset < fileSize {
+				try Task.checkCancellation()
+				let expectedLength = min(partSize, fileSize - offset)
+				try fileHandle.seek(toOffset: UInt64(offset))
+				let (partFileURL, partLength) = try HTTPClientSupport.writeTemporaryFile(copyingUpTo: expectedLength, from: fileHandle)
+				defer {
+					try? FileManager.default.removeItem(at: partFileURL)
+				}
+				guard partLength == expectedLength else {
+					// The file got shorter during the upload, which must not complete a shorter object.
+					throw CocoaError(.fileReadCorruptFile)
+				}
+				let partNumber = parts.count + 1
+				let eTag = try await client.uploadPart(key: key, uploadID: uploadID, partNumber: partNumber, fromFile: partFileURL, progress: progress?.makeExplicitChild(pendingUnitCount: Int64(partLength)))
+				parts.append((partNumber: partNumber, eTag: eTag))
+				offset += partLength
+			}
+			return parts
 		}
 	}
 

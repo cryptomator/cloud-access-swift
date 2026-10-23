@@ -33,6 +33,8 @@
 		C38912ABE29730CB949178B2 /* HTTPClientSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */; };
 		A93A1208E5F090342B387CBD /* IdentifierCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9983B91D46699A6476D90AA /* IdentifierCache.swift */; };
 		FEC4BC14AF0B2225D8B0F762 /* S3XMLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B802123FB38CCFB904D1896 /* S3XMLTests.swift */; };
+		28BA5994C7664388B3BD2E30 /* S3CredentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97D82ACED4E44DE6ACC5823B /* S3CredentialTests.swift */; };
+		C3884F4C1BF847F69E045CA1 /* S3AuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9F3F0C0AB14231B1A3893E /* S3AuthenticatorTests.swift */; };
 		9F4B7464D7988D13E9AF90BC /* S3SignerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFBF2D54899055AA04B2081 /* S3SignerTests.swift */; };
 		EC9E74C3534B388597634706 /* S3EndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EBC80B60CA644F6C7D60EE /* S3EndpointTests.swift */; };
 		085CE47894322C456AD6B25F /* S3CopyTaskUtilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70CD6AEEC424AB1FB726021E /* S3CopyTaskUtilityTests.swift */; };
@@ -310,6 +312,8 @@
 		D5B17152BA3F8D716A72908A /* HTTPClientSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPClientSupport.swift; sourceTree = "<group>"; };
 		C9983B91D46699A6476D90AA /* IdentifierCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifierCache.swift; sourceTree = "<group>"; };
 		5B802123FB38CCFB904D1896 /* S3XMLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3XMLTests.swift; sourceTree = "<group>"; };
+		97D82ACED4E44DE6ACC5823B /* S3CredentialTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CredentialTests.swift; sourceTree = "<group>"; };
+		DF9F3F0C0AB14231B1A3893E /* S3AuthenticatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3AuthenticatorTests.swift; sourceTree = "<group>"; };
 		AEFBF2D54899055AA04B2081 /* S3SignerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3SignerTests.swift; sourceTree = "<group>"; };
 		A5EBC80B60CA644F6C7D60EE /* S3EndpointTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3EndpointTests.swift; sourceTree = "<group>"; };
 		70CD6AEEC424AB1FB726021E /* S3CopyTaskUtilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = S3CopyTaskUtilityTests.swift; sourceTree = "<group>"; };
@@ -727,9 +731,11 @@
 		4A2745FA2847887F00E70D5F /* S3 */ = {
 			isa = PBXGroup;
 			children = (
+				DF9F3F0C0AB14231B1A3893E /* S3AuthenticatorTests.swift */,
 				34B37F3FDAE2440800A83C5B /* S3ClientTests.swift */,
 				4A2745F82847887D00E70D5F /* S3CloudProviderTests.swift */,
 				70CD6AEEC424AB1FB726021E /* S3CopyTaskUtilityTests.swift */,
+				97D82ACED4E44DE6ACC5823B /* S3CredentialTests.swift */,
 				A5EBC80B60CA644F6C7D60EE /* S3EndpointTests.swift */,
 				AEFBF2D54899055AA04B2081 /* S3SignerTests.swift */,
 				5B802123FB38CCFB904D1896 /* S3XMLTests.swift */,
@@ -1673,6 +1679,8 @@
 				7416F22B24F678A30074DA8E /* VaultFormat6CloudProviderMock.swift in Sources */,
 				4A2745F92847887D00E70D5F /* S3CloudProviderTests.swift in Sources */,
 				FEC4BC14AF0B2225D8B0F762 /* S3XMLTests.swift in Sources */,
+				28BA5994C7664388B3BD2E30 /* S3CredentialTests.swift in Sources */,
+				C3884F4C1BF847F69E045CA1 /* S3AuthenticatorTests.swift in Sources */,
 				9F4B7464D7988D13E9AF90BC /* S3SignerTests.swift in Sources */,
 				EC9E74C3534B388597634706 /* S3EndpointTests.swift in Sources */,
 				085CE47894322C456AD6B25F /* S3CopyTaskUtilityTests.swift in Sources */,

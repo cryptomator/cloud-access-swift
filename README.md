@@ -57,7 +57,7 @@ func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) 
   Remote changes are not rolled back. After a call that threw, a remote item that the call was supposed to create, replace, delete or move may or may not exist.
 - **Downloads:** The file is created at `localURL` only if the download succeeds. An item that already exists there is not overwritten (`CloudProviderError.itemAlreadyExists`). The returned metadata has the size of the local file and the `lastModifiedDate` that `fetchItemMetadata(at:)` reports, which is never newer than the downloaded content.
 - **Progress:** Pass a fresh `Progress` to observe a download or upload. The provider is its exclusive writer and sets its unit counts. The progress completes only when the method returns and stays incomplete if the method throws.
-- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. The WebDAV, S3, pCloud, Box, Dropbox, Google Drive and Microsoft Graph providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, Dropbox doesn't for one of 150 MiB or more, and Microsoft Graph doesn't for one of more than 5 MiB, because they upload such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
+- **`onTaskCreation`:** Gets called at most once with the suspended `URLSessionTask`, and only if the provider transfers the whole file with a single one. The WebDAV, S3, pCloud, Box, Dropbox, Google Drive and Microsoft Graph providers do, also when a vault provider wraps them. Box doesn't for an upload of 50 MiB or more, Dropbox doesn't for one of 150 MiB or more, Microsoft Graph doesn't for one of more than 5 MiB, and S3 doesn't for one of more than 4768 MiB, because they upload such a file in parts. The provider awaits the closure and then resumes the task itself, so the closure must not resume it. If the calling task is cancelled while the closure runs, the provider never resumes the task, unless it is the task of an upload that passed its commit point before.
 
 ### Crypto
 
@@ -392,8 +392,9 @@ let secretKey = ...
 let url = ... // Note: the URL should not already contain the bucket name
 let bucket = ... // Note: the bucket should already exist
 let region = ...
+let forcePathStyle = ... // optional: `true` puts the bucket in the path (`https://host/bucket/key`) instead of the host (`https://bucket.host/key`), e.g., for a server without wildcard DNS, defaults to `nil`, which lets the bucket name and the host decide
 let identifier = ... // optional: you might want to give this credential an identifier, defaults to a random UUID
-let credential = S3Credential(accessKey: accessKey, secretKey: secretKey, url: url, bucket: bucket, region: region, identifier: identifier)
+let credential = S3Credential(accessKey: accessKey, secretKey: secretKey, url: url, bucket: bucket, region: region, forcePathStyle: forcePathStyle, identifier: identifier)
 ```
 
 You can then use the credential to create a S3 provider:
@@ -410,17 +411,19 @@ let sharedContainerIdentifier = ... // the App Group container in an app extensi
 let provider = try S3CloudProvider.withBackgroundSession(credential: credential, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 ```
 
-In theory, you could use the provider without further checks. However, you should verify the S3 credential using the S3 authenticator:
+In theory, you could use the provider without further checks. However, you should verify the S3 credential using the S3 authenticator and store the credential that it returns:
 
 ```swift
 let credential = ...
 do {
-  try await S3Authenticator.verifyCredential(credential)
-  // credential validation successful
+  let verifiedCredential = try await S3Authenticator.verifyCredential(credential)
+  // credential validation successful, store `verifiedCredential`
 } catch {
   // error handling
 }
 ```
+
+The returned credential is the one that listed the bucket. If the server named another region for the bucket, it carries that region and, for an AWS host such as `s3.us-east-1.amazonaws.com`, the host of that region. If the bucket's host couldn't be resolved or a TLS connection to it failed, it has `forcePathStyle` set to `true`. Otherwise it equals the given credential.
 
 ### WebDAV
 

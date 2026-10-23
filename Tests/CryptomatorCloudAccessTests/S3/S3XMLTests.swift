@@ -72,6 +72,33 @@ class S3XMLTests: XCTestCase {
 		XCTAssertEqual(S3Error(statusCode: 404), S3Error(statusCode: 404, body: Data()))
 	}
 
+	func testErrorTakesBucketRegionFromHeaderOverDocument() {
+		let body = Data("<Error><Code>AuthorizationHeaderMalformed</Code><Region>eu-west-1</Region></Error>".utf8)
+
+		XCTAssertEqual("eu-central-1", S3Error(statusCode: 400, body: body, bucketRegionHeader: "eu-central-1").bucketRegion)
+		XCTAssertEqual("eu-west-1", S3Error(statusCode: 400, body: body).bucketRegion)
+		XCTAssertEqual("eu-west-1", S3Error(statusCode: 400, body: body, bucketRegionHeader: "eu-west-1/x").bucketRegion)
+		XCTAssertEqual("eu-central-1", S3Error(statusCode: 301, body: Data(), bucketRegionHeader: "eu-central-1").bucketRegion)
+	}
+
+	/// A region goes into the signing scope and possibly the host, so one that fails the region rule is dropped.
+	func testErrorDropsInvalidBucketRegion() {
+		for region in ["eu-west-1/x", "", "-eu-west-1", "eu.west.1"] {
+			let body = Data("<Error><Code>AuthorizationHeaderMalformed</Code><Region>\(region)</Region></Error>".utf8)
+			XCTAssertNil(S3Error(statusCode: 400, body: body, bucketRegionHeader: region).bucketRegion, region)
+			XCTAssertNil(S3Error(statusCode: 301, body: Data(), bucketRegionHeader: region).bucketRegion, region)
+		}
+	}
+
+	func testIsWrongRegion() {
+		XCTAssertTrue(S3Error(statusCode: 301).isWrongRegion)
+		for code in ["PermanentRedirect", "AuthorizationHeaderMalformed", "IllegalLocationConstraintException"] {
+			XCTAssertTrue(S3Error(statusCode: 400, code: code).isWrongRegion, code)
+		}
+		XCTAssertFalse(S3Error(statusCode: 403, code: "AccessDenied").isWrongRegion)
+		XCTAssertFalse(S3Error(statusCode: 400).isWrongRegion)
+	}
+
 	func testErrorDocumentInSuccessfulResponseIsDetected() {
 		let body = Data("<Error><Code>InternalError</Code><Message>We encountered an internal error. Please try again.</Message></Error>".utf8)
 		XCTAssertEqual("InternalError", S3Error(errorDocument: body, statusCode: 200)?.code)

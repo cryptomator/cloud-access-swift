@@ -67,7 +67,7 @@ extension IntegrationProvider {
 			return try PCloudCloudProvider(credential: .integrationTestInvalid())
 		case .s3:
 			let credential = SharedCredentials.s3
-			let invalidCredential = S3Credential(accessKey: credential.accessKey, secretKey: credential.secretKey + "Foo", url: credential.url, bucket: credential.bucket, region: credential.region)
+			let invalidCredential = S3Credential(accessKey: credential.accessKey, secretKey: credential.secretKey + "Foo", url: credential.url, bucket: credential.bucket, region: credential.region, forcePathStyle: credential.forcePathStyle)
 			return try S3CloudProvider(credential: invalidCredential)
 		case .webDAV:
 			let credential = IntegrationTestSecrets.webDAVCredential

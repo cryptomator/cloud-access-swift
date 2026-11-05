@@ -27,6 +27,7 @@ jobs:
           # Disable shallow clone for SonarCloud analysis
           # https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/ci-based-analysis/github-actions-for-sonarcloud
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
@@ -73,6 +74,8 @@ jobs:
       DEVICE: 'iPhone 17'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
@@ -147,6 +150,8 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Draft release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4
         env:

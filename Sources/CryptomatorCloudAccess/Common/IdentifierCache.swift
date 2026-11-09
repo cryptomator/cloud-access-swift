@@ -53,6 +53,21 @@ enum CloudPathSubtree {
 	}
 }
 
+extension DatabaseQueue {
+	/// Opens a database file that is written without durability (`synchronous = OFF`), so its owner must delete the file with itself and never reopen it.
+	static func withoutDurability(path: String) throws -> DatabaseQueue {
+		var configuration = Configuration()
+		// WAL, because a rollback journal is created and deleted for every commit, and a `MEMORY` journal would hold every page that a large transaction changes.
+		configuration.journalMode = .wal
+		let dbQueue = try DatabaseQueue(path: path, configuration: configuration)
+		// Set after opening, because GRDB's WAL setup sets `synchronous = NORMAL`.
+		try dbQueue.writeWithoutTransaction { db in
+			try db.execute(sql: "PRAGMA synchronous = OFF")
+		}
+		return dbQueue
+	}
+}
+
 /// Keeps the items of the paths that a provider resolved in a database file of its own, so that a large folder's items don't stay in memory. The cache deletes the file when it is released.
 final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	let directoryURL: URL
@@ -61,13 +76,8 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	init() throws {
 		self.directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-		var configuration = Configuration()
-		// WAL rather than `journal_mode = MEMORY`, which would hold every page that invalidating a large subtree changes.
-		configuration.journalMode = .wal
-		self.dbQueue = try DatabaseQueue(path: directoryURL.appendingPathComponent("identifiers.sqlite").path, configuration: configuration)
-		// Set after opening, because GRDB's WAL setup sets `synchronous = NORMAL`. The file is deleted with the cache, so it needs no durability.
+		self.dbQueue = try DatabaseQueue.withoutDurability(path: directoryURL.appendingPathComponent("identifiers.sqlite").path)
 		try dbQueue.writeWithoutTransaction { db in
-			try db.execute(sql: "PRAGMA synchronous = OFF")
 			try db.execute(sql: "PRAGMA cache_size = -500")
 		}
 		try dbQueue.write { db in

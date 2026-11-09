@@ -38,6 +38,19 @@ class DirectoryContentCacheTests: XCTestCase {
 		cache = try DirectoryContentDBCache(dbWriter: inMemoryDB, maxPageSize: maxPageSize)
 	}
 
+	func testDatabaseFileNeedsNoDurability() throws {
+		let directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directoryURL) }
+		let fileCache = try DirectoryContentDBCache(fileAt: directoryURL.appendingPathComponent("db.sqlite"), maxPageSize: maxPageSize)
+
+		try fileCache.dbWriter.read { db in
+			XCTAssertEqual("wal", try String.fetchOne(db, sql: "PRAGMA journal_mode"))
+			XCTAssertEqual(0, try Int.fetchOne(db, sql: "PRAGMA synchronous"))
+			XCTAssertEqual(-500, try Int.fetchOne(db, sql: "PRAGMA cache_size"))
+		}
+	}
+
 	func testCacheAndRetrieveElement() throws {
 		let cloudItemMetadata = CloudItemMetadata(name: "test.txt", cloudPath: CloudPath("/test.txt"), itemType: .file, lastModifiedDate: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), size: 54175)
 		try assertRoundTrip(of: cloudItemMetadata)

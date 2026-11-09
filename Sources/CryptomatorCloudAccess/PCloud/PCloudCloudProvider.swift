@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import GRDB
 
 public final class PCloudCloudProvider: CloudProvider {
 	/// The API error codes that the provider maps to a `CloudProviderError`.
@@ -41,7 +40,7 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	convenience init(client: PCloudClient, maxPageSize: Int = .max) throws {
 		try self.init(client: client) { tmpDirURL in
-			try DirectoryContentDBCache(dbWriter: DatabaseQueue(path: tmpDirURL.appendingPathComponent("db.sqlite").path), maxPageSize: maxPageSize)
+			try DirectoryContentDBCache(fileAt: tmpDirURL.appendingPathComponent("db.sqlite"), maxPageSize: maxPageSize)
 		}
 	}
 

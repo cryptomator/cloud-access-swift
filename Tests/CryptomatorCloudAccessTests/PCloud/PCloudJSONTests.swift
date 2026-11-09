@@ -24,16 +24,6 @@ class PCloudJSONTests: XCTestCase {
 		XCTAssertEqual(7, metadata.size)
 	}
 
-	func testFolderListing() throws {
-		let metadata = try PCloudJSON.metadata(in: Data(#"{"result":0,"metadata":{"isfolder":true,"name":"folder","folderid":3,"modified":1792056600,"contents":[{"isfolder":true,"name":"sub","folderid":4,"modified":1792056601},{"isfolder":false,"name":"b.txt","fileid":5,"modified":1792056602,"size":0}]}}"#.utf8))
-
-		XCTAssertTrue(metadata.isFolder)
-		XCTAssertEqual(3, metadata.identifier)
-		XCTAssertNil(metadata.size)
-		XCTAssertEqual(["sub", "b.txt"], metadata.contents?.map(\.name))
-		XCTAssertEqual([4, 5], metadata.contents?.map(\.identifier))
-	}
-
 	func testUploadedMetadataReadsFirstElement() throws {
 		let metadata = try PCloudJSON.uploadedMetadata(in: Data(#"{"result":0,"fileids":[42],"metadata":[{"isfolder":false,"name":"a.txt","fileid":42,"modified":1792056600,"size":7}]}"#.utf8))
 

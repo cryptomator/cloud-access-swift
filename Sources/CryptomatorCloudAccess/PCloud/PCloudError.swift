@@ -14,6 +14,8 @@ enum PCloudError: Error, Equatable {
 	case unexpectedHTTPStatusCode(code: Int)
 	/// The response couldn't be read.
 	case unexpectedContent
+	/// A key, the result, an element, the folder's fields or the nesting of a folder listing exceeds what `PCloudListingReader` holds in memory.
+	case listingTooLarge
 	case inconsistentCache
 	case fileLinkNotFound
 }

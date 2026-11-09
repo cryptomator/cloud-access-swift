@@ -39,7 +39,7 @@ extension IntegrationProvider {
 		case .microsoftGraph:
 			return try MicrosoftGraphCloudProvider(credential: SharedCredentials.microsoftGraph, maxPageSize: maxPageSize)
 		case .pCloud:
-			return try PCloudCloudProvider(credential: SharedCredentials.pCloud.get())
+			return try PCloudCloudProvider(credential: SharedCredentials.pCloud.get(), maxPageSize: maxPageSize)
 		case .s3:
 			return try S3CloudProvider(credential: SharedCredentials.s3, maxPageSize: maxPageSize)
 		case .webDAV:

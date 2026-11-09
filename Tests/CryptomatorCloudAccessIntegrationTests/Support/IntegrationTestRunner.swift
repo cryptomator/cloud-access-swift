@@ -65,7 +65,7 @@ struct IntegrationTestContext: Sendable {
 	/// A provider of the vault of a vault backend, opened from the vault's files with its password.
 	func openVault() async throws -> CloudProvider {
 		let vault = try #require(fixture.vault, "\(backend.token) has no vault")
-		return try await vault.open(delegate: fixture.account.makeTestProvider())
+		return try await vault.open(delegate: fixture.account.provider)
 	}
 
 	/// A provider with an invalid credential of its own.

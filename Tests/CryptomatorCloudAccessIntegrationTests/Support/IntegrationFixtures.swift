@@ -15,18 +15,9 @@ import Foundation
 
 /// The providers of an account and the folder of this run in it, shared by all vault formats.
 struct IntegrationAccount: Sendable {
-	let kind: IntegrationProvider
 	let provider: CloudProvider
 	let limitedProvider: CloudProvider
 	let runRoot: CloudPath
-
-	func makeTestProvider() throws -> CloudProvider {
-		return kind.needsProviderPerTest ? try kind.makeProvider() : provider
-	}
-
-	func makeLimitedTestProvider() throws -> CloudProvider {
-		return kind.needsProviderPerTest ? try kind.makeProvider(maxPageSize: IntegrationFixtures.maxPageSizeForLimitedProvider) : limitedProvider
-	}
 }
 
 struct IntegrationVault: Sendable {
@@ -118,12 +109,12 @@ struct IntegrationFixture: Sendable {
 
 	/// A vault backend gets a new decorator, so that each test starts with a cold directory ID cache.
 	func makeProvider() throws -> CloudProvider {
-		let delegate = try account.makeTestProvider()
+		let delegate = account.provider
 		return try vault?.makeDecorator(delegate: delegate) ?? delegate
 	}
 
 	func makeLimitedProvider() throws -> CloudProvider {
-		let delegate = try account.makeLimitedTestProvider()
+		let delegate = account.limitedProvider
 		return try vault?.makeDecorator(delegate: delegate) ?? delegate
 	}
 }
@@ -243,7 +234,7 @@ actor IntegrationFixtures {
 		runRoots[kind] = RunRoot(provider: provider, path: runRoot)
 		try await kind.semaphore.withPermit(budget: IntegrationFixtures.buildStepBudget) { try await provider.createFolderIfMissing(at: runRoot) }
 		try await waitUntilVisible(runRoot, through: provider, on: kind)
-		return IntegrationAccount(kind: kind, provider: provider, limitedProvider: limitedProvider, runRoot: runRoot)
+		return IntegrationAccount(provider: provider, limitedProvider: limitedProvider, runRoot: runRoot)
 	}
 
 	private func buildFixture(for backend: IntegrationBackend) async throws -> IntegrationFixture {

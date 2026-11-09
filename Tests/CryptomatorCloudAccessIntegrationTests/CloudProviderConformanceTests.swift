@@ -98,11 +98,9 @@ extension IntegrationTests {
 		func fetchItemListForSubfolder(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
-				let expectedItems = [CloudItemMetadata(name: "EmptySubfolder", cloudPath: cloudPath.appendingPathComponent("EmptySubfolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
-					+ (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
 				let itemList = try await context.provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil)
 				#expect(itemList.nextPageToken == nil)
-				#expect(itemList.items.sorted() == expectedItems)
+				#expect(itemList.items.sorted() == Conformance.expectedTestFolderItems(in: context))
 			}
 		}
 
@@ -150,6 +148,22 @@ extension IntegrationTests {
 				#expect(secondItemList.nextPageToken == nil)
 				#expect(secondItemList.items.count == 3)
 				#expect((firstItemList.items + secondItemList.items).sorted() == Conformance.expectedRootFolderItems(in: context))
+			}
+		}
+
+		/// Lists `testFolder`, which no other test lists with the limited provider, so that the listings and retries of other tests can't invalidate its page token.
+		@Test(arguments: IntegrationBackend.selectedPaginating)
+		func fetchItemListInterleavedWithAnotherListingOfTheSameFolder(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let provider = try context.makeLimitedProvider()
+				let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
+				let firstItemList = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil)
+				let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath)
+				let secondItemList = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: firstItemList.nextPageToken)
+				#expect(firstItemList.nextPageToken != nil)
+				#expect(secondItemList.nextPageToken == nil)
+				#expect((firstItemList.items + secondItemList.items).sorted() == Conformance.expectedTestFolderItems(in: context))
+				#expect(otherItemList.items.sorted() == Conformance.expectedTestFolderItems(in: context))
 			}
 		}
 
@@ -612,6 +626,12 @@ extension IntegrationTests {
 			let cloudPath = context.treeRoot
 			return (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
 				+ [CloudItemMetadata(name: "testFolder", cloudPath: cloudPath.appendingPathComponent("testFolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
+		}
+
+		private static func expectedTestFolderItems(in context: IntegrationTestContext) -> [CloudItemMetadata] {
+			let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
+			return [CloudItemMetadata(name: "EmptySubfolder", cloudPath: cloudPath.appendingPathComponent("EmptySubfolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
+				+ (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
 		}
 
 		private static func expectDownload(from cloudPath: CloudPath, toHave expectedFileContent: String, in context: IntegrationTestContext) async throws {

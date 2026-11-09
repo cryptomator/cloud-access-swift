@@ -209,7 +209,7 @@ private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate, Propf
 }
 
 class PropfindResponseParser: PropfindParserDelegate {
-	private let parser: XMLParser
+	fileprivate let parser: XMLParser
 	private let responseURL: URL
 	private lazy var elements = [PropfindResponseElement]()
 
@@ -237,23 +237,29 @@ class PropfindResponseParser: PropfindParserDelegate {
 
 class CachePropfindResponseParser: PropfindResponseParser {
 	let cache: DirectoryContentCache
-	let folderEnumerationPath: CloudPath
+	let snapshot: DirectoryContentSnapshot
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
+	private var cachingError: Error?
 
-	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, folderEnumerationPath: CloudPath) {
+	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
 		self.cache = cache
-		self.folderEnumerationPath = folderEnumerationPath
+		self.snapshot = snapshot
 		super.init(parser, responseURL: responseURL)
 	}
 
+	/// A failed cache save aborts the parsing and is thrown instead of the parser's error, so that a snapshot missing an element is never published.
 	func fillCache() throws {
-		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(folderEnumerationPath) called")
-		_ = try getElements()
+		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
+		do {
+			_ = try getElements()
+		} catch {
+			throw cachingError ?? error
+		}
 		guard isDirectory else {
 			throw CloudProviderError.itemTypeMismatch
 		}
-		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(folderEnumerationPath) finished")
+		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) finished")
 	}
 
 	override func receivedElement(_ element: PropfindResponseElement) {
@@ -262,12 +268,14 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			return
 		}
 		elementsCached += 1
-		let cloudPath = folderEnumerationPath.appendingPathComponent(element.url.lastPathComponent)
+		let cloudPath = snapshot.folderEnumerationPath.appendingPathComponent(element.url.lastPathComponent)
 		let cloudItemMetadata = CloudItemMetadata(element, cloudPath: cloudPath)
 		do {
-			try cache.save(cloudItemMetadata, for: folderEnumerationPath, index: elementsCached)
+			try cache.save(cloudItemMetadata, in: snapshot, index: elementsCached)
 		} catch {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: caching element \(element) failed with error: \(error)")
+			cachingError = error
+			parser.abortParsing()
 		}
 	}
 }

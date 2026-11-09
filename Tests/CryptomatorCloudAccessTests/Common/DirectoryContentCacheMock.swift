@@ -18,69 +18,92 @@ import Foundation
 final class DirectoryContentCacheMock: DirectoryContentCache, @unchecked Sendable {
 	// MARK: - save
 
-	var saveForIndexThrowableError: Error?
-	var saveForIndexCallsCount = 0
-	var saveForIndexCalled: Bool {
-		saveForIndexCallsCount > 0
+	var saveInIndexThrowableError: Error?
+	var saveInIndexCallsCount = 0
+	var saveInIndexCalled: Bool {
+		saveInIndexCallsCount > 0
 	}
 
-	var saveForIndexReceivedArguments: (element: CloudItemMetadata, folderEnumerationPath: CloudPath, index: Int64)?
-	var saveForIndexReceivedInvocations: [(element: CloudItemMetadata, folderEnumerationPath: CloudPath, index: Int64)] = []
-	var saveForIndexClosure: ((CloudItemMetadata, CloudPath, Int64) throws -> Void)?
+	var saveInIndexReceivedArguments: (element: CloudItemMetadata, snapshot: DirectoryContentSnapshot, index: Int64)?
+	var saveInIndexReceivedInvocations: [(element: CloudItemMetadata, snapshot: DirectoryContentSnapshot, index: Int64)] = []
+	var saveInIndexClosure: ((CloudItemMetadata, DirectoryContentSnapshot, Int64) throws -> Void)?
 
-	func save(_ element: CloudItemMetadata, for folderEnumerationPath: CloudPath, index: Int64) throws {
-		if let error = saveForIndexThrowableError {
+	func save(_ element: CloudItemMetadata, in snapshot: DirectoryContentSnapshot, index: Int64) throws {
+		if let error = saveInIndexThrowableError {
 			throw error
 		}
-		saveForIndexCallsCount += 1
-		saveForIndexReceivedArguments = (element: element, folderEnumerationPath: folderEnumerationPath, index: index)
-		saveForIndexReceivedInvocations.append((element: element, folderEnumerationPath: folderEnumerationPath, index: index))
-		try saveForIndexClosure?(element, folderEnumerationPath, index)
+		saveInIndexCallsCount += 1
+		saveInIndexReceivedArguments = (element: element, snapshot: snapshot, index: index)
+		saveInIndexReceivedInvocations.append((element: element, snapshot: snapshot, index: index))
+		try saveInIndexClosure?(element, snapshot, index)
 	}
 
-	// MARK: - clearCache
+	// MARK: - discard
 
-	var clearCacheForThrowableError: Error?
-	var clearCacheForCallsCount = 0
-	var clearCacheForCalled: Bool {
-		clearCacheForCallsCount > 0
+	var discardThrowableError: Error?
+	var discardCallsCount = 0
+	var discardCalled: Bool {
+		discardCallsCount > 0
 	}
 
-	var clearCacheForReceivedFolderEnumerationPath: CloudPath?
-	var clearCacheForReceivedInvocations: [CloudPath] = []
-	var clearCacheForClosure: ((CloudPath) throws -> Void)?
+	var discardReceivedSnapshot: DirectoryContentSnapshot?
+	var discardReceivedInvocations: [DirectoryContentSnapshot] = []
+	var discardClosure: ((DirectoryContentSnapshot) throws -> Void)?
 
-	func clearCache(for folderEnumerationPath: CloudPath) throws {
-		if let error = clearCacheForThrowableError {
+	func discard(_ snapshot: DirectoryContentSnapshot) throws {
+		if let error = discardThrowableError {
 			throw error
 		}
-		clearCacheForCallsCount += 1
-		clearCacheForReceivedFolderEnumerationPath = folderEnumerationPath
-		clearCacheForReceivedInvocations.append(folderEnumerationPath)
-		try clearCacheForClosure?(folderEnumerationPath)
+		discardCallsCount += 1
+		discardReceivedSnapshot = snapshot
+		discardReceivedInvocations.append(snapshot)
+		try discardClosure?(snapshot)
 	}
 
-	// MARK: - getResponse
+	// MARK: - publish
 
-	var getResponseForPageTokenThrowableError: Error?
-	var getResponseForPageTokenCallsCount = 0
-	var getResponseForPageTokenCalled: Bool {
-		getResponseForPageTokenCallsCount > 0
+	var publishThrowableError: Error?
+	var publishCallsCount = 0
+	var publishCalled: Bool {
+		publishCallsCount > 0
 	}
 
-	var getResponseForPageTokenReceivedArguments: (folderPath: CloudPath, pageToken: String?)?
-	var getResponseForPageTokenReceivedInvocations: [(folderPath: CloudPath, pageToken: String?)] = []
-	var getResponseForPageTokenReturnValue: DirectoryContentCacheResponse!
-	var getResponseForPageTokenClosure: ((CloudPath, String?) throws -> DirectoryContentCacheResponse)?
+	var publishReceivedSnapshot: DirectoryContentSnapshot?
+	var publishReceivedInvocations: [DirectoryContentSnapshot] = []
+	var publishReturnValue: CloudItemList!
+	var publishClosure: ((DirectoryContentSnapshot) throws -> CloudItemList)?
 
-	func getResponse(for folderPath: CloudPath, pageToken: String?) throws -> DirectoryContentCacheResponse {
-		if let error = getResponseForPageTokenThrowableError {
+	func publish(_ snapshot: DirectoryContentSnapshot) throws -> CloudItemList {
+		if let error = publishThrowableError {
 			throw error
 		}
-		getResponseForPageTokenCallsCount += 1
-		getResponseForPageTokenReceivedArguments = (folderPath: folderPath, pageToken: pageToken)
-		getResponseForPageTokenReceivedInvocations.append((folderPath: folderPath, pageToken: pageToken))
-		return try getResponseForPageTokenClosure.map({ try $0(folderPath, pageToken) }) ?? getResponseForPageTokenReturnValue
+		publishCallsCount += 1
+		publishReceivedSnapshot = snapshot
+		publishReceivedInvocations.append(snapshot)
+		return try publishClosure.map({ try $0(snapshot) }) ?? publishReturnValue
+	}
+
+	// MARK: - getPage
+
+	var getPageForPageTokenThrowableError: Error?
+	var getPageForPageTokenCallsCount = 0
+	var getPageForPageTokenCalled: Bool {
+		getPageForPageTokenCallsCount > 0
+	}
+
+	var getPageForPageTokenReceivedArguments: (folderPath: CloudPath, pageToken: String)?
+	var getPageForPageTokenReceivedInvocations: [(folderPath: CloudPath, pageToken: String)] = []
+	var getPageForPageTokenReturnValue: CloudItemList!
+	var getPageForPageTokenClosure: ((CloudPath, String) throws -> CloudItemList)?
+
+	func getPage(for folderPath: CloudPath, pageToken: String) throws -> CloudItemList {
+		if let error = getPageForPageTokenThrowableError {
+			throw error
+		}
+		getPageForPageTokenCallsCount += 1
+		getPageForPageTokenReceivedArguments = (folderPath: folderPath, pageToken: pageToken)
+		getPageForPageTokenReceivedInvocations.append((folderPath: folderPath, pageToken: pageToken))
+		return try getPageForPageTokenClosure.map({ try $0(folderPath, pageToken) }) ?? getPageForPageTokenReturnValue
 	}
 }
 

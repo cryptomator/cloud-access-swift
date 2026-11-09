@@ -55,6 +55,25 @@ class LocalFileSystemTests: XCTestCase {
 		XCTAssertEqual(2, itemList.items.count)
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
+		XCTAssertNil(itemList.nextPageToken)
+		try assertDirectoryContentCacheIsEmpty(provider.cache)
+	}
+
+	func testFetchItemListInterleavedWithAnotherListingOfTheSameFolder() async throws {
+		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, maxPageSize: 2)
+		let names = (0 ..< 5).map { "file \($0)" }
+		for name in names {
+			FileManager.default.createFile(atPath: tmpDirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+		}
+
+		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		let deletedName = try XCTUnwrap(firstPage.items.first).name
+		try FileManager.default.removeItem(at: tmpDirURL.appendingPathComponent(deletedName, isDirectory: false))
+		let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+		let itemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"), appendTo: firstPage)
+
+		XCTAssertEqual(names, itemList.items.map(\.name).sorted())
+		XCTAssertEqual(names.filter { $0 != deletedName }, otherItemList.items.map(\.name).sorted())
 	}
 
 	func testFetchItemListWithNotFoundError() async {
@@ -397,6 +416,30 @@ class LocalFileSystemTests: XCTestCase {
 		recorder.cancelsTaskOnStart = false
 		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 		XCTAssertEqual(["file"], itemList.items.map(\.name))
+	}
+
+	func testFetchItemListWithCancellationAfterFillLeavesNoRows() async throws {
+		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+		for name in ["file 0", "file 1", "file 2"] {
+			FileManager.default.createFile(atPath: dirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+		}
+		let recorder = SecurityScopedAccessRecorder()
+		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+		// Stopping the access to the folder is the last step of the fill, after every child was saved.
+		recorder.isOperationFinished = {
+			withUnsafeCurrentTask { $0?.cancel() }
+			return true
+		}
+		let listing = Task {
+			try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
+		}
+		await XCTAssertThrowsErrorAsync(try await value(of: listing)) { error in
+			XCTAssertTrue(error is CancellationError)
+		}
+		recorder.isOperationFinished = { true }
+
+		try assertDirectoryContentCacheIsEmpty(provider.cache)
 	}
 
 	func testGetItemName() {

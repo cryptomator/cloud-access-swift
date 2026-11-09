@@ -34,7 +34,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	private let queue = OperationQueue()
 	private let shouldStopAccessingRootURL: Bool
 	private let maxPageSize: Int
-	private let cache: DirectoryContentCache
+	let cache: DirectoryContentCache
 	private let tmpDirURL: URL
 	private let securityScopedAccess: (start: @Sendable (URL) -> Bool, stop: @Sendable (URL) -> Void)
 
@@ -80,18 +80,16 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
-		if pageToken == nil {
-			try await fillCache(for: cloudPath)
+		if let pageToken {
+			return try cache.getPage(for: cloudPath, pageToken: pageToken)
 		}
-		let itemList = try getCachedElements(for: cloudPath, pageToken: pageToken)
-		if itemList.nextPageToken == nil {
-			try cache.clearCache(for: cloudPath)
+		return try await cache.publishSnapshot(of: cloudPath) { snapshot in
+			try await fillCache(snapshot)
 		}
-		return itemList
 	}
 
-	private func fillCache(for cloudPath: CloudPath) async throws {
-		try cache.clearCache(for: cloudPath)
+	private func fillCache(_ snapshot: DirectoryContentSnapshot) async throws {
+		let cloudPath = snapshot.folderEnumerationPath
 		let url = rootURL.appendingPathComponent(cloudPath)
 		let shouldStopAccessing = securityScopedAccess.start(url)
 		defer {
@@ -99,31 +97,31 @@ public final class LocalFileSystemProvider: CloudProvider {
 				securityScopedAccess.stop(url)
 			}
 		}
-		CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
+		CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) called with startAccessingSecurityScopedResource: \(shouldStopAccessing)")
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url)
 		let childURLs: [URL] = try await withSDKContinuation { resumer in
 			coordinate(with: readingIntent) { error in
 				if let error {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed coordinated read with error: \(error)")
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) failed coordinated read with error: \(error)")
 					resumer.resume(throwing: error)
 					return
 				}
 				do {
 					try self.evaluateReadingIntentForFetchItemList(readingIntent)
 				} catch {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed readingIntent evaluation with error: \(error)")
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) failed readingIntent evaluation with error: \(error)")
 					resumer.resume(throwing: error)
 					return
 				}
 				guard let directoryEnumerator = FileManager.default.enumerator(at: readingIntent.url, includingPropertiesForKeys: [.isHiddenKey], options: .skipsSubdirectoryDescendants) else {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed directoryEnumerator creation")
+					CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) failed directoryEnumerator creation")
 					resumer.resume(throwing: CloudProviderError.pageTokenInvalid)
 					return
 				}
 				resumer.resume(returning: directoryEnumerator.compactMap { $0 as? URL })
 			}
 		}
-		try await fillCacheAfterCheck(for: cloudPath, url: url, childURLs: childURLs)
+		try await fillCacheAfterCheck(snapshot, url: url, childURLs: childURLs)
 	}
 
 	private func evaluateReadingIntentForFetchItemList(_ readingIntent: NSFileAccessIntent) throws {
@@ -139,7 +137,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	private func fillCacheAfterCheck(for cloudPath: CloudPath, url: URL, childURLs: [URL]) async throws {
+	private func fillCacheAfterCheck(_ snapshot: DirectoryContentSnapshot, url: URL, childURLs: [URL]) async throws {
+		let cloudPath = snapshot.folderEnumerationPath
 		do {
 			var cachedItemsCount: Int64 = 0
 			for childURL in childURLs {
@@ -154,21 +153,16 @@ public final class LocalFileSystemProvider: CloudProvider {
 				do {
 					let childItemMetadata = try await getItemMetadata(forItemAt: iCloudCompatibleChildURL, parentCloudPath: cloudPath)
 					cachedItemsCount += 1
-					try cache.save(childItemMetadata, for: cloudPath, index: cachedItemsCount)
+					try cache.save(childItemMetadata, in: snapshot, index: cachedItemsCount)
 				} catch CloudProviderError.itemNotFound {
 					// Ignore item that can't be found anyway, this should not prevent fetching item list
 				}
 			}
-			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) finished")
+			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) finished")
 		} catch {
-			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(for: \(cloudPath.path)) failed with error: \(error)")
+			CloudAccessDDLogDebug("LocalFileSystemProvider: fillCache(\(cloudPath.path)) failed with error: \(error)")
 			throw error
 		}
-	}
-
-	private func getCachedElements(for cloudPath: CloudPath, pageToken: String?) throws -> CloudItemList {
-		let cacheResponse = try cache.getResponse(for: cloudPath, pageToken: pageToken)
-		return CloudItemList(items: cacheResponse.elements, nextPageToken: cacheResponse.nextPageToken)
 	}
 
 	@concurrent

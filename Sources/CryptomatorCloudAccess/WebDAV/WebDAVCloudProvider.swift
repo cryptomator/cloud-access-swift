@@ -31,7 +31,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	private static let defaultPropertyNames = ["getlastmodified", "getcontentlength", "resourcetype"]
 
 	private let client: WebDAVClient
-	private let directoryContentCache: DirectoryContentCache
+	let directoryContentCache: DirectoryContentCache
 	private let tmpDirURL: URL
 
 	public convenience init(credential: WebDAVCredential, maxPageSize: Int = .max) throws {
@@ -95,10 +95,10 @@ public final class WebDAVCloudProvider: CloudProvider {
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
 		do {
-			if pageToken == nil {
-				try await updatePropfindResponseCache(forFolderAt: cloudPath)
+			if let pageToken {
+				return try directoryContentCache.getPage(for: cloudPath, pageToken: pageToken)
 			}
-			return try getCachedCloudItemList(forFolderAt: cloudPath, withPageToken: pageToken)
+			return try await publishPropfindResponseSnapshot(forFolderAt: cloudPath)
 		} catch WebDAVError.httpError(statusCode: 405) {
 			// Workaround for: https://github.com/nextcloud/server/issues/34574
 			throw CloudProviderError.itemNotFound
@@ -107,11 +107,10 @@ public final class WebDAVCloudProvider: CloudProvider {
 		}
 	}
 
-	private func updatePropfindResponseCache(forFolderAt cloudPath: CloudPath) async throws {
+	private func publishPropfindResponseSnapshot(forFolderAt cloudPath: CloudPath) async throws -> CloudItemList {
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
-		try directoryContentCache.clearCache(for: cloudPath)
 		let tmpFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
 		defer {
 			try? FileManager.default.removeItem(at: tmpFileURL)
@@ -122,14 +121,11 @@ public final class WebDAVCloudProvider: CloudProvider {
 		guard let inputStream = InputStream(url: tmpFileURL) else {
 			throw WebDAVProviderError.invalidResponse
 		}
-		let parser = CachePropfindResponseParser(XMLParser(stream: inputStream), responseURL: responseURL, cache: directoryContentCache, folderEnumerationPath: cloudPath)
-		try parser.fillCache()
-		inputStream.close()
-	}
-
-	private func getCachedCloudItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) throws -> CloudItemList {
-		let response = try directoryContentCache.getResponse(for: cloudPath, pageToken: pageToken)
-		return CloudItemList(items: response.elements, nextPageToken: response.nextPageToken)
+		return try await directoryContentCache.publishSnapshot(of: cloudPath) { snapshot in
+			let parser = CachePropfindResponseParser(XMLParser(stream: inputStream), responseURL: responseURL, cache: directoryContentCache, snapshot: snapshot)
+			try parser.fillCache()
+			inputStream.close()
+		}
 	}
 
 	@concurrent

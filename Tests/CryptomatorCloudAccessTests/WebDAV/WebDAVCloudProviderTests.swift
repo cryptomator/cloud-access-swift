@@ -146,7 +146,9 @@ class WebDAVCloudProviderTests: XCTestCase {
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Nextcloud intro.mp4" }))
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Nextcloud.png" }))
 		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Photos" }))
+		XCTAssertNil(itemList.nextPageToken)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
 	}
 
 	func testFetchItemListWithNotFoundError() async throws {
@@ -197,6 +199,56 @@ class WebDAVCloudProviderTests: XCTestCase {
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
+	}
+
+	func testFetchItemListInterleavedWithAnotherListingOfTheSameFolder() async throws {
+		let provider = try WebDAVCloudProvider(client: client, maxPageSize: 2)
+		let itemListData = try getTestData(forResource: "item-list", withExtension: "xml")
+		try enqueueResponse(statusCode: 200, data: itemListData, for: baseURL)
+		try enqueueResponse(statusCode: 200, data: removingResponse(withHref: "/cloud/remote.php/webdav/Documents/", from: itemListData), for: baseURL)
+
+		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+		let itemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"), appendTo: firstPage)
+
+		XCTAssertEqual(WebDAVCloudProviderTests.itemListNames, itemList.items.map(\.name).sorted())
+		XCTAssertEqual(WebDAVCloudProviderTests.itemListNames.filter { $0 != "Documents" }, otherItemList.items.map(\.name).sorted())
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testFetchItemListWhileAnotherListingOfTheSameFolderFillsTheCache() async throws {
+		let gatedClient = FirstPropfindGateClient(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
+		let provider = try WebDAVCloudProvider(client: gatedClient, maxPageSize: 2)
+		let itemListData = try getTestData(forResource: "item-list", withExtension: "xml")
+		// The held request reaches the mock after the other listing's request, so its response is queued second.
+		try enqueueResponse(statusCode: 200, data: removingResponse(withHref: "/cloud/remote.php/webdav/Documents/", from: itemListData), for: baseURL)
+		try enqueueResponse(statusCode: 200, data: itemListData, for: baseURL)
+
+		let heldListing = Task {
+			try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+		}
+		await fulfillment(of: [gatedClient.firstPropfindHeld], timeout: testWaitTimeout)
+		let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+		gatedClient.firstPropfindGate.open()
+		let itemList = try await value(of: heldListing)
+
+		XCTAssertEqual(WebDAVCloudProviderTests.itemListNames, itemList.items.map(\.name).sorted())
+		XCTAssertEqual(WebDAVCloudProviderTests.itemListNames.filter { $0 != "Documents" }, otherItemList.items.map(\.name).sorted())
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testFetchItemListWithTruncatedResponseLeavesNoRows() async throws {
+		let document = try XCTUnwrap(String(data: getTestData(forResource: "item-list", withExtension: "xml"), encoding: .utf8))
+		var end = document.startIndex
+		for _ in 0 ..< 3 {
+			end = try XCTUnwrap(document.range(of: "</d:response>", range: end ..< document.endIndex)).upperBound
+		}
+		try enqueueResponse(statusCode: 200, data: Data(document[..<end].utf8), for: baseURL)
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
+			XCTAssertEqual(XMLParser.errorDomain, (error as NSError).domain)
+		}
+		try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
 	}
 
 	func testDownloadFile() async throws {
@@ -1068,6 +1120,17 @@ class WebDAVCloudProviderTests: XCTestCase {
 
 	// MARK: - Internal
 
+	/// The names of the children in `item-list.xml`.
+	private static let itemListNames = ["Documents", "Nextcloud Manual.pdf", "Nextcloud intro.mp4", "Nextcloud.png", "Photos"].sorted()
+
+	private func removingResponse(withHref href: String, from data: Data) throws -> Data {
+		let document = try XCTUnwrap(String(data: data, encoding: .utf8))
+		let hrefRange = try XCTUnwrap(document.range(of: "<d:href>\(href)</d:href>"))
+		let responseStart = try XCTUnwrap(document.range(of: "<d:response>", options: .backwards, range: document.startIndex ..< hrefRange.lowerBound))
+		let responseEnd = try XCTUnwrap(document.range(of: "</d:response>", range: hrefRange.upperBound ..< document.endIndex))
+		return Data(document.replacingCharacters(in: responseStart.lowerBound ..< responseEnd.upperBound, with: "").utf8)
+	}
+
 	private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
 		let testBundle = Bundle(for: type(of: self))
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
@@ -1097,6 +1160,27 @@ class WebDAVCloudProviderTests: XCTestCase {
 		let client = WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: gate.hooks))
 		let provider = try WebDAVCloudProvider(client: client)
 		return (provider, gate)
+	}
+}
+
+/// Holds back the client's first `PROPFIND` until the test opens `firstPropfindGate`, before the request reaches the URL protocol mock.
+///
+/// `@unchecked Sendable`: restates the conformance of `WebDAVClientMock`; the gate's state is protected by a lock or is itself `Sendable`.
+private final class FirstPropfindGateClient: WebDAVClientMock, @unchecked Sendable {
+	let firstPropfindHeld = XCTestExpectation(description: "first PROPFIND held")
+	let firstPropfindGate = Gate()
+	private let isFirstPropfind = OSAllocatedUnfairLock(initialState: true)
+
+	override func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) async throws -> HTTPURLResponse {
+		let isFirst = isFirstPropfind.withLock { isFirst in
+			defer { isFirst = false }
+			return isFirst
+		}
+		if isFirst {
+			firstPropfindHeld.fulfill()
+			await firstPropfindGate.wait()
+		}
+		return try await super.PROPFIND(url: url, depth: depth, to: localURL, propertyNames: propertyNames)
 	}
 }
 

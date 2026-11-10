@@ -16,7 +16,7 @@ public final class S3CloudProvider: CloudProvider {
 	private let multipartUploadThreshold: Int
 	private let minPartSize: Int
 	private let maxPartCount: Int
-	private static let delimiter = "/"
+	fileprivate static let delimiter = "/"
 	private static let folderContentType = "application/x-directory"
 	private static let s3MaxPageSize = 1000
 
@@ -550,7 +550,7 @@ public final class S3CloudProvider: CloudProvider {
 extension CloudItemMetadata {
 	init(object: S3Object) {
 		let itemType: CloudItemType = object.key.unicodeScalars.last == "/" ? .folder : .file
-		let cloudPath = CloudPath("/" + object.key)
+		let cloudPath = CloudPath(S3CloudProvider.delimiter + object.key)
 		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified.flatMap(Date.date(fromISO8601:)), size: object.size)
 	}
 }
@@ -559,7 +559,7 @@ extension CloudItemList {
 	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out those that are neither the prefix itself nor directly below it, which only a server that ignores the delimiter or the prefix returns.
 	init(listObjects: S3ListObjectsResult, listedPrefix: String? = nil) {
 		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.filter { CloudItemList.isAddressable($0, listedPrefix: listedPrefix) }.map { prefix in
-			let subFolderCloudPath = CloudPath("/" + prefix)
+			let subFolderCloudPath = CloudPath(S3CloudProvider.delimiter + prefix)
 			return CloudItemMetadata(name: subFolderCloudPath.lastPathComponent, cloudPath: subFolderCloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		}
 		var items = listObjects.contents.filter { CloudItemList.isAddressable($0.key, listedPrefix: listedPrefix) }.map { CloudItemMetadata(object: $0) }

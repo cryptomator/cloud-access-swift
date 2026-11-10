@@ -167,6 +167,37 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		assertCacheOnlySavedTo()
 	}
 
+	func testResponseSkipsElementsOutsideTheFolder() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/other/sibling.txt", "/folder/ok.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual([CloudItemMetadata(name: "ok.txt", cloudPath: .init("/folder/ok.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
+		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
+	/// The server spells the folder decomposed, unlike the request, and its hrefs differ too: lowercase escapes (a), an absolute URI in the request's spelling (b), a doubled slash (c) and a relative href (d).
+	func testResponseCachesElementsOfFolderInAnotherSpelling() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/B\u{FC}ro"))
+		let xmlParser = getXMLParser(forHrefs: ["/Bu%CC%88ro/", "/Bu%cc%88ro/a.txt", "http://example.com/B%C3%BCro/b.txt", "/Bu%CC%88ro//c.txt", "d.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "http://example.com/B%C3%BCro/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual(["a.txt", "b.txt", "c.txt", "d.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.name))
+		XCTAssertEqual([1, 2, 3, 4], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
+	func testResponseCachesElementsBeforeTheFoldersOwnElement() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/early.txt", "/folder/", "/folder/late.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual(["early.txt", "late.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.name))
+		XCTAssertEqual([1, 2], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
 	/// An href that ends with a slash is a collection.
 	private func getXMLParser(forHrefs hrefs: [String]) -> XMLParser {
 		let responses = hrefs.map { href in

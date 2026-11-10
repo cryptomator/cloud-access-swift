@@ -241,6 +241,8 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	let snapshot: DirectoryContentSnapshot
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
+	/// The path segments of the folder's own element as the server spells them, which may differ from the request's. Until it arrives, an element's parent isn't checked.
+	private var folderSegments: [String]?
 	private var cachingError: Error?
 
 	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
@@ -266,14 +268,19 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	override func receivedElement(_ element: PropfindResponseElement) {
 		if !isDirectory, element.depth == 0 {
 			isDirectory = element.collection
+			folderSegments = CachePropfindResponseParser.decodedPathSegments(of: element.url)
 			return
 		}
 		guard element.depth == 1 else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't one level deeper than the folder")
 			return
 		}
-		guard let name = CachePropfindResponseParser.itemName(of: element.url) else {
+		guard let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), let name = segments.last, name.isSinglePathComponent else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its name is no single path component")
+			return
+		}
+		if let folderSegments, !segments.dropLast().elementsEqual(folderSegments) {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't in the folder")
 			return
 		}
 		elementsCached += 1
@@ -288,13 +295,11 @@ class CachePropfindResponseParser: PropfindResponseParser {
 		}
 	}
 
-	/// Reads the name from the percent-encoded path, because `lastPathComponent` decodes `%2F` into a `/` that the cloud path would read as a separator.
-	/// - Returns: `nil` if the name is no single path component.
-	private static func itemName(of url: URL) -> String? {
-		guard let name = url.path(percentEncoded: true).pathSegments().last(where: { !$0.isEmpty })?.removingPercentEncoding, name.isSinglePathComponent else {
-			return nil
-		}
-		return name
+	/// Splits the percent-encoded path before decoding its non-empty segments, because decoding first turns `%2F` into a `/` that the cloud path would read as a separator. `String` equality treats canonically equivalent segments (NFC and NFD) as equal.
+	/// - Returns: `nil` if a segment can't be decoded.
+	private static func decodedPathSegments(of url: URL) -> [String]? {
+		let segments = url.path(percentEncoded: true).pathSegments().filter { !$0.isEmpty }.map(\.removingPercentEncoding)
+		return segments.contains(nil) ? nil : segments.compactMap(\.self)
 	}
 }
 

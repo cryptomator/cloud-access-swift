@@ -70,6 +70,14 @@ class DropboxCloudProviderTests: XCTestCase {
 		XCTAssertEqual(2000, firstArgument["limit"] as? Int)
 	}
 
+	func testListingSkipsNamesThatAreNoSinglePathComponent() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.listing([DropboxMockResponse.file(name: "a/b"), DropboxMockResponse.folder(name: ".."), DropboxMockResponse.file(name: "file.txt")]))]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+		XCTAssertEqual([CloudPath("/file.txt")], itemList.items.map(\.cloudPath))
+	}
+
 	func testUntaggedListingEntryThrows() async throws {
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.listing([DropboxMockResponse.file(name: "file.txt", tagged: false)]))]
 

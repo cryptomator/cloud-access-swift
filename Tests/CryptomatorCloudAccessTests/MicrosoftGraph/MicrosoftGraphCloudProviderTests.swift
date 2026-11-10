@@ -100,6 +100,39 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		XCTAssertEqual(1000, itemList.items.count)
 	}
 
+	/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
+	func testListingSkipsNamesThatAreNoSinglePathComponent() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: #"{"value":[{"id":"X1","name":".","folder":{}},{"id":"X2","name":"a/b","size":7,"file":{}},\#(MicrosoftGraphCloudProviderTests.fileItem)],"@odata.nextLink":"https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT"}"#),
+			URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/a/b")))
+
+		XCTAssertEqual([CloudPath("/file.txt")], itemList.items.map(\.cloudPath))
+		XCTAssertEqual("https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT", itemList.nextPageToken)
+		XCTAssertEqual([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/a:")], requests.requests.map(\.url))
+		XCTAssertEqual(2, logCapture.messages.count(where: { $0.hasSuffix("because its name is no single path component") }))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testListingOfItemWithoutNameThrowsMissingItemName() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[{"id":"F","size":7,"file":{}}]}"#)]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
+			guard case MicrosoftGraphError.missingItemName = error else {
+				XCTFail("Unexpected error: \(error)")
+				return
+			}
+		}
+	}
+
 	// MARK: - Transfers
 
 	func testDownloadAwaitsOnTaskCreationBeforeResumingTask() async throws {

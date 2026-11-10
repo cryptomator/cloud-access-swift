@@ -57,6 +57,44 @@ class CloudPathTests: XCTestCase {
 		XCTAssertEqual("/../../foo/baz", "/../../foo/bar/.///../baz".standardizedPath())
 	}
 
+	func testIsSinglePathComponent() {
+		XCTAssertFalse("a/b".isSinglePathComponent)
+		XCTAssertFalse("".isSinglePathComponent)
+		XCTAssertFalse(".".isSinglePathComponent)
+		XCTAssertFalse("..".isSinglePathComponent)
+		XCTAssertFalse("/x".isSinglePathComponent)
+		XCTAssertFalse("x/".isSinglePathComponent)
+		XCTAssertFalse("a/\u{301}b".isSinglePathComponent)
+
+		XCTAssertTrue("ok".isSinglePathComponent)
+		XCTAssertTrue(".hidden".isSinglePathComponent)
+		XCTAssertTrue(#"a\b"#.isSinglePathComponent)
+		XCTAssertTrue("..a".isSinglePathComponent)
+		XCTAssertTrue("a b".isSinglePathComponent)
+		XCTAssertTrue("\u{301}a".isSinglePathComponent)
+		XCTAssertTrue("Gelöschte Dateien 🗑".isSinglePathComponent)
+	}
+
+	/// A slash and a combining mark that follows it are one `Character`, but the slash still separates.
+	func testSeparatorBeforeCombiningMark() {
+		let name = "\u{301}report.txt"
+		let cloudPath = CloudPath("/foo").appendingPathComponent(name)
+		XCTAssertEqual("/foo/\u{301}report.txt", cloudPath.path)
+		XCTAssertEqual(["/", "foo", name], cloudPath.pathComponents)
+		XCTAssertEqual(name, cloudPath.lastPathComponent)
+		XCTAssertEqual("/foo", cloudPath.deletingLastPathComponent().path)
+		XCTAssertEqual("/foo/\u{301}report", cloudPath.deletingPathExtension().path)
+		XCTAssertEqual("/a.b/\u{301}c", CloudPath("/a.b/\u{301}c").deletingPathExtension().path)
+		XCTAssertEqual("/foo/\u{301}report.txt.bak", cloudPath.appendingPathExtension("bak").path)
+		XCTAssertEqual("/foo/\u{301}report.txt", CloudPath("/foo//\u{301}report.txt").path)
+		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("a/\u{301}b").path)
+
+		let rootChild = CloudPath("/").appendingPathComponent(name)
+		XCTAssertTrue(rootChild.isAbsolute)
+		XCTAssertEqual(["/", name], rootChild.pathComponents)
+		XCTAssertEqual("/", rootChild.deletingLastPathComponent().path)
+	}
+
 	func testPathComponents() {
 		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar/").pathComponents)
 		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar").pathComponents)

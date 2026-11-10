@@ -115,6 +115,38 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		}
 	}
 
+	/// Drive accepts names that a cloud path can't hold. Such an item is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
+	func testListingSkipsNamesThatAreNoSinglePathComponent() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([
+				GoogleDriveMockResponse.file(id: "X1", name: "a/b"),
+				GoogleDriveMockResponse.folder(id: "X2", name: ".."),
+				GoogleDriveMockResponse.folder(id: "X3", name: "."),
+				GoogleDriveMockResponse.folder(id: "X4", name: ""),
+				GoogleDriveMockResponse.file(id: "F", name: "ok")
+			])),
+			URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record)
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/a/b"))) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+
+		XCTAssertEqual([CloudPath("/ok")], itemList.items.map(\.cloudPath))
+		XCTAssertEqual(["'root' in parents and name contains 'a' and trashed = false"], requests.requests.map { GoogleDriveCloudProviderTests.queryParameter("q", of: $0) })
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testListingOfItemWithoutNameThrowsMissingItemName() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([#"{"id":"F","mimeType":"text/plain"}"#]))]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
+			XCTAssertEqual(.missingItemName, error as? GoogleDriveError)
+		}
+	}
+
 	/// A 400 on the first page is a bad request, which a restart of the listing wouldn't heal.
 	func testBadRequestIsPageTokenInvalidOnlyWithPageToken() async throws {
 		let badRequest = URLProtocolMock.handler(statusCode: 400, body: GoogleDriveMockResponse.error(status: 400, reason: "invalid"))

@@ -121,7 +121,7 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 			return originalName
 		} else {
 			let data = try await loadLngFile(shortenedName)
-			guard let originalName = String(data: data, encoding: .utf8) else {
+			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
 				throw VaultFormatError.invalidNameFile
 			}
 			try? addToCache(shortenedName, originalName: originalName)

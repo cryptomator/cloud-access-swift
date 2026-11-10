@@ -79,16 +79,22 @@ public final class S3CloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) called")
 		do {
+			let prefix = getPrefix(for: cloudPath)
 			let output: S3ListObjectsResult
 			do {
 				// The listing includes the folder itself.
-				output = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: pageToken, maxKeys: maxPageSize + 1)
+				output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: pageToken, maxKeys: maxPageSize + 1)
 			} catch {
 				throw await checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) received output: \(output)")
-			let itemList = removeParentFolderFrom(itemList: CloudItemList(listObjects: output), parentFolderPath: cloudPath)
-			try await validateItemList(itemList, folderPath: cloudPath)
+			let listedItems = CloudItemList(listObjects: output, listedPrefix: prefix)
+			let itemList = removeParentFolderFrom(itemList: listedItems, parentFolderPath: cloudPath)
+			// Skip the check for a missing folder if a key below the prefix was left out. That key proves that the folder exists, although the page may hold no item.
+			let keysBelowPrefix = (output.contents.map(\.key) + output.commonPrefixes).count(where: { $0.deletingPrefix(prefix) != nil })
+			if listedItems.items.count == keysBelowPrefix {
+				try await validateItemList(itemList, folderPath: cloudPath)
+			}
 			return itemList
 		} catch {
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) failed with error: \(error)")
@@ -413,10 +419,10 @@ public final class S3CloudProvider: CloudProvider {
 			return ""
 		}
 		var path = cloudPath.path
-		if path.hasPrefix("/") {
-			path.removeFirst()
+		if path.unicodeScalars.first == "/" {
+			path.unicodeScalars.removeFirst()
 		}
-		if isFolder, !path.hasSuffix("/") {
+		if isFolder, path.unicodeScalars.last != "/" {
 			path += "/"
 		}
 		return path
@@ -543,23 +549,47 @@ public final class S3CloudProvider: CloudProvider {
 
 extension CloudItemMetadata {
 	init(object: S3Object) {
-		let itemType: CloudItemType = object.key.hasSuffix("/") ? .folder : .file
-		let path = object.key.hasPrefix("/") ? object.key : "/" + object.key
-		let cloudPath = CloudPath(path)
+		let itemType: CloudItemType = object.key.unicodeScalars.last == "/" ? .folder : .file
+		let cloudPath = CloudPath("/" + object.key)
 		self.init(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: object.lastModified.flatMap(Date.date(fromISO8601:)), size: object.size)
 	}
 }
 
 extension CloudItemList {
-	init(listObjects: S3ListObjectsResult) {
-		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.map { prefix in
-			let path = prefix.hasPrefix("/") ? prefix : "/" + prefix
-			let subFolderCloudPath = CloudPath(path)
+	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out those that are neither the prefix itself nor directly below it, which only a server that ignores the delimiter or the prefix returns.
+	init(listObjects: S3ListObjectsResult, listedPrefix: String? = nil) {
+		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.filter { CloudItemList.isAddressable($0, listedPrefix: listedPrefix) }.map { prefix in
+			let subFolderCloudPath = CloudPath("/" + prefix)
 			return CloudItemMetadata(name: subFolderCloudPath.lastPathComponent, cloudPath: subFolderCloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		}
-		var items = listObjects.contents.map { CloudItemMetadata(object: $0) }
+		var items = listObjects.contents.filter { CloudItemList.isAddressable($0.key, listedPrefix: listedPrefix) }.map { CloudItemMetadata(object: $0) }
 		items.append(contentsOf: subFolders)
 		self.init(items: items, nextPageToken: listObjects.nextContinuationToken)
+	}
+
+	/// Whether a cloud path addresses the key: every segment, after dropping one trailing slash, is a single path component. Any other key, e.g., `a//b`, `a/../b` or `/a`, would standardize to a cloud path that names another key.
+	private static func isAddressable(_ key: String, listedPrefix: String?) -> Bool {
+		var segments = key.pathSegments()
+		if segments.count > 1, segments.last == "" {
+			segments.removeLast()
+		}
+		guard segments.allSatisfy(\.isSinglePathComponent) else {
+			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because one of its segments is no single path component")
+			return false
+		}
+		guard let listedPrefix else {
+			return true
+		}
+		guard let remainder = key.deletingPrefix(listedPrefix) else {
+			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(listedPrefix)")
+			return false
+		}
+		// The remainder is empty for the folder's marker and holds a slash at most at its end for a key directly below the prefix.
+		guard !remainder.unicodeScalars.dropLast().contains("/") else {
+			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it isn't directly below the listed prefix \(listedPrefix)")
+			return false
+		}
+		return true
 	}
 }
 
@@ -570,10 +600,11 @@ extension CloudPath {
 }
 
 private extension String {
+	/// Compares bytes, as S3 does, because a `Character` can span the end of the prefix.
 	func deletingPrefix(_ prefix: String) -> String? {
-		guard hasPrefix(prefix) else {
+		guard utf8.starts(with: prefix.utf8) else {
 			return nil
 		}
-		return String(dropFirst(prefix.count))
+		return String(Substring(utf8.dropFirst(prefix.utf8.count)))
 	}
 }

@@ -172,11 +172,12 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		return URL(string: escapedHref, relativeTo: responseURL)
 	}
 
+	/// Splits by Unicode scalar and counts the non-empty segments, because a slash can form one `Character` with an adjacent mark.
 	private func getDepth(_ url: URL?) -> Int? {
 		guard let elementURL = url else {
 			return nil
 		}
-		return elementURL.path.split(separator: "/").count - responseURL.path.split(separator: "/").count
+		return elementURL.path.unicodeScalars.split(separator: "/").count - responseURL.path.unicodeScalars.split(separator: "/").count
 	}
 }
 
@@ -267,6 +268,10 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			isDirectory = element.collection
 			return
 		}
+		guard element.depth == 1 else {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't one level deeper than the folder")
+			return
+		}
 		guard let name = CachePropfindResponseParser.itemName(of: element.url) else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its name is no single path component")
 			return
@@ -286,7 +291,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	/// Reads the name from the percent-encoded path, because `lastPathComponent` decodes `%2F` into a `/` that the cloud path would read as a separator.
 	/// - Returns: `nil` if the name is no single path component.
 	private static func itemName(of url: URL) -> String? {
-		guard let name = url.path(percentEncoded: true).split(separator: "/").last?.removingPercentEncoding, !name.contains("/"), name != ".", name != ".." else {
+		guard let name = url.path(percentEncoded: true).pathSegments().last(where: { !$0.isEmpty })?.removingPercentEncoding, name.isSinglePathComponent else {
 			return nil
 		}
 		return name

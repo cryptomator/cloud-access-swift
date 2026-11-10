@@ -185,15 +185,20 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	private func fetchItemList(forFolderAt cloudPath: CloudPath, with request: URLRequest) async throws -> CloudItemList {
 		let data = try await sendExpectingOK(request)
 		let collection = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.Collection<MicrosoftGraphAPI.DriveItem>.self, from: data)
+		var items = [CloudItemMetadata]()
 		for driveItem in collection.value {
 			guard let name = driveItem.name else {
+				throw MicrosoftGraphError.missingItemName
+			}
+			guard name.isSinglePathComponent else {
+				CloudAccessDDLogDebug("MicrosoftGraphCloudProvider: skipping item \(name) in \(cloudPath.path), because its name is no single path component")
 				continue
 			}
 			let childCloudPath = cloudPath.appendingPathComponent(name)
-			let childItem = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
-			try identifierCache.addOrUpdate(childItem)
+			try identifierCache.addOrUpdate(MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem))
+			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath))
 		}
-		return try convertToCloudItemList(collection, at: cloudPath)
+		return CloudItemList(items: items, nextPageToken: collection.nextLink)
 	}
 
 	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
@@ -432,19 +437,6 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let lastModifiedDate = driveItem.fileSystemInfo?.lastModifiedDate
 		let size = Int(driveItem.size ?? 0)
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-	}
-
-	private func convertToCloudItemList(_ collection: MicrosoftGraphAPI.Collection<MicrosoftGraphAPI.DriveItem>, at cloudPath: CloudPath) throws -> CloudItemList {
-		var items = [CloudItemMetadata]()
-		for driveItem in collection.value {
-			guard let name = driveItem.name else {
-				throw MicrosoftGraphError.missingItemName
-			}
-			let itemCloudPath = cloudPath.appendingPathComponent(name)
-			let itemMetadata = try convertToCloudItemMetadata(driveItem, at: itemCloudPath)
-			items.append(itemMetadata)
-		}
-		return CloudItemList(items: items, nextPageToken: collection.nextLink)
 	}
 
 	private func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {

@@ -128,16 +128,52 @@ class CachedPropfindResponseParserTests: XCTestCase {
 	}
 
 	func testResponseSkipsNamesThatAreNoSinglePathComponent() throws {
-		let responses = ["/", "/a%2Fb", "/c%2fd/", "/%2E%2E", "/%2e/", "/0.txt"].map { href in
-			let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
-			return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
-		}
-		let xmlParser = XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
+		let xmlParser = getXMLParser(forHrefs: ["/", "/%2E%2E", "/%2e/", "/0.txt"])
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, snapshot: snapshot)
 		try parser.fillCache()
 		XCTAssertEqual([CloudItemMetadata(name: "0.txt", cloudPath: .init("/0.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
 		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
 		assertCacheOnlySavedTo()
+	}
+
+	/// An href with an encoded slash reaches the name check only if it lies outside the folder, because only then is its decoded path one level deeper than the folder.
+	func testResponseSkipsNamesWithEncodedSlash() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/a%2Fb", "/c%2fd/", "/folder/0.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual([CloudItemMetadata(name: "0.txt", cloudPath: .init("/folder/0.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
+		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
+	func testResponseCachesNameStartingWithCombiningMark() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/%CC%81report.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual(["\u{301}report.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.name))
+		XCTAssertEqual(["/folder/\u{301}report.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path))
+		assertCacheOnlySavedTo()
+	}
+
+	func testResponseSkipsElementsThatAreNotOneLevelDeeper() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/sub/deep.txt", "/up.txt", "/folder/", "/folder/ok.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual([CloudItemMetadata(name: "ok.txt", cloudPath: .init("/folder/ok.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
+		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
+	/// An href that ends with a slash is a collection.
+	private func getXMLParser(forHrefs hrefs: [String]) -> XMLParser {
+		let responses = hrefs.map { href in
+			let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
+			return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+		}
+		return XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
 	}
 
 	private func getXMLParser(forResource name: String, withExtension ext: String) throws -> XMLParser {

@@ -312,7 +312,7 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	}
 
 	private func toCleartextList(_ ciphertextList: CloudItemList, cleartextParentPath: CloudPath, parentDirId: Data) throws -> CloudItemList {
-		let cleartextItems = ciphertextList.items.compactMap { try? self.toCleartextMetadata($0, cleartextParentPath: cleartextParentPath, parentDirId: parentDirId) }
+		let cleartextItems = ciphertextList.items.compactMap { try? self.toCleartextMetadata($0, cleartextParentPath: cleartextParentPath, parentDirId: parentDirId) }.filter(\.name.isSinglePathComponent)
 		return CloudItemList(items: cleartextItems, nextPageToken: ciphertextList.nextPageToken)
 	}
 

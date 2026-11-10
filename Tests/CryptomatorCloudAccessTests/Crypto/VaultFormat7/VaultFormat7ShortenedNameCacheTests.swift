@@ -83,6 +83,22 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
 	}
 
+	/// The cache counts the path's segments like `CloudPath` counts its components, also where a slash and a combining mark are one `Character`.
+	func testShortenedAndOriginalPathBelowVaultPathWithCombiningMark() async throws {
+		let cache = try VaultFormat7ShortenedNameCache(vaultPath: CloudPath("/foo/\u{301}bar"), threshold: 220)
+		let longName = String(repeating: "a", count: 217)
+
+		let shortened = cache.getShortenedPath(CloudPath("/foo/\u{301}bar/d/2/30/\(longName).c9r/dir.c9r"))
+		let original = try await cache.getOriginalPath(CloudPath("/foo/\u{301}bar/d/2/30/shortened.c9s/dir.c9r")) { cloudPath in
+			XCTAssertEqual("/foo/\u{301}bar/d/2/30/shortened.c9s", cloudPath.path)
+			return Data("loooong.c9r".utf8)
+		}
+
+		XCTAssertEqual("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.cloudPath.path)
+		XCTAssertEqual("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir?.cloudPath.path)
+		XCTAssertEqual("/foo/\u{301}bar/d/2/30/loooong.c9r/dir.c9r", original.path)
+	}
+
 	func testGetOriginalPathWithNonUTF8Name() async {
 		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
 
@@ -91,6 +107,23 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		}) { error in
 			XCTAssertEqual(.invalidNameFile, error as? VaultFormatError)
 		}
+	}
+
+	/// A name file is the cloud's to write, so a name that would redirect the inflated path is rejected and not cached.
+	func testGetOriginalPathWithNameThatIsNoSinglePathComponent() async throws {
+		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
+
+		for name in ["../x.c9r", "a/b", ".", ""] {
+			await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(shortened) { _ in
+				return Data(name.utf8)
+			}, name) { error in
+				XCTAssertEqual(.invalidNameFile, error as? VaultFormatError, name)
+			}
+		}
+		let longName = try await cache.getOriginalPath(shortened) { _ in
+			return Data("loooong.c9r".utf8)
+		}
+		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
 	}
 
 	func testDeflatePath1() {

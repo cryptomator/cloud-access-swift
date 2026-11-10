@@ -207,6 +207,26 @@ class PCloudCloudProviderTests: XCTestCase {
 		PCloudProviderTestResponse.assertMetadata(thirdPage.items[0], name: "e", cloudPath: CloudPath("/e"), itemType: .file, size: 7)
 	}
 
+	/// An item whose name is no single path component gets no snapshot position, because a gap in the positions would drop a later item from the pages. It gets no cached identifier either, so that it shadows no path and doesn't replace the cached root.
+	func testListingSkipsNamesThatAreNoSinglePathComponent() async throws {
+		let provider = try PCloudCloudProvider(client: .mocked(), maxPageSize: 2)
+		let requests = RequestRecorder()
+		let root = PCloudProviderTestResponse.rootWithFiles(["a", "b", ".", "x/y", "c"])
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: root), URLProtocolMock.handler(body: root, onRequest: requests.record)]
+
+		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: XCTUnwrap(firstPage.nextPageToken))
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/x/y"))) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+
+		XCTAssertEqual(["a", "b"], firstPage.items.map(\.name))
+		XCTAssertEqual(["c"], secondPage.items.map(\.name))
+		XCTAssertNil(secondPage.nextPageToken)
+		XCTAssertEqual(["0"], requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] })
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	func testInterleavedListingsOfSameFolderSeeTheirOwnItems() async throws {
 		let provider = try PCloudCloudProvider(client: .mocked(), maxPageSize: 2)
 		URLProtocolMock.requestHandler = [

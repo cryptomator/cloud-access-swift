@@ -51,6 +51,7 @@ class S3CloudProviderTests: XCTestCase {
 	func testGetKey() {
 		XCTAssertEqual("foo.txt", provider.getKey(for: CloudPath("/foo.txt")))
 		XCTAssertEqual("foo/bar.txt", provider.getKey(for: CloudPath("/foo/bar.txt")))
+		XCTAssertEqual("\u{301}foo.txt", provider.getKey(for: CloudPath("/\u{301}foo.txt")))
 	}
 
 	// MARK: - Error Conversion
@@ -538,6 +539,128 @@ class S3CloudProviderTests: XCTestCase {
 		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
 
 		XCTAssertEqual([Date(timeIntervalSince1970: 1_792_326_896.5)], itemList.items.map(\.lastModifiedDate))
+	}
+
+	func testListingSkipsKeysWithSegmentsThatAreNoSinglePathComponent() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt", "f/.."], commonPrefixes: ["f/../", "f//", "f/./", "f/sub/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["ok.txt", ""], commonPrefixes: ["/"]))
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+		let rootItemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+		XCTAssertEqual([CloudPath("/f/ok.txt"), CloudPath("/f/sub")], itemList.items.map(\.cloudPath))
+		XCTAssertEqual([CloudPath("/ok.txt")], rootItemList.items.map(\.cloudPath))
+		let skippedKeys = logCapture.messages.filter { $0.hasSuffix("because one of its segments is no single path component") }
+		XCTAssertEqual(["f/..", "f/../", "f//", "f/./", "/", ""].map { "S3CloudProvider: skipping key \($0), because one of its segments is no single path component" }.sorted(), skippedKeys.sorted())
+	}
+
+	/// The left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
+	func testListingReturnsEmptyPageWithTokenIfEveryKeyIsSkipped() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/.", "f/.."], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
+		]
+
+		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+		let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: firstPage.nextPageToken)
+
+		XCTAssertTrue(firstPage.items.isEmpty)
+		XCTAssertEqual("next", firstPage.nextPageToken)
+		XCTAssertEqual([CloudPath("/f/ok.txt")], secondPage.items.map(\.cloudPath))
+	}
+
+	/// A server that ignores the delimiter or the prefix must not get items listed that aren't directly in the folder, where the vault layer would trap on a path that is too deep.
+	func testListingSkipsKeysThatAreNotDirectlyBelowFolder() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/", "f/ok.txt", "f/sub/deep.txt", "g/other.txt", "f"], commonPrefixes: ["f/sub/deeper/", "f/a/\u{301}b/"]))
+		]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+
+		XCTAssertEqual([CloudPath("/f/ok.txt")], itemList.items.map(\.cloudPath))
+	}
+
+	func testListingKeepsNameStartingWithCombiningMark() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/\u{301}report.txt"]))]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+
+		XCTAssertEqual(["\u{301}report.txt"], itemList.items.map(\.name))
+		XCTAssertEqual([CloudPath("/f")], itemList.items.map { $0.cloudPath.deletingLastPathComponent() })
+	}
+
+	/// A page without keys below the prefix may be the listing of a missing folder, so the listing checks the folder even if it left out keys outside the prefix.
+	func testListingOfMissingFolderThrowsItemNotFound() async throws {
+		for keys in [[], ["g/other.txt"]] {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys)),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+			]
+
+			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil), "\(keys)") { error in
+				XCTAssertEqual(.itemNotFound, error as? CloudProviderError, "\(keys)")
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, "\(keys)")
+		}
+	}
+
+	/// The folder's marker is no item, so a page that holds only the marker is checked like an empty one.
+	func testListingOfMarkerBesideFileOfSameNameThrowsItemTypeMismatch() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f"]))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)) { error in
+			XCTAssertEqual(.itemTypeMismatch, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A prepended mark such as U+0600 forms one `Character` with the slash that follows it, so the key's segments and the marker's trailing slash are found by scalar.
+	func testListingOfFolderWhoseNameEndsWithPrependedMark() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f\u{600}/", "f\u{600}/x.txt"]))]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f\u{600}"), withPageToken: nil)
+
+		XCTAssertEqual(["/f\u{600}/x.txt"], itemList.items.map(\.cloudPath.path))
+	}
+
+	/// A degenerate listed path keeps its dot segment in the prefix, so the key is checked as a whole, not only below the prefix.
+	func testListingSkipsKeysWithDotSegmentInListedPrefix() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["../x.txt"]))]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/.."), withPageToken: nil)
+
+		XCTAssertTrue(itemList.items.isEmpty)
+	}
+
+	func testFetchItemMetadataOfNestedFileAndFolder() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a/b.txt"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["a/c/"]))
+		]
+
+		let file = try await provider.fetchItemMetadata(at: CloudPath("/a/b.txt"))
+		let folder = try await provider.fetchItemMetadata(at: CloudPath("/a/c"))
+
+		XCTAssertEqual([CloudPath("/a/b.txt"), CloudPath("/a/c")], [file.cloudPath, folder.cloudPath])
+		XCTAssertEqual([.file, .folder], [file.itemType, folder.itemType])
+	}
+
+	func testFetchItemMetadataOfRootIgnoresKeyThatStandardizesToRoot() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [".", ""]))]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/"))) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
 	}
 
 	func testFetchItemMetadataOfFolderListedAfterSibling() async throws {

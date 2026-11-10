@@ -67,6 +67,23 @@ class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 		}
 	}
 
+	/// A name file is the cloud's to write, so a name that would redirect the inflated path is rejected and not cached.
+	func testGetOriginalPathWithNameThatIsNoSinglePathComponent() async throws {
+		let shortened = CloudPath("/foo/bar/d/2/30/shortened.lng")
+
+		for name in ["../x", "a/b", ".", ""] {
+			await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(shortened) { _ in
+				return Data(name.utf8)
+			}, name) { error in
+				XCTAssertEqual(.invalidNameFile, error as? VaultFormatError, name)
+			}
+		}
+		let longName = try await cache.getOriginalPath(shortened) { _ in
+			return Data("loooong".utf8)
+		}
+		XCTAssertEqual("/foo/bar/d/2/30/loooong", longName.path)
+	}
+
 	func testDeflatePath() {
 		let originalPath = CloudPath("/foo/bar/d/2/30/loooooong")
 		let shortened = cache.deflatePath(originalPath, with: "short.lng")

@@ -81,6 +81,18 @@ class BoxCloudProviderTests: XCTestCase {
 		XCTAssertEqual("MARKER", itemList.nextPageToken)
 	}
 
+	func testListingSkipsNamesThatAreNoSinglePathComponent() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.items([
+			BoxMockResponse.fileEntry(id: "4", name: "a/b"),
+			#"{"type":"file","id":"6","size":7}"#,
+			BoxMockResponse.fileEntry(id: "5", name: "file.txt")
+		]))]
+
+		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+		XCTAssertEqual([CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: BoxJSON.date(fromBoxDateTime: BoxMockResponse.modifiedAt), size: 7)], itemList.items)
+	}
+
 	func testFetchItemListErrors() async throws {
 		let cases = [
 			ListingErrorCase(name: "invalid marker", response: URLProtocolMock.handler(statusCode: 400), expectedError: CloudProviderError.pageTokenInvalid),

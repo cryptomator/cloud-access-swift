@@ -75,7 +75,7 @@ private extension CloudPath {
 	}
 
 	func replacingPathComponent(at index: Int, with replacement: String) -> CloudPath {
-		let components = path.components(separatedBy: "/")
+		let components = path.pathSegments()
 		precondition(index < components.count)
 		let tailSize = components.count - index
 		assert(tailSize > 0)
@@ -86,7 +86,7 @@ private extension CloudPath {
 	}
 
 	func trimmingToPathComponent(at index: Int) -> CloudPath {
-		let components = path.components(separatedBy: "/")
+		let components = path.pathSegments()
 		precondition(index < components.count)
 		let toBeRemoved = components.count - components.index(after: index)
 		assert(toBeRemoved >= 0)
@@ -181,7 +181,7 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 			return originalName
 		} else {
 			let data = try await loadNameC9S(c9sDirPath)
-			guard let originalName = String(data: data, encoding: .utf8) else {
+			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
 				throw VaultFormatError.invalidNameFile
 			}
 			try? addToCache(shortenedName, originalName: originalName)

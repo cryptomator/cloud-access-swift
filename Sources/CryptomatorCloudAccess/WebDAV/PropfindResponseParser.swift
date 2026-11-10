@@ -172,11 +172,12 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		return URL(string: escapedHref, relativeTo: responseURL)
 	}
 
+	/// Splits by Unicode scalar and counts the non-empty segments, because a slash can form one `Character` with an adjacent mark.
 	private func getDepth(_ url: URL?) -> Int? {
 		guard let elementURL = url else {
 			return nil
 		}
-		return elementURL.path.split(separator: "/").count - responseURL.path.split(separator: "/").count
+		return elementURL.path.unicodeScalars.split(separator: "/").count - responseURL.path.unicodeScalars.split(separator: "/").count
 	}
 }
 
@@ -240,21 +241,25 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	let snapshot: DirectoryContentSnapshot
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
-	private var cachingError: Error?
+	/// The decoded path segments of the first element at the folder's depth, taken as the folder's own. The server may spell them differently from the request. Until that element arrives, an element's parent isn't checked.
+	private var folderSegments: [String]?
+	private let responseSegmentCount: Int?
+	private var abortError: Error?
 
 	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
 		self.cache = cache
 		self.snapshot = snapshot
+		self.responseSegmentCount = CachePropfindResponseParser.decodedPathSegments(of: responseURL)?.count
 		super.init(parser, responseURL: responseURL)
 	}
 
-	/// A failed cache save aborts the parsing and is thrown instead of the parser's error, so that a snapshot missing an element is never published.
+	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published. A second element at the folder's depth with another path aborts it with `WebDAVProviderError.invalidResponse`. Either error is thrown instead of the parser's.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
 		do {
 			_ = try getElements()
 		} catch {
-			throw cachingError ?? error
+			throw abortError ?? error
 		}
 		guard isDirectory else {
 			throw CloudProviderError.itemTypeMismatch
@@ -263,12 +268,29 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	}
 
 	override func receivedElement(_ element: PropfindResponseElement) {
-		if !isDirectory, element.depth == 0 {
-			isDirectory = element.collection
+		// The depth counts the segments of the decoded path, which is empty for a path that can't be decoded and longer for one with an encoded slash. Such an element isn't at the folder's depth, so its own segments must agree.
+		if element.depth == 0, let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), segments.count == responseSegmentCount {
+			if let folderSegments, segments != folderSegments {
+				// Either may be the listed folder, which one pass can't tell. Elements cached since the first were checked against it, so they may belong to another folder.
+				CloudAccessDDLogDebug("CachePropfindResponseParser: aborting, because element \(element) is a second element at the depth of the listed folder with another path")
+				abortError = WebDAVProviderError.invalidResponse
+				parser.abortParsing()
+				return
+			}
+			folderSegments = segments
+			isDirectory = isDirectory || element.collection
 			return
 		}
-		guard let name = CachePropfindResponseParser.itemName(of: element.url) else {
+		guard element.depth == 1 else {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't one level deeper than the folder")
+			return
+		}
+		guard let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), let name = segments.last, name.isSinglePathComponent else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its name is no single path component")
+			return
+		}
+		if let folderSegments, !segments.dropLast().elementsEqual(folderSegments) {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't in the folder")
 			return
 		}
 		elementsCached += 1
@@ -278,18 +300,16 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			try cache.save(cloudItemMetadata, in: snapshot, index: elementsCached)
 		} catch {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: caching element \(element) failed with error: \(error)")
-			cachingError = error
+			abortError = error
 			parser.abortParsing()
 		}
 	}
 
-	/// Reads the name from the percent-encoded path, because `lastPathComponent` decodes `%2F` into a `/` that the cloud path would read as a separator.
-	/// - Returns: `nil` if the name is no single path component.
-	private static func itemName(of url: URL) -> String? {
-		guard let name = url.path(percentEncoded: true).split(separator: "/").last?.removingPercentEncoding, !name.contains("/"), name != ".", name != ".." else {
-			return nil
-		}
-		return name
+	/// Splits the percent-encoded path before decoding its non-empty segments, because decoding first turns `%2F` into a `/` that the cloud path would read as a separator. `String` equality treats canonically equivalent segments (NFC and NFD) as equal.
+	/// - Returns: `nil` if a segment can't be decoded.
+	private static func decodedPathSegments(of url: URL) -> [String]? {
+		let segments = url.path(percentEncoded: true).pathSegments().filter { !$0.isEmpty }.map(\.removingPercentEncoding)
+		return segments.contains(nil) ? nil : segments.compactMap(\.self)
 	}
 }
 

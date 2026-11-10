@@ -41,7 +41,17 @@ extension String {
 	}
 
 	func standardizedPath() -> String {
-		return components(separatedBy: "/").standardized().joined(separator: "/")
+		return pathSegments().standardized().joined(separator: "/")
+	}
+
+	/// Splits the string at every slash, keeping empty segments. It compares Unicode scalars, because a slash forms one `Character` with a combining mark after it or a prepended mark (e.g. U+0600) before it, so a `Character`-based search misses it.
+	func pathSegments() -> [String] {
+		return unicodeScalars.split(separator: "/", omittingEmptySubsequences: false).map { String(Substring($0)) }
+	}
+
+	/// Whether appending the string to a cloud path adds exactly one component equal to the string, rather than nesting it, dropping a slash or resolving to the folder or its parent.
+	var isSinglePathComponent: Bool {
+		return !isEmpty && !unicodeScalars.contains("/") && self != "." && self != ".."
 	}
 }
 
@@ -81,14 +91,14 @@ public struct CloudPath: Equatable, Codable, Sendable {
 	public let path: String
 
 	public var isAbsolute: Bool {
-		return path.first == "/"
+		return path.unicodeScalars.first == "/"
 	}
 
 	public var pathComponents: [String] {
 		if path == "/" {
 			return ["/"]
 		}
-		var components = path.components(separatedBy: "/")
+		var components = path.pathSegments()
 		if isAbsolute {
 			components.removeFirst()
 			components.insert("/", at: 0)
@@ -121,7 +131,7 @@ public struct CloudPath: Equatable, Codable, Sendable {
 	}
 
 	public func appendingPathComponent(_ pathComponent: String) -> CloudPath {
-		if !path.isEmpty, !path.hasSuffix("/"), !pathComponent.hasPrefix("/") {
+		if !path.isEmpty, path.unicodeScalars.last != "/", pathComponent.unicodeScalars.first != "/" {
 			return CloudPath(path + "/" + pathComponent)
 		} else {
 			return CloudPath(path + pathComponent)
@@ -143,17 +153,17 @@ public struct CloudPath: Equatable, Codable, Sendable {
 	}
 
 	public func appendingPathExtension(_ pathExtension: String) -> CloudPath {
-		if pathExtension.isEmpty || pathExtension.contains(" ") || pathExtension.contains("/") || pathExtension.last == "." {
+		if pathExtension.isEmpty || pathExtension.contains(" ") || pathExtension.unicodeScalars.contains("/") || pathExtension.last == "." {
 			return self
 		}
-		var components = path.components(separatedBy: "/")
+		var components = path.pathSegments()
 		let lastComponent = components.removeLast()
 		components.append("\(lastComponent).\(pathExtension)")
 		return CloudPath(components.joined(separator: "/"))
 	}
 
 	public func deletingPathExtension() -> CloudPath {
-		var components = path.components(separatedBy: "/")
+		var components = path.pathSegments()
 		let lastComponent = components.removeLast()
 		if lastComponent.isEmpty || lastComponent == "." || lastComponent == ".." {
 			return self

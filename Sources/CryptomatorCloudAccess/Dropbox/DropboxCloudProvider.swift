@@ -62,8 +62,12 @@ public final class DropboxCloudProvider: CloudProvider {
 				// Dropbox lists the root at "" instead of "/".
 				result = try await client.listFolder(path: cloudPath == CloudPath("/") ? "" : cloudPath.path, limit: maxPageSize)
 			}
-			let items = try result.entries.map { entry in
-				try convertToCloudItemMetadata(entry, at: cloudPath.appendingPathComponent(entry.name), untaggedAs: nil)
+			let items = try result.entries.compactMap { entry -> CloudItemMetadata? in
+				guard entry.name.isSinglePathComponent else {
+					CloudAccessDDLogDebug("DropboxCloudProvider: skipping item \(entry.name) in \(cloudPath.path), because its name is no single path component")
+					return nil
+				}
+				return try convertToCloudItemMetadata(entry, at: cloudPath.appendingPathComponent(entry.name), untaggedAs: nil)
 			}
 			return CloudItemList(items: items, nextPageToken: result.hasMore ? result.cursor : nil)
 		}

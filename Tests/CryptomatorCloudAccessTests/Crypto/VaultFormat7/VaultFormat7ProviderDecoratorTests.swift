@@ -62,6 +62,15 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertTrue(itemList.items.isEmpty)
 	}
 
+	func testFetchItemListSkipsNamesThatAreNoSinglePathComponent() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/nested.c9r": Data(), "\(dirPath)/parent.c9r": Data(), "\(dirPath)/file1.c9r": Data()])
+		let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["nested": "a/b", "parent": "..", "file1": "File 1"], contents: [:])
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		XCTAssertEqual([CloudPath("/File 1")], itemList.items.map(\.cloudPath))
+	}
+
 	func testDownloadFile() async throws {
 		let decorator: VaultFormat7ProviderDecorator = decorator
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)

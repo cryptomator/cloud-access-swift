@@ -420,8 +420,13 @@ public final class BoxCloudProvider: CloudProvider {
 		guard let entries = folderItems.entries else {
 			return CloudItemList(items: [])
 		}
-		let items = try entries.map { entry in
-			try convertToCloudItemMetadata(entry, at: cloudPath.appendingPathComponent(entry.name ?? ""))
+		let items = try entries.compactMap { entry -> CloudItemMetadata? in
+			let name = entry.name ?? ""
+			guard name.isSinglePathComponent else {
+				CloudAccessDDLogDebug("BoxCloudProvider: skipping item \(name) in \(cloudPath.path), because its name is no single path component")
+				return nil
+			}
+			return try convertToCloudItemMetadata(entry, at: cloudPath.appendingPathComponent(name))
 		}
 		return CloudItemList(items: items, nextPageToken: folderItems.nextMarker)
 	}

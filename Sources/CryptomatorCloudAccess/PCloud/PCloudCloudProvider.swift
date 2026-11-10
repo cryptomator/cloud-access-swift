@@ -492,6 +492,10 @@ public final class PCloudCloudProvider: CloudProvider {
 		var index: Int64 = 0
 		try forEachChild(of: listing) { child in
 			try Task.checkCancellation()
+			guard child.name.isSinglePathComponent else {
+				CloudAccessDDLogDebug("PCloudCloudProvider: skipping item \(child.name) in \(folderPath.path), because its name is no single path component")
+				return true
+			}
 			let childPath = folderPath.appendingPathComponent(child.name)
 			try identifierCache.addOrUpdate(PCloudItem(cloudPath: childPath, metadata: child))
 			index += 1

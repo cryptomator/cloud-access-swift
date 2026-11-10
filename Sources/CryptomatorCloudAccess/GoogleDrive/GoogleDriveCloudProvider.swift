@@ -162,6 +162,10 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 				guard let name = file.name else {
 					throw GoogleDriveError.missingItemName
 				}
+				guard name.isSinglePathComponent else {
+					CloudAccessDDLogDebug("GoogleDriveCloudProvider: skipping item \(name) in \(item.cloudPath.path), because its name is no single path component")
+					continue
+				}
 				let child = try GoogleDriveItem(cloudPath: item.cloudPath.appendingPathComponent(name), file: file)
 				try identifierCache.addOrUpdate(child)
 				guard let shortcut = child.shortcut else {

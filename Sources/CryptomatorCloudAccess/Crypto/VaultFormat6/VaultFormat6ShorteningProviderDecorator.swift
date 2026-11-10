@@ -53,7 +53,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		let itemList = try await delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken)
-		let originalItems = try await allSettled(itemList.items) { try await self.getOriginalMetadata($0) }
+		let originalItems = try await allSettled(itemList.items, skipping: isInvalidNameFile) { try await self.getOriginalMetadata($0) }
 		return CloudItemList(items: originalItems, nextPageToken: itemList.nextPageToken)
 	}
 

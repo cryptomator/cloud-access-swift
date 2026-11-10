@@ -88,6 +88,17 @@ class DirectoryContentCacheTests: XCTestCase {
 		XCTAssertEqual(subFolderItems, subfolderPage.items)
 	}
 
+	func testNonpositivePageSizePagesOneItemAtATime() throws {
+		for pageSize in [0, -1] {
+			cache = try DirectoryContentDBCache(dbWriter: DatabaseQueue(), maxPageSize: pageSize)
+			var pages = try [cache.publish(fillSnapshot(of: .root, with: rootItems))]
+			while let pageToken = pages.last?.nextPageToken {
+				try pages.append(cache.getPage(for: .root, pageToken: pageToken))
+			}
+			XCTAssertEqual(rootItems.map { [$0] }, pages.map(\.items))
+		}
+	}
+
 	func testPublishSinglePageSnapshotLeavesNoRows() throws {
 		let snapshot = try fillSnapshot(of: subfolderPath, with: subFolderItems)
 		let firstPage = try cache.publish(snapshot)

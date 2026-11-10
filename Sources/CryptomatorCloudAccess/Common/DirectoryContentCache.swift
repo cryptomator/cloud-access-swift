@@ -36,7 +36,7 @@ protocol DirectoryContentCache: Sendable {
 	 Returns the page of the published snapshot that the page token names.
 
 	 The items of a page are sorted by name.
-	 In addition, the number of items in a page never exceeds the initially specified `maxPageSize`.
+	 In addition, a page holds at most the initially specified `maxPageSize` items, or 1 if `maxPageSize` is less than 1.
 	 Thus it is possible to perform a paginated  folder content listing (with the cached elements).
 	 This is useful, for example, to perform folder listing for folders that have a lot of child items without using a lot of RAM.
 	 Reading a page doesn't change the cache, so the same page token returns the same page until later publications of the folder prune its snapshot.
@@ -103,7 +103,7 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 
 	init(dbWriter: any DatabaseWriter, maxPageSize: Int) throws {
 		self.dbWriter = dbWriter
-		self.maxPageSize = maxPageSize
+		self.maxPageSize = max(1, maxPageSize)
 		try DirectoryContentDBCache.migrator.migrate(dbWriter)
 		// reduce the cache size from 2000 KiB to 500 KiB
 		try dbWriter.write { db in

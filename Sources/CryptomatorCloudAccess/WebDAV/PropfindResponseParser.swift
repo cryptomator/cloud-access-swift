@@ -267,8 +267,12 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			isDirectory = element.collection
 			return
 		}
+		guard let name = CachePropfindResponseParser.itemName(of: element.url) else {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its name is no single path component")
+			return
+		}
 		elementsCached += 1
-		let cloudPath = snapshot.folderEnumerationPath.appendingPathComponent(element.url.lastPathComponent)
+		let cloudPath = snapshot.folderEnumerationPath.appendingPathComponent(name)
 		let cloudItemMetadata = CloudItemMetadata(element, cloudPath: cloudPath)
 		do {
 			try cache.save(cloudItemMetadata, in: snapshot, index: elementsCached)
@@ -277,6 +281,15 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			cachingError = error
 			parser.abortParsing()
 		}
+	}
+
+	/// Reads the name from the percent-encoded path, because `lastPathComponent` decodes `%2F` into a `/` that the cloud path would read as a separator.
+	/// - Returns: `nil` if the name is no single path component.
+	private static func itemName(of url: URL) -> String? {
+		guard let name = url.path(percentEncoded: true).split(separator: "/").last?.removingPercentEncoding, !name.contains("/"), name != ".", name != ".." else {
+			return nil
+		}
+		return name
 	}
 }
 

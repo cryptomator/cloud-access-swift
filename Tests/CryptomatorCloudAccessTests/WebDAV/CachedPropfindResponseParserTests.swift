@@ -127,6 +127,19 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		assertCacheOnlySavedTo()
 	}
 
+	func testResponseSkipsNamesThatAreNoSinglePathComponent() throws {
+		let responses = ["/", "/a%2Fb", "/c%2fd/", "/%2E%2E", "/%2e/", "/0.txt"].map { href in
+			let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
+			return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+		}
+		let xmlParser = XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, snapshot: snapshot)
+		try parser.fillCache()
+		XCTAssertEqual([CloudItemMetadata(name: "0.txt", cloudPath: .init("/0.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
+		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
 	private func getXMLParser(forResource name: String, withExtension ext: String) throws -> XMLParser {
 		let testBundle = Bundle(for: type(of: self))
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext), let xmlParser = XMLParser(contentsOf: fileURL) else {

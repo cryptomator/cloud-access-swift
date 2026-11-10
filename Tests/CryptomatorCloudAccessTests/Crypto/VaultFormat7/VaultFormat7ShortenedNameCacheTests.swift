@@ -64,23 +64,25 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 	}
 
 	func testGetOriginalPath1() async throws {
-		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
+		let shortened = CloudPath("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s")
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
 
-		let longName = try await cache.getOriginalPath(shortened) { cloudPath in
-			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Data("loooong.c9r".utf8)
+		let original = try await cache.getOriginalPath(shortened) { cloudPath in
+			XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", cloudPath.path)
+			return Data(longName.utf8)
 		}
-		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
+		XCTAssertEqual("/foo/bar/d/2/30/\(longName)", original.path)
 	}
 
 	func testGetOriginalPath2() async throws {
-		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s/dir.c9r")
+		let shortened = CloudPath("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r")
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
 
-		let longName = try await cache.getOriginalPath(shortened) { cloudPath in
-			XCTAssertEqual("/foo/bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Data("loooong.c9r".utf8)
+		let original = try await cache.getOriginalPath(shortened) { cloudPath in
+			XCTAssertEqual("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", cloudPath.path)
+			return Data(longName.utf8)
 		}
-		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r/dir.c9r", longName.path)
+		XCTAssertEqual("/foo/bar/d/2/30/\(longName)/dir.c9r", original.path)
 	}
 
 	/// The cache counts the path's segments like `CloudPath` counts its components, also where a slash and a combining mark are one `Character`.
@@ -88,15 +90,16 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		let cache = try VaultFormat7ShortenedNameCache(vaultPath: CloudPath("/foo/\u{301}bar"), threshold: 220)
 		let longName = String(repeating: "a", count: 217)
 
-		let shortened = cache.getShortenedPath(CloudPath("/foo/\u{301}bar/d/2/30/\(longName).c9r/dir.c9r"))
-		let original = try await cache.getOriginalPath(CloudPath("/foo/\u{301}bar/d/2/30/shortened.c9s/dir.c9r")) { cloudPath in
-			XCTAssertEqual("/foo/\u{301}bar/d/2/30/shortened.c9s", cloudPath.path)
-			return Data("loooong.c9r".utf8)
+		// Inflates before shortening, because shortening caches the name, and a cached name isn't loaded.
+		let original = try await cache.getOriginalPath(CloudPath("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r")) { cloudPath in
+			XCTAssertEqual("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", cloudPath.path)
+			return Data("\(longName).c9r".utf8)
 		}
+		let shortened = cache.getShortenedPath(CloudPath("/foo/\u{301}bar/d/2/30/\(longName).c9r/dir.c9r"))
 
 		XCTAssertEqual("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s/dir.c9r", shortened.cloudPath.path)
 		XCTAssertEqual("/foo/\u{301}bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s", shortened.c9sDir?.cloudPath.path)
-		XCTAssertEqual("/foo/\u{301}bar/d/2/30/loooong.c9r/dir.c9r", original.path)
+		XCTAssertEqual("/foo/\u{301}bar/d/2/30/\(longName).c9r/dir.c9r", original.path)
 	}
 
 	func testGetOriginalPathWithNonUTF8Name() async {
@@ -111,7 +114,7 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 
 	/// A name file is the cloud's to write, so a name that would redirect the inflated path is rejected and not cached.
 	func testGetOriginalPathWithNameThatIsNoSinglePathComponent() async throws {
-		let shortened = CloudPath("/foo/bar/d/2/30/shortened.c9s")
+		let shortened = CloudPath("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s")
 
 		for name in ["../x.c9r", "a/b", ".", ""] {
 			await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(shortened) { _ in
@@ -120,10 +123,47 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 				XCTAssertEqual(.invalidNameFile, error as? VaultFormatError, name)
 			}
 		}
-		let longName = try await cache.getOriginalPath(shortened) { _ in
-			return Data("loooong.c9r".utf8)
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
+		let original = try await cache.getOriginalPath(shortened) { _ in
+			return Data(longName.utf8)
 		}
-		XCTAssertEqual("/foo/bar/d/2/30/loooong.c9r", longName.path)
+		XCTAssertEqual("/foo/bar/d/2/30/\(longName)", original.path)
+	}
+
+	/// The inflated path is shortened again to address the item, so a name file holding the name of another item is rejected and not cached.
+	func testGetOriginalPathWithNameOfAnotherShortenedName() async throws {
+		let shortened = CloudPath("/foo/bar/d/2/30/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s")
+		let otherLongName = "\(String(repeating: "file4", count: 44)).c9r" // 9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s
+
+		await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(shortened) { _ in
+			return Data(otherLongName.utf8)
+		}) { error in
+			XCTAssertEqual(.invalidNameFile, error as? VaultFormatError)
+		}
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
+		let original = try await cache.getOriginalPath(shortened) { _ in
+			return Data(longName.utf8)
+		}
+		XCTAssertEqual("/foo/bar/d/2/30/\(longName)", original.path)
+	}
+
+	/// The listed name is compared byte by byte, so a name that differs from the hash only in case or padding, or that is merely canonically equivalent to it (U+212A KELVIN SIGN for `K`), is rejected.
+	func testGetOriginalPathWithListedNameInAnotherSpelling() async {
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
+		let otherLongName = "\(String(repeating: "file4", count: 44)).c9r" // 9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s
+		let spellings = [
+			"-R4LCVEMRSBH0DWUK2YFMOP9TCO=.c9s": longName,
+			"-r4lcvemRsbH0dWuk2yfMOp9tco.c9s": longName,
+			"9j5eV\u{212A}QZdTojV6zlbxhcCLD_8bs=.c9s": otherLongName
+		]
+
+		for (name, nameFileContent) in spellings {
+			await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(CloudPath("/foo/bar/d/2/30/\(name)")) { _ in
+				return Data(nameFileContent.utf8)
+			}, name) { error in
+				XCTAssertEqual(.invalidNameFile, error as? VaultFormatError, name)
+			}
+		}
 	}
 
 	func testDeflatePath1() {

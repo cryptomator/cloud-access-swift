@@ -73,6 +73,26 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		XCTAssertTrue(itemList.items.isEmpty)
 	}
 
+	/// The swapped name files hold valid names, so only the comparison with the listed name leaves their items out.
+	func testFetchItemListSkipsNamesWhoseNameFileBelongsToAnotherName() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
+		let ownDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
+		let file4DirPath = "\(dirPath)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
+		let file5DirPath = "\(dirPath)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, ownDirPath, file4DirPath, file5DirPath], files: [
+			"\(ownDirPath)/contents.c9r": Data(),
+			"\(ownDirPath)/name.c9s": Data(longName.utf8),
+			"\(file4DirPath)/contents.c9r": Data(),
+			"\(file4DirPath)/name.c9s": Data("\(String(repeating: "file5", count: 44)).c9r".utf8),
+			"\(file5DirPath)/contents.c9r": Data(),
+			"\(file5DirPath)/name.c9s": Data("\(String(repeating: "file4", count: 44)).c9r".utf8)
+		])
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+		XCTAssertEqual(["\(dirPath)/\(longName)"], itemList.items.map(\.cloudPath.path))
+	}
+
 	/// The invalid name is listed last, so the listing throws the lookup's error only if `invalidNameFile` is skipped.
 	func testFetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
 		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"

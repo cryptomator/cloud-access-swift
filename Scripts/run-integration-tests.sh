@@ -9,10 +9,10 @@
 # Environment:
 #   DERIVED_DATA_PATH  DerivedData of `xcodebuild build-for-testing -scheme AllIntegrationTests` (default: Xcode's default)
 #   DEVICE             Simulator name (default: iPhone 17)
-#   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf7` (default: all backends, ignored with --only)
+#   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf8` (default: all backends, ignored with --only)
 #
 # --only runs just the tests of a still-failing.txt of an earlier run, on the backends it lists. Each of its lines is
-# `<nodeIdentifier>\t<token>`, where the token is a backend token (`pcloud-vf7`), a provider token
+# `<nodeIdentifier>\t<token>`, where the token is a backend token (`pcloud-vf8`), a provider token
 # (`s3`) for provider-specific tests, or `-` followed by `\t<filter of that run's main pass>` for tests of no backend.
 
 set -uo pipefail

@@ -285,6 +285,7 @@
                 { "path": "IntegrationRunScope.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
                 { "path": "IntegrationTestRunner.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
                 { "path": "IntegrationTestRunnerTests.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
+                { "path": "PathRecordingProvider.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
                 { "path": "TransientError.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
                 { "path": "InvalidOAuthTokenSource.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
                 { "path": "MemoryOAuthTokenStorage.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },

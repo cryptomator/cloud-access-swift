@@ -44,14 +44,14 @@ enum IntegrationProvider: String, CaseIterable, Codable, Sendable {
 enum IntegrationVaultFormat: String, CaseIterable, Codable, Sendable {
 	case plain
 	case vf6
-	case vf7
+	case vf8
 }
 
 struct IntegrationBackend: Hashable, Codable, Sendable, CustomTestStringConvertible {
 	let kind: IntegrationProvider
 	let format: IntegrationVaultFormat
 
-	/// The token that selects this backend in `INTEGRATION_BACKENDS`, e.g. `pcloud-vf7`.
+	/// The token that selects this backend in `INTEGRATION_BACKENDS`, e.g. `pcloud-vf8`.
 	var token: String {
 		return "\(kind.rawValue)-\(format.rawValue)"
 	}
@@ -75,7 +75,7 @@ extension IntegrationBackend {
 
 	private static let noneToken = "none"
 
-	/// The tokens of `INTEGRATION_BACKENDS`: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf7`). Unset or empty selects all backends, `none` selects none.
+	/// The tokens of `INTEGRATION_BACKENDS`: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf8`). Unset or empty selects all backends, `none` selects none.
 	private static let filterTokens: [String] = (ProcessInfo.processInfo.environment["INTEGRATION_BACKENDS"] ?? "")
 		.split(separator: ",")
 		.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }

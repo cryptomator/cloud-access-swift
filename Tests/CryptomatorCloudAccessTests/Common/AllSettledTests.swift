@@ -38,6 +38,21 @@ class AllSettledTests: XCTestCase {
 		}
 	}
 
+	func testReturnsEmptyResultIfAllOperationsWereSkipped() async throws {
+		let values = try await allSettled([1, 2], skipping: isItemNotFound) { _ -> Int in
+			throw CloudProviderError.itemNotFound
+		}
+		XCTAssertEqual([], values)
+	}
+
+	func testThrowsErrorOfFailedOperationIfTheOthersWereSkipped() async {
+		await XCTAssertThrowsErrorAsync(try await allSettled([CloudProviderError.noInternetConnection, CloudProviderError.itemNotFound], skipping: isItemNotFound) { error -> Int in
+			throw error
+		}) { error in
+			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
+		}
+	}
+
 	func testThrowsCancellationErrorIfOneOperationWasCancelled() async {
 		await XCTAssertThrowsErrorAsync(try await allSettled([1, 2]) { element in
 			if element == 2 {
@@ -57,4 +72,8 @@ class AllSettledTests: XCTestCase {
 			XCTAssertTrue(error is CancellationError)
 		}
 	}
+}
+
+private func isItemNotFound(_ error: Error) -> Bool {
+	return error as? CloudProviderError == .itemNotFound
 }

@@ -63,6 +63,28 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		}
 	}
 
+	func testFetchItemListWithOnlyInvalidNamesIsEmpty() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, "\(dirPath)/invalid.c9s"], files: [
+			"\(dirPath)/invalid.c9s/name.c9s": Data("..".utf8)
+		])
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+		XCTAssertTrue(itemList.items.isEmpty)
+	}
+
+	/// The invalid name is listed last, so the listing throws the lookup's error only if `invalidNameFile` is skipped.
+	func testFetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, "\(dirPath)/a-missing.c9s", "\(dirPath)/invalid.c9s"], files: [
+			"\(dirPath)/invalid.c9s/name.c9s": Data("..".utf8)
+		])
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+	}
+
 	func testDownloadFileWithLongName() async throws {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let metadata = try await decorator.downloadFile(from: CloudPath("/File 4 (Long)"), to: localURL)

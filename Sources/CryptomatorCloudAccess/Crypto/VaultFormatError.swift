@@ -12,3 +12,7 @@ enum VaultFormatError: Error {
 	case encounteredUnrelatedFile
 	case invalidNameFile
 }
+
+func isInvalidNameFile(_ error: Error) -> Bool {
+	return error as? VaultFormatError == .invalidNameFile
+}

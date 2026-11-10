@@ -106,7 +106,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		let xmlParser = try getXMLParser(forResource: "missing-href", withExtension: "xml")
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, snapshot: snapshot)
 		XCTAssertThrowsError(try parser.fillCache(), "missing href") { error in
-			XCTAssertEqual(.itemTypeMismatch, error as? CloudProviderError)
+			XCTAssertEqual(.invalidResponse, error as? WebDAVProviderError)
 		}
 		assertNothingCached()
 	}
@@ -136,10 +136,10 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		assertCacheOnlySavedTo()
 	}
 
-	/// An href with an encoded slash reaches the name check only if it lies outside the folder, because only then is its decoded path one level deeper than the folder.
+	/// An encoded slash doesn't separate segments, so `/a%2Fb` and `/c%2fd/` are at the folder's depth and `/folder/e%2Ff` is at a child's. They are skipped instead of counting as a second element at the folder's depth or as a child.
 	func testResponseSkipsNamesWithEncodedSlash() throws {
 		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
-		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/a%2Fb", "/c%2fd/", "/folder/0.txt"])
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/a%2Fb", "/c%2fd/", "/folder/e%2Ff", "/folder/0.txt"])
 		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
 		try parser.fillCache()
 		XCTAssertEqual([CloudItemMetadata(name: "0.txt", cloudPath: .init("/folder/0.txt"), itemType: .file, lastModifiedDate: nil, size: nil)], cacheMock.saveInIndexReceivedInvocations.map(\.element))
@@ -187,19 +187,73 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		assertCacheOnlySavedTo()
 	}
 
-	/// The decoded path of such an href has as many segments as the folder's, but the href names no element at the folder's depth.
-	func testResponseSkipsUndecodableAndEncodedSlashElementsAtTheFoldersDecodedDepth() throws {
-		let folderSnapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/a/b"))
-		for hrefs in [["/", "/%FF.txt", "/ok.txt"], ["/%FF.txt", "/", "/ok.txt"]] {
+	/// An href at the folder's depth with a segment that can't be decoded or that holds an encoded slash is skipped, so it doesn't count as a second element at that depth.
+	func testResponseSkipsUndecodableAndEncodedSlashElementsAtTheFoldersDepth() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/a/b"))
+		for hrefs in [["/a%2Fx/b/", "/a/b/", "/a/b/ok.txt"], ["/a/%FF/", "/a/b/", "/a/b/ok.txt"], ["/a/b/", "/a/x%2Fy", "/a/b/ok.txt"]] {
 			cacheMock = DirectoryContentCacheMock()
-			let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: hrefs), responseURL: XCTUnwrap(URL(string: "/")), cache: cacheMock, snapshot: snapshot)
+			let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: hrefs), responseURL: XCTUnwrap(URL(string: "/a/b/")), cache: cacheMock, snapshot: snapshot)
 			try parser.fillCache()
-			XCTAssertEqual(["/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path), "\(hrefs)")
+			XCTAssertEqual(["/a/b/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path), "\(hrefs)")
 		}
-		cacheMock = DirectoryContentCacheMock()
-		let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: ["/a/b/", "/x%2Fy", "/a/b/ok.txt"]), responseURL: XCTUnwrap(URL(string: "/a/b/")), cache: cacheMock, snapshot: folderSnapshot)
+	}
+
+	/// An element with an encoded slash in a parent segment is no child of the folder. It is skipped even if it arrives before the folder's own element, when its parent segments can't be compared yet.
+	func testResponseSkipsElementsWithEncodedSlashInParentSegment() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		for hrefs in [["/x%2Fy/early.txt", "/folder/", "/folder/ok.txt"], ["/x%2F%CC%81y/early.txt", "/folder/", "/folder/ok.txt"], ["/folder/", "/x%2Fy/late.txt", "/folder/ok.txt"]] {
+			cacheMock = DirectoryContentCacheMock()
+			let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: hrefs), responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+			try parser.fillCache()
+			XCTAssertEqual(["/folder/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path), "\(hrefs)")
+		}
+	}
+
+	/// A segment with an encoded slash that decodes to the same as the response URL's at that position is the request's own, so the folder still lists. An element with any other such segment is skipped, even if it arrives before the folder's own element.
+	func testResponseCachesElementsOfFolderBelowSegmentWithEncodedSlash() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		for hrefs in [
+			["/dav/a%2Fb/folder/", "/dav/a%2fb/folder/ok.txt", "/dav/a%2Fb/folder/c%2Fd", "/dav/a%2Fx/folder/other.txt"],
+			["/dav/a%2Fx/folder/other.txt", "/dav/a%2Fb/folder/", "/dav/a%2fb/folder/ok.txt"],
+			["/a%2Fb/dav/folder/", "/dav/a%2Fb/folder/", "/dav/a%2fb/folder/ok.txt"]
+		] {
+			cacheMock = DirectoryContentCacheMock()
+			let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: hrefs), responseURL: XCTUnwrap(URL(string: "/dav/a%2Fb/folder/")), cache: cacheMock, snapshot: snapshot)
+			try parser.fillCache()
+			XCTAssertEqual(["/folder/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path), "\(hrefs)")
+			XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index), "\(hrefs)")
+			assertCacheOnlySavedTo()
+		}
+	}
+
+	/// A name with an escape that isn't valid UTF-8 (e.g., Latin-1) can't be a cloud path.
+	func testResponseSkipsUndecodableChildren() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/B%FCro.txt", "/folder/B%FCro/", "/folder/ok.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
 		try parser.fillCache()
-		XCTAssertEqual(["/a/b/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path))
+		XCTAssertEqual(["/folder/ok.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.cloudPath.path))
+		XCTAssertEqual([1], cacheMock.saveInIndexReceivedInvocations.map(\.index))
+		assertCacheOnlySavedTo()
+	}
+
+	func testResponseWithUndecodableFolderElementThrows() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/B\u{FC}ro"))
+		let xmlParser = getXMLParser(forHrefs: ["/B%FCro/", "/B%FCro/a.txt"])
+		let parser = try CachePropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/B%C3%BCro/")), cache: cacheMock, snapshot: snapshot)
+		XCTAssertThrowsError(try parser.fillCache()) { error in
+			XCTAssertEqual(.invalidResponse, error as? WebDAVProviderError)
+		}
+		assertNothingCached()
+	}
+
+	func testResponseWithFolderElementThatIsNoCollectionThrows() throws {
+		let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/file.txt"))
+		let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: ["/file.txt"]), responseURL: XCTUnwrap(URL(string: "/file.txt")), cache: cacheMock, snapshot: snapshot)
+		XCTAssertThrowsError(try parser.fillCache()) { error in
+			XCTAssertEqual(.itemTypeMismatch, error as? CloudProviderError)
+		}
+		assertNothingCached()
 	}
 
 	func testResponseWithSecondElementAtTheFoldersDepthThrows() throws {
@@ -232,15 +286,6 @@ class CachedPropfindResponseParserTests: XCTestCase {
 		XCTAssertEqual(["early.txt", "late.txt"], cacheMock.saveInIndexReceivedInvocations.map(\.element.name))
 		XCTAssertEqual([1, 2], cacheMock.saveInIndexReceivedInvocations.map(\.index))
 		assertCacheOnlySavedTo()
-	}
-
-	/// An href that ends with a slash is a collection.
-	private func getXMLParser(forHrefs hrefs: [String]) -> XMLParser {
-		let responses = hrefs.map { href in
-			let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
-			return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
-		}
-		return XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
 	}
 
 	private func getXMLParser(forResource name: String, withExtension ext: String) throws -> XMLParser {

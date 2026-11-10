@@ -96,6 +96,9 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 		}
 		let shortenedName = shortenedPath.lastPathComponent
 		if shortenedName.hasSuffix(VaultFormat6ShortenedNameCache.lngSuffix) {
+			guard VaultFormat6ShortenedNameCache.isDeflatedName(shortenedName) else {
+				throw VaultFormatError.invalidNameFile
+			}
 			let originalName = try await inflateName(shortenedName, lngFileLoader: loadLngFile)
 			return inflatePath(shortenedPath, with: originalName)
 		} else {
@@ -110,6 +113,13 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
 		CC_SHA1(bytes, UInt32(bytes.count) as CC_LONG, &digest)
 		return Data(digest).base32EncodedString()
+	}
+
+	/// Whether the name has the shape of a name that `deflateName` produces: 32 Base32 characters followed by `.lng`. The path of a name file is built from the first four characters of the name, so a listed name of any other shape (e.g., `..AB.lng`) could point to another directory than the one its name file belongs in.
+	private static func isDeflatedName(_ shortenedName: String) -> Bool {
+		let name = shortenedName.utf8
+		let hash = name.dropLast(lngSuffix.utf8.count)
+		return name.suffix(lngSuffix.utf8.count).elementsEqual(lngSuffix.utf8) && hash.count == 32 && hash.allSatisfy { (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains($0) || (UInt8(ascii: "2") ... UInt8(ascii: "7")).contains($0) }
 	}
 
 	func deflatePath(_ originalPath: CloudPath, with shortenedName: String) -> CloudPath {

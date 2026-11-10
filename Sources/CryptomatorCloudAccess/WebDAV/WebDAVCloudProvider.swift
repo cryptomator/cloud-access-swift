@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import GRDB
 
 enum WebDAVProviderError: Error {
 	case resolvingURLFailed
@@ -53,7 +52,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
-		self.directoryContentCache = try DirectoryContentDBCache(dbWriter: DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
+		self.directoryContentCache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}
 
 	deinit {

@@ -39,10 +39,6 @@ enum IntegrationProvider: String, CaseIterable, Codable, Sendable {
 	var isEventuallyConsistent: Bool {
 		return self == .s3 || self == .pCloud
 	}
-
-	var supportsPagination: Bool {
-		return self != .pCloud
-	}
 }
 
 enum IntegrationVaultFormat: String, CaseIterable, Codable, Sendable {
@@ -103,8 +99,6 @@ extension IntegrationBackend {
 	static let selectedPlain: [IntegrationBackend] = selected.filter { $0.format == .plain }
 
 	static let selectedPlainRemote: [IntegrationBackend] = selectedPlain.filter(\.kind.isRemote)
-
-	static let selectedPaginating: [IntegrationBackend] = selected.filter(\.kind.supportsPagination)
 
 	static let selectedVaults: [IntegrationBackend] = selected.filter { $0.format != .plain }
 

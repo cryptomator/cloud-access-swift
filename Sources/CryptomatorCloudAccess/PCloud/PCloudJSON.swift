@@ -16,8 +16,6 @@ struct PCloudMetadata: Decodable, Sendable {
 	let folderID: UInt64?
 	let modified: UInt32
 	let size: UInt64?
-	/// The children of a listed folder.
-	let contents: [PCloudMetadata]?
 
 	var identifier: UInt64? {
 		return isFolder ? folderID : fileID
@@ -30,8 +28,15 @@ struct PCloudMetadata: Decodable, Sendable {
 		case folderID = "folderid"
 		case modified
 		case size
-		case contents
 	}
+}
+
+/// A folder listing whose children stay in the file that the listing was downloaded to.
+struct PCloudFolderListing: Sendable {
+	let folder: PCloudMetadata
+	/// Whether the listing's `contents` is an array, which it is for a folder without children too.
+	let hasContents: Bool
+	let fileURL: URL
 }
 
 /// A temporary download link of a file. Its path and download tag grant access to the file's content, so neither may be logged.
@@ -63,6 +68,16 @@ enum PCloudJSON {
 
 	static func metadata(in body: Data) throws -> PCloudMetadata {
 		return try decode(MetadataResponse.self, from: body).metadata
+	}
+
+	/// Decodes an element of a listing's `contents`.
+	static func child(in element: Data) throws -> PCloudMetadata {
+		return try decode(PCloudMetadata.self, from: element)
+	}
+
+	/// Decodes the metadata of a listed folder from its fields that `PCloudListingReader` collected.
+	static func folder(fromFields fields: Data) throws -> PCloudMetadata {
+		return try decode(PCloudMetadata.self, from: Data("{".utf8) + fields + Data("}".utf8))
 	}
 
 	/// Reads the response of `uploadfile`, which lists the metadata of the uploaded file in an array.

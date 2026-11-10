@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import GRDB
 
 private extension FileManager {
 	func copyItemWithOverwrite(at srcURL: URL, to dstURL: URL) throws {
@@ -51,7 +50,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
-		self.cache = try DirectoryContentDBCache(dbWriter: DatabaseQueue(path: dbURL.path), maxPageSize: maxPageSize)
+		self.cache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}
 
 	deinit {

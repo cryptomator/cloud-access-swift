@@ -53,13 +53,34 @@ enum CloudPathSubtree {
 	}
 }
 
-/// Keeps the items of the paths that a provider resolved, in memory.
+extension DatabaseQueue {
+	/// Opens a database file that is written without durability (`synchronous = OFF`), so its owner must delete the file with itself and never reopen it.
+	static func withoutDurability(path: String) throws -> DatabaseQueue {
+		var configuration = Configuration()
+		// WAL, because a rollback journal is created and deleted for every commit, and a `MEMORY` journal would hold every page that a large transaction changes.
+		configuration.journalMode = .wal
+		let dbQueue = try DatabaseQueue(path: path, configuration: configuration)
+		// Set after opening, because GRDB's WAL setup sets `synchronous = NORMAL`.
+		try dbQueue.writeWithoutTransaction { db in
+			try db.execute(sql: "PRAGMA synchronous = OFF")
+		}
+		return dbQueue
+	}
+}
+
+/// Keeps the items of the paths that a provider resolved in a database file of its own, so that a large folder's items don't stay in memory. The cache deletes the file when it is released.
 final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
-	private let inMemoryDB: DatabaseQueue
+	let directoryURL: URL
+	let dbQueue: DatabaseQueue
 
 	init() throws {
-		self.inMemoryDB = try DatabaseQueue()
-		try inMemoryDB.write { db in
+		self.directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+		self.dbQueue = try DatabaseQueue.withoutDurability(path: directoryURL.appendingPathComponent("identifiers.sqlite").path)
+		try dbQueue.writeWithoutTransaction { db in
+			try db.execute(sql: "PRAGMA cache_size = -500")
+		}
+		try dbQueue.write { db in
 			try db.create(table: Item.databaseTableName) { table in
 				table.column(Item.cloudPathKey, .text).notNull().primaryKey()
 				table.column(Item.identifierKey, .text).notNull()
@@ -70,21 +91,25 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		}
 	}
 
+	deinit {
+		try? FileManager.default.removeItem(at: directoryURL)
+	}
+
 	func get(_ cloudPath: CloudPath) -> Item? {
-		try? inMemoryDB.read { db in
+		try? dbQueue.read { db in
 			return try Item.fetchOne(db, key: cloudPath)
 		}
 	}
 
 	func addOrUpdate(_ item: Item) throws {
-		try inMemoryDB.write { db in
+		try dbQueue.write { db in
 			try item.save(db)
 		}
 	}
 
 	/// Removes the item and the items of its descendants.
 	func invalidate(_ item: Item) throws {
-		try inMemoryDB.write { db in
+		try dbQueue.write { db in
 			try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: item.cloudPath))
 		}
 	}

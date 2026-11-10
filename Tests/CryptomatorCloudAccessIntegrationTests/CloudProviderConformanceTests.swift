@@ -137,7 +137,7 @@ extension IntegrationTests {
 			}
 		}
 
-		@Test(arguments: IntegrationBackend.selectedPaginating)
+		@Test(arguments: IntegrationBackend.selected)
 		func fetchItemListPagination(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let provider = try context.makeLimitedProvider()
@@ -152,7 +152,7 @@ extension IntegrationTests {
 		}
 
 		/// Lists `testFolder`, which no other test lists with the limited provider, so that the listings and retries of other tests can't invalidate its page token.
-		@Test(arguments: IntegrationBackend.selectedPaginating)
+		@Test(arguments: IntegrationBackend.selected)
 		func fetchItemListInterleavedWithAnotherListingOfTheSameFolder(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let provider = try context.makeLimitedProvider()

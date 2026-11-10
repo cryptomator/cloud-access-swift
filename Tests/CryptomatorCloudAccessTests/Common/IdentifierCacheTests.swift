@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import GRDB
 import XCTest
 #if canImport(CryptomatorCloudAccessCore)
 @testable import CryptomatorCloudAccessCore
@@ -165,5 +166,42 @@ class GoogleDriveIdentifierCacheTests: IdentifierCacheTests {
 class MicrosoftGraphIdentifierCacheTests: IdentifierCacheTests {
 	override func makeCache() throws -> IdentifierCacheProbe {
 		return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2) }
+	}
+}
+
+class IdentifierCacheDatabaseTests: XCTestCase {
+	func testDatabaseFileIsDeletedWithCache() throws {
+		var cache: IdentifierCache<PCloudItem>? = try IdentifierCache<PCloudItem>()
+		let databaseURL = try XCTUnwrap(cache).directoryURL.appendingPathComponent("identifiers.sqlite")
+
+		XCTAssertTrue(FileManager.default.fileExists(atPath: databaseURL.path))
+		XCTAssertTrue(databaseURL.path.hasPrefix(FileManager.default.temporaryDirectory.path))
+		cache = nil
+		XCTAssertFalse(FileManager.default.fileExists(atPath: databaseURL.deletingLastPathComponent().path))
+	}
+
+	func testDatabaseNeedsNoDurability() throws {
+		let cache = try IdentifierCache<PCloudItem>()
+
+		try cache.dbQueue.read { db in
+			XCTAssertEqual("wal", try String.fetchOne(db, sql: "PRAGMA journal_mode"))
+			XCTAssertEqual(0, try Int.fetchOne(db, sql: "PRAGMA synchronous"))
+			XCTAssertEqual(-500, try Int.fetchOne(db, sql: "PRAGMA cache_size"))
+		}
+	}
+
+	func testInvalidateRemovesLargeSubtree() throws {
+		let cache = try IdentifierCache<PCloudItem>()
+		for identifier in 1 ... 2000 {
+			try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/foo/\(identifier)"), identifier: UInt64(identifier), itemType: .file))
+		}
+		try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/bar"), identifier: 1, itemType: .folder))
+
+		try cache.invalidate(PCloudItem(cloudPath: CloudPath("/foo"), identifier: 0, itemType: .folder))
+
+		try cache.dbQueue.read { db in
+			XCTAssertEqual(2, try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(PCloudItem.databaseTableName)"))
+		}
+		XCTAssertNotNil(cache.get(CloudPath("/bar")))
 	}
 }

@@ -121,7 +121,7 @@ To run the tests like CI does, build with `xcodebuild build-for-testing -scheme 
 
 ## Writing Tests
 
-A conformance test takes `IntegrationBackend.selected` as its arguments, or a subset (`selectedPlain`, `selectedPlainRemote`, `selectedPaginating`, `selectedVaults`) if it only applies to some backends. Each test of a backend runs its body through `withIntegrationFixture(_:_:)`, which hands each attempt a new `IntegrationTestContext` with the backend's provider:
+A conformance test takes `IntegrationBackend.selected` as its arguments, or a subset (`selectedPlain`, `selectedPlainRemote`, `selectedVaults`) if it only applies to some backends. Each test of a backend runs its body through `withIntegrationFixture(_:_:)`, which hands each attempt a new `IntegrationTestContext` with the backend's provider:
 
 - The read-only tree at `context.treeRoot` (`test 0…4.txt` and `testFolder` with `EmptySubfolder` and `test 0…4.txt`) is built once per backend and read by all of its tests in parallel, so it must not be changed.
 - A test that changes anything works in a folder of its own from `context.makeSandbox()` and creates its items with `createPrerequisiteFolder(at:)` and `uploadPrerequisite(_:to:)`, which wait until the item is visible. `sandboxPath()` returns a unique path without creating anything.

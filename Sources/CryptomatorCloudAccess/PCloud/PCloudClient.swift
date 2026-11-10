@@ -48,9 +48,23 @@ final class PCloudClient: Sendable {
 		return try await PCloudJSON.email(in: call("userinfo", parameters: [], isIdempotent: true))
 	}
 
-	func listFolder(_ folderID: UInt64) async throws -> PCloudMetadata {
-		// The listing has no paging, so its body holds the whole folder, however large.
-		return try await PCloudJSON.metadata(in: call("listfolder", parameters: [("folderid", String(folderID)), ("recursive", "0")] + PCloudClient.formatParameters, isIdempotent: true, bodyLimit: nil))
+	/**
+	 Downloads the listing of the folder to `fileURL`, where it stays after it was read once in full.
+
+	 The listing has no paging, so its body holds the whole folder, however large. It is therefore streamed to the file and read in chunks, and its children are read from the file later.
+
+	 - Throws: `PCloudError.unexpectedContent` if the listing has no folder metadata that `JSONDecoder` can decode, or has `contents` that is neither `null` nor an array of objects.
+	 */
+	func listFolder(_ folderID: UInt64, to fileURL: URL) async throws -> PCloudFolderListing {
+		let summary = try await perform("listfolder", parameters: [("folderid", String(folderID)), ("recursive", "0")] + PCloudClient.formatParameters, isIdempotent: true, send: { request in
+			// A retried attempt's download is moved to the same file, at which no item may exist.
+			try? FileManager.default.removeItem(at: fileURL)
+			return try await self.session.download(request, route: .metadata, handler: HTTPClientSupport.downloadHandler(movingTo: fileURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength), bodyLogging: .omitted, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+		}, read: PCloudClient.successfulListing(of:))
+		guard summary.metadata == .object, summary.contents != .other else {
+			throw PCloudError.unexpectedContent
+		}
+		return try PCloudFolderListing(folder: PCloudJSON.folder(fromFields: summary.folderFields), hasContents: summary.contents == .objects, fileURL: fileURL)
 	}
 
 	func stat(fileID: UInt64) async throws -> PCloudMetadata {
@@ -138,17 +152,24 @@ final class PCloudClient: Sendable {
 
 	 A cancelled task stops the call instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
 	 */
-	func call(_ command: String, parameters: [(String, String)], isIdempotent: Bool, bodyLimit: Int? = HTTPClientSupport.maxMetadataBodyLength) async throws -> Data {
+	func call(_ command: String, parameters: [(String, String)], isIdempotent: Bool) async throws -> Data {
+		return try await perform(command, parameters: parameters, isIdempotent: isIdempotent, send: { request in
+			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
+		}, read: PCloudClient.successfulBody(of:))
+	}
+
+	/// Sends the API method's form `POST` with `send` and reads its outcome with `read`, retrying as `call(_:parameters:isIdempotent:)` does.
+	private func perform<T>(_ command: String, parameters: [(String, String)], isIdempotent: Bool, send: (URLRequest) async throws -> SplitURLSession.Outcome, read: (SplitURLSession.Outcome) throws -> T) async throws -> T {
 		var retryCount = 0
 		while true {
 			let login = try tokenSource.login()
 			var request = try HTTPClientSupport.request("POST", HTTPClientSupport.url(host: login.apiHost, percentEncodedPath: "/\(command)", parameters: []))
 			request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 			request.httpBody = Data(HTTPClientSupport.formEncoded([("access_token", login.accessToken)] + parameters).utf8)
-			let outcome = try await session.data(request, bodyLimit: bodyLimit, bodyLogging: .omitted)
+			let outcome = try await send(request)
 			let failure: Error
 			do {
-				return try PCloudClient.successfulBody(of: outcome)
+				return try read(outcome)
 			} catch {
 				failure = error
 			}
@@ -173,6 +194,35 @@ final class PCloudClient: Sendable {
 		} catch PCloudError.unexpectedContent where !(200 ... 299).contains(httpResponse.statusCode) {
 			throw PCloudError.unexpectedHTTPStatusCode(code: httpResponse.statusCode)
 		}
+	}
+
+	/**
+	 Reads a downloaded listing in full and judges its `result` and `error` as `successfulBody(of:)` judges a body, without holding the listing in memory.
+
+	 An `error` string over 4 KiB is read as no message, whatever its content. A non-2xx status throws even with a successful result, because its body isn't the listing.
+	 */
+	private static func successfulListing(of outcome: SplitURLSession.Outcome) throws -> PCloudListingReader.Summary {
+		let httpResponse = try HTTPClientSupport.httpResponse(of: outcome)
+		guard (200 ... 299).contains(httpResponse.statusCode), case let .file(fileURL) = outcome.body else {
+			_ = try successfulBody(of: outcome)
+			throw PCloudError.unexpectedHTTPStatusCode(code: httpResponse.statusCode)
+		}
+		let summary = try PCloudListingReader.validate(fileAt: fileURL)
+		guard case let .number(result) = summary.result else {
+			throw PCloudError.unexpectedContent
+		}
+		var resultBody = Data(#"{"result":"#.utf8) + result
+		switch summary.error {
+		case let .string(error):
+			resultBody += Data(#","error":"#.utf8) + error
+		case .absent, .null, .oversizedString:
+			break
+		case .other:
+			throw PCloudError.unexpectedContent
+		}
+		// `JSONDecoder` reads the number and the message, so that they are read as in the body of any other method.
+		_ = try PCloudJSON.result(of: resultBody + Data("}".utf8))
+		return summary
 	}
 
 	private static func isTransient(_ error: Error) -> Bool {

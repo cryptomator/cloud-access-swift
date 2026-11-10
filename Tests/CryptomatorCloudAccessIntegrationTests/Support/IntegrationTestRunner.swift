@@ -57,7 +57,7 @@ struct IntegrationTestContext: Sendable {
 		try await waitUntilVisible(cloudPath, through: provider, on: backend.kind)
 	}
 
-	/// A provider that lists at most 3 items per page, except on pCloud, which doesn't paginate.
+	/// A provider that lists at most 3 items per page.
 	func makeLimitedProvider() throws -> CloudProvider {
 		return try fixture.makeLimitedProvider()
 	}

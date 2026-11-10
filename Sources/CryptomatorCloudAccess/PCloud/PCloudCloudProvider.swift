@@ -20,23 +20,45 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private let client: PCloudClient
 	private let identifierCache: IdentifierCache<PCloudItem>
+	let directoryContentCache: DirectoryContentCache
+	let tmpDirURL: URL
 
-	init(client: PCloudClient) throws {
-		self.client = client
-		self.identifierCache = try IdentifierCache<PCloudItem>()
-	}
-
-	public convenience init(credential: PCloudCredential) throws {
-		try self.init(client: .foreground(tokenSource: credential.tokenSource))
+	/// - Parameter maxPageSize: The maximum number of items on a page of a folder listing. pCloud lists a folder in one response, whose items the provider saves on disk and returns page by page.
+	public convenience init(credential: PCloudCredential, maxPageSize: Int = .max) throws {
+		try self.init(client: .foreground(tokenSource: credential.tokenSource), maxPageSize: maxPageSize)
 	}
 
 	/**
-	 Creates a pCloud provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
+	 Creates a pCloud provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests, including folder listings, run on a foreground URL session.
 
+	 - Parameter maxPageSize: The maximum number of items on a page of a folder listing. pCloud lists a folder in one response, whose items the provider saves on disk and returns page by page.
 	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
 	 */
-	public static func withBackgroundSession(credential: PCloudCredential, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> PCloudCloudProvider {
-		return try PCloudCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier))
+	public static func withBackgroundSession(credential: PCloudCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) throws -> PCloudCloudProvider {
+		return try PCloudCloudProvider(client: .background(tokenSource: credential.tokenSource, sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), maxPageSize: maxPageSize)
+	}
+
+	convenience init(client: PCloudClient, maxPageSize: Int = .max) throws {
+		try self.init(client: client) { tmpDirURL in
+			try DirectoryContentDBCache(fileAt: tmpDirURL.appendingPathComponent("db.sqlite"), maxPageSize: maxPageSize)
+		}
+	}
+
+	convenience init(client: PCloudClient, directoryContentCache: DirectoryContentCache) throws {
+		try self.init(client: client) { _ in directoryContentCache }
+	}
+
+	/// - Parameter makeDirectoryContentCache: Creates the cache of the listings' snapshots, given the provider's temporary directory.
+	private init(client: PCloudClient, makeDirectoryContentCache: (URL) throws -> DirectoryContentCache) throws {
+		self.client = client
+		self.identifierCache = try IdentifierCache<PCloudItem>()
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.directoryContentCache = try makeDirectoryContentCache(tmpDirURL)
+	}
+
+	deinit {
+		try? FileManager.default.removeItem(at: tmpDirURL)
 	}
 
 	@concurrent
@@ -50,8 +72,8 @@ public final class PCloudCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
-		guard pageToken == nil else {
-			throw CloudProviderError.pageTokenInvalid
+		if let pageToken {
+			return try directoryContentCache.getPage(for: cloudPath, pageToken: pageToken)
 		}
 		let item = try await resolvePath(forItemAt: cloudPath)
 		try Task.checkCancellation()
@@ -87,8 +109,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		do {
 			let targetName = cloudPath.lastPathComponent
-			let existingContent = try await listContents(of: parentItem).first(where: { $0.name == targetName })
-			if let existingContent {
+			if let existingContent = try await firstChild(of: parentItem, where: { $0.name == targetName }) {
 				if !replaceExisting || existingContent.isFolder {
 					throw CloudProviderError.itemAlreadyExists
 				}
@@ -180,7 +201,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		assert(item.itemType == .folder)
 		CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) called")
 		do {
-			let metadata = try await client.listFolder(item.identifier)
+			let metadata = try await withListing(of: item) { listing in listing.folder }
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received metadata: \(metadata)")
 			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: item.cloudPath)
@@ -202,13 +223,13 @@ public final class PCloudCloudProvider: CloudProvider {
 			throw error
 		}
 		do {
-			let contents = try await listContents(of: item)
-			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) received contents: \(contents)")
-			for content in contents {
-				let childItem = try PCloudItem(cloudPath: item.cloudPath.appendingPathComponent(content.name), metadata: content)
-				try identifierCache.addOrUpdate(childItem)
+			let itemList = try await withListing(of: item) { listing in
+				try await directoryContentCache.publishSnapshot(of: item.cloudPath) { snapshot in
+					try fillSnapshot(snapshot, from: listing)
+				}
 			}
-			return try convertToCloudItemList(contents, at: item.cloudPath)
+			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) received first page of \(itemList.items.count) items")
+			return itemList
 		} catch {
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) failed with error: \(error)")
 			if case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) = error {
@@ -410,11 +431,10 @@ public final class PCloudCloudProvider: CloudProvider {
 	private func getPCloudItem(for name: String, withParentItem parentItem: PCloudItem) async throws -> PCloudItem {
 		CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
 		do {
-			let contents = try await listContents(of: parentItem)
-			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) received contents: \(contents)")
-			guard let content = contents.first(where: { $0.name == name }) else {
+			guard let content = try await firstChild(of: parentItem, where: { $0.name == name }) else {
 				throw CloudProviderError.itemNotFound
 			}
+			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) received metadata: \(content)")
 			return try PCloudItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), metadata: content)
 		} catch {
 			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error)")
@@ -428,17 +448,61 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
-	/// - Throws: `PCloudError.unexpectedContent` if the listing has no `contents`.
-	private func listContents(of folderItem: PCloudItem) async throws -> [PCloudMetadata] {
-		guard let contents = try await client.listFolder(folderItem.identifier).contents else {
+	/// Downloads the folder's listing to a temporary file, which `body` reads and which is deleted afterwards.
+	private func withListing<T>(of folderItem: PCloudItem, _ body: (PCloudFolderListing) async throws -> T) async throws -> T {
+		let listingURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		defer {
+			try? FileManager.default.removeItem(at: listingURL)
+		}
+		let listing = try await client.listFolder(folderItem.identifier, to: listingURL)
+		try Task.checkCancellation()
+		return try await body(listing)
+	}
+
+	/**
+	 Passes the children of a listing, in order, to `body` until it returns false. A child after that isn't decoded.
+
+	 - Throws: `PCloudError.unexpectedContent` if the listing has no `contents`.
+	 */
+	private func forEachChild(of listing: PCloudFolderListing, _ body: (PCloudMetadata) throws -> Bool) throws {
+		guard listing.hasContents else {
 			throw PCloudError.unexpectedContent
 		}
-		return contents
+		try PCloudListingReader.forEachChild(inFileAt: listing.fileURL) { element in
+			try body(PCloudJSON.child(in: element))
+		}
+	}
+
+	private func firstChild(of folderItem: PCloudItem, where predicate: (PCloudMetadata) -> Bool) async throws -> PCloudMetadata? {
+		return try await withListing(of: folderItem) { listing in
+			var match: PCloudMetadata?
+			try forEachChild(of: listing) { child in
+				if predicate(child) {
+					match = child
+				}
+				return match == nil
+			}
+			return match
+		}
+	}
+
+	/// Saves the children of the listing in the snapshot and caches their items, stopping at the next child once the task is cancelled.
+	private func fillSnapshot(_ snapshot: DirectoryContentSnapshot, from listing: PCloudFolderListing) throws {
+		let folderPath = snapshot.folderEnumerationPath
+		var index: Int64 = 0
+		try forEachChild(of: listing) { child in
+			try Task.checkCancellation()
+			let childPath = folderPath.appendingPathComponent(child.name)
+			try identifierCache.addOrUpdate(PCloudItem(cloudPath: childPath, metadata: child))
+			index += 1
+			try directoryContentCache.save(convertToCloudItemMetadata(child, at: childPath), in: snapshot, index: index)
+			return true
+		}
 	}
 
 	private func checkForNameCollision(_ name: String, inFolder parentItem: PCloudItem) async throws {
 		do {
-			if try await listContents(of: parentItem).contains(where: { $0.name == name }) {
+			if try await firstChild(of: parentItem, where: { $0.name == name }) != nil {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		} catch PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) {
@@ -455,10 +519,5 @@ public final class PCloudCloudProvider: CloudProvider {
 			throw PCloudError.unexpectedContent
 		}
 		return CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: lastModifiedDate, size: Int(truncatingIfNeeded: size))
-	}
-
-	private func convertToCloudItemList(_ contents: [PCloudMetadata], at cloudPath: CloudPath) throws -> CloudItemList {
-		let items = try contents.map { try convertToCloudItemMetadata($0, at: cloudPath.appendingPathComponent($0.name)) }
-		return CloudItemList(items: items, nextPageToken: nil)
 	}
 }

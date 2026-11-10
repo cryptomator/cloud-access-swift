@@ -39,7 +39,7 @@ class PCloudClientTests: XCTestCase {
 			sentRequest.withLock { $0 = request }
 		})]
 
-		_ = try await client.listFolder(3)
+		_ = try await client.listFolder(3, to: listingURL())
 
 		let request = try XCTUnwrap(sentRequest.withLock { $0 })
 		XCTAssertEqual("POST", request.httpMethod)
@@ -58,7 +58,7 @@ class PCloudClientTests: XCTestCase {
 		let requests = RequestRecorder()
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3), onRequest: requests.record)]
 
-		_ = try await client.listFolder(3)
+		_ = try await client.listFolder(3, to: listingURL())
 
 		XCTAssertEqual("https://api.pcloud.com/listfolder", requests.requests.first?.url?.absoluteString)
 		XCTAssertEqual("STORED", requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"])
@@ -138,7 +138,7 @@ class PCloudClientTests: XCTestCase {
 	func testAuthenticationCodeIsUnauthorized() async throws {
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.result(2094))]
 
-		await XCTAssertThrowsErrorAsync(try await client.listFolder(0)) { error in
+		await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL())) { error in
 			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
 		}
 	}
@@ -165,7 +165,7 @@ class PCloudClientTests: XCTestCase {
 			URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))
 		]
 
-		await XCTAssertThrowsErrorAsync(try await client.listFolder(0)) { error in
+		await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL())) { error in
 			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
@@ -190,9 +190,10 @@ class PCloudClientTests: XCTestCase {
 		let client: PCloudClient = client
 		let fileURL = try makeLocalFile()
 		let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+		let listingURL = listingURL()
 		URLProtocolMock.requestHandler = Array(repeating: { _ in throw URLError(.cancelled) }, count: 3)
 		let operations: [@Sendable () async throws -> Void] = [
-			{ _ = try await client.listFolder(0) },
+			{ _ = try await client.listFolder(0, to: listingURL) },
 			{ _ = try await client.upload(fromFile: fileURL, parentID: 0, name: "a.txt", progress: nil, onTaskCreation: nil) },
 			{ try await client.download(PCloudMockResponse.link, to: downloadURL, progress: nil, onTaskCreation: nil) }
 		]
@@ -223,23 +224,72 @@ class PCloudClientTests: XCTestCase {
 		XCTAssertFalse(FileManager.default.fileExists(atPath: stagingURL.path))
 	}
 
+	func testListingErrorsAreJudgedAsInOtherBodies() async throws {
+		struct TestCase {
+			let name: String
+			let handler: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
+			let expectedError: Error
+		}
+		let cases = [
+			TestCase(name: "null message of authentication code", handler: URLProtocolMock.handler(body: #"{"result":2000,"error":null}"#), expectedError: CloudProviderError.unauthorized),
+			TestCase(name: "null message", handler: URLProtocolMock.handler(body: #"{"result":2005,"error":null}"#), expectedError: PCloudError.apiError(code: 2005, message: nil)),
+			TestCase(name: "message over 4 KiB", handler: URLProtocolMock.handler(body: #"{"result":2005,"error":"\#(String(repeating: "x", count: 4 * 1024))"}"#), expectedError: PCloudError.apiError(code: 2005, message: nil)),
+			TestCase(name: "unsuccessful status", handler: URLProtocolMock.handler(statusCode: 410, body: PCloudMockResponse.result(2005)), expectedError: PCloudError.apiError(code: 2005, message: "Error 2005.")),
+			// `JSONDecoder` checks the content of a string only where it decodes it.
+			TestCase(name: "invalid string in ignored member", handler: URLProtocolMock.handler(body: #"{"result":2000,"other":"\udc00"}"#), expectedError: CloudProviderError.unauthorized)
+		]
+		for testCase in cases {
+			URLProtocolMock.requestHandler = [testCase.handler]
+
+			await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL()), testCase.name) { error in
+				XCTAssertEqual(String(describing: testCase.expectedError), String(describing: error), testCase.name)
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, testCase.name)
+		}
+	}
+
+	func testListingLeavesValuesItDoesNotDecodeToJSONDecoder() async throws {
+		let body = PCloudMockResponse.folder(id: 3, contents: [#"{"isfolder":true,"name":"sub","folderid":4,"modified":1,"icon":"\ud800\u0001","x":{"\udc00":01}}"#])
+			.replacingOccurrences(of: #"{"result":0,"#, with: #"{"result":0.0000000000000000000000000000000000000,"other":[1-2,--,"\a"],"#)
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: body)]
+
+		let listing = try await client.listFolder(3, to: listingURL())
+
+		XCTAssertEqual(3, listing.folder.identifier)
+		XCTAssertTrue(listing.hasContents)
+	}
+
+	func testListingWithNullContentsHasNoContents() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"result":0,"metadata":{"isfolder":true,"name":"folder","folderid":3,"modified":1792056600,"contents":null}}"#)]
+
+		let listing = try await client.listFolder(3, to: listingURL())
+
+		XCTAssertEqual(3, listing.folder.identifier)
+		XCTAssertFalse(listing.hasContents)
+	}
+
 	// MARK: - Retries
 
 	func testRetriesTransientFailuresOfReads() async throws {
+		// A 2xx response is downloaded to the listing file, so its retry also fails if the file isn't removed in between.
 		let transientResponses: [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] = [
 			URLProtocolMock.handler(body: PCloudMockResponse.result(5000)),
 			URLProtocolMock.handler(body: PCloudMockResponse.result(4010)),
 			{ _ in throw URLError(.networkConnectionLost) },
 			URLProtocolMock.handler(body: "<html>Login</html>"),
 			URLProtocolMock.handler(statusCode: 503, body: ""),
-			URLProtocolMock.handler(statusCode: 429, body: "")
+			URLProtocolMock.handler(statusCode: 429, body: ""),
+			URLProtocolMock.handler(body: String(PCloudMockResponse.folder(id: 0).dropLast())),
+			URLProtocolMock.handler(body: #"{"result":0,"error":[\#(Array(repeating: "1", count: 4 * 1024).joined(separator: ","))]}"#),
+			URLProtocolMock.handler(body: #"{"result":1-2}"#),
+			URLProtocolMock.handler(body: #"{"result":0,"\ud800":0}"#)
 		]
 		for transientResponse in transientResponses {
 			URLProtocolMock.requestHandler = [transientResponse, URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
 
-			let metadata = try await client.listFolder(0)
+			let listing = try await client.listFolder(0, to: listingURL())
 
-			XCTAssertEqual(0, metadata.identifier)
+			XCTAssertEqual(0, listing.folder.identifier)
 			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 		}
 	}
@@ -254,7 +304,7 @@ class PCloudClientTests: XCTestCase {
 		let client = try PCloudClient.mocked(tokenSource: PCloudCredential.makeTokenSource(userID: "1", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL)), sleeps: sleeps)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503, onRequest: { _ in buffer.data = nil }), URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
 
-		await XCTAssertThrowsErrorAsync(try await client.listFolder(0)) { error in
+		await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL())) { error in
 			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
@@ -263,7 +313,7 @@ class PCloudClientTests: XCTestCase {
 	func testRetryWaitsForRetryAfter() async throws {
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503, headerFields: ["Retry-After": "2"]), URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
 
-		_ = try await client.listFolder(0)
+		_ = try await client.listFolder(0, to: listingURL())
 
 		XCTAssertEqual([.seconds(2)], sleeps.durations)
 	}
@@ -284,9 +334,9 @@ class PCloudClientTests: XCTestCase {
 		let body = PCloudMockResponse.folder(id: 0) + String(repeating: " ", count: HTTPClientSupport.maxMetadataBodyLength)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: body)]
 
-		let metadata = try await client.listFolder(0)
+		let listing = try await client.listFolder(0, to: listingURL())
 
-		XCTAssertEqual(0, metadata.identifier)
+		XCTAssertEqual(0, listing.folder.identifier)
 	}
 
 	func testDoesNotRetryTooManyLoginAttempts() async throws {
@@ -295,10 +345,28 @@ class PCloudClientTests: XCTestCase {
 			URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))
 		]
 
-		await XCTAssertThrowsErrorAsync(try await client.listFolder(0)) { error in
+		await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL())) { error in
 			XCTAssertEqual(.apiError(code: 4000, message: "Error 4000."), error as? PCloudError)
 		}
 		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testDoesNotRetryListingsOfUnexpectedShapeOrSize() async throws {
+		let cases: [(body: String, expected: PCloudError)] = [
+			(#"{"result":0}"#, .unexpectedContent),
+			(PCloudMockResponse.folder(id: 0).replacingOccurrences(of: #""contents":[]"#, with: #""contents":{}"#), .unexpectedContent),
+			(PCloudMockResponse.folder(id: 0).replacingOccurrences(of: #""contents""#, with: #""\ud800":0,"contents""#), .unexpectedContent),
+			(PCloudMockResponse.folder(id: 0, contents: [#"{"x":\#(String(repeating: "[", count: 64) + String(repeating: "]", count: 64))}"#]), .listingTooLarge),
+			(#"{"result":0.\#(String(repeating: "0", count: 4 * 1024))}"#, .listingTooLarge)
+		]
+		for (body, expected) in cases {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: body), URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))]
+
+			await XCTAssertThrowsErrorAsync(try await client.listFolder(0, to: listingURL())) { error in
+				XCTAssertEqual(expected, error as? PCloudError)
+			}
+			XCTAssertEqual(1, URLProtocolMock.requestHandler.count, body)
+		}
 	}
 
 	func testRetriesOnlyReads() async throws {
@@ -318,13 +386,14 @@ class PCloudClientTests: XCTestCase {
 
 	func testDoesNotRetryInCancelledTask() async throws {
 		let client: PCloudClient = client
+		let listingURL = listingURL()
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: PCloudMockResponse.result(5000)),
 			URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))
 		]
 
 		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
-			try await client.listFolder(0)
+			try await client.listFolder(0, to: listingURL)
 		})) { error in
 			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
@@ -354,7 +423,7 @@ class PCloudClientTests: XCTestCase {
 		]
 		let fileURL = try makeLocalFile()
 
-		_ = try await backgroundClient.listFolder(0)
+		_ = try await backgroundClient.listFolder(0, to: listingURL())
 		try await backgroundClient.download(PCloudMockResponse.link, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
 		_ = try await backgroundClient.upload(fromFile: fileURL, parentID: 0, name: "a.txt", progress: nil, onTaskCreation: nil)
 
@@ -432,7 +501,13 @@ class PCloudClientTests: XCTestCase {
 
 	/// Every API call of the client that sends a form body, with the parameters besides `access_token` that pcloud-sdk-swift 3.2 sent for it.
 	private static let commands = [
-		Command(name: "listfolder", parameters: ["folderid": "3", "recursive": "0"].merging(formatParameters) { $1 }, isIdempotent: true, successBody: PCloudMockResponse.folder(id: 3), call: { _ = try await $0.listFolder(3) }),
+		Command(name: "listfolder", parameters: ["folderid": "3", "recursive": "0"].merging(formatParameters) { $1 }, isIdempotent: true, successBody: PCloudMockResponse.folder(id: 3), call: { client in
+			let listingURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+			defer {
+				try? FileManager.default.removeItem(at: listingURL)
+			}
+			_ = try await client.listFolder(3, to: listingURL)
+		}),
 		Command(name: "stat", parameters: ["fileid": "5"].merging(formatParameters) { $1 }, isIdempotent: true, successBody: PCloudMockResponse.file(id: 5), call: { _ = try await $0.stat(fileID: 5) }),
 		Command(name: "getfilelink", parameters: ["fileid": "5", "timeformat": "timestamp"], isIdempotent: true, successBody: PCloudMockResponse.fileLink(), call: { _ = try await $0.getFileLink(fileID: 5) }),
 		Command(name: "userinfo", parameters: [:], isIdempotent: true, successBody: #"{"result":0,"email":"user@example.com"}"#, call: { _ = try await $0.userInfoEmail() }),
@@ -442,6 +517,10 @@ class PCloudClientTests: XCTestCase {
 		Command(name: "renamefile", parameters: ["fileid": "5", "tofolderid": "3", "toname": "renamed.txt"].merging(formatParameters) { $1 }, isIdempotent: false, successBody: PCloudMockResponse.file(id: 5), call: { _ = try await $0.renameFile(5, toParent: 3, name: "renamed.txt") }),
 		Command(name: "deletefile", parameters: ["fileid": "5"].merging(formatParameters) { $1 }, isIdempotent: false, successBody: PCloudMockResponse.file(id: 5), call: { try await $0.deleteFile(5) })
 	]
+
+	private func listingURL() -> URL {
+		return tmpDirURL.appendingPathComponent(UUID().uuidString)
+	}
 
 	private func makeLocalFile() throws -> URL {
 		let localURL = tmpDirURL.appendingPathComponent("local.txt")

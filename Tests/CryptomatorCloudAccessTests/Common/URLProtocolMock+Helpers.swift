@@ -46,10 +46,14 @@ final class RequestRecorder: Sendable {
 }
 
 extension SplitURLSession.Hooks {
-	/// Records the fraction of the progress when a transfer task terminated, which is before the provider completes the progress on its return.
-	static func recordingTransferProgress(of progress: Progress, into fractions: OSAllocatedUnfairLock<[Double]>) -> SplitURLSession.Hooks {
+	/**
+	 Records the fraction of the progress when a transfer task terminated, which is before the provider completes the progress on its return.
+
+	 - Parameter isExcluded: Whether an upload or download task isn't a transfer, e.g., a listing that is downloaded to a file.
+	 */
+	static func recordingTransferProgress(of progress: Progress, into fractions: OSAllocatedUnfairLock<[Double]>, excluding isExcluded: @escaping @Sendable (URLSessionTask) -> Bool = { _ in false }) -> SplitURLSession.Hooks {
 		return SplitURLSession.Hooks(willProcessCompletion: { task in
-			if task is URLSessionUploadTask || task is URLSessionDownloadTask {
+			if task is URLSessionUploadTask || task is URLSessionDownloadTask, !isExcluded(task) {
 				fractions.withLock { $0.append(progress.fractionCompleted) }
 			}
 		})

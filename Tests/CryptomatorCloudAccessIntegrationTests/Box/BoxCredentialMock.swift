@@ -47,6 +47,10 @@ actor BoxCCGTokenSource: OAuthTokenSource {
 		return nil
 	}
 
+	nonisolated func hasStoredToken() throws -> Bool {
+		return false
+	}
+
 	func updateUsername(_ username: String) async throws {}
 
 	func deauthenticate() async throws {

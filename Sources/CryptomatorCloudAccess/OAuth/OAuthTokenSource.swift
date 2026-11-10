@@ -11,6 +11,7 @@ import Foundation
 /// Supplies the access token of the requests of an OAuth provider's client, and keeps the login's username.
 protocol OAuthTokenSource: BearerTokenSource {
 	func storedUsername() throws -> String?
+	func hasStoredToken() throws -> Bool
 	func updateUsername(_ username: String) async throws
 	func deauthenticate() async throws
 }
@@ -55,6 +56,10 @@ final class StoredOAuthTokenSource: OAuthTokenSource {
 		return try store.storedUsername()
 	}
 
+	func hasStoredToken() throws -> Bool {
+		return try store.hasStoredToken()
+	}
+
 	func updateUsername(_ username: String) async throws {
 		try await store.updateUsername(username)
 	}
@@ -88,6 +93,10 @@ struct StaticOAuthTokenSource: OAuthTokenSource {
 
 	func storedUsername() throws -> String? {
 		return nil
+	}
+
+	func hasStoredToken() throws -> Bool {
+		return false
 	}
 
 	func updateUsername(_ username: String) async throws {}

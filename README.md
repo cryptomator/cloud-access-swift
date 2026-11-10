@@ -145,7 +145,7 @@ Re-create a saved credential:
 let credential = try BoxCredential(userID: userID, setup: setup)
 ```
 
-`try credential.cachedUsername()` returns the account's name without a request, or `nil` until it is known, e.g., for a login stored by the Box SDK. `try await credential.getUsername()` asks Box for it and stores it if it changed.
+`try credential.cachedUsername()` returns the account's name without a request, or `nil` until it is known, e.g., for a login stored by the Box SDK. `try await credential.getUsername()` asks Box for it and stores it if it changed. `try credential.hasStoredLogin()` tells without a request whether a login is stored for the user ID. Box can still reject a stored login.
 
 You can then use the credential to create a Box provider:
 
@@ -202,7 +202,7 @@ Re-create a saved credential, whose user ID is the `uid` of the account:
 let credential = try DropboxCredential(userID: userID, setup: setup)
 ```
 
-`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by a Dropbox SDK. `try await credential.getUsername()` asks Dropbox for it and stores it if it changed.
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by a Dropbox SDK. `try await credential.getUsername()` asks Dropbox for it and stores it if it changed. `try credential.hasStoredLogin()` tells without a request whether a login is stored for the user ID. Dropbox can still reject a stored login.
 
 You can then use the credential to create a Dropbox provider:
 
@@ -252,7 +252,7 @@ Re-create a saved credential:
 let credential = try GoogleDriveCredential(userID: userID, setup: setup)
 ```
 
-`try credential.cachedUsername()` returns the account's email without a request, or `nil` if it wasn't stored with the login. `try await credential.getUsername()` asks Google for it and stores it if it changed.
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` if it wasn't stored with the login. `try await credential.getUsername()` asks Google for it and stores it if it changed. `try credential.hasStoredLogin()` tells without a request whether a login is stored for the user ID. Google can still reject a stored login.
 
 You can then use the credential to create a Google Drive provider:
 
@@ -364,7 +364,7 @@ Re-create a saved credential:
 let credential = try PCloudCredential(userID: userID, setup: setup)
 ```
 
-`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by the pCloud SDK. `try await credential.getUsername()` asks pCloud for it and stores it if it changed.
+`try credential.cachedUsername()` returns the account's email without a request, or `nil` until it is known, e.g., for a login stored by the pCloud SDK. `try await credential.getUsername()` asks pCloud for it and stores it if it changed. `try credential.hasStoredLogin()` tells without a request whether a login with its API host is stored for the user ID. pCloud can still reject a stored login.
 
 You can then use the credential to create a pCloud provider:
 

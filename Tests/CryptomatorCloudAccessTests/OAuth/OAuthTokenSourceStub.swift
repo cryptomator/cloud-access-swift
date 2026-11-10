@@ -65,6 +65,10 @@ final class OAuthTokenSourceStub: OAuthTokenSource {
 		return state.withLock { $0.username }
 	}
 
+	func hasStoredToken() throws -> Bool {
+		return true
+	}
+
 	func updateUsername(_ username: String) async throws {
 		try state.withLock { state in
 			guard !state.failsUsernameUpdates else {

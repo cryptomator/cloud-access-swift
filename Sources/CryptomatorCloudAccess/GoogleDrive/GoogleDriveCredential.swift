@@ -67,6 +67,11 @@ public final class GoogleDriveCredential: Sendable {
 		return GoogleDriveCredential(userID: token.subject, tokenSource: tokenSource)
 	}
 
+	/// Returns whether a login is stored for the account, without a request. A stored login can still be rejected by Google.
+	public func hasStoredLogin() throws -> Bool {
+		return try tokenSource.hasStoredToken()
+	}
+
 	/// Returns the account's email that was stored with the login, without a request.
 	public func cachedUsername() throws -> String? {
 		return try tokenSource.storedUsername()

@@ -27,6 +27,10 @@ struct InvalidOAuthTokenSource: OAuthTokenSource {
 		return nil
 	}
 
+	func hasStoredToken() throws -> Bool {
+		return false
+	}
+
 	func updateUsername(_ username: String) async throws {}
 
 	func deauthenticate() async throws {}

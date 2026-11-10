@@ -180,6 +180,18 @@ class BoxCredentialTests: XCTestCase {
 		XCTAssertNil(try credential.cachedUsername())
 	}
 
+	func testHasStoredLoginOnlyWhileALoginIsStored() throws {
+		let buffer = TokenBuffer()
+		let credential = try BoxCredential(userID: "USER-ID", tokenSource: makeTokenSource(buffer: buffer))
+
+		XCTAssertFalse(try credential.hasStoredLogin())
+
+		// A login that the Box SDK stored has no username, so `cachedUsername()` can't tell whether one is stored.
+		buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","token_type":"bearer"}"#.utf8)
+
+		XCTAssertTrue(try credential.hasStoredLogin())
+	}
+
 	private func makeTokenSource(buffer: TokenBuffer) throws -> StoredOAuthTokenSource {
 		return try BoxCredential.makeTokenSource(userID: "USER-ID", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), endpoint: .mocked(), assertion: ActivityScript().assertion)
 	}

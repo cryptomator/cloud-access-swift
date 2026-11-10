@@ -71,6 +71,11 @@ public final class BoxCredential: Sendable {
 		return BoxCredential(userID: user.id, tokenSource: tokenSource)
 	}
 
+	/// Returns whether a login is stored for the account, without a request. A stored login can still be rejected by Box.
+	public func hasStoredLogin() throws -> Bool {
+		return try tokenSource.hasStoredToken()
+	}
+
 	/**
 	 Returns the account's name that was stored with the login, without a request.
 

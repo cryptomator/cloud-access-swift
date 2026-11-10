@@ -141,6 +141,10 @@ final class OAuthTokenStore: Sendable {
 		return try loadStoredToken()?.username
 	}
 
+	func hasStoredToken() throws -> Bool {
+		return try loadStoredToken() != nil
+	}
+
 	/**
 	 Returns the stored token, read from storage on every call rather than from this process's state.
 

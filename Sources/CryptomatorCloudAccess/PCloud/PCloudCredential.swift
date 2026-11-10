@@ -104,6 +104,16 @@ public final class PCloudCredential: Sendable {
 		return PCloudCredential(userID: userID, tokenSource: tokenSource)
 	}
 
+	/// Returns whether a login that names its API host is stored for the account, without a request. A stored login can still be rejected by pCloud.
+	public func hasStoredLogin() throws -> Bool {
+		do {
+			_ = try tokenSource.login()
+			return true
+		} catch CloudProviderError.unauthorized {
+			return false
+		}
+	}
+
 	/**
 	 Returns the account's email that was stored with the login, without a request.
 

@@ -172,6 +172,21 @@ class PCloudCredentialTests: XCTestCase {
 		XCTAssertEqual("eapi.pcloud.com", PCloudCredential.apiHost("EAPI.PCLOUD.COM"))
 	}
 
+	func testHasStoredLoginOnlyWhileALoginWithAPIHostIsStored() throws {
+		let buffer = TokenBuffer()
+		let credential = try PCloudCredential(userID: "7", tokenSource: makeTokenSource(buffer: buffer))
+
+		XCTAssertFalse(try credential.hasStoredLogin())
+
+		buffer.store(OAuthToken(accessToken: "ACCESS", refreshToken: nil, expiresAt: nil, username: nil))
+
+		XCTAssertFalse(try credential.hasStoredLogin())
+
+		buffer.store(OAuthToken(accessToken: "ACCESS", refreshToken: nil, expiresAt: nil, username: nil, apiHost: "eapi.pcloud.com"))
+
+		XCTAssertTrue(try credential.hasStoredLogin())
+	}
+
 	func testRejectsAPIHostNamesThatAreNoBareHostNamesOfPCloud() {
 		for apiHostName in ["evil.com/.pcloud.com", "evil.com?.pcloud.com", "evil.com#.pcloud.com", "user@evil.com", "api.pcloud.com:8443", "api..pcloud.com", "", "[::1]", "api.pcloud.com.", "api pcloud.com", "äpi.pcloud.com", "evil.example", "evilpcloud.com", "1.2.3.4"] {
 			XCTAssertNil(PCloudCredential.apiHost(apiHostName), apiHostName)

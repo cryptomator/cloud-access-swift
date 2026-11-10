@@ -114,17 +114,24 @@ class PropfindResponseParserTests: XCTestCase {
 		XCTAssertEqual([-1, 0, 0, 0, 1], try parser.getElements().map(\.depth))
 	}
 
-	func testGetRequestedElementPrefersElementAtDepthOfResponseURL() throws {
-		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/file.txt", "/folder/other.txt"])
+	/// The requested element is listed after another element of its depth and spells its path with an escape.
+	func testGetRequestedElementPrefersElementWithPathOfResponseURL() throws {
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/other.txt", "/folder/file%2Etxt"])
 		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/file.txt")))
 		XCTAssertEqual("/folder/file.txt", try parser.getRequestedElement()?.url.path)
 	}
 
-	/// A server behind a proxy that rewrites the path spells its hrefs with another number of segments than the request.
+	/// A proxy that removes a prefix from the path leaves a child of the requested folder at the depth of the response URL.
 	func testGetRequestedElementFallsBackToFirstElement() throws {
-		let xmlParser = getXMLParser(forHrefs: ["/remote.php/dav/folder/file.txt", "/remote.php/dav/folder/file.txt/x"])
-		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/file.txt")))
-		XCTAssertEqual("/remote.php/dav/folder/file.txt", try parser.getRequestedElement()?.url.path)
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/file.txt"])
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/proxy/folder/")))
+		XCTAssertEqual("/folder", try parser.getRequestedElement()?.url.path)
+	}
+
+	func testGetRequestedElementWithUndecodableResponseURLTakesFirstElement() throws {
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/%E4.txt"])
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/%E4.txt")))
+		XCTAssertEqual("/folder", try parser.getRequestedElement()?.url.path)
 	}
 
 	func testGetRequestedElementWithoutElements() throws {

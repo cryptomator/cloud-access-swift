@@ -243,10 +243,13 @@ class PropfindResponseParser: PropfindParserDelegate {
 		}
 	}
 
-	/// The element to take from the response to a request with depth 0. An element at the depth of the response URL is preferred, because the response can list other elements before the requested one. If none is at that depth, the first element is taken, because a server may spell its hrefs with another number of segments than the request.
+	/// The element to take from the response to a `Depth: 0` request: the first whose decoded path segments equal the response URL's, because a response can list other elements before the requested one. If none does, or if the response URL can't be decoded, the first element is taken, because a server behind a path-rewriting proxy spells its hrefs differently from the request. An element's depth can't pick the element there, because with a prefix removed, another element can have the response URL's depth.
 	func getRequestedElement() throws -> PropfindResponseElement? {
 		let elements = try getElements()
-		return elements.first(where: { $0.depth == 0 }) ?? elements.first
+		guard let responseSegments = responseURL.decodedPathSegments else {
+			return elements.first
+		}
+		return elements.first(where: { $0.url.decodedPathSegments == responseSegments }) ?? elements.first
 	}
 
 	fileprivate func receivedElement(_ element: PropfindResponseElement) {

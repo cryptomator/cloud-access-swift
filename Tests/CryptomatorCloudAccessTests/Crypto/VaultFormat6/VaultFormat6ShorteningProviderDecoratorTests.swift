@@ -63,6 +63,24 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		}
 	}
 
+	/// The name files of these names would lie in other directories than `m/<2 characters>/<2 characters>`, where the mock holds them.
+	func testFetchItemListSkipsNamesThatAreNoDeflatedNames() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+			"\(dirPath)/..AB.lng": Data(),
+			"\(dirPath)/....lng": Data(),
+			"\(dirPath)/AB...lng": Data(),
+			"\(dirPath)/file1": Data(),
+			"pathToVault/AB/..AB.lng": Data("outsideM".utf8),
+			"....lng": Data("outsideVault".utf8),
+			"pathToVault/m/AB...lng": Data("wrongLevel".utf8)
+		])
+		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+		XCTAssertEqual(["\(dirPath)/file1"], itemList.items.map(\.cloudPath.path))
+		XCTAssertFalse(provider.calls.contains("downloadFile"))
+	}
+
 	func testDownloadFileWithLongName() async throws {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let metadata = try await decorator.downloadFile(from: CloudPath("/File 4 (Long)"), to: localURL)

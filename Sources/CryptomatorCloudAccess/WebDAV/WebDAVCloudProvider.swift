@@ -78,10 +78,10 @@ public final class WebDAVCloudProvider: CloudProvider {
 				throw WebDAVProviderError.invalidResponse
 			}
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
-			guard let firstElement = try parser.getElements().first else {
+			guard let element = try parser.getRequestedElement() else {
 				throw WebDAVProviderError.invalidResponse
 			}
-			return CloudItemMetadata(firstElement, cloudPath: cloudPath)
+			return CloudItemMetadata(element, cloudPath: cloudPath)
 		} catch WebDAVError.httpError(statusCode: 405) {
 			// Workaround for: https://github.com/nextcloud/server/issues/34574
 			throw CloudProviderError.itemNotFound

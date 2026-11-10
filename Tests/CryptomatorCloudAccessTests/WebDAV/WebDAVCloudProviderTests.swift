@@ -62,6 +62,31 @@ class WebDAVCloudProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	/// The response lists the parent folder before the requested file.
+	func testFetchItemMetadataTakesElementOfRequestedItem() async throws {
+		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
+
+		let propfindData = Data("""
+		<d:multistatus xmlns:d="DAV:">
+		<d:response><d:href>/cloud/remote.php/webdav/Documents/</d:href><d:propstat><d:prop><d:resourcetype><d:collection /></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+		<d:response><d:href>/cloud/remote.php/webdav/Documents/About.txt</d:href><d:propstat><d:prop><d:getcontentlength>1074</d:getcontentlength><d:resourcetype /></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+		</d:multistatus>
+		""".utf8)
+		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+		URLProtocolMock.requestHandler.append({ request in
+			guard let url = request.url, url.path == responseURL.path else {
+				throw URLProtocolMockError.unexpectedRequest
+			}
+			return (propfindResponse, propfindData)
+		})
+
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
+		XCTAssertEqual("/Documents/About.txt", metadata.cloudPath.path)
+		XCTAssertEqual(.file, metadata.itemType)
+		XCTAssertEqual(1074, metadata.size)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	func testFetchItemMetadataWithNotFoundError() async throws {
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 

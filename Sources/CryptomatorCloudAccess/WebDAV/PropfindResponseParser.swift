@@ -21,6 +21,19 @@ struct PropfindResponseElement: Equatable {
 	let contentLength: Int?
 }
 
+private extension URL {
+	/// The non-empty segments of the percent-encoded path. The decoded path can't be split instead: it holds a `/` for every `%2F`, and it is empty for a URL with an escape that isn't valid UTF-8.
+	var encodedPathSegments: [String] {
+		return path(percentEncoded: true).pathSegments().filter { !$0.isEmpty }
+	}
+
+	/// The decoded segments of the path, or `nil` if a segment can't be decoded.
+	var decodedPathSegments: [String]? {
+		let segments = encodedPathSegments.map(\.removingPercentEncoding)
+		return segments.contains(nil) ? nil : segments.compactMap(\.self)
+	}
+}
+
 private struct PropfindResponseElementProperties: Equatable {
 	let collection: Bool
 	let lastModified: Date?
@@ -172,12 +185,11 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		return URL(string: escapedHref, relativeTo: responseURL)
 	}
 
-	/// Splits by Unicode scalar and counts the non-empty segments, because a slash can form one `Character` with an adjacent mark.
 	private func getDepth(_ url: URL?) -> Int? {
 		guard let elementURL = url else {
 			return nil
 		}
-		return elementURL.path.unicodeScalars.split(separator: "/").count - responseURL.path.unicodeScalars.split(separator: "/").count
+		return elementURL.encodedPathSegments.count - responseURL.encodedPathSegments.count
 	}
 }
 
@@ -231,6 +243,12 @@ class PropfindResponseParser: PropfindParserDelegate {
 		}
 	}
 
+	/// The element to take from the response to a request with depth 0. An element at the depth of the response URL is preferred, because the response can list other elements before the requested one. If none is at that depth, the first element is taken, because a server may spell its hrefs with another number of segments than the request.
+	func getRequestedElement() throws -> PropfindResponseElement? {
+		let elements = try getElements()
+		return elements.first(where: { $0.depth == 0 }) ?? elements.first
+	}
+
 	fileprivate func receivedElement(_ element: PropfindResponseElement) {
 		elements.append(element)
 	}
@@ -241,25 +259,29 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	let snapshot: DirectoryContentSnapshot
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
-	/// The decoded path segments of the first element at the folder's depth, taken as the folder's own. The server may spell them differently from the request. Until that element arrives, an element's parent isn't checked.
+	/// The decoded path segments of the first usable element at the folder's depth, taken as the folder's own. The server may spell them differently from the request, and `String` equality treats canonically equivalent segments (NFC and NFD) as equal. Until that element arrives, an element's parent segments aren't compared with them.
 	private var folderSegments: [String]?
-	private let responseSegmentCount: Int?
+	private let responseSegments: [String]
 	private var abortError: Error?
 
 	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
 		self.cache = cache
 		self.snapshot = snapshot
-		self.responseSegmentCount = CachePropfindResponseParser.decodedPathSegments(of: responseURL)?.count
+		self.responseSegments = responseURL.decodedPathSegments ?? []
 		super.init(parser, responseURL: responseURL)
 	}
 
-	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published. A second element at the folder's depth with another path aborts it with `WebDAVProviderError.invalidResponse`. Either error is thrown instead of the parser's.
+	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published.
+	/// - Throws: The error of a failed cache save. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. Otherwise the parser's error.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
 		do {
 			_ = try getElements()
 		} catch {
 			throw abortError ?? error
+		}
+		guard folderSegments != nil else {
+			throw WebDAVProviderError.invalidResponse
 		}
 		guard isDirectory else {
 			throw CloudProviderError.itemTypeMismatch
@@ -268,8 +290,19 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	}
 
 	override func receivedElement(_ element: PropfindResponseElement) {
-		// The depth counts the segments of the decoded path, which is empty for a path that can't be decoded and longer for one with an encoded slash. Such an element isn't at the folder's depth, so its own segments must agree.
-		if element.depth == 0, let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), segments.count == responseSegmentCount {
+		guard let segments = element.url.decodedPathSegments else {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its path can't be decoded")
+			return
+		}
+		// A segment with an encoded slash is no path component. In a parent segment, it would let the element be taken as the folder's own or as a child of the listed folder. A segment that decodes to the same as the response URL's at that position is the request's own, e.g., of a base URL with an encoded slash.
+		let holdsEncodedSlash = segments.enumerated().contains { index, segment in
+			segment.unicodeScalars.contains("/") && (index >= responseSegments.count || segment != responseSegments[index])
+		}
+		guard !holdsEncodedSlash else {
+			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because a segment of its path holds an encoded slash")
+			return
+		}
+		if element.depth == 0 {
 			if let folderSegments, segments != folderSegments {
 				// Either may be the listed folder, which one pass can't tell. Elements cached since the first were checked against it, so they may belong to another folder.
 				CloudAccessDDLogDebug("CachePropfindResponseParser: aborting, because element \(element) is a second element at the depth of the listed folder with another path")
@@ -285,7 +318,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because it isn't one level deeper than the folder")
 			return
 		}
-		guard let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), let name = segments.last, name.isSinglePathComponent else {
+		guard let name = segments.last, name.isSinglePathComponent else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its name is no single path component")
 			return
 		}
@@ -303,13 +336,6 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			abortError = error
 			parser.abortParsing()
 		}
-	}
-
-	/// Splits the percent-encoded path before decoding its non-empty segments, because decoding first turns `%2F` into a `/` that the cloud path would read as a separator. `String` equality treats canonically equivalent segments (NFC and NFD) as equal.
-	/// - Returns: `nil` if a segment can't be decoded.
-	private static func decodedPathSegments(of url: URL) -> [String]? {
-		let segments = url.path(percentEncoded: true).pathSegments().filter { !$0.isEmpty }.map(\.removingPercentEncoding)
-		return segments.contains(nil) ? nil : segments.compactMap(\.self)
 	}
 }
 

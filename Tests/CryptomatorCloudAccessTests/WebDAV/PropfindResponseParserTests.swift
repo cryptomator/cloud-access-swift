@@ -18,6 +18,17 @@ enum PropfindResponseParserTestsError: Error {
 	case missingTestResource
 }
 
+extension XCTestCase {
+	/// An href that ends with a slash is a collection.
+	func getXMLParser(forHrefs hrefs: [String]) -> XMLParser {
+		let responses = hrefs.map { href in
+			let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
+			return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+		}
+		return XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
+	}
+}
+
 class PropfindResponseParserTests: XCTestCase {
 	func testResponseWith403Status() throws {
 		let xmlParser = try getXMLParser(forResource: "403-status", withExtension: "xml")
@@ -94,6 +105,32 @@ class PropfindResponseParserTests: XCTestCase {
 			PropfindResponseElement(depth: 1, url: XCTUnwrap(try URL(string: "/0.txt", relativeTo: XCTUnwrap(URL(string: "/")))), collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
 			PropfindResponseElement(depth: 1, url: XCTUnwrap(try URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: XCTUnwrap(URL(string: "/")))), collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: nil)
 		], childElements)
+	}
+
+	/// The depth counts the segments of the percent-encoded path, so neither an encoded slash nor an escape that isn't valid UTF-8 changes it.
+	func testDepthCountsEncodedSegments() throws {
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/file.txt", "/folder/B%FCro.txt", "/folder/a%2Fb", "/folder/sub/deep.txt"])
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/file.txt")))
+		XCTAssertEqual([-1, 0, 0, 0, 1], try parser.getElements().map(\.depth))
+	}
+
+	func testGetRequestedElementPrefersElementAtDepthOfResponseURL() throws {
+		let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/file.txt", "/folder/other.txt"])
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/file.txt")))
+		XCTAssertEqual("/folder/file.txt", try parser.getRequestedElement()?.url.path)
+	}
+
+	/// A server behind a proxy that rewrites the path spells its hrefs with another number of segments than the request.
+	func testGetRequestedElementFallsBackToFirstElement() throws {
+		let xmlParser = getXMLParser(forHrefs: ["/remote.php/dav/folder/file.txt", "/remote.php/dav/folder/file.txt/x"])
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/folder/file.txt")))
+		XCTAssertEqual("/remote.php/dav/folder/file.txt", try parser.getRequestedElement()?.url.path)
+	}
+
+	func testGetRequestedElementWithoutElements() throws {
+		let xmlParser = try getXMLParser(forResource: "missing-href", withExtension: "xml")
+		let parser = try PropfindResponseParser(xmlParser, responseURL: XCTUnwrap(URL(string: "/")))
+		XCTAssertNil(try parser.getRequestedElement())
 	}
 
 	// MARK: - Internal

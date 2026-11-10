@@ -241,23 +241,25 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	let snapshot: DirectoryContentSnapshot
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
-	/// The path segments of the folder's own element as the server spells them, which may differ from the request's. Until it arrives, an element's parent isn't checked.
+	/// The decoded path segments of the first element at the folder's depth, taken as the folder's own. The server may spell them differently from the request. Until that element arrives, an element's parent isn't checked.
 	private var folderSegments: [String]?
-	private var cachingError: Error?
+	private let responseSegmentCount: Int?
+	private var abortError: Error?
 
 	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
 		self.cache = cache
 		self.snapshot = snapshot
+		self.responseSegmentCount = CachePropfindResponseParser.decodedPathSegments(of: responseURL)?.count
 		super.init(parser, responseURL: responseURL)
 	}
 
-	/// A failed cache save aborts the parsing and is thrown instead of the parser's error, so that a snapshot missing an element is never published.
+	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published. A second element at the folder's depth with another path aborts it with `WebDAVProviderError.invalidResponse`. Either error is thrown instead of the parser's.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
 		do {
 			_ = try getElements()
 		} catch {
-			throw cachingError ?? error
+			throw abortError ?? error
 		}
 		guard isDirectory else {
 			throw CloudProviderError.itemTypeMismatch
@@ -266,9 +268,17 @@ class CachePropfindResponseParser: PropfindResponseParser {
 	}
 
 	override func receivedElement(_ element: PropfindResponseElement) {
-		if !isDirectory, element.depth == 0 {
-			isDirectory = element.collection
-			folderSegments = CachePropfindResponseParser.decodedPathSegments(of: element.url)
+		// The depth counts the segments of the decoded path, which is empty for a path that can't be decoded and longer for one with an encoded slash. Such an element isn't at the folder's depth, so its own segments must agree.
+		if element.depth == 0, let segments = CachePropfindResponseParser.decodedPathSegments(of: element.url), segments.count == responseSegmentCount {
+			if let folderSegments, segments != folderSegments {
+				// Either may be the listed folder, which one pass can't tell. Elements cached since the first were checked against it, so they may belong to another folder.
+				CloudAccessDDLogDebug("CachePropfindResponseParser: aborting, because element \(element) is a second element at the depth of the listed folder with another path")
+				abortError = WebDAVProviderError.invalidResponse
+				parser.abortParsing()
+				return
+			}
+			folderSegments = segments
+			isDirectory = isDirectory || element.collection
 			return
 		}
 		guard element.depth == 1 else {
@@ -290,7 +300,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			try cache.save(cloudItemMetadata, in: snapshot, index: elementsCached)
 		} catch {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: caching element \(element) failed with error: \(error)")
-			cachingError = error
+			abortError = error
 			parser.abortParsing()
 		}
 	}

@@ -149,6 +149,10 @@ Each run works in `/iOS-IntegrationTests-<timestamp>-<runID>` on each provider a
 
 The respective `CloudProvider` is tested here very generally for the specifications of the `CloudProvider` protocol. Special characteristics of the cloud provider must be tested separately.
 
+### Box
+
+- Correct use of the upload session (file size >= 50 MiB), tested with a lowered threshold in `BoxTests`.
+
 ### Dropbox
 
 - Correct use of the upload session (file size >= 150 MiB), tested with lowered limits in `DropboxTests`.

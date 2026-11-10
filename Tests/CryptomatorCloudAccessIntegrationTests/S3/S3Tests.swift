@@ -42,20 +42,7 @@ extension IntegrationTests.ProviderSpecific {
 			try await withIntegrationFixture(S3Tests.backend) { context in
 				let provider = try S3CloudProvider(client: .foreground(credential: IntegrationTestSecrets.s3Credential), maxPageSize: .max, multipartUploadThreshold: 8 * S3Tests.mebibyte, minPartSize: 5 * S3Tests.mebibyte)
 				let cloudPath = try await context.makeSandbox().appendingPathComponent("large.bin")
-				for (replaceExisting, seed) in [(false, UInt32(1)), (true, UInt32(2))] {
-					// Each 4-byte word is its offset XORed with the seed, so that the parts and both versions differ.
-					let words = stride(from: 0, to: 12 * S3Tests.mebibyte, by: 4).map { (UInt32($0) ^ seed).littleEndian }
-					let data = words.withUnsafeBufferPointer { Data(buffer: $0) }
-					let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
-					try data.write(to: localURL)
-
-					let metadata = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
-					let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
-					_ = try await provider.downloadFile(from: cloudPath, to: downloadURL)
-
-					#expect(metadata.size == data.count)
-					#expect(try Data(contentsOf: downloadURL) == data, "The download differs from the upload")
-				}
+				try await expectUploadRoundTrips(ofLength: 12 * S3Tests.mebibyte, to: cloudPath, through: provider, in: context)
 			}
 		}
 
@@ -142,8 +129,7 @@ extension IntegrationTests.ProviderSpecific {
 		/// Uploads a 12 MB file to test 3 parts with the last part smaller than 5 MB. Each 4-byte word holds its own offset, so that the parts differ. The run root's deletion removes it and its copy.
 		private static func uploadFileForMultiPartCopy(in context: IntegrationTestContext) async throws -> MultiPartCopyUpload {
 			let length = multiPartCopyMaxPartSize + (7 * 1024 * 1024)
-			let words = stride(from: 0, to: length, by: 4).map { UInt32($0).littleEndian }
-			let data = words.withUnsafeBufferPointer { Data(buffer: $0) }
+			let data = patternedData(length: length, seed: 0)
 			let tmpFileURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
 			try data.write(to: tmpFileURL)
 			let sandbox = try await context.makeSandbox()

@@ -72,6 +72,28 @@ func waitUntilVisible(_ cloudPath: CloudPath, through provider: CloudProvider, o
 /// How long a test waits for a step to happen, generous because a loaded CI machine can stall for over half a minute.
 let testWaitTimeout: Duration = .seconds(60)
 
+/// Returns data whose 4-byte words are their offset XORed with the seed, so that its parts differ, and so does data of another seed.
+func patternedData(length: Int, seed: UInt32) -> Data {
+	let words = stride(from: 0, to: length, by: 4).map { (UInt32($0) ^ seed).littleEndian }
+	return words.withUnsafeBufferPointer { Data(buffer: $0) }
+}
+
+/// Uploads patterned data of the length as a new file and then replacing it, and expects each download to equal its upload.
+func expectUploadRoundTrips(ofLength length: Int, to cloudPath: CloudPath, through provider: CloudProvider, in context: IntegrationTestContext) async throws {
+	for (replaceExisting, seed) in [(false, UInt32(1)), (true, UInt32(2))] {
+		let data = patternedData(length: length, seed: seed)
+		let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+		try data.write(to: localURL)
+
+		let metadata = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
+		let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+		_ = try await provider.downloadFile(from: cloudPath, to: downloadURL)
+
+		#expect(metadata.size == data.count)
+		#expect(try Data(contentsOf: downloadURL) == data, "The download differs from the upload")
+	}
+}
+
 struct UnfinishedTaskError: Error, CustomStringConvertible {
 	let timeout: Duration
 

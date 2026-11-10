@@ -39,7 +39,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# The result bundles and logs stay out of the output directory, because S3 logs contain the access key ID.
+# The result bundles and logs stay out of the output directory, which CI uploads artifacts from. A failed expectation can print a credential into a result bundle, and nothing checks the logs for credentials.
 # On CI, the runner empties RUNNER_TEMP after the job even when it kills the script.
 WORK_DIR="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/integration-tests.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT

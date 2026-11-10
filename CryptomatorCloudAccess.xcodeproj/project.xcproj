@@ -298,6 +298,7 @@
               "path": "Box",
               "children": [
                 { "path": "BoxCredentialMock.swift", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
+                { "path": "BoxTests.swift", "encoding": "utf8", "target-membership": [ "CryptomatorCloudAccessIntegrationTests/compile-sources" ] },
               ],
             }, {
               "kind": "group",

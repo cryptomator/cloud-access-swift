@@ -14,75 +14,66 @@ import Foundation
 @testable import CryptomatorCloudAccess
 #endif
 
-/// The `createNewVaultFormat…` functions call `waitUntilVisible` after each folder they create, because the next step fails on an eventually consistent provider if it doesn't see the folder yet.
-enum DecoratorFactory {
-	// MARK: - Vault Format 7
+/**
+ Creates the files and folders of a new vault, and opens a vault from them like the app does, through `VaultProviderFactory`.
 
-	static func createNewVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat7ProviderDecorator {
-		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
-		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
-		let decorator = try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-		let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
-		let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		defer {
-			try? FileManager.default.removeItem(at: tmpDirURL)
-		}
+ The `createNewVaultFormat…` functions call `waitUntilVisible` after each folder they create, because the next step fails on an eventually consistent provider if it doesn't see the folder yet.
+ */
+enum DecoratorFactory {
+	private static let masterkeyFilename = "masterkey.cryptomator"
+	private static let vaultConfigFilename = "vault.cryptomator"
+
+	// MARK: - Vault Format 8
+
+	/// The masterkey file's vault version and the vault config are those of a vault that the app creates.
+	static func createNewVaultFormat8(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> (masterkey: Masterkey, vaultConfigToken: Data) {
+		let masterkey = try createMasterkey()
+		let cipherCombo = CryptorScheme.sivGcm
+		let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: cipherCombo, shorteningThreshold: 220)
+		let vaultConfigToken = try vaultConfig.toToken(keyId: "masterkeyfile:\(masterkeyFilename)", rawKey: masterkey.rawKey)
 		try await delegate.createFolder(at: vaultPath)
 		try await waitUntilVisible(vaultPath)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 7, passphrase: password, scryptCostParam: 2)
-		try masterkeyData.write(to: localMasterkeyURL)
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		_ = try await delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
-		let dPath = vaultPath.appendingPathComponent("d")
-		try await delegate.createFolder(at: dPath)
-		try await waitUntilVisible(dPath)
-		let twoCharsPath = rootDirPath.deletingLastPathComponent()
-		try await delegate.createFolder(at: twoCharsPath)
-		try await waitUntilVisible(twoCharsPath)
-		try await delegate.createFolder(at: rootDirPath)
-		try await waitUntilVisible(rootDirPath)
-		return decorator
+		try await upload(MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 999, passphrase: password, scryptCostParam: 2), to: vaultPath.appendingPathComponent(masterkeyFilename), with: delegate)
+		try await upload(vaultConfigToken, to: vaultPath.appendingPathComponent(vaultConfigFilename), with: delegate)
+		try await createRootDirectory(for: Cryptor(masterkey: masterkey, scheme: cipherCombo), vaultPath: vaultPath, delegate: delegate, waitUntilVisible: waitUntilVisible)
+		return (masterkey, vaultConfigToken)
 	}
 
-	static func createFromExistingVaultFormat7(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> VaultFormat7ProviderDecorator {
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		defer {
-			try? FileManager.default.removeItem(at: tmpDirURL)
-		}
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		_ = try await delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL)
-		let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
+	static func createFromExistingVaultFormat8(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> CloudProvider {
+		let vaultConfigToken = try await download(from: vaultPath.appendingPathComponent(vaultConfigFilename), with: delegate)
+		let masterkeyFile = try await downloadMasterkeyFile(delegate: delegate, vaultPath: vaultPath)
 		let masterkey = try masterkeyFile.unlock(passphrase: password)
-		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
-		return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
+		return try VaultProviderFactory.createVaultProvider(from: UnverifiedVaultConfig(token: vaultConfigToken), masterkey: masterkey, vaultPath: vaultPath, with: delegate)
 	}
 
 	// MARK: - Vault Format 6
 
-	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> VaultFormat6ProviderDecorator {
-		let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
-		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
-		let decorator = try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-		let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
-		let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		defer {
-			try? FileManager.default.removeItem(at: tmpDirURL)
-		}
+	static func createNewVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String, waitUntilVisible: (CloudPath) async throws -> Void) async throws -> Masterkey {
+		let masterkey = try createMasterkey()
 		try await delegate.createFolder(at: vaultPath)
 		try await waitUntilVisible(vaultPath)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let masterkeyData = try MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 6, passphrase: password, scryptCostParam: 2)
-		try masterkeyData.write(to: localMasterkeyURL)
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		_ = try await delegate.uploadFile(from: localMasterkeyURL, to: masterkeyCloudPath, replaceExisting: false)
+		try await upload(MasterkeyFile.lock(masterkey: masterkey, vaultVersion: 6, passphrase: password, scryptCostParam: 2), to: vaultPath.appendingPathComponent(masterkeyFilename), with: delegate)
 		let mPath = vaultPath.appendingPathComponent("m")
 		try await delegate.createFolder(at: mPath)
 		try await waitUntilVisible(mPath)
+		try await createRootDirectory(for: Cryptor(masterkey: masterkey, scheme: .sivCtrMac), vaultPath: vaultPath, delegate: delegate, waitUntilVisible: waitUntilVisible)
+		return masterkey
+	}
+
+	static func createFromExistingVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> CloudProvider {
+		let masterkeyFile = try await downloadMasterkeyFile(delegate: delegate, vaultPath: vaultPath)
+		let masterkey = try masterkeyFile.unlock(passphrase: password)
+		return try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: masterkeyFile.version, vaultPath: vaultPath, with: delegate)
+	}
+
+	// MARK: - Helpers
+
+	private static func createMasterkey() throws -> Masterkey {
+		return try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
+	}
+
+	private static func createRootDirectory(for cryptor: Cryptor, vaultPath: CloudPath, delegate: CloudProvider, waitUntilVisible: (CloudPath) async throws -> Void) async throws {
+		let rootDirPath = try getRootDirectoryPath(for: cryptor, vaultPath: vaultPath)
 		let dPath = vaultPath.appendingPathComponent("d")
 		try await delegate.createFolder(at: dPath)
 		try await waitUntilVisible(dPath)
@@ -91,29 +82,33 @@ enum DecoratorFactory {
 		try await waitUntilVisible(twoCharsPath)
 		try await delegate.createFolder(at: rootDirPath)
 		try await waitUntilVisible(rootDirPath)
-		return decorator
 	}
-
-	static func createFromExistingVaultFormat6(delegate: CloudProvider, vaultPath: CloudPath, password: String) async throws -> VaultFormat6ProviderDecorator {
-		let masterkeyCloudPath = vaultPath.appendingPathComponent("masterkey.cryptomator")
-		let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		defer {
-			try? FileManager.default.removeItem(at: tmpDirURL)
-		}
-		let localMasterkeyURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		_ = try await delegate.downloadFile(from: masterkeyCloudPath, to: localMasterkeyURL)
-		let masterkeyFile = try MasterkeyFile.withContentFromURL(url: localMasterkeyURL)
-		let masterkey = try masterkeyFile.unlock(passphrase: password)
-		let cryptor = Cryptor(masterkey: masterkey, scheme: .sivCtrMac)
-		return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: vaultPath, cryptor: cryptor)
-	}
-
-	// MARK: - Helpers
 
 	private static func getRootDirectoryPath(for cryptor: Cryptor, vaultPath: CloudPath) throws -> CloudPath {
 		let digest = try cryptor.encryptDirId(Data())
 		let i = digest.index(digest.startIndex, offsetBy: 2)
 		return vaultPath.appendingPathComponent("d/\(digest[..<i])/\(digest[i...])")
+	}
+
+	private static func downloadMasterkeyFile(delegate: CloudProvider, vaultPath: CloudPath) async throws -> MasterkeyFile {
+		return try await MasterkeyFile.withContentFromData(data: download(from: vaultPath.appendingPathComponent(masterkeyFilename), with: delegate))
+	}
+
+	private static func upload(_ data: Data, to cloudPath: CloudPath, with delegate: CloudProvider) async throws {
+		let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		defer {
+			try? FileManager.default.removeItem(at: localURL)
+		}
+		try data.write(to: localURL)
+		_ = try await delegate.uploadFile(from: localURL, to: cloudPath, replaceExisting: false)
+	}
+
+	private static func download(from cloudPath: CloudPath, with delegate: CloudProvider) async throws -> Data {
+		let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		defer {
+			try? FileManager.default.removeItem(at: localURL)
+		}
+		_ = try await delegate.downloadFile(from: cloudPath, to: localURL)
+		return try Data(contentsOf: localURL)
 	}
 }

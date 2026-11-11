@@ -62,6 +62,16 @@ struct IntegrationTestContext: Sendable {
 		return try fixture.makeLimitedProvider()
 	}
 
+	/// A new provider of the backend and a recorder of its calls to the account's provider, which is how a test sees the ciphertext paths of a vault. A vault backend's provider starts with a cold name cache.
+	func makeRecordingProvider() throws -> (provider: CloudProvider, recorder: PathRecordingProvider) {
+		return try fixture.makeRecordingProvider()
+	}
+
+	/// The provider of the account, which `provider` and the recording providers of a vault backend pass ciphertext paths to.
+	var rawProvider: CloudProvider {
+		return fixture.account.provider
+	}
+
 	/// A provider of the vault of a vault backend, opened from the vault's files with its password.
 	func openVault() async throws -> CloudProvider {
 		let vault = try #require(fixture.vault, "\(backend.token) has no vault")

@@ -88,6 +88,7 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 	 - Parameter lngFileLoader: A closure loading the contents of a `.lng` file for the corresponding `lngFileName`.
 	 - Parameter lngFileName: The name of a `.lng` file, whose original name should be loaded.
 	 - Returns: Either `shortenedPath` if no shortening was applied or the original ("inflated") path.
+	 - Throws: `VaultFormatError.invalidNameFile` if a `.lng` name isn't 32 Base32 characters, or if its `.lng` file holds no single path component or a name whose hash isn't the `.lng` name.
 	 */
 	func getOriginalPath(_ shortenedPath: CloudPath, lngFileLoader loadLngFile: @Sendable (_ lngFileName: String) async throws -> Data) async throws -> CloudPath {
 		precondition(shortenedPath.pathComponents.count <= ciphertextNameCompIdx + 1)
@@ -132,6 +133,10 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 		} else {
 			let data = try await loadLngFile(shortenedName)
 			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
+				throw VaultFormatError.invalidNameFile
+			}
+			// A name with another hash can't be addressed through the inflated path, which `getShortenedPath` shortens to that hash.
+			guard (deflateName(originalName) + VaultFormat6ShortenedNameCache.lngSuffix).utf8.elementsEqual(shortenedName.utf8) else {
 				throw VaultFormatError.invalidNameFile
 			}
 			try? addToCache(shortenedName, originalName: originalName)

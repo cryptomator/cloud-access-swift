@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       backends:
-        description: 'Integration test backends, e.g. pcloud,s3-vf7 (empty runs all)'
+        description: 'Integration test backends, e.g. pcloud,s3-vf8 (empty runs all)'
         required: false
         default: ''
 

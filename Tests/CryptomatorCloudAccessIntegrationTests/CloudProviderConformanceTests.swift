@@ -7,9 +7,9 @@
 //
 
 #if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
+@testable import CryptomatorCloudAccessCore
 #else
-import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccess
 #endif
 import Foundation
 import Testing
@@ -137,17 +137,16 @@ extension IntegrationTests {
 			}
 		}
 
+		/// A page can hold fewer items than the page size, because a vault backend leaves out what isn't an item of the vault, e.g. the `dirid.c9r` of vault format 8.
 		@Test(arguments: IntegrationBackend.selected)
 		func fetchItemListPagination(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let provider = try context.makeLimitedProvider()
 				let firstItemList = try await provider.fetchItemList(forFolderAt: context.treeRoot, withPageToken: nil)
-				let secondItemList = try await provider.fetchItemList(forFolderAt: context.treeRoot, withPageToken: firstItemList.nextPageToken)
+				let itemLists = try await [firstItemList] + Conformance.remainingItemLists(after: firstItemList, forFolderAt: context.treeRoot, through: provider)
 				#expect(firstItemList.nextPageToken != nil)
-				#expect(firstItemList.items.count == 3)
-				#expect(secondItemList.nextPageToken == nil)
-				#expect(secondItemList.items.count == 3)
-				#expect((firstItemList.items + secondItemList.items).sorted() == Conformance.expectedRootFolderItems(in: context))
+				#expect(itemLists.allSatisfy { $0.items.count <= IntegrationFixtures.maxPageSizeForLimitedProvider })
+				#expect(itemLists.flatMap(\.items).sorted() == Conformance.expectedRootFolderItems(in: context))
 			}
 		}
 
@@ -159,10 +158,10 @@ extension IntegrationTests {
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
 				let firstItemList = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil)
 				let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath)
-				let secondItemList = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: firstItemList.nextPageToken)
+				let itemLists = try await [firstItemList] + Conformance.remainingItemLists(after: firstItemList, forFolderAt: cloudPath, through: provider)
 				#expect(firstItemList.nextPageToken != nil)
-				#expect(secondItemList.nextPageToken == nil)
-				#expect((firstItemList.items + secondItemList.items).sorted() == Conformance.expectedTestFolderItems(in: context))
+				#expect(itemLists.allSatisfy { $0.items.count <= IntegrationFixtures.maxPageSizeForLimitedProvider })
+				#expect(itemLists.flatMap(\.items).sorted() == Conformance.expectedTestFolderItems(in: context))
 				#expect(otherItemList.items.sorted() == Conformance.expectedTestFolderItems(in: context))
 			}
 		}
@@ -618,6 +617,92 @@ extension IntegrationTests {
 			}
 		}
 
+		/**
+		 A provider that was called with a long path has its shortened name cached, so the listing uses a new provider, which has to restore the names from the name files.
+		 */
+		@Test(arguments: IntegrationBackend.selectedVaults)
+		func itemsWithLongNamesAreShortened(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let format = backend.format
+				let sandbox = try await context.makeSandbox()
+				let folderPath = sandbox.appendingPathComponent(String(repeating: "d", count: 200))
+				let filePath = sandbox.appendingPathComponent(String(repeating: "f", count: 200))
+				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
+				let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let (writer, writerRecorder) = try context.makeRecordingProvider()
+
+				try await writer.createFolder(at: folderPath)
+				_ = try await writer.uploadFile(from: localURL, to: filePath, replaceExisting: false)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				let uploadedPaths = writerRecorder.paths(of: .uploadFile)
+				let createdShortenedNames = Set((writerRecorder.paths(of: .createFolder) + uploadedPaths).compactMap { Conformance.shortenedName(in: $0, of: format) })
+				let uploadedNameFiles = Set(uploadedPaths.compactMap { Conformance.shortenedName(ofNameFileAt: $0, of: format) })
+				// The decorator ignores a failed upload of `dirid.c9r`, so only the recorder shows whether it was uploaded.
+				let uploadedDirIdFile = uploadedPaths.contains { $0.lastPathComponent == "dirid.c9r" }
+				let listing = try await Conformance.coldListing(of: sandbox, expecting: [folderPath, filePath], in: context)
+				let downloadedNameFiles = Set(listing.recorder.paths(of: .downloadFile).compactMap { Conformance.shortenedName(ofNameFileAt: $0, of: format) })
+				let folderMetadata = try await listing.provider.fetchItemMetadata(at: folderPath)
+				let fileMetadata = try await listing.provider.fetchItemMetadata(at: filePath)
+				_ = try await listing.provider.downloadFile(from: filePath, to: downloadURL)
+
+				#expect(createdShortenedNames.count == 2, "The folder and the file weren't created at shortened names")
+				#expect(uploadedNameFiles == createdShortenedNames)
+				#expect(uploadedDirIdFile == (format == .vf8))
+				#expect(listing.cloudPaths == [folderPath, filePath])
+				#expect(downloadedNameFiles == createdShortenedNames, "The listing didn't restore the names from the name files")
+				#expect(folderMetadata.cloudPath == folderPath)
+				#expect(folderMetadata.itemType == .folder)
+				#expect(fileMetadata.cloudPath == filePath)
+				#expect(fileMetadata.itemType == .file)
+				#expect(try String(contentsOf: downloadURL, encoding: .utf8) == Conformance.testContentForSandboxItems)
+			}
+		}
+
+		/// Moves a file from a shortened name to another one and on to an unshortened one, and deletes a folder with a shortened name. Every listing uses a new provider, so the listings after the moves have to restore the names from the name files.
+		@Test(arguments: IntegrationBackend.selectedVaults)
+		func itemsWithLongNamesAreMovedAndDeleted(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let sandbox = try await context.makeSandbox()
+				let folderPath = sandbox.appendingPathComponent(String(repeating: "d", count: 200))
+				let filePath = sandbox.appendingPathComponent(String(repeating: "f", count: 200))
+				let renamedFilePath = sandbox.appendingPathComponent(String(repeating: "r", count: 200))
+				let shortFilePath = sandbox.appendingPathComponent("shortName")
+				let nestedFilePath = folderPath.appendingPathComponent("fileInFolderWithLongName")
+				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
+				let (writer, writerRecorder) = try context.makeRecordingProvider()
+				try await writer.createFolder(at: folderPath)
+				_ = try await writer.uploadFile(from: localURL, to: filePath, replaceExisting: false)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+
+				try await writer.moveFile(from: filePath, to: renamedFilePath)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				// Listed before the move to the short name, which deletes the `.c9s` directory of vault format 8 and its name file with it.
+				let listingAfterRename = try await Conformance.coldListing(of: sandbox, expecting: [folderPath, renamedFilePath], in: context)
+
+				try await writer.moveFile(from: renamedFilePath, to: shortFilePath)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				let shortTargetPath = writerRecorder.paths(of: .moveFile).last
+				let listingAfterShortening = try await Conformance.coldListing(of: sandbox, expecting: [folderPath, shortFilePath], in: context)
+
+				_ = try await writer.uploadFile(from: localURL, to: nestedFilePath, replaceExisting: false)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				let listingOfFolder = try await Conformance.coldListing(of: folderPath, expecting: [nestedFilePath], in: context)
+
+				try await writer.deleteFile(at: shortFilePath)
+				try await writer.deleteFile(at: nestedFilePath)
+				try await writer.deleteFolder(at: folderPath)
+				let listingAfterDeletion = try await Conformance.coldListing(of: sandbox, expecting: [], in: context)
+
+				#expect(listingAfterRename.cloudPaths == [folderPath, renamedFilePath])
+				#expect(shortTargetPath.map { Conformance.shortenedName(in: $0, of: backend.format) == nil } == true, "The file wasn't moved to an unshortened name")
+				#expect(listingAfterShortening.cloudPaths == [folderPath, shortFilePath])
+				#expect(listingOfFolder.cloudPaths == [nestedFilePath])
+				#expect(listingAfterDeletion.cloudPaths == [])
+			}
+		}
+
 		// MARK: - Helpers
 
 		private static let testContentForSandboxItems = "AAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBABABABABABBABABABBABABABABABAB"
@@ -632,6 +717,61 @@ extension IntegrationTests {
 			let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
 			return [CloudItemMetadata(name: "EmptySubfolder", cloudPath: cloudPath.appendingPathComponent("EmptySubfolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
 				+ (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
+		}
+
+		private static func remainingItemLists(after itemList: CloudItemList, forFolderAt cloudPath: CloudPath, through provider: CloudProvider) async throws -> [CloudItemList] {
+			var itemLists = [CloudItemList]()
+			var pageToken = itemList.nextPageToken
+			while pageToken != nil {
+				let nextItemList = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: pageToken)
+				itemLists.append(nextItemList)
+				pageToken = nextItemList.nextPageToken
+			}
+			return itemLists
+		}
+
+		/**
+		 Lists the folder with a new provider until it lists the expected paths, which must be sorted.
+
+		 A listing that doesn't match yet is retried. A moved `.c9s` directory holds the name file of its old name until the new one is uploaded, so its item is left out until then. An eventually consistent provider can list an item before its name file or before the contents of its `.c9s` directory, which fails the listing as not found.
+		 */
+		private static func coldListing(of cloudPath: CloudPath, expecting expectedCloudPaths: [CloudPath], in context: IntegrationTestContext) async throws -> ColdListing {
+			let (provider, recorder) = try context.makeRecordingProvider()
+			var cloudPaths: [CloudPath]?
+			_ = try await eventually(on: context.backend.kind) {
+				do {
+					cloudPaths = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath).items.sorted().map(\.cloudPath)
+				} catch CloudProviderError.itemNotFound, VaultFormat7ShorteningError.c9sItemNotFound {
+					cloudPaths = nil
+				}
+				return cloudPaths == expectedCloudPaths
+			}
+			return ColdListing(cloudPaths: cloudPaths, provider: provider, recorder: recorder)
+		}
+
+		/// Waits until the account's provider sees every item that the recorder's calls created since the last wait, so that the next step doesn't fail on the visibility lag.
+		private static func waitUntilCreatedItemsAreVisible(of recorder: PathRecordingProvider, in context: IntegrationTestContext) async throws {
+			for cloudPath in recorder.takeCreatedPaths() {
+				try await waitUntilVisible(cloudPath, through: context.rawProvider, on: context.backend.kind)
+			}
+		}
+
+		/// The shortened name in the ciphertext path of an item or of a file in its `.c9s` directory, or `nil` if the path has none or is a name file's.
+		private static func shortenedName(in cloudPath: CloudPath, of format: IntegrationVaultFormat) -> String? {
+			guard shortenedName(ofNameFileAt: cloudPath, of: format) == nil else {
+				return nil
+			}
+			let suffix = format == .vf6 ? ".lng" : ".c9s"
+			return cloudPath.pathComponents.first { $0.hasSuffix(suffix) }
+		}
+
+		/// The shortened name whose name file is at the ciphertext path: below `m` in vault format 6, else the `name.c9s` of a `.c9s` directory.
+		private static func shortenedName(ofNameFileAt cloudPath: CloudPath, of format: IntegrationVaultFormat) -> String? {
+			if format == .vf6 {
+				return cloudPath.pathComponents.contains("m") ? cloudPath.lastPathComponent : nil
+			} else {
+				return cloudPath.lastPathComponent == "name.c9s" ? cloudPath.deletingLastPathComponent().lastPathComponent : nil
+			}
 		}
 
 		private static func expectDownload(from cloudPath: CloudPath, toHave expectedFileContent: String, in context: IntegrationTestContext) async throws {
@@ -662,4 +802,11 @@ extension IntegrationTests {
 			#expect(targetExists, "The target doesn't exist")
 		}
 	}
+}
+
+private struct ColdListing {
+	/// The paths of the last listing, sorted by name, or `nil` if it failed because an item wasn't found.
+	let cloudPaths: [CloudPath]?
+	let provider: CloudProvider
+	let recorder: PathRecordingProvider
 }

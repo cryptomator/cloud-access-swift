@@ -11,6 +11,7 @@
 #else
 @testable import CryptomatorCloudAccess
 #endif
+import CryptomatorCryptoLib
 import Foundation
 
 /// The providers of an account and the folder of this run in it, shared by all vault formats.
@@ -20,10 +21,11 @@ struct IntegrationAccount: Sendable {
 	let runRoot: CloudPath
 }
 
+/// A vault whose decorators are built like the app builds them, through `VaultProviderFactory`: a crypto decorator over a shortening decorator.
 struct IntegrationVault: Sendable {
 	enum Format: Sendable {
 		case vf6
-		case vf7
+		case vf8
 
 		init?(_ format: IntegrationVaultFormat) {
 			switch format {
@@ -31,45 +33,50 @@ struct IntegrationVault: Sendable {
 				return nil
 			case .vf6:
 				self = .vf6
-			case .vf7:
-				self = .vf7
+			case .vf8:
+				self = .vf8
 			}
 		}
 	}
 
-	static let password = "IntegrationTest"
-
-	let format: Format
-	let path: CloudPath
-	let cryptor: VaultCryptor
-
-	static func create(_ format: Format, at path: CloudPath, delegate: CloudProvider, waitUntilVisible: @Sendable (CloudPath) async throws -> Void) async throws -> IntegrationVault {
-		let cryptor: VaultCryptor = switch format {
-		case .vf6:
-			try await DecoratorFactory.createNewVaultFormat6(delegate: delegate, vaultPath: path, password: password, waitUntilVisible: waitUntilVisible).cryptor
-		case .vf7:
-			try await DecoratorFactory.createNewVaultFormat7(delegate: delegate, vaultPath: path, password: password, waitUntilVisible: waitUntilVisible).cryptor
-		}
-		return IntegrationVault(format: format, path: path, cryptor: cryptor)
+	private enum Keys: Sendable {
+		case vf6(Masterkey)
+		case vf8(Masterkey, vaultConfigToken: Data)
 	}
 
-	/// A new decorator with the vault's cryptor, which skips downloading and unlocking the masterkey.
-	func makeDecorator(delegate: CloudProvider) throws -> CloudProvider {
+	static let password = "IntegrationTest"
+
+	let path: CloudPath
+	private let keys: Keys
+
+	static func create(_ format: Format, at path: CloudPath, delegate: CloudProvider, waitUntilVisible: @Sendable (CloudPath) async throws -> Void) async throws -> IntegrationVault {
 		switch format {
 		case .vf6:
-			return try VaultFormat6ProviderDecorator(delegate: delegate, vaultPath: path, cryptor: cryptor)
-		case .vf7:
-			return try VaultFormat7ProviderDecorator(delegate: delegate, vaultPath: path, cryptor: cryptor)
+			let masterkey = try await DecoratorFactory.createNewVaultFormat6(delegate: delegate, vaultPath: path, password: password, waitUntilVisible: waitUntilVisible)
+			return IntegrationVault(path: path, keys: .vf6(masterkey))
+		case .vf8:
+			let (masterkey, vaultConfigToken) = try await DecoratorFactory.createNewVaultFormat8(delegate: delegate, vaultPath: path, password: password, waitUntilVisible: waitUntilVisible)
+			return IntegrationVault(path: path, keys: .vf8(masterkey, vaultConfigToken: vaultConfigToken))
+		}
+	}
+
+	/// A new decorator with the vault's masterkey, which skips downloading the vault's files and unlocking the masterkey.
+	func makeDecorator(delegate: CloudProvider) throws -> CloudProvider {
+		switch keys {
+		case let .vf6(masterkey):
+			return try VaultProviderFactory.createLegacyVaultProvider(from: masterkey, vaultVersion: 6, vaultPath: path, with: delegate)
+		case let .vf8(masterkey, vaultConfigToken):
+			return try VaultProviderFactory.createVaultProvider(from: UnverifiedVaultConfig(token: vaultConfigToken), masterkey: masterkey, vaultPath: path, with: delegate)
 		}
 	}
 
 	/// A new decorator from the vault's files, unlocked with the password.
 	func open(delegate: CloudProvider) async throws -> CloudProvider {
-		switch format {
+		switch keys {
 		case .vf6:
 			return try await DecoratorFactory.createFromExistingVaultFormat6(delegate: delegate, vaultPath: path, password: IntegrationVault.password)
-		case .vf7:
-			return try await DecoratorFactory.createFromExistingVaultFormat7(delegate: delegate, vaultPath: path, password: IntegrationVault.password)
+		case .vf8:
+			return try await DecoratorFactory.createFromExistingVaultFormat8(delegate: delegate, vaultPath: path, password: IntegrationVault.password)
 		}
 	}
 }
@@ -116,6 +123,11 @@ struct IntegrationFixture: Sendable {
 	func makeLimitedProvider() throws -> CloudProvider {
 		let delegate = account.limitedProvider
 		return try vault?.makeDecorator(delegate: delegate) ?? delegate
+	}
+
+	func makeRecordingProvider() throws -> (provider: CloudProvider, recorder: PathRecordingProvider) {
+		let recorder = PathRecordingProvider(delegate: account.provider)
+		return try (vault?.makeDecorator(delegate: recorder) ?? recorder, recorder)
 	}
 }
 

@@ -169,7 +169,7 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 	/**
 	 A provider that checks the source first reports the moved item as `itemNotFound`, one that checks the target first as `itemAlreadyExists`.
 
-	 The test seeds the name that the item was moved to, and the mock's files don't change, so the listing holds both names and returns the item twice. A real page that was listed before the move holds only the shortened name. For the same reason, the metadata hook reports the shortened name as gone.
+	 The test seeds the name that the item was moved to. Because the mock's files don't change, the page holds both names, like a page listed during a move that copies and then deletes. The metadata hook reports the shortened name as gone, because the mock's files don't show the move. The listing returns the item once.
 	 */
 	func testFetchItemListReturnsLegacyShortenedNameThatAnotherListingMoved() async throws {
 		let shortenedPath = CloudPath("\(legacyDirPath)/\(legacyShortenedName)")
@@ -183,7 +183,7 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 			}
 			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
-			XCTAssertEqual(Array(repeating: "\(legacyDirPath)/\(legacyOriginalName)", count: 2), itemList.items.map(\.cloudPath.path), "\(error)")
+			XCTAssertEqual(["\(legacyDirPath)/\(legacyOriginalName)"], itemList.items.map(\.cloudPath.path), "\(error)")
 		}
 	}
 

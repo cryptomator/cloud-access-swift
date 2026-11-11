@@ -38,6 +38,31 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertTrue(error is CancellationError)
 	}
 
+	/// No response is queued, so a probe of the folder below the root would fail with another error.
+	func testCheckContinuationTokenForInvalidityKeepsMissingConnection() async {
+		for folderPath in [CloudPath.root, CloudPath("/foo")] {
+			let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: folderPath, error: URLError(.notConnectedToInternet))
+			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, folderPath.path)
+		}
+	}
+
+	func testCheckContinuationTokenForInvalidityWithOtherErrorAtRoot() async {
+		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: S3Error(statusCode: 500, code: "InternalError"))
+		XCTAssertEqual(.pageTokenInvalid, error as? CloudProviderError)
+	}
+
+	/// Only the listing's response is queued, so a probe of the folder below the root would fail with another error.
+	func testFetchItemListWithPageTokenAndRejectedCredentialsThrowsUnauthorized() async throws {
+		let provider: S3CloudProvider = provider
+		for folderPath in [CloudPath.root, CloudPath("/foo")] {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>ExpiredToken</Code></Error>")]
+			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: folderPath, withPageToken: "token")) { error in
+				XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError, folderPath.path)
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, folderPath.path)
+		}
+	}
+
 	func testGetPrefix() {
 		let rootCloudPath = CloudPath("/")
 		XCTAssertEqual("", provider.getPrefix(for: rootCloudPath))
@@ -64,15 +89,16 @@ class S3CloudProviderTests: XCTestCase {
 		for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken"] {
 			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403, code: code)) as? CloudProviderError, code)
 		}
+		// These codes name a rejected security token, not a continuation token.
+		for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
+			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError, code)
+		}
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401)) as? CloudProviderError)
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403)) as? CloudProviderError)
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue))) as? CloudProviderError)
 	}
 
 	func testConvertInvalidPageTokenErrors() {
-		for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
-			XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError, code)
-		}
 		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "continuation-token")) as? CloudProviderError)
 		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 500, code: "InternalError", reason: "Incorrect padding")) as? CloudProviderError)
 	}
@@ -525,7 +551,7 @@ class S3CloudProviderTests: XCTestCase {
 		let request = try XCTUnwrap(requests.withLock { $0 }.first)
 		XCTAssertEqual("GET", request.httpMethod)
 		XCTAssertEqual("/exampleBucket", request.url?.path)
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1001", "delimiter": "/", "continuation-token": "token"], S3CloudProviderTests.queryParameters(of: request))
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"], S3CloudProviderTests.queryParameters(of: request))
 		XCTAssertEqual([CloudPath("/folder/a.txt"), CloudPath("/folder/sub")], itemList.items.map(\.cloudPath))
 		XCTAssertEqual([.file, .folder], itemList.items.map(\.itemType))
 		XCTAssertEqual("next", itemList.nextPageToken)

@@ -82,8 +82,8 @@ public final class S3CloudProvider: CloudProvider {
 			let prefix = getPrefix(for: cloudPath)
 			let output: S3ListObjectsResult
 			do {
-				// The listing includes the folder itself.
-				output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: pageToken, maxKeys: maxPageSize + 1)
+				// A folder's marker counts toward `max-keys`, so the first page of a folder that has one holds one item fewer. Asking for one more key would let every other page exceed `maxPageSize`.
+				output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: pageToken, maxKeys: maxPageSize)
 			} catch {
 				throw await checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
 			}
@@ -309,7 +309,8 @@ public final class S3CloudProvider: CloudProvider {
 	 Checks for continuation token invalidity.
 
 	 As not every S3 provider returns the same error message if the continuation token is invalid, we first try to convert the passed error to a `CloudProviderError.pageTokenInvalid`.
-	 If the conversion fails because we don't know the error, we check if the folder exists at the passed `folderPath`. If this is the case, we assume that the request failed because of an invalid continuation token.
+	 Rejected credentials and a missing connection say nothing about the continuation token, so `unauthorized` and `noInternetConnection` are returned as they are.
+	 For every other error, we check if the folder exists at the passed `folderPath`, which the root always does. If this is the case, we assume that the request failed because of an invalid continuation token.
 
 	 - Returns: The error with which the request for the item list fails.
 	 */
@@ -318,8 +319,11 @@ public final class S3CloudProvider: CloudProvider {
 		guard continuationToken != nil, !(convertedError is CancellationError) else {
 			return convertedError
 		}
-		if case CloudProviderError.pageTokenInvalid = convertedError {
+		switch convertedError {
+		case CloudProviderError.pageTokenInvalid, CloudProviderError.unauthorized, CloudProviderError.noInternetConnection:
 			return convertedError
+		default:
+			break
 		}
 		if folderPath == .root {
 			return CloudProviderError.pageTokenInvalid
@@ -469,10 +473,8 @@ public final class S3CloudProvider: CloudProvider {
 
 	func convertS3Error(_ error: S3Error) -> Error {
 		switch error.code {
-		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken":
+		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
 			return CloudProviderError.unauthorized
-		case "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
-			return CloudProviderError.pageTokenInvalid
 		case "NoSuchKey":
 			return CloudProviderError.itemNotFound
 		case "InvalidArgument" where error.argumentName == "continuation-token":

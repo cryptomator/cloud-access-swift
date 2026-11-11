@@ -25,6 +25,7 @@ public final class DropboxCloudProvider: CloudProvider {
 		self.uploadSessionChunkLength = uploadSessionChunkLength
 	}
 
+	/// - Parameter maxPageSize: The number of items that a listing asks Dropbox for per page, capped at 2000. Dropbox treats it as approximate, so a page can hold slightly more items.
 	public convenience init(credential: DropboxCredential, maxPageSize: Int = .max) {
 		self.init(client: .foreground(tokenSource: credential.tokenSource), maxPageSize: maxPageSize)
 	}
@@ -32,6 +33,7 @@ public final class DropboxCloudProvider: CloudProvider {
 	/**
 	 Creates a Dropbox provider whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
 
+	 - Parameter maxPageSize: The number of items that a listing asks Dropbox for per page, capped at 2000. Dropbox treats it as approximate, so a page can hold slightly more items.
 	 - Parameter sharedContainerIdentifier: The container into which the background URL session downloads files, which an app extension must share with its app, or `nil` in the app.
 	 */
 	public static func withBackgroundSession(credential: DropboxCredential, maxPageSize: Int = .max, sessionIdentifier: String, sharedContainerIdentifier: String?) -> DropboxCloudProvider {

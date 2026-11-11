@@ -147,7 +147,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	/**
 	 Restores the name of a listed item. Old Cryptomator versions also shortened names of exactly the longest length that is kept today. A listed item whose original name is no longer shortened is moved to that name, because every other operation addresses it by that name. Cryptomator for Android does the same, as did cryptofs up to 1.8.
 
-	 - Throws: `LegacyNameNotMoved` if the item can neither be moved to nor found under its original name, unless a request failed for a missing internet connection or was cancelled.
+	 - Throws: `LegacyNameNotMoved` if the move fails and the item isn't at its original name, or if another item has that name. A missing internet connection and cancellation are thrown unchanged.
 	 */
 	private func getOriginalMetadataOfListedItem(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
 		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
@@ -158,8 +158,12 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		do {
 			do {
 				try await delegate.moveFile(from: shortenedMetadata.cloudPath, to: originalPath)
-			} catch CloudProviderError.itemNotFound {
-				// The item was moved after this page was listed, e.g., by a concurrent listing or another client.
+			} catch let error as CloudProviderError where error == .itemNotFound || error == .itemAlreadyExists {
+				// The item was moved after this page was listed, e.g., by a concurrent listing or another client. A provider that checks the target first reports that as `itemAlreadyExists`. If the listed item still exists then, another item has its original name.
+				try Task.checkCancellation()
+				if error == .itemAlreadyExists, try await delegate.checkForItemExistence(at: shortenedMetadata.cloudPath) {
+					throw error
+				}
 				try Task.checkCancellation()
 				return try await delegate.fetchItemMetadata(at: originalPath)
 			}

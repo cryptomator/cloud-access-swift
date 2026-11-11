@@ -166,13 +166,25 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		}
 	}
 
-	/// The test seeds the name that the item was moved to, and the mock's files don't change, so the listing holds both names and returns the item twice. A real page that was listed before the move holds only the shortened name.
+	/**
+	 A provider that checks the source first reports the moved item as `itemNotFound`, one that checks the target first as `itemAlreadyExists`.
+
+	 The test seeds the name that the item was moved to, and the mock's files don't change, so the listing holds both names and returns the item twice. A real page that was listed before the move holds only the shortened name. For the same reason, the metadata hook reports the shortened name as gone.
+	 */
 	func testFetchItemListReturnsLegacyShortenedNameThatAnotherListingMoved() async throws {
-		let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data()])
-		provider.moveHook = { throw CloudProviderError.itemNotFound }
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
-		XCTAssertEqual(Array(repeating: "\(legacyDirPath)/\(legacyOriginalName)", count: 2), itemList.items.map(\.cloudPath.path))
+		let shortenedPath = CloudPath("\(legacyDirPath)/\(legacyShortenedName)")
+		for error in [CloudProviderError.itemNotFound, .itemAlreadyExists] {
+			let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data()])
+			provider.moveHook = { throw error }
+			provider.metadataHook = { cloudPath in
+				if cloudPath == shortenedPath {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
+			XCTAssertEqual(Array(repeating: "\(legacyDirPath)/\(legacyOriginalName)", count: 2), itemList.items.map(\.cloudPath.path), "\(error)")
+		}
 	}
 
 	func testFetchItemListWithCancelledMoveOfLegacyShortenedName() async throws {

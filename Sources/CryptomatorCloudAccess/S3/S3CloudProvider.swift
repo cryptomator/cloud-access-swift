@@ -309,7 +309,8 @@ public final class S3CloudProvider: CloudProvider {
 	 Checks for continuation token invalidity.
 
 	 As not every S3 provider returns the same error message if the continuation token is invalid, we first try to convert the passed error to a `CloudProviderError.pageTokenInvalid`.
-	 If the conversion fails because we don't know the error, we check if the folder exists at the passed `folderPath`. If this is the case, we assume that the request failed because of an invalid continuation token.
+	 Rejected credentials and a missing connection say nothing about the continuation token, so `unauthorized` and `noInternetConnection` are returned as they are.
+	 For every other error, we check if the folder exists at the passed `folderPath`, which the root always does. If this is the case, we assume that the request failed because of an invalid continuation token.
 
 	 - Returns: The error with which the request for the item list fails.
 	 */
@@ -318,8 +319,11 @@ public final class S3CloudProvider: CloudProvider {
 		guard continuationToken != nil, !(convertedError is CancellationError) else {
 			return convertedError
 		}
-		if case CloudProviderError.pageTokenInvalid = convertedError {
+		switch convertedError {
+		case CloudProviderError.pageTokenInvalid, CloudProviderError.unauthorized, CloudProviderError.noInternetConnection:
 			return convertedError
+		default:
+			break
 		}
 		if folderPath == .root {
 			return CloudProviderError.pageTokenInvalid

@@ -38,6 +38,31 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertTrue(error is CancellationError)
 	}
 
+	/// No response is queued, so a probe of the folder below the root would fail with another error.
+	func testCheckContinuationTokenForInvalidityKeepsMissingConnection() async {
+		for folderPath in [CloudPath.root, CloudPath("/foo")] {
+			let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: folderPath, error: URLError(.notConnectedToInternet))
+			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, folderPath.path)
+		}
+	}
+
+	func testCheckContinuationTokenForInvalidityWithOtherErrorAtRoot() async {
+		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: S3Error(statusCode: 500, code: "InternalError"))
+		XCTAssertEqual(.pageTokenInvalid, error as? CloudProviderError)
+	}
+
+	/// Only the listing's response is queued, so a probe of the folder below the root would fail with another error.
+	func testFetchItemListWithPageTokenAndRejectedCredentialsThrowsUnauthorized() async throws {
+		let provider: S3CloudProvider = provider
+		for folderPath in [CloudPath.root, CloudPath("/foo")] {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>ExpiredToken</Code></Error>")]
+			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: folderPath, withPageToken: "token")) { error in
+				XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError, folderPath.path)
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, folderPath.path)
+		}
+	}
+
 	func testGetPrefix() {
 		let rootCloudPath = CloudPath("/")
 		XCTAssertEqual("", provider.getPrefix(for: rootCloudPath))

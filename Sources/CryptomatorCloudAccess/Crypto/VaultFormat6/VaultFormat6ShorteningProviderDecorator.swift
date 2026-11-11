@@ -8,6 +8,13 @@
 
 import Foundation
 
+/// Thrown for a listed item whose legacy name couldn't be moved to its original name. The listing skips it like `invalidNameFile`, so such an item never fails the listing.
+private struct LegacyNameNotMoved: Error {}
+
+private func isLeftOutOfListing(_ error: Error) -> Bool {
+	return isInvalidNameFile(error) || error is LegacyNameNotMoved
+}
+
 /**
  Cloud provider decorator for Cryptomator vaults in vault format 6 (only name shortening).
 
@@ -53,7 +60,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		let itemList = try await delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken)
-		let originalItems = try await allSettled(itemList.items, skipping: isInvalidNameFile) { try await self.getOriginalMetadata($0) }
+		let originalItems = try await allSettled(itemList.items, skipping: isLeftOutOfListing) { try await self.getOriginalMetadataOfListedItem($0) }
 		return CloudItemList(items: originalItems, nextPageToken: itemList.nextPageToken)
 	}
 
@@ -135,6 +142,31 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
 		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
 		return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
+	}
+
+	/**
+	 Restores the name of a listed item. Old Cryptomator versions also shortened names of exactly the longest length that is kept today. A listed item whose original name is no longer shortened is moved to that name, because every other operation addresses it by that name. Cryptomator for Android does the same, as did cryptofs up to 1.8.
+
+	 - Throws: `LegacyNameNotMoved` if the item can neither be moved to nor found under its original name, unless a request failed for a missing internet connection or was cancelled.
+	 */
+	private func getOriginalMetadataOfListedItem(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
+		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
+		guard originalPath != shortenedMetadata.cloudPath, !shortenedNameCache.getShortenedPath(originalPath).pointsToLNG else {
+			return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
+		}
+		try Task.checkCancellation()
+		do {
+			do {
+				try await delegate.moveFile(from: shortenedMetadata.cloudPath, to: originalPath)
+			} catch CloudProviderError.itemNotFound {
+				// The item was moved after this page was listed, e.g., by a concurrent listing or another client.
+				try Task.checkCancellation()
+				return try await delegate.fetchItemMetadata(at: originalPath)
+			}
+		} catch let error where !(error is CancellationError) && error as? CloudProviderError != .noInternetConnection {
+			throw LegacyNameNotMoved()
+		}
+		return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
 	}
 
 	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.

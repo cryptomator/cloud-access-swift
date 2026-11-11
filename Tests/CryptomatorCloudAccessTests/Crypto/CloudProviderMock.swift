@@ -25,7 +25,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		var moved: [String: String] = [:]
 		var transferHook: (@Sendable (CloudPath, Progress?) async throws -> Void)?
 		var mutationHook: (@Sendable () -> Void)?
-		var metadataHook: (@Sendable (CloudPath) -> Void)?
+		var metadataHook: (@Sendable (CloudPath) throws -> Void)?
+		var moveHook: (@Sendable () throws -> Void)?
 	}
 
 	let folders: Set<String>
@@ -66,10 +67,16 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		set { state.withLock { $0.mutationHook = newValue } }
 	}
 
-	/// Runs before the metadata of an item is fetched.
-	var metadataHook: (@Sendable (CloudPath) -> Void)? {
+	/// Runs before the metadata of an item is fetched, which fails with the error that the hook throws.
+	var metadataHook: (@Sendable (CloudPath) throws -> Void)? {
 		get { state.withLock { $0.metadataHook } }
 		set { state.withLock { $0.metadataHook = newValue } }
+	}
+
+	/// Runs before a file is moved, which fails with the error that the hook throws.
+	var moveHook: (@Sendable () throws -> Void)? {
+		get { state.withLock { $0.moveHook } }
+		set { state.withLock { $0.moveHook = newValue } }
 	}
 
 	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max) {
@@ -82,7 +89,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
 		record("fetchItemMetadata")
-		metadataHook?(cloudPath)
+		try metadataHook?(cloudPath)
 		return try getItemMetadata(at: cloudPath)
 	}
 
@@ -159,6 +166,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		record("moveFile")
+		try moveHook?()
 		moveItem(from: sourceCloudPath, to: targetCloudPath)
 	}
 

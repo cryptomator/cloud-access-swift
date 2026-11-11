@@ -82,8 +82,8 @@ public final class S3CloudProvider: CloudProvider {
 			let prefix = getPrefix(for: cloudPath)
 			let output: S3ListObjectsResult
 			do {
-				// The listing includes the folder itself.
-				output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: pageToken, maxKeys: maxPageSize + 1)
+				// A folder's marker counts toward `max-keys`, so the first page of a folder that has one holds one item fewer. Asking for one more key would let every other page exceed `maxPageSize`.
+				output = try await listObjects(withPrefix: prefix, recursive: false, pageToken: pageToken, maxKeys: maxPageSize)
 			} catch {
 				throw await checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
 			}
@@ -469,10 +469,8 @@ public final class S3CloudProvider: CloudProvider {
 
 	func convertS3Error(_ error: S3Error) -> Error {
 		switch error.code {
-		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken":
+		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
 			return CloudProviderError.unauthorized
-		case "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
-			return CloudProviderError.pageTokenInvalid
 		case "NoSuchKey":
 			return CloudProviderError.itemNotFound
 		case "InvalidArgument" where error.argumentName == "continuation-token":

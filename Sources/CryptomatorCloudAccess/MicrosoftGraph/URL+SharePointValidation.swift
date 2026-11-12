@@ -9,6 +9,7 @@
 import Foundation
 
 public extension URL {
+	@discardableResult
 	func validateForSharePoint() throws -> URL {
 		let urlString = absoluteString
 		guard !urlString.isEmpty else {
@@ -23,7 +24,7 @@ public extension URL {
 		let pattern = #"^https:\/\/[a-zA-Z0-9-]+\.sharepoint\.com\/(sites|teams)\/[^\/]+$"#
 		let regex = try NSRegularExpression(pattern: pattern)
 		let range = NSRange(urlString.startIndex..., in: urlString)
-		guard regex.firstMatch(in: urlString, range: range) != nil, let url = URL(string: urlString) else {
+		guard regex.firstMatch(in: urlString, range: range) != nil else {
 			throw SharePointURLValidationError.invalidURL
 		}
 		return self

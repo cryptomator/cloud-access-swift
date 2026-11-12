@@ -226,13 +226,16 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	}
 
 	private func fetchC9SItemMetadata(_ c9sDir: C9SDir) async throws -> CloudItemMetadata {
-		let c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: nil)
-		let wanted = ["contents.c9r", "dir.c9r", "symlink.c9r"]
-		let filter = { (item: CloudItemMetadata) in wanted.contains(item.name) }
-		guard let c9sItemMetadata = c9sItemList.items.first(where: filter) else {
-			throw VaultFormat7ShorteningError.c9sItemNotFound
-		}
-		return c9sItemMetadata
+		var pageToken: String?
+		repeat {
+			try Task.checkCancellation()
+			let c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: pageToken)
+			if let c9sItemMetadata = c9sItemList.items.first(where: { guessItemTypeByC9SItemName($0.name) != .unknown }) {
+				return c9sItemMetadata
+			}
+			pageToken = c9sItemList.nextPageToken
+		} while pageToken != nil
+		throw VaultFormat7ShorteningError.c9sItemNotFound
 	}
 
 	private func guessItemTypeByC9SItemName(_ c9sItemName: String) -> CloudItemType {

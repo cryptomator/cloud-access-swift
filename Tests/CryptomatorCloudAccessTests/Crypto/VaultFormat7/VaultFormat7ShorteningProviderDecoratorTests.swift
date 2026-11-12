@@ -93,6 +93,21 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		XCTAssertEqual(["\(dirPath)/\(longName)"], itemList.items.map(\.cloudPath.path))
 	}
 
+	/// With one item per page, `name.c9s` fills the first page of the `.c9s` directory and `symlink.c9r` is on the second.
+	func testFetchItemListFindsC9SItemOnLaterPage() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let longName = "\(String(repeating: "a", count: 217)).c9r"
+		let c9sDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: [
+			"\(c9sDirPath)/name.c9s": Data(longName.utf8),
+			"\(c9sDirPath)/symlink.c9r": Data()
+		], maxPageSize: 1)
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+		XCTAssertEqual(["\(dirPath)/\(longName)"], itemList.items.map(\.cloudPath.path))
+		XCTAssertEqual([.symlink], itemList.items.map(\.itemType))
+	}
+
 	/// The invalid name is listed last, so the listing throws the lookup's error only if `invalidNameFile` is skipped.
 	func testFetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
 		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"

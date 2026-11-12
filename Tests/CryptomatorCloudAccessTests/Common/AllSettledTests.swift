@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class AllSettledTests: XCTestCase {
 	func testReturnsEmptyResultForEmptyInput() async throws {

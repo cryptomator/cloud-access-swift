@@ -9,7 +9,7 @@
 import Foundation
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class WebDAVClientTests: XCTestCase {
 	private let baseURL = URL(string: "https://webdav.example.com/remote.php/webdav/")!

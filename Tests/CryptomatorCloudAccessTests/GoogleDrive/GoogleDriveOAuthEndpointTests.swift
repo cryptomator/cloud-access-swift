@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class GoogleDriveOAuthEndpointTests: XCTestCase {
 	private static let now = Date(timeIntervalSince1970: 1_792_000_000)

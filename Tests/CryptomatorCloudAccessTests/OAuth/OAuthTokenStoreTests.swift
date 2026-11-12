@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class OAuthTokenStoreTests: XCTestCase {
 	private static let tokenA = OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil)

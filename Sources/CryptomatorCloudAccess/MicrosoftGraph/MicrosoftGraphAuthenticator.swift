@@ -6,9 +6,7 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
 import CryptomatorCloudAccessCore
-#endif
 @preconcurrency import MSAL
 import UIKit
 

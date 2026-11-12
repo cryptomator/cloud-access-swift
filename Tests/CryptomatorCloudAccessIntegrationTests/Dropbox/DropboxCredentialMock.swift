@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum DropboxCredentialMock {
 	/**
@@ -20,7 +20,7 @@ enum DropboxCredentialMock {
 		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: IntegrationTestSecrets.dropboxRefreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .dropbox, account: userID))
 		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("DropboxTokenLocks", isDirectory: true)
 		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
-		let endpoint = DropboxOAuthEndpoint(appKey: IntegrationTestSecrets.dropboxAppKey)
+		let endpoint = try DropboxOAuthEndpoint(appKey: IntegrationTestSecrets.dropboxAppKey)
 		let tokenSource = StoredOAuthTokenSource(provider: .dropbox, account: userID, persistence: oauth, legacyDecoder: DropboxLegacyToken.decode, refresher: { token in
 			try await endpoint.refresh(token)
 		}, revoke: { _ in })

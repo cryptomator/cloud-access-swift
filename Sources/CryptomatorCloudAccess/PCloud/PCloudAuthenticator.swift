@@ -6,10 +6,8 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@_spi(Authentication) import CryptomatorCloudAccessCore
-#endif
 import AuthenticationServices
+@_spi(Authentication) import CryptomatorCloudAccessCore
 import UIKit
 
 public enum PCloudAuthenticatorError: Error {

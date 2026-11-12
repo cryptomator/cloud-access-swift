@@ -9,7 +9,7 @@
 import Foundation
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// `@unchecked Sendable`: `folders`, `files`, `maxPageSize` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
 public class CloudProviderMock: CloudProvider, @unchecked Sendable {

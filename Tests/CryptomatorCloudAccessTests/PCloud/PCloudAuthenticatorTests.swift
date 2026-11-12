@@ -9,6 +9,7 @@
 import AuthenticationServices
 import XCTest
 @testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class PCloudAuthenticatorTests: XCTestCase {
 	private let appKey = "AppKey"

@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// `@unchecked Sendable`: restates the conformance of `WebDAVClient`; the recorded requests are protected by `requests`.
 class WebDAVClientMock: WebDAVClient, @unchecked Sendable {

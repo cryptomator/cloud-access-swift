@@ -8,7 +8,7 @@
 
 import Foundation
 import Testing
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.s3)))
@@ -45,7 +45,7 @@ extension IntegrationTests.ProviderSpecific {
 		@Test
 		func forcedPathStyleRoundTrip() async throws {
 			try await withIntegrationFixture(S3Tests.backend) { context in
-				let credential = IntegrationTestSecrets.s3Credential
+				let credential = try IntegrationTestSecrets.s3Credential
 				let provider = try S3CloudProvider(credential: S3Credential(accessKey: credential.accessKey, secretKey: credential.secretKey, url: credential.url, bucket: credential.bucket, region: credential.region, forcePathStyle: true))
 				let sandbox = try await context.makeSandbox()
 				let cloudPath = sandbox.appendingPathComponent("file.txt")
@@ -73,7 +73,7 @@ extension IntegrationTests.ProviderSpecific {
 		@Test
 		func verifyCredentialKeepsWorkingCredential() async throws {
 			try await withIntegrationRetries(on: .s3) {
-				let credential = IntegrationTestSecrets.s3Credential
+				let credential = try IntegrationTestSecrets.s3Credential
 				let verifiedCredential = try await S3Authenticator.verifyCredential(credential)
 				let isUnchanged = verifiedCredential == credential
 				#expect(isUnchanged, "The login check changed a working credential")

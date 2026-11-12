@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// Always hands out an invalid token, so that every request ends in `CloudProviderError.unauthorized`.
 struct InvalidOAuthTokenSource: OAuthTokenSource {

@@ -9,7 +9,7 @@
 import Foundation
 import GRDB
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// The cache of one item type, with the items built from a path, a number for the identifier and an item type.
 struct IdentifierCacheProbe {

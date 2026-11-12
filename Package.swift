@@ -60,6 +60,35 @@ let package = Package(
 			dependencies: ["CryptomatorCloudAccessCore", .product(name: "AppAuth", package: "AppAuth-iOS")],
 			sources: appExtensionUnsafeSources,
 			swiftSettings: swiftSettings
+		),
+		.testTarget(
+			name: "CryptomatorCloudAccessTests",
+			dependencies: [
+				"CryptomatorCloudAccess",
+				"CryptomatorCloudAccessCore",
+				.product(name: "AppAuth", package: "AppAuth-iOS"),
+				.product(name: "CocoaLumberjackSwift", package: "CocoaLumberjack"),
+				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
+				.product(name: "GRDB", package: "GRDB.swift"),
+				.product(name: "JOSESwift", package: "JOSESwift"),
+				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc")
+			],
+			resources: [
+				.process("WebDAV/AuthenticatorResponses"),
+				.process("WebDAV/ClientTestResponses"),
+				.process("WebDAV/PropfindTestRequests")
+			],
+			swiftSettings: swiftSettings
+		),
+		.testTarget(
+			name: "CryptomatorCloudAccessIntegrationTests",
+			dependencies: [
+				"CryptomatorCloudAccessCore",
+				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
+				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc")
+			],
+			exclude: ["README.md"],
+			swiftSettings: swiftSettings
 		)
 	],
 	swiftLanguageModes: [.v6]

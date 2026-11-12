@@ -8,7 +8,7 @@
 
 import CryptomatorCryptoLib
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// The providers of an account and the folder of this run in it, shared by all vault formats.
 struct IntegrationAccount: Sendable {

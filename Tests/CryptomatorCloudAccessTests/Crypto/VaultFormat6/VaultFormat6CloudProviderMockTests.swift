@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class VaultFormat6CloudProviderMockTests: XCTestCase {
 	var tmpDirURL: URL!

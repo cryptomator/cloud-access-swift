@@ -8,7 +8,7 @@
 
 import Foundation
 import Testing
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.dropbox)))

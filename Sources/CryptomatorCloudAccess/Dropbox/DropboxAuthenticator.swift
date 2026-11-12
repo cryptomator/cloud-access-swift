@@ -6,11 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@_spi(Authentication) import CryptomatorCloudAccessCore
-#endif
 import AuthenticationServices
 import CryptoKit
+@_spi(Authentication) import CryptomatorCloudAccessCore
 import Foundation
 import os
 import UIKit

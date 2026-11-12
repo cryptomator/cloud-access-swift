@@ -9,7 +9,7 @@
 import Foundation
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class MicrosoftGraphCloudProviderTests: XCTestCase {
 	private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#

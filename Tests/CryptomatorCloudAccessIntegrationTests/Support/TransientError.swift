@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 private let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet]
 

@@ -8,7 +8,7 @@
 
 import Foundation
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class NetworkConnectionErrorTests: XCTestCase {
 	// MARK: - URLError codes that should be detected

@@ -9,6 +9,7 @@
 @preconcurrency import MSAL
 import XCTest
 @testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 @MainActor
 class MicrosoftGraphAuthenticatorTests: XCTestCase {

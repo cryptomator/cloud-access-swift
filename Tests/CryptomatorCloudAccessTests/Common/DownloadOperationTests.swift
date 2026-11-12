@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class DownloadOperationTests: XCTestCase {
 	let itemMetadata = CloudItemMetadata(name: "file", cloudPath: CloudPath("/file"), itemType: .unknown, lastModifiedDate: Date(timeIntervalSince1970: 0), size: nil)

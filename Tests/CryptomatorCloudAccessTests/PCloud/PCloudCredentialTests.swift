@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class PCloudCredentialTests: XCTestCase {
 	private static let userInfo = #"{"result":0,"email":"user@example.com","userid":7}"#

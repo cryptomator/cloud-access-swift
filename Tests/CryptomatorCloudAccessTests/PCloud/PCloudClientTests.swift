@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class PCloudClientTests: XCTestCase {
 	private var sleeps: SleepRecorder!

@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class S3XMLTests: XCTestCase {
 	func testListObjectsResult() throws {

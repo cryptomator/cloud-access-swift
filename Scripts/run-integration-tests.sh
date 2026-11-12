@@ -7,7 +7,7 @@
 # Usage: Scripts/run-integration-tests.sh [--only <file>]
 #
 # Environment:
-#   DERIVED_DATA_PATH  DerivedData of `xcodebuild build-for-testing -scheme AllIntegrationTests` (default: Xcode's default)
+#   DERIVED_DATA_PATH  DerivedData of `xcodebuild build-for-testing -scheme CryptomatorCloudAccess-Package` (default: Xcode's default)
 #   DEVICE             Simulator name (default: iPhone 17)
 #   BACKENDS           INTEGRATION_BACKENDS filter, e.g. `pcloud,s3-vf8` (default: all backends, ignored with --only)
 #
@@ -94,12 +94,12 @@ run_pass() {
     derived_data_args=(-derivedDataPath "$DERIVED_DATA_PATH")
   fi
   env NSUnbufferedIO=YES TEST_RUNNER_INTEGRATION_BACKENDS="$filter" xcodebuild test-without-building \
-    -scheme AllIntegrationTests \
+    -scheme CryptomatorCloudAccess-Package \
     -destination "name=$DEVICE" \
     ${derived_data_args[@]+"${derived_data_args[@]}"} \
     -resultBundlePath "$WORK_DIR/$name.xcresult" \
     -collect-test-diagnostics never \
-    ${1+"$@"} 2>&1 | "${formatter[@]}"
+    "$@" 2>&1 | "${formatter[@]}"
   echo "${PIPESTATUS[0]}" > "$WORK_DIR/$name.exit"
   echo "$filter" > "$WORK_DIR/$name.filter"
   echo "::endgroup::"
@@ -139,7 +139,8 @@ not_passed() {
 if [ -n "$ONLY_FILE" ]; then
   run_selected_pass pass1 "$ONLY_FILE"
 else
-  run_pass pass1 "$BACKENDS"
+  # The scheme also holds the unit tests.
+  run_pass pass1 "$BACKENDS" "-only-testing:$TEST_BUNDLE"
 fi
 
 if ! parse_pass pass1; then

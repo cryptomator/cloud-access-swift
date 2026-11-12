@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class DropboxJSONTests: XCTestCase {
 	func testServerModifiedIsParsedAsSwiftyDropboxDid() {

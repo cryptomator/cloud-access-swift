@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// The credentials that all tests of a provider share, so that each is authorized once per run.
 private enum SharedCredentials {
@@ -17,7 +17,6 @@ private enum SharedCredentials {
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
 	static let microsoftGraph = MicrosoftGraphCredentialMock()
 	static let pCloud = Result { try PCloudCredential.integrationTest() }
-	static let s3 = IntegrationTestSecrets.s3Credential
 }
 
 extension IntegrationProvider {
@@ -37,7 +36,7 @@ extension IntegrationProvider {
 		case .pCloud:
 			return try PCloudCloudProvider(credential: SharedCredentials.pCloud.get(), maxPageSize: maxPageSize)
 		case .s3:
-			return try S3CloudProvider(credential: SharedCredentials.s3, maxPageSize: maxPageSize)
+			return try S3CloudProvider(credential: IntegrationTestSecrets.s3Credential, maxPageSize: maxPageSize)
 		case .webDAV:
 			return try WebDAVCloudProvider(credential: IntegrationTestSecrets.webDAVCredential, maxPageSize: maxPageSize)
 		case .localFileSystem:
@@ -62,11 +61,11 @@ extension IntegrationProvider {
 		case .pCloud:
 			return try PCloudCloudProvider(credential: .integrationTestInvalid())
 		case .s3:
-			let credential = SharedCredentials.s3
+			let credential = try IntegrationTestSecrets.s3Credential
 			let invalidCredential = S3Credential(accessKey: credential.accessKey, secretKey: credential.secretKey + "Foo", url: credential.url, bucket: credential.bucket, region: credential.region, forcePathStyle: credential.forcePathStyle)
 			return try S3CloudProvider(credential: invalidCredential)
 		case .webDAV:
-			let credential = IntegrationTestSecrets.webDAVCredential
+			let credential = try IntegrationTestSecrets.webDAVCredential
 			let invalidCredential = WebDAVCredential(baseURL: credential.baseURL, username: credential.username, password: credential.password + "Foo", allowedCertificate: credential.allowedCertificate)
 			return try WebDAVCloudProvider(credential: invalidCredential)
 		case .localFileSystem:

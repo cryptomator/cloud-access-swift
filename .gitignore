@@ -1,6 +1,5 @@
 # Secrets
 .integration-test-secrets.sh
-Tests/CryptomatorCloudAccessIntegrationTests/IntegrationTestSecrets.swift
 
 # macOS
 .DS_Store

@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 extension PCloudCredential {
 	static func integrationTest() throws -> PCloudCredential {
@@ -19,7 +19,7 @@ extension PCloudCredential {
 	}
 
 	private static func integrationTestAPIHost() throws -> String {
-		guard let apiHost = apiHost(IntegrationTestSecrets.pCloudHTTPAPIHostName) else {
+		guard let apiHost = try apiHost(IntegrationTestSecrets.pCloudHTTPAPIHostName) else {
 			throw URLError(.badURL)
 		}
 		return apiHost

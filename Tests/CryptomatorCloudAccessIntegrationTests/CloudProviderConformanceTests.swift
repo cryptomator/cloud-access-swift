@@ -8,7 +8,7 @@
 
 import Foundation
 import Testing
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /**
  Tests every backend against the specification of the `CloudProvider` protocol.

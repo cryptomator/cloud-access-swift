@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 extension URLProtocolMock {
 	static func formParameters(of request: URLRequest) -> [String: String] {

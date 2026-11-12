@@ -169,7 +169,7 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertEqual("", calls[0].filter)
         bundle = os.path.join(os.path.dirname(calls[0].arguments[6]), "pass1.xcresult")
-        self.assertEqual(["test-without-building", "-scheme", "AllIntegrationTests", "-destination", "name=iPhone 17", "-resultBundlePath", bundle, "-collect-test-diagnostics", "never"], calls[0].arguments)
+        self.assertEqual(["test-without-building", "-scheme", "CryptomatorCloudAccess-Package", "-destination", "name=iPhone 17", "-resultBundlePath", bundle, "-collect-test-diagnostics", "never", "-only-testing:" + BUNDLE], calls[0].arguments)
 
     def test_pair_that_passes_on_rerun_is_healed(self):
         self.write_pass("pass1", results(

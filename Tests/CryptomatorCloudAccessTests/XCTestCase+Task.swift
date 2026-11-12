@@ -9,7 +9,7 @@
 import Foundation
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 struct UnfinishedTaskError: Error {}
 

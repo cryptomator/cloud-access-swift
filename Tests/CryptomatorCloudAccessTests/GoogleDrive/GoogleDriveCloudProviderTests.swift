@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class GoogleDriveCloudProviderTests: XCTestCase {
 	private static let rootWithFile = GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "F", name: "file.txt")])

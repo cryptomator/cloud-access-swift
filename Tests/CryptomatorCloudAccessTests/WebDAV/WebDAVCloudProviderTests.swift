@@ -9,7 +9,7 @@
 import Foundation
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum WebDAVProviderTestsError: Error {
 	case missingTestResource
@@ -1153,7 +1153,7 @@ class WebDAVCloudProviderTests: XCTestCase {
 	}
 
 	private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
-		let testBundle = Bundle(for: type(of: self))
+		let testBundle = Bundle.module
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
 			throw WebDAVProviderTestsError.missingTestResource
 		}

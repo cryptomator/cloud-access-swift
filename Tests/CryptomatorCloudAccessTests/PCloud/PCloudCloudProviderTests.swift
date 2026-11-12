@@ -9,7 +9,7 @@
 import GRDB
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class PCloudCloudProviderTests: XCTestCase {
 	private var provider: PCloudCloudProvider!

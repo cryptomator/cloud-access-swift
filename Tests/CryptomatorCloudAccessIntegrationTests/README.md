@@ -31,9 +31,9 @@ export WEBDAV_USERNAME=...
 export WEBDAV_PASSWORD=...
 ```
 
-If you aren't using the Xcode project, you may have to run `./create-integration-test-secrets-file.sh` once. If you change the secrets later on, you have to run that script again.
+The tests read this file when they run, so a build needs no secrets and a changed secret needs no rebuild. They don't run the file as a script but read only its `export KEY=value` lines, skipping empty lines and lines starting with `#`. A line whose value a shell would expand, unescape or split (a `$`, a backslash, an unquoted space or `~`) fails every test that needs a secret, and the error names the line's number. Put a value in single quotes if it holds anything but letters, digits and `_./:+=@%,-`. A value can't hold a single quote.
 
-If you are building via a CI system, set these secret environment variables accordingly.
+The tests find the file through the path of their own source, so they have to run on the machine that built them. CI writes the file from its secrets before it runs the tests.
 
 ### How to Get the Secrets
 
@@ -117,9 +117,16 @@ The tests are Swift Testing suites that run in parallel in one process, so the t
 
 A vault backend builds its providers through `VaultProviderFactory`, like the app does, so each is a crypto decorator over a shortening decorator. Vault format 7 has no backend, because its decorators differ from those of format 8 only in `createFolder`, which the unit tests cover. Its cipher combo, `sivCtrMac`, runs in the `vf6` backend, because the `vf8` vault uses `sivGcm` like a new vault of the app.
 
-`INTEGRATION_BACKENDS` selects the backends: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf8`). Unset or empty selects all backends, and `none` selects none, so only the tests that don't depend on the selection run. An unknown token fails `backendSelectionIsValid`, so a typo can't pass a run that tested nothing. The provider tokens are `box`, `dropbox`, `googledrive`, `microsoftgraph`, `pcloud`, `s3`, `webdav` and `localfilesystem`. Each per-provider scheme, e.g. `PCloudIntegrationTests`, sets the filter to its provider. `AllIntegrationTests` sets none. To filter it, set `TEST_RUNNER_INTEGRATION_BACKENDS` in the environment of `xcodebuild`.
+`INTEGRATION_BACKENDS` selects the backends: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf8`). Unset or empty selects all backends, and `none` selects none, so only the tests that don't depend on the selection run. An unknown token fails `backendSelectionIsValid`, so a typo can't pass a run that tested nothing. The provider tokens are `box`, `dropbox`, `googledrive`, `microsoftgraph`, `pcloud`, `s3`, `webdav` and `localfilesystem`. `xcodebuild` passes a variable to the tests only with the prefix `TEST_RUNNER_`, which it strips, so set `TEST_RUNNER_INTEGRATION_BACKENDS` in its environment.
 
-To run the tests like CI does, build with `xcodebuild build-for-testing -scheme AllIntegrationTests -destination 'name=<simulator>'` and then run `DEVICE='<simulator>' BACKENDS=pcloud ./Scripts/run-integration-tests.sh`.
+The package's scheme, `CryptomatorCloudAccess-Package`, holds the unit tests too, so select the integration tests with `-only-testing`. To run the tests of one provider:
+
+```sh
+xcodebuild build-for-testing -scheme CryptomatorCloudAccess-Package -destination 'name=<simulator>'
+TEST_RUNNER_INTEGRATION_BACKENDS=pcloud xcodebuild test-without-building -scheme CryptomatorCloudAccess-Package -destination 'name=<simulator>' -only-testing:CryptomatorCloudAccessIntegrationTests
+```
+
+To run the tests like CI does, build the same way and then run `DEVICE='<simulator>' BACKENDS=pcloud ./Scripts/run-integration-tests.sh`.
 
 ## Writing Tests
 
@@ -131,7 +138,7 @@ A conformance test takes `IntegrationBackend.selected` as its arguments, or a su
 
 A provider-specific suite is nested in `IntegrationTests.ProviderSpecific`, so it runs within the sweep and cleanup of the run. It is gated with `.enabled(if: IntegrationBackend.isSelected(.<provider>))`. Its name is the provider token followed by `Tests`, in any case, e.g. `S3Tests` or `GoogleDriveTests`, because the CI script re-runs a failed test with the provider whose token it derives from the name. A test that needs no fixture runs its body through `withIntegrationRetries(on:_:)`, which retries and bounds it the same way.
 
-To add a provider, add a case to `IntegrationProvider`, create its providers in `IntegrationProvider+Factory.swift` and add a scheme that sets `INTEGRATION_BACKENDS` to its token.
+To add a provider, add a case to `IntegrationProvider` and create its providers in `IntegrationProvider+Factory.swift`. Read its secrets through `IntegrationTestSecrets`, add them to the sample above, and add each to the `env` of the step in `.github/workflows/build.yml` that writes the secrets file, with the prefix `SECRET_`.
 
 ## Retries
 

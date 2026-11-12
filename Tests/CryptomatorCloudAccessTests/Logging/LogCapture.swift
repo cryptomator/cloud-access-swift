@@ -9,7 +9,7 @@
 import CocoaLumberjackSwift
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// Captures the messages of `CloudAccessDDLog` with debug logging enabled, until `stop()` is called.
 ///

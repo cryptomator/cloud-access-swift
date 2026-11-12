@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class DropboxLegacyTokenTests: XCTestCase {
 	func testDecodeShortLivedAccessTokenOfObjCSDK() throws {

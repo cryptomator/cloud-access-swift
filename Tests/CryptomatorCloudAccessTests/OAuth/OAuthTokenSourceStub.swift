@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// Hands out `TOKEN` until a refresh rejects it, and `REFRESHED` afterwards. Keeps the username in memory.
 final class OAuthTokenSourceStub: OAuthTokenSource {

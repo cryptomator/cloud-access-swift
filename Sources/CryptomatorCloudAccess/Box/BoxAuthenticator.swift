@@ -6,10 +6,8 @@
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@_spi(Authentication) import CryptomatorCloudAccessCore
-#endif
 import AuthenticationServices
+@_spi(Authentication) import CryptomatorCloudAccessCore
 import UIKit
 
 public enum BoxAuthenticatorError: Error {

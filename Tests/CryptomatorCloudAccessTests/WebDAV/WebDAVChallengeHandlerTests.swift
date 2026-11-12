@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class WebDAVChallengeHandlerTests: XCTestCase {
 	/// A self-signed certificate for webdav.example.com.

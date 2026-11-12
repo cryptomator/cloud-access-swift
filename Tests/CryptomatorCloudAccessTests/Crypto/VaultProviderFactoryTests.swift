@@ -8,7 +8,7 @@
 
 import CryptomatorCryptoLib
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class VaultProviderFactoryTests: XCTestCase {
 	let cloudProviderMock = CloudProviderMock(folders: [], files: [String: Data]())

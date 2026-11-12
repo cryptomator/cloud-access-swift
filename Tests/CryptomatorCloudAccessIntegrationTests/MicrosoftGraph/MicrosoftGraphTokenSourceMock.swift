@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum MicrosoftGraphTokenSourceMockError: Error {
 	case tokenRequestFailed(statusCode: Int)
@@ -65,12 +65,12 @@ final class MicrosoftGraphTokenSourceMock: BearerTokenSource {
 		return try getAccessTokenResponse(from: data).accessToken
 	}
 
-	private func getAccessTokenRequest() -> URLRequest {
+	private func getAccessTokenRequest() throws -> URLRequest {
 		let url = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/token")!
 		var request = URLRequest(url: url)
 		request.httpMethod = "POST"
 		var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
-		components.queryItems = [
+		components.queryItems = try [
 			URLQueryItem(name: "client_id", value: IntegrationTestSecrets.microsoftGraphClientId),
 			URLQueryItem(name: "scope", value: "https://graph.microsoft.com/Files.ReadWrite"),
 			URLQueryItem(name: "refresh_token", value: IntegrationTestSecrets.microsoftGraphRefreshToken),

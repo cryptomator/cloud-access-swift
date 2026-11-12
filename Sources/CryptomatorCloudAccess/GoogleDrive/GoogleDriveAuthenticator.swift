@@ -6,10 +6,8 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@_spi(Authentication) import CryptomatorCloudAccessCore
-#endif
 @preconcurrency import AppAuth
+@_spi(Authentication) import CryptomatorCloudAccessCore
 import Foundation
 
 public enum GoogleDriveAuthenticatorError: Error {

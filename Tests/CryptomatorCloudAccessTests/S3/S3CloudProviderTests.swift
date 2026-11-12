@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class S3CloudProviderTests: XCTestCase {
 	var provider: S3CloudProvider!

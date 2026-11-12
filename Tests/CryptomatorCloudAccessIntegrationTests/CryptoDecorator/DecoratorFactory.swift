@@ -8,7 +8,7 @@
 
 import CryptomatorCryptoLib
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /**
  Creates the files and folders of a new vault, and opens a vault from them like the app does, through `VaultProviderFactory`.

@@ -9,9 +9,9 @@
 import Foundation
 import os
 import Testing
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
-/// Checks the test runner's retry policy, permits and error classification, the run-root naming, and the wiring of the fixtures on the local file system, which needs no network.
+/// Checks the test runner's retry policy, permits and error classification, the run-root naming, the parsing of the secrets file, and the wiring of the fixtures on the local file system, which needs no network.
 extension IntegrationTests {
 	struct Runner {
 		private static let backend = IntegrationBackend(.localFileSystem, .plain)
@@ -221,6 +221,30 @@ extension IntegrationTests {
 			#expect(abs(date.timeIntervalSinceNow) < 24 * 60 * 60)
 			#expect(IntegrationFixtures.runRootDate(ofFolderNamed: "iOS-IntegrationTests-20261015T093000Z-1A2B3C4D") == Date(timeIntervalSince1970: 1_792_056_600))
 			#expect(IntegrationFixtures.runRootDate(ofFolderNamed: "iOS-IntegrationTests-Plain-1A2B3C4D") == nil)
+		}
+
+		// MARK: - Secrets
+
+		@Test
+		func secretsAreReadFromExportLines() throws {
+			let script = """
+			#!/bin/sh
+			# comment
+
+			export PLAIN=abc-123_/+=.:@%,
+			export SINGLE='a b"$c\\d'
+			export DOUBLE="a b'c"
+			export EMPTY=
+			"""
+			#expect(try IntegrationTestSecrets.parse(script) == ["PLAIN": "abc-123_/+=.:@%,", "SINGLE": "a b\"$c\\d", "DOUBLE": "a b'c", "EMPTY": ""])
+		}
+
+		/// A shell would expand, unescape, split or run these, or not export them, so reading them literally would yield another value than the shell does.
+		@Test(arguments: ["KEY=value", "export KEY=a b", "export KEY=$OTHER", "export KEY=\"$OTHER\"", "export KEY=\"a\\nb\"", "export KEY=`date`", "export KEY=a\\ b", "export KEY='a'b", "export KEY=a;date", "export KEY=~", "export KEY=a:~", "export KEY={a,b}", "export KEY=*", "export KEY=a # comment", "echo hello"])
+		func secretsRejectLineThatShellReadsDifferently(_ line: String) {
+			#expect(throws: IntegrationTestSecretsError.unsupportedLine(2)) {
+				try IntegrationTestSecrets.parse("export FIRST=1\n\(line)")
+			}
 		}
 
 		private func expectNoRetry(of error: some Error & Equatable) async throws {

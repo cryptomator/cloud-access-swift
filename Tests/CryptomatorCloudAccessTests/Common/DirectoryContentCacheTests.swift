@@ -8,7 +8,7 @@
 
 import GRDB
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class DirectoryContentCacheTests: XCTestCase {
 	var cache: DirectoryContentDBCache!

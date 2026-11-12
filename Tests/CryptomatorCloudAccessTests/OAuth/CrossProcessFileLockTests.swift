@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class CrossProcessFileLockTests: XCTestCase {
 	private var directoryURL: URL!

@@ -9,7 +9,7 @@
 import os
 import Security
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class KeychainOAuthTokenStorageTests: XCTestCase {
 	private static let googleKey = OAuthAccountKey(provider: .googleDrive, account: "112233")

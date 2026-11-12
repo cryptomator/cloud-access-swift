@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecoratorTests {
 	var shorteningDecorator: VaultFormat6ShorteningProviderDecorator!

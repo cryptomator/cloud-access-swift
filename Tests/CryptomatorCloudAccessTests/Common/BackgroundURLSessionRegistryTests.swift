@@ -8,7 +8,7 @@
 
 import os
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// The registry creates `.default` sessions for the fake background identifiers, because the hostless test bundle can't create background sessions.
 class BackgroundURLSessionRegistryTests: XCTestCase {

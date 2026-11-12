@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// Keeps the logins of the integration tests in memory, so that no test touches the keychain.
 final class MemoryOAuthTokenStorage: OAuthTokenStorage {

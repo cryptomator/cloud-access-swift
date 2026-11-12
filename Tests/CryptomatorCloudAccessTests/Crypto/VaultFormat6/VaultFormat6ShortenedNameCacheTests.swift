@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class VaultFormat6ShortenedNameCacheTests: XCTestCase {
 	let vaultPath = CloudPath("/foo/bar")

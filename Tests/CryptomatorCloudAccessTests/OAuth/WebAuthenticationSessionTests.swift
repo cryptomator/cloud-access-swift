@@ -8,6 +8,7 @@
 
 import XCTest
 @testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 @MainActor
 class WebAuthenticationSessionTests: XCTestCase {

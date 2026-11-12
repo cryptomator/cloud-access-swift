@@ -8,7 +8,7 @@
 
 import Foundation
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum PropfindResponseParserTestsError: Error {
 	case missingTestResource
@@ -139,7 +139,7 @@ class PropfindResponseParserTests: XCTestCase {
 	// MARK: - Internal
 
 	private func getXMLParser(forResource name: String, withExtension ext: String) throws -> XMLParser {
-		let testBundle = Bundle(for: type(of: self))
+		let testBundle = Bundle.module
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext), let xmlParser = XMLParser(contentsOf: fileURL) else {
 			throw PropfindResponseParserTestsError.missingTestResource
 		}

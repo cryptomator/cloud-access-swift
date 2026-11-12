@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 /// `@unchecked Sendable`: restates the conformance of `MicrosoftGraphCredential`; this subclass adds no state.
 class MicrosoftGraphCredentialMock: MicrosoftGraphCredential, @unchecked Sendable {

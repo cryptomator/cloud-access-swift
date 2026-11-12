@@ -8,7 +8,7 @@
 
 import GRDB
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class CachedPropfindResponseParserTests: XCTestCase {
 	var cacheMock: DirectoryContentCacheMock!
@@ -285,7 +285,7 @@ class CachedPropfindResponseParserTests: XCTestCase {
 	}
 
 	private func getXMLParser(forResource name: String, withExtension ext: String) throws -> XMLParser {
-		let testBundle = Bundle(for: type(of: self))
+		let testBundle = Bundle.module
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext), let xmlParser = XMLParser(contentsOf: fileURL) else {
 			throw PropfindResponseParserTestsError.missingTestResource
 		}

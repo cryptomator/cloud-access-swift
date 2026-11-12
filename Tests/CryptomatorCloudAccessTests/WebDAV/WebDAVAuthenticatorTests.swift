@@ -8,7 +8,7 @@
 
 import Foundation
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum WebDAVAuthenticatorTestsError: Error {
 	case missingTestResource
@@ -55,7 +55,7 @@ class WebDAVAuthenticatorTests: XCTestCase {
 	// MARK: - Internal
 
 	private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
-		let testBundle = Bundle(for: type(of: self))
+		let testBundle = Bundle.module
 		guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
 			throw WebDAVAuthenticatorTestsError.missingTestResource
 		}

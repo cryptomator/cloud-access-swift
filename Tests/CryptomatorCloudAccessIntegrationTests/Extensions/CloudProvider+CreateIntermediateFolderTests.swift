@@ -9,7 +9,7 @@
 import Foundation
 import os
 import Testing
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 enum CloudProviderFolderMockError: Error {
 	case notMocked

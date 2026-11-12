@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import CryptomatorCloudAccess
+@testable import CryptomatorCloudAccessCore
 
 class SDKContinuationTests: XCTestCase {
 	func testResumesExactlyOnceUnderConcurrentDoubleCompletion() async throws {

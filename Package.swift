@@ -33,12 +33,12 @@ let package = Package(
 		.library(name: "CryptomatorCloudAccessCore", targets: ["CryptomatorCloudAccessCore"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.16.0"),
+		.package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", exact: "2.17.1"),
 		.package(url: "https://github.com/cryptomator/cryptolib-swift.git", .upToNextMinor(from: "3.0.0")),
 		.package(url: "https://github.com/CocoaLumberjack/CocoaLumberjack.git", .upToNextMinor(from: "3.10.0")),
-		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.11.1")),
+		.package(url: "https://github.com/groue/GRDB.swift.git", .upToNextMinor(from: "7.12.0")),
 		.package(url: "https://github.com/openid/AppAuth-iOS.git", .upToNextMinor(from: "3.0.0")),
-		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0-cryptomator.2")
+		.package(url: "https://github.com/cryptomator/JOSESwift.git", exact: "3.0.0")
 	],
 	targets: [
 		.target(

@@ -90,10 +90,10 @@ public final class S3CloudProvider: CloudProvider {
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) received output: \(output)")
 			let listedItems = CloudItemList(listObjects: output, listedPrefix: prefix)
 			let itemList = removeParentFolderFrom(itemList: listedItems, parentFolderPath: cloudPath)
-			// Skip the check for a missing folder if a key below the prefix was left out. That key proves that the folder exists, although the page may hold no item.
-			let keysBelowPrefix = (output.contents.map(\.key) + output.commonPrefixes).count(where: { $0.deletingPrefix(prefix) != nil })
-			if listedItems.items.count == keysBelowPrefix {
-				try await validateItemList(itemList, folderPath: cloudPath)
+			// A key with the prefix, be it the folder's marker or a key that was left out, proves that the folder exists, although the page may hold no item. Without one, the folder may also be missing or a file.
+			let hasKeyWithPrefix = output.contents.contains(where: { $0.key.deletingPrefix(prefix) != nil }) || output.commonPrefixes.contains(where: { $0.deletingPrefix(prefix) != nil })
+			if !hasKeyWithPrefix, cloudPath != .root {
+				try await assertFolderExists(at: cloudPath)
 			}
 			return itemList
 		} catch {
@@ -336,22 +336,6 @@ public final class S3CloudProvider: CloudProvider {
 		}
 	}
 
-	/**
-	 Validates the given `CloudItemList`.
-
-	 Since S3 realizes the concept of a folder via the prefixes of the files, empty folders can be realized via a 0-byte file with this prefix - for example, when creating a new folder using the AWS S3 Console.
-	 However, S3 also returns an empty list if the folder does not exist at all. Therefore, in case of an empty list, the existence of the 0-byte file must be checked by a `fetchItemMetadata(at:)` call for the given `folderPath`.
-	 */
-	func validateItemList(_ itemList: CloudItemList, folderPath: CloudPath) async throws {
-		if !itemList.items.isEmpty || folderPath == .root {
-			return
-		}
-		let metadata = try await fetchItemMetadata(at: folderPath)
-		guard metadata.itemType == .folder else {
-			throw CloudProviderError.itemTypeMismatch
-		}
-	}
-
 	// - MARK: Multipart Upload
 
 	/**
@@ -473,7 +457,10 @@ public final class S3CloudProvider: CloudProvider {
 
 	func convertS3Error(_ error: S3Error) -> Error {
 		switch error.code {
-		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "ExpiredToken", "InvalidToken", "TokenRefreshRequired":
+		case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "ExpiredToken", "InvalidToken", "TokenRefreshRequired", "InvalidTokenId", "InvalidSecurity":
+			return CloudProviderError.unauthorized
+		case "Unauthorized" where error.statusCode == 401:
+			// Cloudflare R2's code for rejected credentials. With a 403, it was reported for a CORS failure.
 			return CloudProviderError.unauthorized
 		case "NoSuchKey":
 			return CloudProviderError.itemNotFound
@@ -538,6 +525,13 @@ public final class S3CloudProvider: CloudProvider {
 		CloudAccessDDLogDebug("S3CloudProvider: assertItemDoesNotExist(at: \(cloudPath.path)) called")
 		if try await checkForItemExistence(at: cloudPath) {
 			throw CloudProviderError.itemAlreadyExists
+		}
+	}
+
+	func assertFolderExists(at cloudPath: CloudPath) async throws {
+		let metadata = try await fetchItemMetadata(at: cloudPath)
+		guard metadata.itemType == .folder else {
+			throw CloudProviderError.itemTypeMismatch
 		}
 	}
 

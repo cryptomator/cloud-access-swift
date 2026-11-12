@@ -86,13 +86,14 @@ class S3CloudProviderTests: XCTestCase {
 	}
 
 	func testConvertUnauthorizedErrors() {
-		for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken"] {
+		for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "InvalidTokenId", "InvalidSecurity"] {
 			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403, code: code)) as? CloudProviderError, code)
 		}
 		// These codes name a rejected security token, not a continuation token.
 		for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
 			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError, code)
 		}
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401, code: "Unauthorized")) as? CloudProviderError)
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401)) as? CloudProviderError)
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403)) as? CloudProviderError)
 		XCTAssertEqual(.unauthorized, provider.convertStandardError(NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue))) as? CloudProviderError)
@@ -115,6 +116,7 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys"), provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys")) as? S3Error)
 		XCTAssertEqual(S3Error(statusCode: 404, code: "NoSuchBucket"), provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchBucket")) as? S3Error)
 		XCTAssertEqual(S3Error(statusCode: 404), provider.convertStandardError(S3Error(statusCode: 404)) as? S3Error)
+		XCTAssertEqual(S3Error(statusCode: 403, code: "Unauthorized"), provider.convertStandardError(S3Error(statusCode: 403, code: "Unauthorized")) as? S3Error)
 	}
 
 	// MARK: - Transfers
@@ -586,20 +588,22 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertEqual(["f/..", "f/../", "f//", "f/./", "/", ""].map { "S3CloudProvider: skipping key \($0), because one of its segments is no single path component" }.sorted(), skippedKeys.sorted())
 	}
 
-	/// The left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
-	func testListingReturnsEmptyPageWithTokenIfEveryKeyIsSkipped() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/.", "f/.."], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
-		]
+	/// The folder's marker and the left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
+	func testListingReturnsEmptyPageWithTokenIfPageHoldsOnlyMarkerOrSkippedKeys() async throws {
+		for keys in [["f/"], ["f/.", "f/.."]] {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
+			]
 
-		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-		let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: firstPage.nextPageToken)
+			let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+			XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "\(keys)")
+			let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: firstPage.nextPageToken)
 
-		XCTAssertTrue(firstPage.items.isEmpty)
-		XCTAssertEqual("next", firstPage.nextPageToken)
-		XCTAssertEqual([CloudPath("/f/ok.txt")], secondPage.items.map(\.cloudPath))
+			XCTAssertTrue(firstPage.items.isEmpty, "\(keys)")
+			XCTAssertEqual("next", firstPage.nextPageToken, "\(keys)")
+			XCTAssertEqual([CloudPath("/f/ok.txt")], secondPage.items.map(\.cloudPath), "\(keys)")
+		}
 	}
 
 	/// A server that ignores the delimiter or the prefix must not get items listed that aren't directly in the folder, where the vault layer would trap on a path that is too deep.
@@ -637,10 +641,9 @@ class S3CloudProviderTests: XCTestCase {
 		}
 	}
 
-	/// The folder's marker is no item, so a page that holds only the marker is checked like an empty one.
-	func testListingOfMarkerBesideFileOfSameNameThrowsItemTypeMismatch() async throws {
+	func testListingOfFileThrowsItemTypeMismatch() async throws {
 		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
 			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f"]))
 		]
 

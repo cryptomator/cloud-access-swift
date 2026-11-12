@@ -60,11 +60,6 @@ let package = Package(
 			dependencies: ["CryptomatorCloudAccessCore", .product(name: "AppAuth", package: "AppAuth-iOS")],
 			sources: appExtensionUnsafeSources,
 			swiftSettings: swiftSettings
-		),
-		.testTarget(
-			name: "CryptomatorCloudAccessTests",
-			dependencies: ["CryptomatorCloudAccess"],
-			swiftSettings: swiftSettings
 		)
 	],
 	swiftLanguageModes: [.v6]

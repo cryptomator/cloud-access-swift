@@ -8,11 +8,7 @@
 
 import GRDB
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class DirectoryContentCacheTests: XCTestCase {
 	var cache: DirectoryContentDBCache!
@@ -224,7 +220,6 @@ class DirectoryContentCacheTests: XCTestCase {
 		XCTAssertEqual(1, firstPage.items.count, file: file, line: line)
 		let cachedElement = try XCTUnwrap(firstPage.items.first, file: file, line: line)
 		XCTAssertEqual(cloudItemMetadata, cachedElement, file: file, line: line)
-		XCTAssertEqual(cloudItemMetadata.lastModifiedDate, cachedElement.lastModifiedDate, file: file, line: line)
 	}
 }
 

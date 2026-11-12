@@ -9,11 +9,7 @@
 import CryptoKit
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class BoxCloudProviderTests: XCTestCase {
 	private static let rootWithFile = BoxMockResponse.items([BoxMockResponse.fileEntry(id: "5", name: "file.txt")])

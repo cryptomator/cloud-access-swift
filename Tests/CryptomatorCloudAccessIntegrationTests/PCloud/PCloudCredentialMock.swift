@@ -7,11 +7,7 @@
 //
 
 import Foundation
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 extension PCloudCredential {
 	static func integrationTest() throws -> PCloudCredential {

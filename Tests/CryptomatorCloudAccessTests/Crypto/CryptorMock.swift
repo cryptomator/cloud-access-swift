@@ -9,11 +9,7 @@
 import CryptomatorCryptoLib
 import Foundation
 import os
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 extension Dictionary where Value: Equatable {
 	func someKey(for value: Value) -> Key? {

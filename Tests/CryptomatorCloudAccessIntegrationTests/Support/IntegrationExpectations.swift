@@ -6,11 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#else
 import CryptomatorCloudAccess
-#endif
 import Foundation
 import os
 import Testing
@@ -148,14 +144,18 @@ func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration, slee
 	}
 }
 
-// MARK: - CloudItemMetadata
+// MARK: - Listed Items
 
-extension CloudItemMetadata: @retroactive Comparable, @retroactive Equatable {
-	public static func < (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
-		return lhs.name < rhs.name
-	}
+/// What a listing says about an item apart from its date and size, which differ between providers.
+struct ListedItem: Equatable {
+	let name: String
+	let cloudPath: CloudPath
+	let itemType: CloudItemType
+}
 
-	public static func == (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
-		return lhs.name == rhs.name && lhs.cloudPath == rhs.cloudPath && lhs.itemType == rhs.itemType
+extension Sequence<CloudItemMetadata> {
+	/// The items sorted by name.
+	func listedItems() -> [ListedItem] {
+		return map { ListedItem(name: $0.name, cloudPath: $0.cloudPath, itemType: $0.itemType) }.sorted { $0.name < $1.name }
 	}
 }

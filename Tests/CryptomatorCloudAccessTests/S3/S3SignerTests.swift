@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 /// The signature examples are the ones that the AWS documentation of Signature Version 4 for S3 publishes.
 class S3SignerTests: XCTestCase {

@@ -9,11 +9,7 @@
 import Foundation
 import GRDB
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 /// The cache of one item type, with the items built from a path, a number for the identifier and an item type.
 struct IdentifierCacheProbe {

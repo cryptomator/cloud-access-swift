@@ -7,11 +7,7 @@
 //
 
 import Foundation
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 enum GoogleDriveAuthenticatorMock {
 	/// Creates a credential over an in-memory login with the test account's refresh token. Its access token has expired, so the first request refreshes it.

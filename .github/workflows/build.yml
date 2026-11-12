@@ -46,6 +46,8 @@ jobs:
         run: |
           ./Scripts/process.sh
           exit $?
+      - name: Test integration test script
+        run: python3 -I -m unittest discover -s Scripts/integration-tests/tests
       - name: Build
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | xcbeautify
       - name: Test
@@ -60,10 +62,35 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
 
+  package:
+    name: Build Swift package
+    runs-on: xcode-27
+    env:
+      DERIVED_DATA_PATH: 'DerivedData'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DERIVED_DATA_PATH }}/SourcePackages
+          key: ${{ runner.os }}-package-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-package-spm-
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_$(cat .xcode-version).app"
+          xcodebuild -version
+      - name: Build
+        run: |
+          # xcodebuild prefers the Xcode project over the package, and the project builds the library as one module.
+          rm -rf CryptomatorCloudAccess.xcodeproj
+          set -o pipefail && env NSUnbufferedIO=YES xcodebuild build -scheme 'CryptomatorCloudAccess-Package' -destination 'generic/platform=iOS Simulator' -derivedDataPath $DERIVED_DATA_PATH | xcbeautify
+
   integration-tests:
     name: Run integration tests
     runs-on: xcode-27
-    needs: build
+    needs: [build, package]
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     timeout-minutes: 120
     permissions:
@@ -144,7 +171,7 @@ jobs:
   release:
     name: Deploy and draft a release
     runs-on: macos-latest
-    needs: build
+    needs: [build, package]
     permissions:
       contents: write # Required for drafting the release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')

@@ -1,0 +1,28 @@
+#!/bin/bash
+#
+# Stands in for `xcodebuild test-without-building`. It creates the result bundle, records the call in $STUB_FIXTURES/calls.log
+# and exits with the code in $STUB_FIXTURES/<pass>.exit (default 0). The pass is the result bundle's name.
+
+fixtures="${STUB_FIXTURES:?}"
+bundle=""
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = "-resultBundlePath" ]; then
+    bundle="$argument"
+  fi
+  previous="$argument"
+done
+if [ "${1:-}" != "test-without-building" ] || [ -z "$bundle" ]; then
+  echo "xcodebuild $*" >> "$fixtures/unexpected.log"
+  exit 64
+fi
+mkdir -p "$bundle"
+{
+  echo "filter=${TEST_RUNNER_INTEGRATION_BACKENDS-<unset>}"
+  printf 'arg=%s\n' "$@"
+  echo "end"
+} >> "$fixtures/calls.log"
+pass="$(basename "$bundle" .xcresult)"
+if [ -f "$fixtures/$pass.exit" ]; then
+  exit "$(cat "$fixtures/$pass.exit")"
+fi

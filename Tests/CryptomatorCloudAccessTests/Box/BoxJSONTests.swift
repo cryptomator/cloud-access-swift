@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class BoxJSONTests: XCTestCase {
 	/// The date of an earlier download must stay equal, so the parser must match the Box SDK's formatters exactly, including the forms that they accept beyond their format.

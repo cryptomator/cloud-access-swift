@@ -9,9 +9,6 @@
 @preconcurrency import AppAuth
 import XCTest
 @testable import CryptomatorCloudAccess
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#endif
 
 class GoogleDriveAuthenticatorTests: XCTestCase {
 	func testDriveAccessNeedsDriveScope() {

@@ -8,11 +8,7 @@
 
 import CryptomatorCryptoLib
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class VaultProviderFactoryTests: XCTestCase {
 	let cloudProviderMock = CloudProviderMock(folders: [], files: [String: Data]())

@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class HTTPDebugLoggerTests: XCTestCase {
 	private let url = URL(string: "https://user:SECRET-PASSWORD@example.com:8443/path/file.txt?token=SECRET-TOKEN&SECRET-BARE-TOKEN#SECRET-FRAGMENT")!

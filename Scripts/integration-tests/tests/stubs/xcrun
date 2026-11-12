@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# Stands in for the two `xcrun xcresulttool` calls of the script. The pass is the result bundle's name. The test results
+# are $STUB_FIXTURES/<pass>.json, and reading them fails if that file is missing. The action log is $STUB_FIXTURES/<pass>.log.
+
+fixtures="${STUB_FIXTURES:?}"
+if [ "$#" -eq 6 ] && [ "$1 $2 $3 $4 $5" = "xcresulttool get test-results tests --path" ]; then
+  pass="$(basename "$6" .xcresult)"
+  [ -f "$fixtures/$pass.json" ] || exit 1
+  exec cat "$fixtures/$pass.json"
+fi
+if [ "$#" -eq 7 ] && [ "$1 $2 $3 $4 $6 $7" = "xcresulttool get log --path --type action" ]; then
+  pass="$(basename "$5" .xcresult)"
+  if [ -f "$fixtures/$pass.log" ]; then
+    exec cat "$fixtures/$pass.log"
+  fi
+  exit 0
+fi
+echo "xcrun $*" >> "$fixtures/unexpected.log"
+exit 64

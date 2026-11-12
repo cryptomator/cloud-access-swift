@@ -6,13 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
-@testable import CryptomatorCloudAccess
-#endif
 import Foundation
 import Testing
+@testable import CryptomatorCloudAccess
 
 /**
  Tests every backend against the specification of the `CloudProvider` protocol.
@@ -90,7 +86,7 @@ extension IntegrationTests {
 			try await withIntegrationFixture(backend) { context in
 				let itemList = try await context.provider.fetchItemList(forFolderAt: context.treeRoot, withPageToken: nil)
 				#expect(itemList.nextPageToken == nil)
-				#expect(itemList.items.sorted() == Conformance.expectedRootFolderItems(in: context))
+				#expect(itemList.items.listedItems() == Conformance.expectedRootFolderItems(in: context))
 			}
 		}
 
@@ -100,7 +96,7 @@ extension IntegrationTests {
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
 				let itemList = try await context.provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil)
 				#expect(itemList.nextPageToken == nil)
-				#expect(itemList.items.sorted() == Conformance.expectedTestFolderItems(in: context))
+				#expect(itemList.items.listedItems() == Conformance.expectedTestFolderItems(in: context))
 			}
 		}
 
@@ -146,7 +142,7 @@ extension IntegrationTests {
 				let itemLists = try await [firstItemList] + Conformance.remainingItemLists(after: firstItemList, forFolderAt: context.treeRoot, through: provider)
 				#expect(firstItemList.nextPageToken != nil)
 				#expect(itemLists.allSatisfy { $0.items.count <= IntegrationFixtures.maxPageSizeForLimitedProvider })
-				#expect(itemLists.flatMap(\.items).sorted() == Conformance.expectedRootFolderItems(in: context))
+				#expect(itemLists.flatMap(\.items).listedItems() == Conformance.expectedRootFolderItems(in: context))
 			}
 		}
 
@@ -161,8 +157,8 @@ extension IntegrationTests {
 				let itemLists = try await [firstItemList] + Conformance.remainingItemLists(after: firstItemList, forFolderAt: cloudPath, through: provider)
 				#expect(firstItemList.nextPageToken != nil)
 				#expect(itemLists.allSatisfy { $0.items.count <= IntegrationFixtures.maxPageSizeForLimitedProvider })
-				#expect(itemLists.flatMap(\.items).sorted() == Conformance.expectedTestFolderItems(in: context))
-				#expect(otherItemList.items.sorted() == Conformance.expectedTestFolderItems(in: context))
+				#expect(itemLists.flatMap(\.items).listedItems() == Conformance.expectedTestFolderItems(in: context))
+				#expect(otherItemList.items.listedItems() == Conformance.expectedTestFolderItems(in: context))
 			}
 		}
 
@@ -613,7 +609,7 @@ extension IntegrationTests {
 			try await withIntegrationFixture(backend) { context in
 				let provider = try await context.openVault()
 				let itemList = try await provider.fetchItemListExhaustively(forFolderAt: context.treeRoot)
-				#expect(itemList.items.sorted() == Conformance.expectedRootFolderItems(in: context))
+				#expect(itemList.items.listedItems() == Conformance.expectedRootFolderItems(in: context))
 			}
 		}
 
@@ -707,16 +703,18 @@ extension IntegrationTests {
 
 		private static let testContentForSandboxItems = "AAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBABABABABABBABABABBABABABABABAB"
 
-		private static func expectedRootFolderItems(in context: IntegrationTestContext) -> [CloudItemMetadata] {
+		/// The items in the order of `listedItems()`.
+		private static func expectedRootFolderItems(in context: IntegrationTestContext) -> [ListedItem] {
 			let cloudPath = context.treeRoot
-			return (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
-				+ [CloudItemMetadata(name: "testFolder", cloudPath: cloudPath.appendingPathComponent("testFolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
+			return (0 ..< 5).map { ListedItem(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file) }
+				+ [ListedItem(name: "testFolder", cloudPath: cloudPath.appendingPathComponent("testFolder"), itemType: .folder)]
 		}
 
-		private static func expectedTestFolderItems(in context: IntegrationTestContext) -> [CloudItemMetadata] {
+		/// The items in the order of `listedItems()`.
+		private static func expectedTestFolderItems(in context: IntegrationTestContext) -> [ListedItem] {
 			let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
-			return [CloudItemMetadata(name: "EmptySubfolder", cloudPath: cloudPath.appendingPathComponent("EmptySubfolder"), itemType: .folder, lastModifiedDate: nil, size: nil)]
-				+ (0 ..< 5).map { CloudItemMetadata(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file, lastModifiedDate: nil, size: nil) }
+			return [ListedItem(name: "EmptySubfolder", cloudPath: cloudPath.appendingPathComponent("EmptySubfolder"), itemType: .folder)]
+				+ (0 ..< 5).map { ListedItem(name: "test \($0).txt", cloudPath: cloudPath.appendingPathComponent("test \($0).txt"), itemType: .file) }
 		}
 
 		private static func remainingItemLists(after itemList: CloudItemList, forFolderAt cloudPath: CloudPath, through provider: CloudProvider) async throws -> [CloudItemList] {
@@ -731,7 +729,7 @@ extension IntegrationTests {
 		}
 
 		/**
-		 Lists the folder with a new provider until it lists the expected paths, which must be sorted.
+		 Lists the folder with a new provider until it lists the expected paths, which must be in the order of `listedItems()`.
 
 		 A listing that doesn't match yet is retried. A moved `.c9s` directory holds the name file of its old name until the new one is uploaded, so its item is left out until then. An eventually consistent provider can list an item before its name file or before the contents of its `.c9s` directory, which fails the listing as not found.
 		 */
@@ -740,7 +738,7 @@ extension IntegrationTests {
 			var cloudPaths: [CloudPath]?
 			_ = try await eventually(on: context.backend.kind) {
 				do {
-					cloudPaths = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath).items.sorted().map(\.cloudPath)
+					cloudPaths = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath).items.listedItems().map(\.cloudPath)
 				} catch CloudProviderError.itemNotFound, VaultFormat7ShorteningError.c9sItemNotFound {
 					cloudPaths = nil
 				}

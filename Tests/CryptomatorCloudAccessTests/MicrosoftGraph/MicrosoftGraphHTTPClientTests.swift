@@ -8,11 +8,7 @@
 
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class MicrosoftGraphHTTPClientTests: XCTestCase {
 	private let url = URL(string: "https://graph.microsoft.com/v1.0/me/drive/root")!

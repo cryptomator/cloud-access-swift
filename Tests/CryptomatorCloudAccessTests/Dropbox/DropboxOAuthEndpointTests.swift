@@ -8,11 +8,7 @@
 
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class DropboxOAuthEndpointTests: XCTestCase {
 	private static let now = Date(timeIntervalSince1970: 1_792_000_000)

@@ -10,9 +10,6 @@ import AuthenticationServices
 import os
 import XCTest
 @testable import CryptomatorCloudAccess
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#endif
 
 @MainActor
 class DropboxAuthenticatorTests: XCTestCase {

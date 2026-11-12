@@ -8,11 +8,7 @@
 
 import Foundation
 import os
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 enum MicrosoftGraphTokenSourceMockError: Error {
 	case tokenRequestFailed(statusCode: Int)

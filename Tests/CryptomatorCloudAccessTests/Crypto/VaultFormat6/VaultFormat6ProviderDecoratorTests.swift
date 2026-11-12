@@ -9,11 +9,7 @@
 import CryptomatorCryptoLib
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class VaultFormat6ProviderDecoratorTests: XCTestCase {
 	let vaultPath = CloudPath("pathToVault")

@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class S3CredentialTests: XCTestCase {
 	/// The app stores credentials as JSON, and one that no longer decodes loses its account.

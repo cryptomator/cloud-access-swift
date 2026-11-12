@@ -8,11 +8,7 @@
 
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 /// The buckets pass the name rule of virtual-hosted style, so that their requests are virtual-hosted unless path style is forced.
 class S3AuthenticatorTests: XCTestCase {

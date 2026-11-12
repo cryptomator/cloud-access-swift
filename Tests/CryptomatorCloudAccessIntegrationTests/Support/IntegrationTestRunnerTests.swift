@@ -9,11 +9,7 @@
 import Foundation
 import os
 import Testing
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 /// Checks the test runner's retry policy, permits and error classification, the run-root naming, and the wiring of the fixtures on the local file system, which needs no network.
 extension IntegrationTests {

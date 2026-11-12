@@ -9,11 +9,7 @@
 import CryptoKit
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class S3ClientTests: XCTestCase {
 	private var sleeps: SleepRecorder!

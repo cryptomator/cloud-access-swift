@@ -6,13 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
-@testable import CryptomatorCloudAccess
-#endif
 import Foundation
 import Testing
+@testable import CryptomatorCloudAccess
 
 extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.googleDrive)))

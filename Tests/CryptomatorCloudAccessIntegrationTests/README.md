@@ -143,6 +143,8 @@ In CI, `Scripts/run-integration-tests.sh` re-runs the failed tests once against 
 
 The script's summary lists the pairs that passed only on the re-run, those still failing, the in-process retries, and why a pass didn't complete. It goes to the log as well as the job summary, because the job summary can't be read through the API. Both are public, and a failure message can contain request URLs with credentials, e.g., in the user info of a `URLError`. So the summary shows only the parts of a failure message that can't contain them, such as an error's domain and code. It also names the file and line of the failing check.
 
+The script's Python is in `Scripts/integration-tests/`. The script's tests run it with stubs for `xcodebuild` and `xcrun`, so they need no build. Run them from the repository root with `python3 -I -m unittest discover -s Scripts/integration-tests/tests`.
+
 ## Remote Folders
 
 Each run works in `/iOS-IntegrationTests-<timestamp>-<runID>` on each provider and deletes it at the end. A root of its own per run avoids the eventual consistency races on S3 and pCloud, where deleting a path and immediately recreating it can fail. A run that is killed can't delete its root, so each run starts by deleting such folders that are older than 24 hours. Folders named `iOS-IntegrationTests-{Plain|VaultFormat6|VaultFormat7}-<runID>` can belong to a running build of an older release, so they are only deleted when empty or when their newest file is older than 24 hours.

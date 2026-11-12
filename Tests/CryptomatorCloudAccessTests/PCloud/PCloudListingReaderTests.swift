@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class PCloudListingReaderTests: XCTestCase {
 	private static let chunkSizes = [1, HTTPClientSupport.temporaryFileBufferLength]

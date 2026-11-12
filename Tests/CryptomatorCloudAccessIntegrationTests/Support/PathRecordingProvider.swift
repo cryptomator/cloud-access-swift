@@ -6,11 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#else
 import CryptomatorCloudAccess
-#endif
 import Foundation
 import os
 

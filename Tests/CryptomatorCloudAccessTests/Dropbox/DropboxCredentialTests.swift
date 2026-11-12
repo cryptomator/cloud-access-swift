@@ -7,11 +7,7 @@
 //
 
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class DropboxCredentialTests: XCTestCase {
 	private static let exchangeResponse = #"{"access_token":"NEW-ACCESS","expires_in":14400,"token_type":"bearer","refresh_token":"NEW-REFRESH","uid":"12345","account_id":"dbid:ACCOUNT"}"#

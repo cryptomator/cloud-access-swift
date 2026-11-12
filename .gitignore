@@ -38,3 +38,4 @@ playground.xcworkspace
 .vscode/
 integration-output/
 integration-input/
+__pycache__/

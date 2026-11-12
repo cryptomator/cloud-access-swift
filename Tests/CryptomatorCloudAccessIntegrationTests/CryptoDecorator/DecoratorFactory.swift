@@ -8,11 +8,7 @@
 
 import CryptomatorCryptoLib
 import Foundation
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 /**
  Creates the files and folders of a new vault, and opens a vault from them like the app does, through `VaultProviderFactory`.

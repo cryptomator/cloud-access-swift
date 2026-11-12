@@ -8,11 +8,7 @@
 
 import os
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class DropboxCloudProviderTests: XCTestCase {
 	private static let uploadSessionStart = #"{"session_id":"SESSION"}"#

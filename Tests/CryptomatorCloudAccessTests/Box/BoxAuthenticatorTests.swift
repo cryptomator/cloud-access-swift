@@ -9,9 +9,6 @@
 import AuthenticationServices
 import XCTest
 @testable import CryptomatorCloudAccess
-#if canImport(CryptomatorCloudAccessCore)
-import CryptomatorCloudAccessCore
-#endif
 
 class BoxAuthenticatorTests: XCTestCase {
 	private let clientID = "clientid"

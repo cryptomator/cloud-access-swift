@@ -7,11 +7,7 @@
 //
 
 import Foundation
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 // swiftlint:disable all
 /// `@unchecked Sendable`: only used by the synchronous parser tests, which call it from a single thread.

@@ -6,13 +6,9 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
-@testable import CryptomatorCloudAccess
-#endif
 import Foundation
 import XCTest
+@testable import CryptomatorCloudAccess
 
 enum WebDAVAuthenticatorTestsError: Error {
 	case missingTestResource

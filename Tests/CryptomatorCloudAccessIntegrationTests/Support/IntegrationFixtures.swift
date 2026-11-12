@@ -6,13 +6,9 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
-@testable import CryptomatorCloudAccess
-#endif
 import CryptomatorCryptoLib
 import Foundation
+@testable import CryptomatorCloudAccess
 
 /// The providers of an account and the folder of this run in it, shared by all vault formats.
 struct IntegrationAccount: Sendable {

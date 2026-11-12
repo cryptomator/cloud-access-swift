@@ -8,11 +8,7 @@
 
 import GRDB
 import XCTest
-#if canImport(CryptomatorCloudAccessCore)
-@testable import CryptomatorCloudAccessCore
-#else
 @testable import CryptomatorCloudAccess
-#endif
 
 class CachedPropfindResponseParserTests: XCTestCase {
 	var cacheMock: DirectoryContentCacheMock!
@@ -309,11 +305,5 @@ class CachedPropfindResponseParserTests: XCTestCase {
 	private func assertNothingCached() {
 		XCTAssertFalse(cacheMock.saveInIndexCalled)
 		assertCacheOnlySavedTo()
-	}
-}
-
-extension CloudItemMetadata: @retroactive Equatable {
-	public static func == (lhs: CloudItemMetadata, rhs: CloudItemMetadata) -> Bool {
-		return lhs.name == rhs.name && lhs.cloudPath == rhs.cloudPath && lhs.itemType == rhs.itemType && lhs.size == rhs.size
 	}
 }

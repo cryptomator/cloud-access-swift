@@ -9,12 +9,6 @@ This library defines the cloud access API used by Cryptomator for iOS.
 
 The API is implemented once for each cloud. It also forms the foundation for decoration layers for the various vault formats that can be applied to get a cleartext view for cloud-stored vaults.
 
-## Special Shoutout
-
-Continuous integration hosting is provided by [MacStadium](https://www.macstadium.com/company/opensource).
-
-<a href="https://www.macstadium.com/company/opensource"><img src="https://uploads-ssl.webflow.com/5ac3c046c82724970fc60918/5c019d917bba312af7553b49_MacStadium-developerlogo.png" alt="MacStadium" height="100"></a>
-
 ## Requirements
 
 - iOS 17.0 or higher

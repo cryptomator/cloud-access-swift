@@ -285,15 +285,13 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	/// Dropbox reports no size or date for a folder.
 	private func convertToCloudItemMetadata(_ metadata: DropboxMetadata, at cloudPath: CloudPath, untaggedAs untaggedType: CloudItemType?) throws -> CloudItemMetadata {
-		switch try metadata.cloudItemType(untaggedAs: untaggedType) {
-		case .folder:
+		if try metadata.cloudItemType(untaggedAs: untaggedType) == .folder {
 			return CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
-		default:
-			guard let size = metadata.size else {
-				throw DropboxError.unexpectedContent
-			}
-			return try CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.lastModifiedDate, size: Int(size))
 		}
+		guard let size = metadata.size else {
+			throw DropboxError.unexpectedContent
+		}
+		return try CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.lastModifiedDate, size: Int(size))
 	}
 
 	func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {

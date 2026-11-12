@@ -109,10 +109,9 @@ public final class PCloudCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		do {
 			let targetName = cloudPath.lastPathComponent
-			if let existingContent = try await firstChild(of: parentItem, where: { $0.name == targetName }) {
-				if !replaceExisting || existingContent.isFolder {
-					throw CloudProviderError.itemAlreadyExists
-				}
+			let existingContent = try await firstChild(of: parentItem, where: { $0.name == targetName })
+			if let existingContent, !replaceExisting || existingContent.isFolder {
+				throw CloudProviderError.itemAlreadyExists
 			}
 		} catch PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) {
 			throw CloudProviderError.parentFolderDoesNotExist

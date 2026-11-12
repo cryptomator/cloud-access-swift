@@ -62,10 +62,8 @@ private extension [String] {
 
 	func standardized() -> [String] {
 		var standardized: [String] = []
-		for element in self {
-			if element.isEmpty || element == "." {
-				continue
-			} else if let lastElement = standardized.last, lastElement != "..", element == ".." {
+		for element in self where !element.isEmpty && element != "." {
+			if let lastElement = standardized.last, lastElement != "..", element == ".." {
 				standardized.removeLast()
 			} else {
 				standardized.append(element)

@@ -15,11 +15,9 @@ extension CloudPath: DatabaseValueConvertible {
 	}
 
 	public static func fromDatabaseValue(_ dbValue: DatabaseValue) -> CloudPath? {
-		switch dbValue.storage {
-		case let .string(string):
-			return self.init(string)
-		default:
+		guard case let .string(string) = dbValue.storage else {
 			return nil
 		}
+		return self.init(string)
 	}
 }

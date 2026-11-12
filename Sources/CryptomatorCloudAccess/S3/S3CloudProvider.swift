@@ -282,24 +282,24 @@ public final class S3CloudProvider: CloudProvider {
 	/**
 	 Moves a folder from `sourceCloudPath` to `targetCloudPath` after various preconditions have already been met.
 
-	 Since S3 does not support move directly, this must be realized via a copy followed by a delete of the source object. For folders, this needs to be done for each individual object with the prefix of the given `folderPath`.
+	 Since S3 does not support move directly, this must be realized via a copy followed by a delete of the source object. For folders, this needs to be done for each individual object with the prefix of `sourceCloudPath`, and only objects that were copied are deleted. An object without a size is copied in a single request, as `moveFile` does.
 	 */
 	func moveFolderAfterCheck(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		let parentSourceKey = getKey(for: sourceCloudPath)
-		let parentTargetKey = getKey(for: targetCloudPath)
+		let sourcePrefix = getPrefix(for: sourceCloudPath)
+		let targetPrefix = getPrefix(for: targetCloudPath)
 		var nextContinuationToken: String?
 		repeat {
-			let listObjects = try await listObjects(withPrefix: getPrefix(for: sourceCloudPath), recursive: true, pageToken: nextContinuationToken)
+			let listObjects = try await listObjects(withPrefix: sourcePrefix, recursive: true, pageToken: nextContinuationToken)
 			let copyRequests: [S3CopyRequest] = listObjects.contents.compactMap {
-				guard let name = $0.key.deletingPrefix(parentSourceKey), let itemSize = $0.size else {
+				guard let name = $0.key.deletingPrefix(sourcePrefix) else {
 					return nil
 				}
-				let targetKey = parentTargetKey + name
-				return .init(sourceKey: $0.key, targetKey: targetKey, itemSize: itemSize)
+				let targetKey = targetPrefix + name
+				return .init(sourceKey: $0.key, targetKey: targetKey, itemSize: $0.size ?? 0)
 			}
 			try await copyUtility.copy(copyRequests)
 
-			try await deleteObjects(keys: listObjects.contents.map(\.key))
+			try await deleteObjects(keys: copyRequests.map(\.sourceKey))
 
 			nextContinuationToken = listObjects.nextContinuationToken
 		} while nextContinuationToken != nil
@@ -398,8 +398,17 @@ public final class S3CloudProvider: CloudProvider {
 
 	// - MARK: Requests
 
+	/// Leaves out the keys and common prefixes that don't start with the prefix, which only a server that ignores the prefix returns, so that a folder move or deletion never touches a key outside its folder.
 	private func listObjects(withPrefix prefix: String, recursive: Bool, pageToken: String?, maxKeys: Int = S3CloudProvider.s3MaxPageSize) async throws -> S3ListObjectsResult {
-		return try await client.listObjectsV2(prefix: prefix, delimiter: recursive ? nil : S3CloudProvider.delimiter, continuationToken: pageToken, maxKeys: maxKeys)
+		let result = try await client.listObjectsV2(prefix: prefix, delimiter: recursive ? nil : S3CloudProvider.delimiter, continuationToken: pageToken, maxKeys: maxKeys)
+		let hasPrefix: (String) -> Bool = { key in
+			guard key.deletingPrefix(prefix) != nil else {
+				CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(prefix)")
+				return false
+			}
+			return true
+		}
+		return S3ListObjectsResult(contents: result.contents.filter { hasPrefix($0.key) }, commonPrefixes: result.commonPrefixes.filter(hasPrefix), nextContinuationToken: result.nextContinuationToken)
 	}
 
 	func getKey(for cloudPath: CloudPath, isFolder: Bool = false) -> String {

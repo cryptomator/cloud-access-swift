@@ -68,7 +68,7 @@ class S3ClientTests: XCTestCase {
 
 	func testCopySourceEncodesReservedCharacters() async throws {
 		let copySource = OSAllocatedUnfairLock<String?>(initialState: nil)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>", onRequest: { request in
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.copyObjectResult, onRequest: { request in
 			copySource.withLock { $0 = request.value(forHTTPHeaderField: "x-amz-copy-source") }
 		})]
 
@@ -145,7 +145,7 @@ class S3ClientTests: XCTestCase {
 	func testRetriesErrorDocumentInSuccessfulCopyResponse() async throws {
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error. Please try again.</Message></Error>"),
-			URLProtocolMock.handler(body: "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>")
+			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
 		]
 
 		try await client.copyObject(sourceKey: "a.txt", targetKey: "b.txt")
@@ -487,6 +487,7 @@ extension S3Client {
 
 enum S3MockResponse {
 	static let completeMultipartUploadResult = "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>"
+	static let copyObjectResult = "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>"
 
 	static func initiateMultipartUploadResult(uploadID: String = "upload-id") -> String {
 		return "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>\(uploadID)</UploadId></InitiateMultipartUploadResult>"

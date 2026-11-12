@@ -792,11 +792,110 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	func testDeleteFolderLeavesKeysOutsideFolder() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt", "folder2/b.txt"])),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		try await provider.deleteFolder(at: CloudPath("/folder"))
+
+		XCTAssertEqual([["folder/a.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testMoveFolderCopiesAndDeletesEveryPage() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/sub/b.txt"]), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
+
+		let sent = requests.requests
+		XCTAssertEqual(["GET", "PUT", "PUT", "POST", "GET", "PUT", "POST"], sent.map(\.httpMethod))
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000"], S3CloudProviderTests.queryParameters(of: sent[0]))
+		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"], S3CloudProviderTests.queryParameters(of: sent[4]))
+		XCTAssertEqual(["/exampleBucket/target/": "exampleBucket/folder/", "/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt"], S3CloudProviderTests.copySources(of: sent[1 ... 2]))
+		XCTAssertEqual(["/exampleBucket/target/sub/b.txt": "exampleBucket/folder/sub/b.txt"], S3CloudProviderTests.copySources(of: sent[5 ... 5]))
+		XCTAssertEqual(["folder/", "folder/a.txt"], S3CloudProviderTests.deletedKeys(of: sent[3]))
+		XCTAssertEqual(["folder/sub/b.txt"], S3CloudProviderTests.deletedKeys(of: sent[6]))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testMoveFolderLeavesKeysOutsideFolderAndCopiesKeyWithoutSize() async throws {
+		let requests = RequestRecorder()
+		let contents = "<Contents><Key>folder/a.txt</Key><Size>7</Size></Contents><Contents><Key>folder2/b.txt</Key><Size>7</Size></Contents><Contents><Key>folder/c.txt</Key></Contents>"
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated>\(contents)</ListBucketResult>", onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
+
+		let sent = requests.requests
+		XCTAssertEqual(["GET", "PUT", "PUT", "POST"], sent.map(\.httpMethod))
+		XCTAssertEqual(["/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt", "/exampleBucket/target/c.txt": "exampleBucket/folder/c.txt"], S3CloudProviderTests.copySources(of: sent[1 ... 2]))
+		XCTAssertEqual(["folder/a.txt", "folder/c.txt"], S3CloudProviderTests.deletedKeys(of: sent[3]))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testMoveFolderWithFailedCopyDeletesNothing() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"]), onRequest: requests.record),
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		}
+
+		XCTAssertEqual(["GET", "PUT"], requests.requests.map(\.httpMethod))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Helpers
 
 	private static func queryParameters(of request: URLRequest) -> [String: String] {
 		let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
 		return Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+	}
+
+	/// The responses to the checks of a folder move from `/folder` to `/target`: the source exists and the target doesn't.
+	private static func folderMoveChecks() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+		return [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+		]
+	}
+
+	private static func copyObject(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+		return URLProtocolMock.handler(body: S3MockResponse.copyObjectResult, onRequest: requests.record)
+	}
+
+	/// The copy source of each copy request by the path of its target. The copies of a page run concurrently, so their order isn't fixed.
+	private static func copySources(of requests: ArraySlice<URLRequest>) -> [String: String] {
+		let copies = requests.map { request in
+			let targetPath = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } ?? ""
+			let copySource = request.value(forHTTPHeaderField: "x-amz-copy-source") ?? ""
+			return (targetPath, copySource)
+		}
+		return Dictionary(copies, uniquingKeysWith: { first, _ in first })
+	}
+
+	private static func deletedKeys(of request: URLRequest) -> [String] {
+		return S3XMLElement.parse(request.httpBody ?? Data())?.children("Object").compactMap { $0.text(of: "Key") } ?? []
 	}
 
 	/// With the default threshold, returns a provider that uploads a file of more than 9 bytes in parts of 4 bytes.

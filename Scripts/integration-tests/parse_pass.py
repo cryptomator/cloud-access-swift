@@ -54,13 +54,14 @@ def walk(node):
             incomplete_causes.append(runner_error_cause(node))
             return
         arguments = [child for child in node.get("children", []) if child.get("nodeType") == "Arguments"]
-        if any(crash_marker.search(text) for target in [node] + arguments for text, _ in messages(target)):
+        test_messages = [message for target in arguments + [node] for message in messages(target)]
+        if any(crash_marker.search(text) for text, _ in test_messages):
             incomplete_causes.append("a test process crashed")
         if arguments and all(backend_token.match(argument.get("name", "")) for argument in arguments):
             for argument in arguments:
                 pairs.append((argument.get("result", "unknown"), node_identifier, argument["name"], reasons(messages(argument) + messages(node))))
         else:
-            pairs.append((node.get("result", "unknown"), node_identifier, token_for(node_identifier), reasons(messages(node))))
+            pairs.append((node.get("result", "unknown"), node_identifier, token_for(node_identifier), reasons(test_messages)))
         return
     for child in node.get("children", []):
         walk(child)

@@ -283,6 +283,15 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertIn("| `-` | 0 | 1 | 0 | 0 |", result.stdout.splitlines())
         self.assert_last_call(2, "pcloud", VAULT_FORMATS)
 
+    def test_failure_message_of_argument_that_is_no_backend_is_reported(self):
+        failed_test = results(test_case(VAULT_FORMATS, "Failed", argument(".vf6", "Failed", failure("Expectation failed: a == b"))))
+        self.write_pass("pass1", failed_test, exit_code=65)
+        self.write_pass("pass2", failed_test, exit_code=65)
+
+        result = self.run_script(BACKENDS="pcloud")
+
+        self.assertIn("- `{}` `-`: expectation failed".format(VAULT_FORMATS), result.stdout.splitlines())
+
     def test_provider_specific_test_is_rerun_with_its_provider(self):
         self.write_pass("pass1", results(test_case(S3, "Failed")), exit_code=65)
         self.write_pass("pass2", results(test_case(S3, "Passed")))

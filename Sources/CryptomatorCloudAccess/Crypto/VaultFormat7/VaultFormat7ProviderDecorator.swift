@@ -36,8 +36,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		self.vaultPath = vaultPath
 		self.cryptor = cryptor
 		self.dirIdCache = try DirectoryIdCache()
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 	}
 
 	deinit {

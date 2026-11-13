@@ -23,6 +23,11 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		try super.tearDownWithError()
 	}
 
+	override func testTemporaryDirectoryLiesInProcessFolder() throws {
+		try super.testTemporaryDirectoryLiesInProcessFolder()
+		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, shorteningDecorator.tmpDirURL.deletingLastPathComponent().path)
+	}
+
 	private let legacyDirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	/// A name of 129 characters, which old Cryptomator versions shortened and current ones keep.
 	private let legacyOriginalName = "0" + String(repeating: "A", count: 128)

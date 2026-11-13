@@ -74,8 +74,7 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	let dbQueue: DatabaseQueue
 
 	init() throws {
-		self.directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+		self.directoryURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 		self.dbQueue = try DatabaseQueue.withoutDurability(path: directoryURL.appendingPathComponent("identifiers.sqlite").path)
 		try dbQueue.writeWithoutTransaction { db in
 			try db.execute(sql: "PRAGMA cache_size = -500")

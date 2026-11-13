@@ -31,6 +31,10 @@ class VaultFormat6ProviderDecoratorTests: XCTestCase {
 		try FileManager.default.removeItem(at: tmpDirURL)
 	}
 
+	func testTemporaryDirectoryLiesInProcessFolder() throws {
+		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, decorator.tmpDirURL.deletingLastPathComponent().path)
+	}
+
 	func testFetchItemMetadata() async throws {
 		let metadata = try await decorator.fetchItemMetadata(at: CloudPath("/Directory 1/File 3"))
 		XCTAssertEqual("File 3", metadata.name)

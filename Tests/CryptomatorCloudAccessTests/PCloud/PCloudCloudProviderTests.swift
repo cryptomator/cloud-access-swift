@@ -258,6 +258,12 @@ class PCloudCloudProviderTests: XCTestCase {
 		_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: pageTokens[1])
 	}
 
+	func testTemporaryDirectoryLiesInProcessFolder() throws {
+		let provider = try PCloudCloudProvider(client: .mocked())
+
+		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, provider.tmpDirURL.deletingLastPathComponent().path)
+	}
+
 	func testListingsLeaveNoFilesAndReleaseRemovesTemporaryDirectory() async throws {
 		var provider: PCloudCloudProvider? = try PCloudCloudProvider(client: .mocked())
 		let tmpDirURL = try XCTUnwrap(provider?.tmpDirURL)

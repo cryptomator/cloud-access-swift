@@ -40,8 +40,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
 		self.delegate = delegate
 		self.shortenedNameCache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath, threshold: threshold)
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 	}
 
 	convenience init(delegate: CloudProvider, vaultPath: CloudPath) throws {

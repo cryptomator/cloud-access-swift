@@ -140,7 +140,7 @@ enum HTTPClientSupport {
 
 	/// The caller deletes the returned file.
 	static func writeTemporaryFile(_ write: (FileHandle) throws -> Void) throws -> URL {
-		let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let url = try ProcessTemporaryDirectory.shared.makeFileURL()
 		guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
 			throw CocoaError(.fileWriteUnknown)
 		}

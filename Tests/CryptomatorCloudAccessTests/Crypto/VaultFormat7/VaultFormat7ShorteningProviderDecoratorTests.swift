@@ -23,6 +23,11 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		try super.tearDownWithError()
 	}
 
+	override func testTemporaryDirectoryLiesInProcessFolder() throws {
+		try super.testTemporaryDirectoryLiesInProcessFolder()
+		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, shorteningDecorator.tmpDirURL.deletingLastPathComponent().path)
+	}
+
 	override func testFetchItemListForRootDir() async throws {
 		let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 		XCTAssertEqual(6, itemList.items.count)

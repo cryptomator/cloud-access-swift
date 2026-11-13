@@ -156,6 +156,24 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		}
 	}
 
+	// MARK: - Lookups
+
+	/// Drive can return a page without the item before the list ends.
+	func testLookupFollowsPageTokens() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "B", name: "file.txt.bak")], nextPageToken: "P2"), onRequest: requests.record),
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "F", name: "file.txt")]), onRequest: requests.record),
+			URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt"))
+		]
+
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+		XCTAssertEqual(CloudPath("/file.txt"), metadata.cloudPath)
+		XCTAssertEqual([nil, "P2"], requests.requests.map { GoogleDriveCloudProviderTests.queryParameter("pageToken", of: $0) })
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Shortcuts
 
 	/// Requests for a shortcut's content and children go to its target, whereas a move or delete changes the shortcut itself.

@@ -13,7 +13,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	private static let metadataFields = "name,modifiedTime,size,mimeType"
 	private static let listingFields = "nextPageToken,files(id,name,modifiedTime,size,mimeType,shortcutDetails)"
 	private static let shortcutTargetFields = "modifiedTime,size,mimeType"
-	private static let lookupFields = "files(id,name,mimeType,shortcutDetails)"
+	private static let lookupFields = "nextPageToken,files(id,name,mimeType,shortcutDetails)"
 	private static let moveFields = "id,name,modifiedTime,mimeType,shortcutDetails"
 
 	private let client: GoogleDriveClient
@@ -275,16 +275,26 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	 Shortcuts are supported by resolving them transparently to the target.
 
+	 The search follows page tokens until it finds the item, because the query's `contains` also matches other names and Drive can return a short or empty page before the list ends.
+
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
 	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) async throws -> GoogleDriveItem {
-		let fileList = try await perform("getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier))") {
-			try await client.files(query: GoogleDriveClient.query(inFolder: parentItem.resolvedIdentifier, named: name), pageSize: nil, pageToken: nil, fields: GoogleDriveCloudProvider.lookupFields)
+		let query = GoogleDriveClient.query(inFolder: parentItem.resolvedIdentifier, named: name)
+		var pageToken: String?
+		while true {
+			let fileList = try await perform("getGoogleDriveItem(name: \(name), parentItem: \(parentItem.identifier), pageToken: \(pageToken ?? "nil"))") {
+				try await client.files(query: query, pageSize: nil, pageToken: pageToken, fields: GoogleDriveCloudProvider.lookupFields)
+			}
+			if let file = fileList.files?.first(where: { $0.name == name }) {
+				return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
+			}
+			guard let nextPageToken = fileList.nextPageToken else {
+				throw CloudProviderError.itemNotFound
+			}
+			try Task.checkCancellation()
+			pageToken = nextPageToken
 		}
-		guard let file = fileList.files?.first(where: { $0.name == name }) else {
-			throw CloudProviderError.itemNotFound
-		}
-		return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
 	}
 
 	// MARK: - Resolve Shortcut

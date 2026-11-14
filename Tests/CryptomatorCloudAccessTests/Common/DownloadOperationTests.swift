@@ -29,6 +29,7 @@ class DownloadOperationTests: XCTestCase {
 		let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
 		let downloadedMetadata = try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
 			XCTAssertFalse(FileManager.default.fileExists(atPath: stagedURL.path))
+			XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, stagedURL.deletingLastPathComponent().path)
 			try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
 			stagedFile.withLock { $0 = stagedURL }
 			return self.itemMetadata

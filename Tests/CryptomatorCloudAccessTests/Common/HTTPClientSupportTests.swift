@@ -54,6 +54,16 @@ class HTTPClientSupportTests: XCTestCase {
 		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
 	}
 
+	func testTemporaryFileLiesInProcessFolder() throws {
+		let url = try HTTPClientSupport.writeTemporaryFile { try $0.write(contentsOf: Data("hello".utf8)) }
+		defer {
+			try? FileManager.default.removeItem(at: url)
+		}
+
+		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, url.deletingLastPathComponent().path)
+		XCTAssertEqual(Data("hello".utf8), try Data(contentsOf: url))
+	}
+
 	/// A failure recorded while the task ran, e.g., an exceeded body limit, takes precedence over the cancellation it caused.
 	func testHTTPResponseThrowsRecordedFailureBeforeTransportError() {
 		let outcome = SplitURLSession.Outcome(response: nil, body: .none, error: URLError(.cancelled), recordedFailure: SplitURLSessionError.responseBodyTooLarge(limit: 1))

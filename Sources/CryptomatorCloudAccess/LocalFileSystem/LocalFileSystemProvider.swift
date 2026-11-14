@@ -47,8 +47,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 		self.securityScopedAccess = securityScopedAccess
 		self.shouldStopAccessingRootURL = securityScopedAccess.start(rootURL)
 		self.maxPageSize = maxPageSize
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
 		self.cache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}

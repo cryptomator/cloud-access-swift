@@ -33,8 +33,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		self.delegate = delegate
 		self.vaultPath = vaultPath
 		self.shortenedNameCache = try VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 	}
 
 	deinit {

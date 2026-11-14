@@ -10,14 +10,11 @@ import Foundation
 
 /// A file owned by a single operation, which writes its download there and publishes it to the caller's destination only after everything else succeeded.
 struct StagingFile: Sendable {
-	private static let directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent("CryptomatorCloudAccessStaging", isDirectory: true)
-
 	/// The URL to write to. No item exists at this URL until the operation creates it.
 	let url: URL
 
 	init() throws {
-		try FileManager.default.createDirectory(at: StagingFile.directoryURL, withIntermediateDirectories: true)
-		self.url = StagingFile.directoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		self.url = try ProcessTemporaryDirectory.shared.makeFileURL()
 	}
 
 	/**

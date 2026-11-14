@@ -171,7 +171,7 @@ class IdentifierCacheDatabaseTests: XCTestCase {
 		let databaseURL = try XCTUnwrap(cache).directoryURL.appendingPathComponent("identifiers.sqlite")
 
 		XCTAssertTrue(FileManager.default.fileExists(atPath: databaseURL.path))
-		XCTAssertTrue(databaseURL.path.hasPrefix(FileManager.default.temporaryDirectory.path))
+		XCTAssertTrue(try databaseURL.path.hasPrefix(ProcessTemporaryDirectory.shared.directoryURL().path))
 		cache = nil
 		XCTAssertFalse(FileManager.default.fileExists(atPath: databaseURL.deletingLastPathComponent().path))
 	}

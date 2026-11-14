@@ -49,8 +49,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 
 	init(client: WebDAVClient, maxPageSize: Int = .max) throws {
 		self.client = client
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
 		self.directoryContentCache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}

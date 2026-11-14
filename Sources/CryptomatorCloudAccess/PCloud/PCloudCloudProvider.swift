@@ -52,8 +52,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	private init(client: PCloudClient, makeDirectoryContentCache: (URL) throws -> DirectoryContentCache) throws {
 		self.client = client
 		self.identifierCache = try IdentifierCache<PCloudItem>()
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 		self.directoryContentCache = try makeDirectoryContentCache(tmpDirURL)
 	}
 

@@ -13,6 +13,8 @@ import XCTest
 
 class MicrosoftGraphCloudProviderTests: XCTestCase {
 	private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#
+	private static let downloadURL = "https://content.example.com/dl/SECRET-PATH?tempauth=SECRET"
+	private static let fileItemWithDownloadURL = #"{"id":"F","name":"file.txt","size":7,"file":{},"fileSystemInfo":{"lastModifiedDateTime":"2026-11-16T10:00:00Z"},"@microsoft.graph.downloadUrl":"\#(MicrosoftGraphCloudProviderTests.downloadURL)"}"#
 
 	var provider: MicrosoftGraphCloudProvider!
 	let maxPageSize = 100
@@ -113,7 +115,7 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 
 		XCTAssertEqual([CloudPath("/file.txt")], itemList.items.map(\.cloudPath))
 		XCTAssertEqual("https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT", itemList.nextPageToken)
-		XCTAssertEqual([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/a:")], requests.requests.map(\.url))
+		XCTAssertEqual([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/a:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem")], requests.requests.map(\.url))
 		XCTAssertEqual(2, logCapture.messages.count(where: { $0.hasSuffix("because its name is no single path component") }))
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
@@ -127,6 +129,24 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 				return
 			}
 		}
+	}
+
+	// MARK: - Metadata
+
+	func testItemMetadataSelectsFields() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record),
+			URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
+		]
+
+		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+		XCTAssertEqual(7, metadata.size)
+		XCTAssertEqual([
+			URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/file.txt:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem"),
+			URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem")
+		], requests.requests.map(\.url))
 	}
 
 	// MARK: - Transfers
@@ -270,13 +290,179 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		assertTransferProgress(fractions.withLock { $0 })
 	}
 
+	// MARK: - Download URL
+
+	/// The date comes from the metadata request, because the path lookup's item has none.
+	func testDownloadFromDownloadURL() async throws {
+		let requests = RequestRecorder()
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record),
+			URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL, onRequest: requests.record),
+			URLProtocolMock.handler(body: "content", onRequest: requests.record)
+		]
+
+		let metadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+
+		XCTAssertEqual([
+			URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/file.txt:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem"),
+			URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F"),
+			URL(string: MicrosoftGraphCloudProviderTests.downloadURL)
+		], requests.requests.map(\.url))
+		XCTAssertNil(requests.requests.last?.value(forHTTPHeaderField: "Authorization"))
+		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: localURL))
+		XCTAssertEqual(Date(timeIntervalSince1970: 1_794_823_200), metadata.lastModifiedDate)
+	}
+
+	func testDownloadWithoutUsableDownloadURLGoesThroughGraph() async throws {
+		for metadataBody in [MicrosoftGraphCloudProviderTests.fileItem, MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "http://")] {
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked())
+			let requests = RequestRecorder()
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(body: metadataBody),
+				URLProtocolMock.handler(body: "content", onRequest: requests.record)
+			]
+
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+
+			XCTAssertEqual([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F/content")], requests.requests.map(\.url), metadataBody)
+			XCTAssertEqual("Bearer TOKEN", requests.requests.first?.value(forHTTPHeaderField: "Authorization"), metadataBody)
+			XCTAssertEqual(Data("content".utf8), try Data(contentsOf: localURL), metadataBody)
+		}
+	}
+
+	func testRefusedDownloadURLFallsBackToGraph() async throws {
+		let requests = RequestRecorder()
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [
+			URLProtocolMock.handler(statusCode: 401),
+			URLProtocolMock.handler(body: "content", onRequest: requests.record)
+		]
+
+		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+
+		XCTAssertEqual([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F/content")], requests.requests.map(\.url))
+		XCTAssertEqual("Bearer TOKEN", requests.requests.first?.value(forHTTPHeaderField: "Authorization"))
+		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: localURL))
+	}
+
+	func testDeletedFileThrowsItemNotFoundAfterFallback() async throws {
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(statusCode: 404)]
+
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	func testOtherSuccessOfDownloadURLFailsWithoutFallback() async throws {
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 206, body: "con"), URLProtocolMock.handler(body: "content")]
+
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)) { error in
+			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 206) = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
+	func testDownloadURLIsNotLogged() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: "content")]
+
+		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("--> GET https://content.example.com") }, logCapture.joinedMessages)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+	}
+
+	func testDownloadFromDownloadURLReportsBytesOfTask() async throws {
+		let progress = Progress(totalUnitCount: 1)
+		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
+		let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
+
+		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+
+		assertTransferProgress(fractions.withLock { $0 })
+	}
+
+	func testFallbackHandsOverNoTask() async throws {
+		let taskHosts = OSAllocatedUnfairLock(initialState: [String?]())
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: "content")]
+
+		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: { task in
+			taskHosts.withLock { $0.append(task.originalRequest?.url?.host()) }
+		})
+
+		XCTAssertEqual(["content.example.com"], taskHosts.withLock { $0 })
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testFallbackReportsProgressOfItsTransfer() async throws {
+		let progress = Progress(totalUnitCount: 1)
+		let fractionBeforeFallback = OSAllocatedUnfairLock<Double?>(initialState: nil)
+		let fractionsOfFallback = OSAllocatedUnfairLock(initialState: [Double]())
+		let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks(willProcessCompletion: { task in
+			if task is URLSessionDownloadTask, task.originalRequest?.url?.path.hasSuffix("/content") == true {
+				fractionsOfFallback.withLock { $0.append(progress.fractionCompleted) }
+			}
+		})))
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [
+			URLProtocolMock.handler(statusCode: 401, body: "refused", headerFields: ["Content-Length": "7"]),
+			URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"], onRequest: { _ in
+				fractionBeforeFallback.withLock { $0 = progress.fractionCompleted }
+			})
+		]
+
+		_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: progress, onTaskCreation: nil)
+
+		let before = try XCTUnwrap(fractionBeforeFallback.withLock { $0 })
+		let fallbackFractions = fractionsOfFallback.withLock { $0 }
+		XCTAssertLessThan(before, 0.9, "The refused transfer completed the download's progress")
+		XCTAssertEqual(1, fallbackFractions.count)
+		XCTAssertGreaterThan(fallbackFractions.first ?? 0, before, "The progress of the fallback's task isn't part of the download's progress")
+		XCTAssertLessThan(fallbackFractions.first ?? 1, 1, "The progress completed before the download returned")
+	}
+
+	func testCancellationBeforeFallbackStopsDownload() async throws {
+		let provider: MicrosoftGraphCloudProvider = provider
+		let localURL = tmpDirURL.appendingPathComponent("file.txt")
+		let canceller = TaskCanceller<CloudItemMetadata>()
+		URLProtocolMock.requestHandler = directDownloadPreparation() + [
+			URLProtocolMock.handler(statusCode: 401, onRequest: { _ in
+				canceller.cancel()
+			}),
+			URLProtocolMock.handler(body: "content")
+		]
+
+		let download = canceller.start {
+			try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+		}
+
+		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
+	}
+
 	// MARK: - Requests
 
 	func testChildrenRequest() throws {
 		let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
 		let request = try provider.childrenRequest(for: item)
 		XCTAssertEqual("GET", request.httpMethod)
-		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100"), request.url)
+		XCTAssertEqual(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100&$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem"), request.url)
 		XCTAssertNil(request.httpBody)
 	}
 
@@ -351,6 +537,11 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 	/// The responses of the path lookup and the metadata request of `/file.txt`, before its download.
 	private func downloadPreparation() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
 		return [URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem), URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem)]
+	}
+
+	/// The responses of the path lookup and the metadata request of `/file.txt` before its download, the latter carrying a download URL.
+	private func directDownloadPreparation() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+		return [URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem), URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL)]
 	}
 
 	/// The responses of the lookup that finds no `/file.txt` and of the upload session request, before the upload's `PUT`.

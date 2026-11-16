@@ -13,6 +13,21 @@ enum MicrosoftGraphAPI {
 	static let baseURL = "https://\(host)/v1.0"
 
 	struct DriveItem: Decodable {
+		// swiftlint:disable:next nesting
+		private enum CodingKeys: String, CodingKey, CaseIterable {
+			case id
+			case name
+			case size
+			case folder
+			case fileSystemInfo
+			case parentReference
+			case remoteItem
+			case downloadURL = "@microsoft.graph.downloadUrl"
+		}
+
+		/// The value of `$select` that returns every decoded field except the download URL, which Graph leaves out of a `$select` response even when `$select` names it.
+		static let selectedFields = CodingKeys.allCases.filter { $0 != .downloadURL }.map(\.stringValue).joined(separator: ",")
+
 		let id: String
 		let name: String?
 		let size: Int64?
@@ -20,6 +35,8 @@ enum MicrosoftGraphAPI {
 		let remoteItem: RemoteItem?
 		let parentReference: ItemReference?
 		let fileSystemInfo: FileSystemInfo?
+		/// The pre-authenticated URL of a file's content, which a response carries only without `$select`.
+		let downloadURL: String?
 
 		var cloudItemType: CloudItemType {
 			let folder: Folder? = if let remoteItem {

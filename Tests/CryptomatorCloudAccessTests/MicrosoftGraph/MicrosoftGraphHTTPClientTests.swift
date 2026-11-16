@@ -241,6 +241,24 @@ class MicrosoftGraphHTTPClientTests: XCTestCase {
 		}
 	}
 
+	func testBodiesOfDownloadsAreNotLogged() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		let downloadURL = try XCTUnwrap(URL(string: "https://content.example.com/dl/PATH"))
+		for authorization in [BearerRequestSender.Authorization.bearer, .none] {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404, body: #"{"error":"https://content.example.com/dl/SECRET-PATH"}"#)]
+
+			let response = try await client.download(URLRequest(url: downloadURL), authorization: authorization, to: tmpDirURL.appendingPathComponent(UUID().uuidString), progress: nil, onTaskCreation: nil)
+
+			XCTAssertEqual(404, response.statusCode)
+		}
+
+		XCTAssertEqual(2, logCapture.messages.count { $0.hasPrefix("--> GET https://content.example.com") }, logCapture.joinedMessages)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+	}
+
 	// MARK: - Discovery
 
 	func testDiscoveryMapsForbiddenToUnauthorized() async throws {

@@ -91,9 +91,9 @@ class BoxCloudProviderTests: XCTestCase {
 
 	func testFetchItemListErrors() async throws {
 		let cases = [
-			ListingErrorCase(name: "invalid marker", response: URLProtocolMock.handler(statusCode: 400), expectedError: CloudProviderError.pageTokenInvalid),
-			ListingErrorCase(name: "web link", response: URLProtocolMock.handler(body: BoxMockResponse.items([#"{"type":"web_link","id":"9","name":"Link"}"#])), expectedError: BoxError.unexpectedContent),
-			ListingErrorCase(name: "unparseable date", response: URLProtocolMock.handler(body: BoxMockResponse.items([BoxMockResponse.fileEntry(id: "5", name: "file.txt", modifiedAt: "not-a-date")])), expectedError: BoxError.unexpectedContent)
+			ErrorCase(name: "invalid marker", response: URLProtocolMock.handler(statusCode: 400), expectedError: CloudProviderError.pageTokenInvalid),
+			ErrorCase(name: "web link", response: URLProtocolMock.handler(body: BoxMockResponse.items([#"{"type":"web_link","id":"9","name":"Link"}"#])), expectedError: BoxError.unexpectedContent),
+			ErrorCase(name: "unparseable date", response: URLProtocolMock.handler(body: BoxMockResponse.items([BoxMockResponse.fileEntry(id: "5", name: "file.txt", modifiedAt: "not-a-date")])), expectedError: BoxError.unexpectedContent)
 		]
 		for testCase in cases {
 			URLProtocolMock.requestHandler = [testCase.response]
@@ -306,22 +306,31 @@ class BoxCloudProviderTests: XCTestCase {
 		XCTAssertEqual(["name": "file.txt", "parent": ["id": "0"]] as NSDictionary, try JSONSerialization.jsonObject(with: Data(attributes.utf8)) as? NSDictionary)
 	}
 
+	/// Only a missing scope is a login failure, and a full storage is a quota failure. Any other 403, e.g., for a folder shared view-only, passes through raw, because signing in again wouldn't fix it.
 	func testUploadErrors() async throws {
 		let localURL = try makeLocalFile(content: "file content")
-		let cases: [(code: String, expectedError: CloudProviderError)] = [
-			("storage_limit_exceeded", .quotaInsufficient),
-			("access_denied_insufficient_permissions", .unauthorized)
+		let cases = [
+			ErrorCase(name: "storage_limit_exceeded", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "storage_limit_exceeded")), expectedError: CloudProviderError.quotaInsufficient),
+			ErrorCase(name: "insufficient_scope", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "insufficient_scope")), expectedError: CloudProviderError.unauthorized),
+			ErrorCase(name: "insufficient_scope challenge without body", response: URLProtocolMock.handler(statusCode: 403, headerFields: ["WWW-Authenticate": #"Bearer realm="Service", error="insufficient_scope", error_description="The request requires higher privileges than provided by the access token.""#]), expectedError: CloudProviderError.unauthorized),
+			ErrorCase(name: "body code before challenge", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "storage_limit_exceeded"), headerFields: ["WWW-Authenticate": #"Bearer realm="Service", error="insufficient_scope""#]), expectedError: CloudProviderError.quotaInsufficient),
+			ErrorCase(name: "access_denied_insufficient_permissions", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "access_denied_insufficient_permissions")), expectedError: BoxError.apiError(statusCode: 403, code: "access_denied_insufficient_permissions", message: nil)),
+			ErrorCase(name: "no body", response: URLProtocolMock.handler(statusCode: 403), expectedError: BoxError.apiError(statusCode: 403, code: nil, message: nil))
 		]
-		for (code, expectedError) in cases {
+		for testCase in cases {
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
-				URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: code))
+				testCase.response
 			]
 
-			await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil), code) { error in
-				XCTAssertEqual(expectedError, error as? CloudProviderError, code)
+			await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil), testCase.name) { error in
+				XCTAssertEqual(String(describing: testCase.expectedError), String(describing: error), testCase.name)
 			}
 		}
+	}
+
+	func testUnauthorizedIsUnauthorized() {
+		XCTAssertEqual(.unauthorized, provider.convertStandardError(BoxError.apiError(statusCode: 401, code: nil, message: nil)) as? CloudProviderError)
 	}
 
 	func testChunkedUploadSendsPartsWithDigestsAndCommits() async throws {
@@ -456,7 +465,7 @@ class BoxCloudProviderTests: XCTestCase {
 	}
 }
 
-private struct ListingErrorCase {
+private struct ErrorCase {
 	let name: String
 	let response: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
 	let expectedError: Error

@@ -40,7 +40,7 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		XCTAssertTrue(provider.convertStandardError(wrappedCancellationError) is CancellationError)
 		let cases: [(GoogleDriveError, CloudProviderError)] = [
 			(.apiError(statusCode: 401, reason: nil, message: nil), .unauthorized),
-			(.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: nil), .unauthorized),
+			(.apiError(statusCode: 403, reason: "insufficientPermissions", message: nil), .unauthorized),
 			(.apiError(statusCode: 403, reason: "storageQuotaExceeded", message: nil), .quotaInsufficient),
 			(.apiError(statusCode: 404, reason: "notFound", message: nil), .itemNotFound),
 			(.apiError(statusCode: 507, reason: nil, message: nil), .quotaInsufficient)
@@ -59,6 +59,15 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		}
 	}
 
+	/// A 403 about an item, an action, a policy or a limit, or one without a reason, isn't fixed by signing in again.
+	func testForbiddenWithoutMissingScopeIsNotUnauthorized() {
+		for reason in ["insufficientFilePermissions", "appNotAuthorizedToFile", "teamDriveMembershipRequired", "domainPolicy", "dailyLimitExceeded", nil] {
+			let error = GoogleDriveError.apiError(statusCode: 403, reason: reason, message: nil)
+
+			XCTAssertEqual(error, provider.convertStandardError(error) as? GoogleDriveError, reason ?? "nil")
+		}
+	}
+
 	func testFullDriveThrowsQuotaInsufficient() async throws {
 		URLProtocolMock.requestHandler = [
 			URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
@@ -70,6 +79,19 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		}
 	}
 
+	/// A folder shared view-only refuses the upload, which signing in again wouldn't fix.
+	func testUploadWithoutFilePermissionThrowsRawError() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+			URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientFilePermissions"))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: "Error"), error as? GoogleDriveError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Listings
 
 	func testListingSkipsShortcutWhoseTargetIsGoneOrPrivate() async throws {
@@ -78,10 +100,12 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 				GoogleDriveMockResponse.file(id: "F", name: "file.txt"),
 				GoogleDriveMockResponse.shortcut(id: "S1", name: "broken", targetID: "T1", targetMimeType: "text/plain"),
 				GoogleDriveMockResponse.shortcut(id: "S2", name: "private", targetID: "T2", targetMimeType: "text/plain"),
-				GoogleDriveMockResponse.shortcut(id: "S3", name: "link", targetID: "T3", targetMimeType: "application/vnd.google-apps.folder")
+				GoogleDriveMockResponse.shortcut(id: "S3", name: "forbidden", targetID: "T3", targetMimeType: "text/plain"),
+				GoogleDriveMockResponse.shortcut(id: "S4", name: "link", targetID: "T4", targetMimeType: "application/vnd.google-apps.folder")
 			])),
 			URLProtocolMock.handler(statusCode: 404, body: GoogleDriveMockResponse.error(status: 404, reason: "notFound")),
 			URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientFilePermissions")),
+			URLProtocolMock.handler(statusCode: 403),
 			URLProtocolMock.handler(body: #"{"mimeType":"application/vnd.google-apps.folder","modifiedTime":"\#(GoogleDriveMockResponse.modifiedTime)"}"#)
 		]
 
@@ -93,16 +117,18 @@ class GoogleDriveCloudProviderTests: XCTestCase {
 		], itemList.items)
 	}
 
-	/// A shortcut whose target request fails on the connection or through every retry fails the listing, which would otherwise look complete without it.
+	/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
 	func testListingFailsIfShortcutTargetRequestFails() async throws {
 		let cases = [
-			ShortcutTargetFailureCase(name: "connection", response: { _ in throw URLError(.networkConnectionLost) }, expectedError: CloudProviderError.noInternetConnection),
-			ShortcutTargetFailureCase(name: "rate limit", response: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "rateLimitExceeded")), expectedError: GoogleDriveError.apiError(statusCode: 403, reason: "rateLimitExceeded", message: "Error"))
+			ShortcutTargetFailureCase(name: "connection", response: { _ in throw URLError(.networkConnectionLost) }, attemptCount: 5, expectedError: CloudProviderError.noInternetConnection),
+			ShortcutTargetFailureCase(name: "rate limit", response: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "rateLimitExceeded")), attemptCount: 5, expectedError: GoogleDriveError.apiError(statusCode: 403, reason: "rateLimitExceeded", message: "Error")),
+			ShortcutTargetFailureCase(name: "missing scope", response: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientPermissions")), attemptCount: 1, expectedError: CloudProviderError.unauthorized),
+			ShortcutTargetFailureCase(name: "full drive", response: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "storageQuotaExceeded")), attemptCount: 1, expectedError: CloudProviderError.quotaInsufficient)
 		]
 		for testCase in cases {
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S1", name: "link", targetID: "T1", targetMimeType: "text/plain")]))
-			] + Array(repeating: testCase.response, count: 5)
+			] + Array(repeating: testCase.response, count: testCase.attemptCount)
 
 			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil), testCase.name) { error in
 				XCTAssertEqual(String(describing: testCase.expectedError), String(describing: error), testCase.name)
@@ -586,5 +612,7 @@ private struct GoogleDriveMutationCase {
 private struct ShortcutTargetFailureCase {
 	let name: String
 	let response: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
+	/// How many attempts the client makes before it gives up.
+	let attemptCount: Int
 	let expectedError: Error
 }

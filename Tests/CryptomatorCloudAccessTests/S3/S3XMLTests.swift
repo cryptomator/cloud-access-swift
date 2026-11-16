@@ -129,6 +129,35 @@ class S3XMLTests: XCTestCase {
 		}
 	}
 
+	func testDeletionFailuresOfResultWithoutErrors() throws {
+		for body in ["", " \n\t\r", "<DeleteResult/>", "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>a.txt</Key></Deleted></DeleteResult>"] {
+			XCTAssertEqual([], try S3XML.deletionFailures(in: Data(body.utf8)), body)
+		}
+	}
+
+	func testDeletionFailures() throws {
+		let body = Data("""
+		<?xml version="1.0" encoding="UTF-8"?>
+		<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+			<Error><Key>a &amp; b.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error>
+			<Error><Key>c&#10;d.txt</Key><Code>InternalError</Code></Error>
+			<Error><Code>AccessDenied</Code></Error>
+		</DeleteResult>
+		""".utf8)
+
+		XCTAssertEqual([
+			S3DeletionFailure(key: "a & b.txt", code: "AccessDenied"),
+			S3DeletionFailure(key: "c\nd.txt", code: "InternalError"),
+			S3DeletionFailure(key: nil, code: "AccessDenied")
+		], try S3XML.deletionFailures(in: body))
+	}
+
+	func testDeletionFailuresOfOtherDocumentThrows() {
+		XCTAssertThrowsError(try S3XML.deletionFailures(in: Data(S3MockResponse.copyObjectResult.utf8))) { error in
+			XCTAssertEqual(.unparseableResult, error as? S3ResponseError)
+		}
+	}
+
 	func testDeleteObjectsBodyEscapesKeys() throws {
 		let body = try XCTUnwrap(String(bytes: S3XML.deleteObjectsBody(keys: ["a<b>&c.txt"]), encoding: .utf8))
 		XCTAssertTrue(body.contains("<Quiet>true</Quiet><Object><Key>a&lt;b&gt;&amp;c.txt</Key></Object>"), body)

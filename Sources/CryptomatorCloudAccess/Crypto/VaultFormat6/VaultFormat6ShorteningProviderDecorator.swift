@@ -169,6 +169,8 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 				try Task.checkCancellation()
 				return try await delegate.fetchItemMetadata(at: originalPath)
 			}
+		} catch CloudProviderError.moveCompletedWithSourceRemaining {
+			// The item is at its original name, and only leftovers remain at the listed one.
 		} catch let error where !(error is CancellationError) && error as? CloudProviderError != .noInternetConnection {
 			throw LegacyNameNotMoved()
 		}

@@ -53,7 +53,7 @@ class S3ClientTests: XCTestCase {
 			bodyHashes.withLock { $0 = (Data(Insecure.MD5.hash(data: body)).base64EncodedString(), S3Signer.sha256Hex(body)) }
 		})]
 
-		try await client.deleteObjects(keys: ["a.txt", "folder/b.txt"])
+		_ = try await client.deleteObjects(keys: ["a.txt", "folder/b.txt"])
 
 		let sent = sentHashes.withLock { $0 }
 		let expected = try XCTUnwrap(bodyHashes.withLock { $0 })
@@ -73,12 +73,118 @@ class S3ClientTests: XCTestCase {
 		XCTAssertEqual("exampleBucket/folder/a%2Bb%26c%3Dd%20%C3%A9.txt", copySource.withLock { $0 })
 	}
 
-	func testDeleteObjectsIgnoresErrorsOfSingleObjects() async throws {
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "<DeleteResult><Error><Key>a.txt</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error></DeleteResult>")]
+	func testDeleteObjectsReturnsRefusedKeys() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "AccessDenied")]))]
 
-		try await client.deleteObjects(keys: ["a.txt"])
+		let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
 
+		XCTAssertEqual([S3DeletionFailure(key: "a.txt", code: "AccessDenied")], refusals)
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// Some servers report a key that doesn't exist, which counts as deleted.
+	func testDeleteObjectsDropsNoSuchKey() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "NoSuchKey")]))]
+
+		let refusals = try await client.deleteObjects(keys: ["a.txt"])
+
+		XCTAssertEqual([], refusals)
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteObjectsResendsBatchOnTransientKeyError() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("b.txt", "SlowDown")]), onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "NoSuchKey")]), onRequest: requests.record)
+		]
+
+		let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+
+		XCTAssertEqual([], refusals)
+		XCTAssertEqual([["a.txt", "b.txt"], ["a.txt", "b.txt"]], requests.requests.map { S3XMLElement.parse($0.httpBody ?? Data())?.children("Object").compactMap { $0.text(of: "Key") } })
+		XCTAssertEqual(1, sleeps.durations.count)
+	}
+
+	func testDeleteObjectsThrowsTransientErrorAfterBudget() async throws {
+		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "SlowDown")])), count: 4)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt"])) { error in
+			XCTAssertEqual("SlowDown", (error as? S3Error)?.code)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A resend can't change the outcome of a permanent refusal, so the transient one is returned with it. A refusal without a code counts as permanent.
+	func testDeleteObjectsWithPermanentRefusalReturnsAtOnce() async throws {
+		for permanentCode in ["AccessDenied", nil] {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "SlowDown"), ("b.txt", permanentCode)])),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: []))
+			]
+
+			let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+
+			XCTAssertEqual([S3DeletionFailure(key: "a.txt", code: "SlowDown"), S3DeletionFailure(key: "b.txt", code: permanentCode)], refusals)
+			XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+			XCTAssertEqual([], sleeps.durations)
+		}
+	}
+
+	func testDeleteObjectsWithTransientRefusalThenTransportFailureThrowsInterrupted() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("b.txt", "SlowDown")]))] + Array(repeating: S3MockResponse.failure(.timedOut), count: 3)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt", "b.txt"])) { error in
+			XCTAssertEqual(.timedOut, ((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteObjectsWithTransientRequestRefusalThenTransportFailureThrowsInterrupted() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503)] + Array(repeating: S3MockResponse.failure(.timedOut), count: 3)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt"])) { error in
+			XCTAssertEqual(.timedOut, ((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteObjectsWithClockSkewRefusalThenTransportFailureThrowsInterrupted() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))])] + Array(repeating: S3MockResponse.failure(.timedOut), count: 4)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt"])) { error in
+			XCTAssertEqual(.timedOut, ((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A transport failure leaves the batch's outcome unknown, so it is thrown as it is unless S3 answered an earlier attempt.
+	func testDeleteObjectsWithTransportFailuresThrowsTransportError() async throws {
+		URLProtocolMock.requestHandler = Array(repeating: S3MockResponse.failure(.timedOut), count: 4)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt"])) { error in
+			XCTAssertEqual(.timedOut, (error as? URLError)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// The cancellation stops the resend of a transiently refused batch, and it stays a cancellation rather than an interrupted deletion.
+	func testDeleteObjectsCancelledAfterTransientRefusalThrowsCancellationError() async throws {
+		let client: S3Client = client
+		let canceller = TaskCanceller<[S3DeletionFailure]>()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "SlowDown")]), onRequest: { _ in
+				canceller.cancel()
+			}),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: []))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await value(of: canceller.start {
+			try await client.deleteObjects(keys: ["a.txt"])
+		})) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
 	}
 
 	func testErrorCarriesBucketRegionHeader() async throws {
@@ -484,6 +590,19 @@ extension S3Client {
 enum S3MockResponse {
 	static let completeMultipartUploadResult = "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>"
 	static let copyObjectResult = "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>"
+	static func deleteResult(errors: [(key: String, code: String?)]) -> String {
+		let entries = errors.map { error in
+			"<Error><Key>\(error.key)</Key>\(error.code.map { "<Code>\($0)</Code>" } ?? "")<Message>message</Message></Error>"
+		}.joined()
+		return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\(entries)</DeleteResult>"
+	}
+
+	static func failure(_ code: URLError.Code, _ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+		return { request in
+			requests.record(request)
+			throw URLError(code)
+		}
+	}
 
 	static func initiateMultipartUploadResult(uploadID: String = "upload-id") -> String {
 		return "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>\(uploadID)</UploadId></InitiateMultipartUploadResult>"

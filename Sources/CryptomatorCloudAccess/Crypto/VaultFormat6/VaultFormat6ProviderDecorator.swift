@@ -177,11 +177,7 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 		try Task.checkCancellation()
 		try await withoutCancellation {
 			if let dirId {
-				do {
-					try await self.deleteCiphertextDir(dirId)
-				} catch CloudProviderError.itemNotFound {
-					// the directory is broken, so delete the dir file anyway
-				}
+				try await self.deleteCiphertextDir(dirId)
 			}
 			try await self.delegate.deleteFile(at: folderCiphertextPath)
 			try self.dirIdCache.invalidate(cleartextCloudPath)
@@ -203,11 +199,14 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 		let folderCiphertextSourcePath = try await getFolderCiphertextPath(cleartextSourceCloudPath)
 		let folderCiphertextTargetPath = try await getFolderCiphertextPath(cleartextTargetCloudPath)
 		try Task.checkCancellation()
-		try await delegate.moveFile(from: folderCiphertextSourcePath, to: folderCiphertextTargetPath)
-		if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
-			try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
+		try await completingMove {
+			try await delegate.moveFile(from: folderCiphertextSourcePath, to: folderCiphertextTargetPath)
+		} finalize: {
+			if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
+				try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
+			}
+			try dirIdCache.invalidate(cleartextSourceCloudPath)
 		}
-		try dirIdCache.invalidate(cleartextSourceCloudPath)
 	}
 
 	// MARK: - Encryption
@@ -328,17 +327,9 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 
 	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
-		let dirPath = try getDirPath(dirId)
-		var pageToken: String?
-		repeat {
-			let itemList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
+		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { itemList in
 			let subDirs = itemList.items.filter { $0.name.hasPrefix("0") }
-			let dirIds = try await allSettled(subDirs) { try await self.downloadFile(at: $0.cloudPath) }
-			// delete subdirectories recursively
-			_ = try await allSettled(dirIds) { try await self.deleteCiphertextDir($0) }
-			pageToken = itemList.nextPageToken
-		} while pageToken != nil
-		// delete self
-		try await delegate.deleteFolder(at: dirPath)
+			return try await allSettled(subDirs) { try await self.downloadFile(at: $0.cloudPath) }
+		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
 	}
 }

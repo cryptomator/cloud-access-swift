@@ -17,4 +17,8 @@ public enum CloudProviderError: Error {
 	case quotaInsufficient
 	case unauthorized
 	case noInternetConnection
+	/// Thrown by `deleteFolder` or `deleteFile` when the cloud refused to delete the item, wholly or in part. The item may still exist, and a later delete can finish it.
+	case deletionIncomplete
+	/// Thrown by `moveFolder` or `moveFile` once the target is complete and usable, when leftovers remain at the source.
+	case moveCompletedWithSourceRemaining
 }

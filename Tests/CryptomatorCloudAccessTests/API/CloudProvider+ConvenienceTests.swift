@@ -54,6 +54,14 @@ class CloudProvider_ConvenienceTests: XCTestCase {
 		try await provider.deleteFolderIfExisting(at: existingItemPath)
 	}
 
+	func testDeleteFolderIfExistingRejectsForUnlistableExistingItem() async throws {
+		let unlistableItemPath = CloudPath("/unlistableFolder")
+		let provider = ConvenienceCloudProviderMock()
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolderIfExisting(at: unlistableItemPath)) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+	}
+
 	func testDeleteFolderIfExistingRejectsWithErrorOtherThanItemNotFound() async throws {
 		let itemPath = CloudPath("/AAAAA/BBBB")
 		let provider = ConvenienceCloudProviderMock()
@@ -103,13 +111,13 @@ private final class ConvenienceCloudProviderMock: CloudProvider {
 
 	@concurrent
 	func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
-		let nonExistentItemPath = CloudPath("/nonExistentFile")
-		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
+		let nonExistentItemPaths = [CloudPath("/nonExistentFile"), CloudPath("/nonExistentFolder")]
+		let existingItemPaths = [CloudPath("/thisFolderExistsInTheCloud"), CloudPath("/unlistableFolder")]
 		switch cloudPath {
-		case nonExistentItemPath:
+		case _ where nonExistentItemPaths.contains(cloudPath):
 			throw CloudProviderError.itemNotFound
-		case existingItemPath:
-			return CloudItemMetadata(name: "thisFolderExistsInTheCloud", cloudPath: existingItemPath, itemType: .folder, lastModifiedDate: nil, size: nil)
+		case _ where existingItemPaths.contains(cloudPath):
+			return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
 		default:
 			throw CloudProviderError.noInternetConnection
 		}
@@ -163,11 +171,12 @@ private final class ConvenienceCloudProviderMock: CloudProvider {
 		try deleteItem(at: cloudPath)
 	}
 
+	/// `/unlistableFolder` exists, but deleting it throws `itemNotFound`, as a vault provider does for a folder it can't list.
 	private func deleteItem(at cloudPath: CloudPath) throws {
-		let nonExistentItemPath = CloudPath("/nonExistentFolder")
+		let notFoundItemPaths = [CloudPath("/nonExistentFolder"), CloudPath("/unlistableFolder")]
 		let existingItemPath = CloudPath("/thisFolderExistsInTheCloud")
 		switch cloudPath {
-		case nonExistentItemPath:
+		case _ where notFoundItemPaths.contains(cloudPath):
 			throw CloudProviderError.itemNotFound
 		case existingItemPath:
 			return

@@ -861,7 +861,259 @@ class S3CloudProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	// MARK: - Refused Deletions
+
+	func testDeleteFolderWithRefusedKeysDeletesEveryPageAndThrowsDeletionIncomplete() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertEqual([["folder/", "folder/a.txt"], ["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A 403 for the whole request is a refusal rather than a sign of wrong credentials, because the listings before it succeeded.
+	func testDeleteFolderWithFailedDeleteRequestOnFirstPageDeletesEveryPage() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertEqual([["folder/a.txt"], ["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A later failure must not replace the refusal, because a vault could then skip the error and delete the folder's reference.
+	func testDeleteFolderWithRefusalThenListingFailureThrowsDeletionIncomplete() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidArgument</Code></Error>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteFolderWithTransportFailureDuringBatchResendThrowsDeletionIncomplete() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"])),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
+		] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3)
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// S3 answered, although with a result that can't be read, so the batch counts as refused and the next page is still deleted.
+	func testDeleteFolderWithUnreadableDeleteResultOnFirstPageDeletesEveryPage() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))
+		] + Array(repeating: URLProtocolMock.handler(body: S3MockResponse.copyObjectResult), count: 4) + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertEqual([["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// The task is cancelled while page 2 is listed, so the check before its deletion stops the delete.
+	func testDeleteFolderCancelledAfterRefusalThrowsCancellationError() async throws {
+		let provider: S3CloudProvider = provider
+		let canceller = TaskCanceller<Void>()
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: { _ in
+				canceller.cancel()
+			}),
+			URLProtocolMock.handler(body: "<DeleteResult/>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await value(of: canceller.start {
+			try await provider.deleteFolder(at: CloudPath("/folder"))
+		})) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testMoveFolderWithRefusedKeysCopiesEveryPageAndThrowsMoveCompleted() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		let sent = requests.requests
+		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT", "POST"], sent.map(\.httpMethod))
+		XCTAssertEqual([["folder/a.txt"], ["folder/b.txt"]], sent.filter { $0.httpMethod == "POST" }.map(S3CloudProviderTests.deletedKeys(of:)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testMoveFolderWithFailedDeleteRequestCopiesEveryPageAndThrowsMoveCompleted() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT", "POST"], requests.requests.map(\.httpMethod))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A failed copy means that the target is incomplete, so a refusal before it doesn't make the move complete.
+	func testMoveFolderWithRefusalThenCopyFailureThrowsCopyError() async throws {
+		let requests = RequestRecorder()
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+			S3CloudProviderTests.copyObject(requests),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidRequest</Code></Error>", onRequest: requests.record)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual("InvalidRequest", (error as? S3Error)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT"], requests.requests.map(\.httpMethod))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// Whether the batch was deleted is unknown after a transport failure, so the move stops before the next page.
+	func testMoveFolderWithTransportFailureDuringBatchResendThrowsAtOnce() async throws {
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
+		] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3) + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testMoveFolderWithTransportFailureOnDeleteRequestThrowsAtOnce() async throws {
+		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"], nextContinuationToken: "next2")),
+			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+			S3MockResponse.failure(.notConnectedToInternet),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/c.txt"]))
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
+			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, "Unexpected error: \(error)")
+		}
+		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
+	}
+
+	func testMoveFileWithRefusedSourceDeleteThrowsMoveCompleted() async throws {
+		URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))) { error in
+			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// The error body of a 404 may be missing, so any 404 means that the source is gone.
+	func testMoveFileWithNoSuchKeyOnSourceDeleteSucceeds() async throws {
+		for body in ["<Error><Code>NoSuchKey</Code></Error>", ""] {
+			URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+				URLProtocolMock.handler(statusCode: 404, body: body)
+			]
+
+			try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))
+
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, body)
+		}
+	}
+
+	/// The listing before the DELETE succeeded with the same credentials, so a 403 refuses this object rather than the login.
+	func testDeleteFileWithRefusedDeleteThrowsDeletionIncomplete() async throws {
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
+			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/a.txt"))) { error in
+			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// Whether the source was deleted is unknown after a transport failure, so it doesn't count as a refusal.
+	func testMoveFileWithTransportFailureOnSourceDeleteKeepsError() async throws {
+		URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+			S3MockResponse.failure(.notConnectedToInternet)
+		]
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))) { error in
+			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Helpers
+
+	/// The responses to the checks and the copy of a file move from `/a.txt` to `/b.txt`.
+	private static func fileMoveChecksAndCopy() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+		return [
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
+			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
+		]
+	}
 
 	private static func queryParameters(of request: URLRequest) -> [String: String] {
 		let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []

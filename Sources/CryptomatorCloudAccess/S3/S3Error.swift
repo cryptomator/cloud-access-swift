@@ -71,3 +71,8 @@ enum S3ResponseError: Error {
 	/// A 2xx response lacks the result that its operation returns, e.g., because S3 cut a long-running copy short, or carries an `<Error>` document that can't be read.
 	case unparseableResult
 }
+
+/// A `DeleteObjects` batch that ended in a transport failure after S3 had answered an earlier attempt with an error. Its keys may still exist.
+struct S3DeletionInterrupted: Error {
+	let underlying: Error
+}

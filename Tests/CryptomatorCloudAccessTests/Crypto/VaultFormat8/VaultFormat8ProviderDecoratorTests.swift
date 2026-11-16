@@ -114,6 +114,18 @@ class VaultFormat8ProviderDecoratorTests: XCTestCase {
 		XCTAssertEqual([], try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path))
 	}
 
+	func testMoveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
+		let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["dir1": "Directory 1", "dir2": "Directory 2"], contents: [:])
+		let decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(Data("dir1-id".utf8), try decorator.dirIdCache.get(CloudPath("/Directory 2")))
+		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
+	}
+
 	func testThrowsCancellationErrorInCancelledTask() async {
 		await assertThrowsCancellationErrorInCancelledTask(decorator)
 		XCTAssertEqual([], provider.calls)

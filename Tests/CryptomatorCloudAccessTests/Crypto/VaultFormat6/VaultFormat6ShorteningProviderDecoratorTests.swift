@@ -147,6 +147,14 @@ class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecorato
 		}
 	}
 
+	func testFetchItemListReturnsLegacyShortenedNameWhoseMoveLeftLeftovers() async throws {
+		let provider = makeProviderWithLegacyShortenedName()
+		provider.afterMutationHook = CloudProviderMock.failing("moveFile", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
+		XCTAssertEqual(["\(legacyDirPath)/\(legacyOriginalName)"], itemList.items.map(\.cloudPath.path))
+	}
+
 	/// A missing internet connection says nothing about whether the item can be moved, so it counts like a name file that couldn't be downloaded.
 	func testFetchItemListWithLegacyShortenedNameThrowsIfMoveFailsWithoutInternetConnection() async throws {
 		let provider = makeProviderWithLegacyShortenedName()

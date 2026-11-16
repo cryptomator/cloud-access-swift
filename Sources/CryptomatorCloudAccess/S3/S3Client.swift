@@ -84,11 +84,38 @@ final class S3Client: Sendable {
 		try await send(request(method: "DELETE", key: key)) { _ in }
 	}
 
-	/// Deletes the objects in quiet mode. The errors of single objects in a successful response are not reported.
-	func deleteObjects(keys: [String]) async throws {
+	/**
+	 Deletes the objects in quiet mode and returns those that S3 refused to delete. An object that doesn't exist (`NoSuchKey`) counts as deleted.
+
+	 A response whose refusals all have transient codes is retried as a transient failure, which resends the whole batch. That is harmless, because a key that an earlier attempt deleted counts as deleted. A response with any other refusal returns all of its refusals at once, because a resend can't undo the permanent one.
+
+	 - Throws: The `S3Error` of a transient refusal that persists through the retries. `S3DeletionInterrupted` with the transport failure that ends a batch after S3 answered an earlier attempt with an error.
+	 */
+	func deleteObjects(keys: [String]) async throws -> [S3DeletionFailure] {
 		let body = S3XML.deleteObjectsBody(keys: keys)
 		let contentMD5 = Data(Insecure.MD5.hash(data: body)).base64EncodedString()
-		try await send(request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)) { _ in }
+		let deleteRequest = request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)
+		var sawErrorResponse = false
+		do {
+			return try await send(deleteRequest, onRetry: { failure in
+				if S3Client.isErrorResponse(failure) {
+					sawErrorResponse = true
+				}
+			}, result: { body in
+				let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
+				guard let transientCode = refusals.first?.code, refusals.allSatisfy({ $0.code.map(S3Client.transientErrorCodes.contains) ?? false }) else {
+					return refusals
+				}
+				throw S3Error(statusCode: 200, code: transientCode)
+			})
+		} catch where sawErrorResponse && !(S3Client.isErrorResponse(error) || error is CancellationError) {
+			throw S3DeletionInterrupted(underlying: error)
+		}
+	}
+
+	/// Whether S3 answered the request, with an error or with a result that can't be read. A transport failure leaves the request's outcome unknown.
+	static func isErrorResponse(_ error: Error) -> Bool {
+		return error is S3Error || error is S3ResponseError
 	}
 
 	func copyObject(sourceKey: String, targetKey: String) async throws {
@@ -216,8 +243,10 @@ final class S3Client: Sendable {
 	 A failed attempt is retried up to three times if its failure is transient. A transient failure is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`). A retry waits for the response's `Retry-After`, capped at 60 seconds, or else for a random exponential delay. A request that failed because of the device's clock is retried once with the server's clock.
 
 	 A cancelled task stops the request instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
+
+	 - Parameter onRetry: Gets called with each failure before the request is sent again, also before the resend with the server's clock.
 	 */
-	func send<Output>(_ request: URLRequest, result: (Data) throws -> Output) async throws -> Output {
+	func send<Output>(_ request: URLRequest, onRetry: (Error) -> Void = { _ in /* Nothing observes the retries. */ }, result: (Data) throws -> Output) async throws -> Output {
 		let payloadHash = request.httpBody.map(S3Signer.sha256Hex) ?? S3Signer.emptyPayloadHash
 		var retryCount = 0
 		var hasCorrectedClockSkew = false
@@ -236,9 +265,11 @@ final class S3Client: Sendable {
 			if !hasCorrectedClockSkew, correctClockSkew(after: failure, response: outcome.response, signingOffset: signingOffset) {
 				hasCorrectedClockSkew = true
 				try Task.checkCancellation()
+				onRetry(failure)
 				continue
 			}
 			try await waitBeforeRetry(after: failure, of: outcome, retryCount: &retryCount)
+			onRetry(failure)
 		}
 	}
 

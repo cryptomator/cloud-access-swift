@@ -215,7 +215,9 @@ public final class S3CloudProvider: CloudProvider {
 		do {
 			_ = try await getItemMetadata(at: cloudPath)
 			try Task.checkCancellation()
-			try await client.deleteObject(key: getKey(for: cloudPath))
+			if try await isDeletionRefused(ofKey: getKey(for: cloudPath)) {
+				throw CloudProviderError.deletionIncomplete
+			}
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) finished")
 		} catch {
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) failed with error: \(error)")
@@ -251,7 +253,9 @@ public final class S3CloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			try await withoutCancellation {
 				try await self.copyUtility.copy(copyRequest)
-				try await self.deleteFile(at: sourceCloudPath)
+				if try await self.isDeletionRefused(ofKey: sourceKey) {
+					throw CloudProviderError.moveCompletedWithSourceRemaining
+				}
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
 		} catch {
@@ -283,10 +287,15 @@ public final class S3CloudProvider: CloudProvider {
 	 Moves a folder from `sourceCloudPath` to `targetCloudPath` after various preconditions have already been met.
 
 	 Since S3 does not support move directly, this must be realized via a copy followed by a delete of the source object. For folders, this needs to be done for each individual object with the prefix of `sourceCloudPath`, and only objects that were copied are deleted. An object without a size is copied in a single request, as `moveFile` does.
+
+	 S3 refusing to delete source objects, or a whole `DeleteObjects` request, doesn't stop the move, so that every page is copied.
+
+	 - Throws: `CloudProviderError.moveCompletedWithSourceRemaining` after copying every page if S3 refused to delete source objects. A failed listing or copy, or a transport failure of a `DeleteObjects` request, is thrown at once.
 	 */
 	func moveFolderAfterCheck(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		let sourcePrefix = getPrefix(for: sourceCloudPath)
 		let targetPrefix = getPrefix(for: targetCloudPath)
+		var hasSourceRemaining = false
 		var nextContinuationToken: String?
 		repeat {
 			let listObjects = try await listObjects(withPrefix: sourcePrefix, recursive: true, pageToken: nextContinuationToken)
@@ -299,10 +308,19 @@ public final class S3CloudProvider: CloudProvider {
 			}
 			try await copyUtility.copy(copyRequests)
 
-			try await deleteObjects(keys: copyRequests.map(\.sourceKey))
+			do {
+				if try await isDeletionRefused(ofKeys: copyRequests.map(\.sourceKey)) {
+					hasSourceRemaining = true
+				}
+			} catch let error as S3DeletionInterrupted {
+				throw error.underlying
+			}
 
 			nextContinuationToken = listObjects.nextContinuationToken
 		} while nextContinuationToken != nil
+		if hasSourceRemaining {
+			throw CloudProviderError.moveCompletedWithSourceRemaining
+		}
 	}
 
 	/**
@@ -490,26 +508,76 @@ public final class S3CloudProvider: CloudProvider {
 	 Recursively deletes a folder at the given path after its existence has already been checked.
 
 	 Since S3 has no folders, this needs to be done for each individual object with the prefix of the given `cloudPath`.
+
+	 S3 refusing to delete objects, or a whole `DeleteObjects` request, doesn't stop the deletion, so that every page is deleted that can be.
+
+	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well, including a transport failure that ends a batch after S3 answered an earlier attempt with an error.
 	 */
 	func deleteFolderAfterCheck(at cloudPath: CloudPath) async throws {
+		var isIncomplete = false
 		var nextContinuationToken: String?
 		repeat {
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) called")
-			let listObjects = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: true, pageToken: nextContinuationToken)
-			try Task.checkCancellation()
-			try await deleteObjects(keys: listObjects.contents.map(\.key))
+			do {
+				let listObjects = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: true, pageToken: nextContinuationToken)
+				try Task.checkCancellation()
+				if try await isDeletionRefused(ofKeys: listObjects.contents.map(\.key)) {
+					isIncomplete = true
+				}
+				nextContinuationToken = listObjects.nextContinuationToken
+			} catch let error as S3DeletionInterrupted {
+				CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed after S3 refused to delete objects: \(error.underlying)")
+				throw CloudProviderError.deletionIncomplete
+			} catch where isIncomplete && !(error is CancellationError) {
+				CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed after S3 refused to delete objects: \(error)")
+				throw CloudProviderError.deletionIncomplete
+			}
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) finished")
-			nextContinuationToken = listObjects.nextContinuationToken
 		} while nextContinuationToken != nil
+		if isIncomplete {
+			throw CloudProviderError.deletionIncomplete
+		}
 	}
 
-	/// The errors of single objects are ignored, so that a folder of which S3 refused to delete some objects counts as deleted.
-	func deleteObjects(keys: [String]) async throws {
+	/**
+	 Deletes the objects and returns whether S3 refused to delete some of them, which it logs. An error response to the whole request refuses all of them. An object that doesn't exist counts as deleted.
+
+	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had answered an earlier attempt of the batch with an error.
+	 */
+	private func isDeletionRefused(ofKeys keys: [String]) async throws -> Bool {
 		if keys.isEmpty {
-			return
+			return false
 		}
-		try await client.deleteObjects(keys: keys)
+		let refusals: [S3DeletionFailure]
+		do {
+			refusals = try await client.deleteObjects(keys: keys)
+		} catch where S3Client.isErrorResponse(error) {
+			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(keys.count) objects: \(error)")
+			return true
+		}
+		if !refusals.isEmpty {
+			let examples = refusals.prefix(10).map { "\($0.key ?? "nil") (\($0.code ?? "nil"))" }.joined(separator: ", ")
+			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(refusals.count) objects, e.g., \(examples)")
+		}
+		return !refusals.isEmpty
+	}
+
+	/**
+	 Deletes the object and returns whether S3 refused to delete it, which it logs. An object that is gone (`NoSuchKey` or 404) counts as deleted.
+
+	 - Throws: A transport failure, after which it is unknown whether the object was deleted.
+	 */
+	private func isDeletionRefused(ofKey key: String) async throws -> Bool {
+		do {
+			try await client.deleteObject(key: key)
+		} catch let error as S3Error where error.code == "NoSuchKey" || error.statusCode == 404 {
+			return false
+		} catch where S3Client.isErrorResponse(error) {
+			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(key): \(error)")
+			return true
+		}
+		return false
 	}
 
 	// - MARK: Assertions

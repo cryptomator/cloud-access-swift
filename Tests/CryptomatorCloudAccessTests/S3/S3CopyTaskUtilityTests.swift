@@ -47,6 +47,40 @@ class S3CopyTaskUtilityTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	/// The objects that fit in one request are copied before the multipart copies, which run one after another, so that the parts of several objects never add up beyond `concurrencyLimit` requests in flight.
+	func testMultipartCopiesRunAfterRegularCopiesOneAtATime() async throws {
+		let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
+		let requests = RequestRecorder()
+		let answer: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
+			let url = try XCTUnwrap(request.url)
+			let queryNames = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? [])
+			let body = if queryNames.contains("uploads") {
+				S3MockResponse.initiateMultipartUploadResult(uploadID: url.lastPathComponent)
+			} else if queryNames.contains("partNumber") {
+				"<CopyPartResult><ETag>\"etag\"</ETag></CopyPartResult>"
+			} else if queryNames.contains("uploadId") {
+				S3MockResponse.completeMultipartUploadResult
+			} else {
+				S3MockResponse.copyObjectResult
+			}
+			return try URLProtocolMock.handler(body: body, onRequest: requests.record)(request)
+		}
+		URLProtocolMock.requestHandler = Array(repeating: answer, count: 12)
+		let copyRequests = [
+			S3CopyRequest(sourceKey: "large-a", targetKey: "large-a-copy", itemSize: 25),
+			S3CopyRequest(sourceKey: "small-a", targetKey: "small-a-copy", itemSize: 5),
+			S3CopyRequest(sourceKey: "large-b", targetKey: "large-b-copy", itemSize: 25),
+			S3CopyRequest(sourceKey: "small-b", targetKey: "small-b-copy", itemSize: 10)
+		]
+
+		try await copyTaskUtility.copy(copyRequests)
+
+		let targets = requests.requests.compactMap { $0.url?.lastPathComponent }
+		XCTAssertEqual(["small-a-copy", "small-b-copy"], targets.prefix(2).sorted())
+		XCTAssertEqual(Array(repeating: "large-a-copy", count: 5) + Array(repeating: "large-b-copy", count: 5), Array(targets.dropFirst(2)))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	/// The abort of a cancelled multipart copy is retried after a transient failure, so that no multipart upload is left behind.
 	func testCancelledMultipartCopyRetriesAbort() async throws {
 		let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)

@@ -22,18 +22,30 @@ final class S3CopyTaskUtility: Sendable {
 
 	/// A multipart copy checks for cancellation before each part and before completing it. When a provider calls it after its commit point, these checks never fire, because that task isn't cancelled.
 	func copy(_ request: S3CopyRequest) async throws {
-		if request.itemSize > maxPartSize {
+		if needsMultipartCopy(request) {
 			try await multipartCopy(request)
 		} else {
 			try await regularCopy(request)
 		}
 	}
 
-	/// Copies the objects with at most `concurrencyLimit` of them at a time.
+	/**
+	 Copies the objects that fit in one request, at most `concurrencyLimit` at a time, and then the larger ones one after another, so that the call has at most `concurrencyLimit` copy requests in flight.
+
+	 On HTTP/1.1, URLSession queues the requests beyond its connections per host, and the time a request waits in that queue counts against its timeout. A queued request would therefore fail once the server-side copies ahead of it take longer than that timeout.
+	 */
 	func copy(_ requests: [S3CopyRequest]) async throws {
-		_ = try await mapConcurrently(requests, limit: concurrencyLimit) { request in
-			try await self.copy(request)
+		_ = try await mapConcurrently(requests.filter { !needsMultipartCopy($0) }, limit: concurrencyLimit) { request in
+			try await self.regularCopy(request)
 		}
+		for request in requests where needsMultipartCopy(request) {
+			try Task.checkCancellation()
+			try await multipartCopy(request)
+		}
+	}
+
+	private func needsMultipartCopy(_ request: S3CopyRequest) -> Bool {
+		return request.itemSize > maxPartSize
 	}
 
 	private func regularCopy(_ request: S3CopyRequest) async throws {

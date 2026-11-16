@@ -36,4 +36,13 @@ class MicrosoftGraphAPITests: XCTestCase {
 		XCTAssertEqual("remote", shortcutItem.identifier)
 		XCTAssertEqual("remoteDrive", shortcutItem.driveIdentifier)
 	}
+
+	func testDecodeDownloadURL() throws {
+		let json = #"{"id": "file", "name": "file.txt", "size": 42, "file": {}, "@microsoft.graph.downloadUrl": "https://content.example.com/dl/file?tempauth=TOKEN"}"#
+
+		let item = try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: Data(json.utf8))
+
+		XCTAssertEqual("https://content.example.com/dl/file?tempauth=TOKEN", item.downloadURL)
+		XCTAssertEqual(42, item.size)
+	}
 }

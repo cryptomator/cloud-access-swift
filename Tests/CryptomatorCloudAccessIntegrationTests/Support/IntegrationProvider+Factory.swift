@@ -10,7 +10,7 @@ import Foundation
 @testable import CryptomatorCloudAccessCore
 
 /// The credentials that all tests of a provider share, so that each is authorized once per run.
-private enum SharedCredentials {
+enum SharedCredentials {
 	static let box = BoxCredential.integrationTest()
 	static let dropbox = Result { try DropboxCredentialMock.generateAuthorizedCredential() }
 	static let googleDrive = Result { try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest") }

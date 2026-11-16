@@ -175,6 +175,7 @@ The respective `CloudProvider` is tested here very generally for the specificati
 ### Microsoft Graph
 
 - Correct use of the cache for `resolvePath`.
+- Downloads from an item's pre-authenticated download URL instead of `/content`, tested in `MicrosoftGraphTests`. The conformance tests can't tell the two apart, because a refused download URL falls back to `/content`.
 
 ### pCloud
 

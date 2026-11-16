@@ -137,7 +137,7 @@ class S3AuthenticatorTests: XCTestCase {
 	func testFallsBackToPathStyleAfterTLSFailure() async throws {
 		let requests = RequestRecorder()
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted, requests),
+			S3MockResponse.failure(.serverCertificateUntrusted, requests),
 			S3AuthenticatorTests.listing(requests)
 		]
 
@@ -150,7 +150,7 @@ class S3AuthenticatorTests: XCTestCase {
 
 	/// The client retries a DNS failure three times before the fallback runs.
 	func testFallsBackToPathStyleAfterRetriedDNSFailure() async throws {
-		URLProtocolMock.requestHandler = Array(repeating: S3AuthenticatorTests.failure(.cannotFindHost), count: 4) + [S3AuthenticatorTests.listing()]
+		URLProtocolMock.requestHandler = Array(repeating: S3MockResponse.failure(.cannotFindHost), count: 4) + [S3AuthenticatorTests.listing()]
 
 		let credential = try await S3AuthenticatorTests.verify(S3AuthenticatorTests.customCredential)
 
@@ -161,7 +161,7 @@ class S3AuthenticatorTests: XCTestCase {
 	/// A server that only serves virtual-hosted requests may answer a path-style one with 403, which says nothing about the cause.
 	func testFailedPathStyleFallbackThrowsFailureThatTriggeredIt() async throws {
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted),
+			S3MockResponse.failure(.serverCertificateUntrusted),
 			S3AuthenticatorTests.signatureDoesNotMatch()
 		]
 
@@ -174,7 +174,7 @@ class S3AuthenticatorTests: XCTestCase {
 	func testCorrectsRegionAfterPathStyleFallback() async throws {
 		let requests = RequestRecorder()
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted, requests),
+			S3MockResponse.failure(.serverCertificateUntrusted, requests),
 			S3AuthenticatorTests.authorizationHeaderMalformed(region: "eu-west-1", requests),
 			S3AuthenticatorTests.signatureDoesNotMatch(requests)
 		]
@@ -189,7 +189,7 @@ class S3AuthenticatorTests: XCTestCase {
 
 	func testPathStyleFallbackThrowsWrongRegionErrorWithoutValidRegion() async throws {
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted),
+			S3MockResponse.failure(.serverCertificateUntrusted),
 			S3AuthenticatorTests.authorizationHeaderMalformed(region: "eu-west-1/x"),
 			S3AuthenticatorTests.listing()
 		]
@@ -202,7 +202,7 @@ class S3AuthenticatorTests: XCTestCase {
 
 	/// A connection failure that isn't about the bucket's host, e.g., a timeout, says nothing about the addressing, and forced path style would be stored with the credential.
 	func testDoesNotFallBackAfterOtherConnectionFailure() async throws {
-		URLProtocolMock.requestHandler = Array(repeating: S3AuthenticatorTests.failure(.timedOut), count: 4) + [S3AuthenticatorTests.listing()]
+		URLProtocolMock.requestHandler = Array(repeating: S3MockResponse.failure(.timedOut), count: 4) + [S3AuthenticatorTests.listing()]
 
 		await XCTAssertThrowsErrorAsync(try await S3AuthenticatorTests.verify(S3AuthenticatorTests.customCredential)) { error in
 			XCTAssertEqual(.timedOut, (error as? URLError)?.code)
@@ -225,7 +225,7 @@ class S3AuthenticatorTests: XCTestCase {
 	func testDoesNotFallBackWithForcedPathStyle() async throws {
 		let input = S3AuthenticatorTests.customCredential
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted),
+			S3MockResponse.failure(.serverCertificateUntrusted),
 			S3AuthenticatorTests.listing()
 		]
 
@@ -251,7 +251,7 @@ class S3AuthenticatorTests: XCTestCase {
 	/// The client doesn't check for cancellation before it throws a failure that it doesn't retry, so only the check before a further listing stops the correction.
 	func testDoesNotCorrectAfterCancellationDuringFirstListing() async throws {
 		let triggers: [(name: String, response: Handler)] = [
-			("TLS failure", S3AuthenticatorTests.failure(.serverCertificateUntrusted)),
+			("TLS failure", S3MockResponse.failure(.serverCertificateUntrusted)),
 			("wrong region", S3AuthenticatorTests.permanentRedirect(toRegion: "eu-central-1"))
 		]
 		for (name, response) in triggers {
@@ -277,7 +277,7 @@ class S3AuthenticatorTests: XCTestCase {
 		let canceller = TaskCanceller<S3Credential>()
 		let signatureDoesNotMatch = S3AuthenticatorTests.signatureDoesNotMatch()
 		URLProtocolMock.requestHandler = [
-			S3AuthenticatorTests.failure(.serverCertificateUntrusted),
+			S3MockResponse.failure(.serverCertificateUntrusted),
 			{ request in
 				canceller.cancel()
 				return try signatureDoesNotMatch(request)
@@ -313,13 +313,6 @@ class S3AuthenticatorTests: XCTestCase {
 
 	private static func signatureDoesNotMatch(_ requests: RequestRecorder = RequestRecorder()) -> Handler {
 		return URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>SignatureDoesNotMatch</Code></Error>", onRequest: requests.record)
-	}
-
-	private static func failure(_ code: URLError.Code, _ requests: RequestRecorder = RequestRecorder()) -> Handler {
-		return { request in
-			requests.record(request)
-			throw URLError(code)
-		}
 	}
 
 	/// Returns the region of the `Authorization` header's scope, e.g., `eu-central-1` of `Credential=access/20261023/eu-central-1/s3/aws4_request`.

@@ -23,6 +23,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		var mutationHook: (@Sendable () -> Void)?
 		var metadataHook: (@Sendable (CloudPath) throws -> Void)?
 		var moveHook: (@Sendable () throws -> Void)?
+		var listingHook: (@Sendable (CloudPath, String?) throws -> Void)?
+		var afterMutationHook: (@Sendable (String, CloudPath) throws -> Void)?
 	}
 
 	let folders: Set<String>
@@ -75,6 +77,27 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		set { state.withLock { $0.moveHook = newValue } }
 	}
 
+	/// Runs before a page of the given folder is listed, with its page token, which fails with the error that the hook throws.
+	var listingHook: (@Sendable (CloudPath, String?) throws -> Void)? {
+		get { state.withLock { $0.listingHook } }
+		set { state.withLock { $0.listingHook = newValue } }
+	}
+
+	/// Runs after a deletion or a move took effect, with the name of the call and its cloud path (a move's source). The call then fails with the error that the hook throws.
+	var afterMutationHook: (@Sendable (String, CloudPath) throws -> Void)? {
+		get { state.withLock { $0.afterMutationHook } }
+		set { state.withLock { $0.afterMutationHook = newValue } }
+	}
+
+	/// Returns an `afterMutationHook` that fails the call of the given name with the error at the given cloud paths, or at every path if `paths` is empty.
+	static func failing(_ call: String, with error: Error, at paths: Set<String> = []) -> @Sendable (String, CloudPath) throws -> Void {
+		return { mutation, cloudPath in
+			if mutation == call, paths.isEmpty || paths.contains(cloudPath.path) {
+				throw error
+			}
+		}
+	}
+
 	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max) {
 		self.folders = folders
 		self.files = files
@@ -93,6 +116,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
 		record("fetchItemList")
+		try listingHook?(cloudPath, pageToken)
 		let parentPath = cloudPath.path
 		let parentPathLvl = parentPath.components(separatedBy: "/").count
 		let childDirs = folders.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
@@ -146,6 +170,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		try Task.checkCancellation()
 		record("deleteFile")
 		deleteItem(at: cloudPath)
+		try afterMutationHook?("deleteFile", cloudPath)
 	}
 
 	@concurrent
@@ -156,6 +181,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 			throw CloudProviderError.itemNotFound
 		}
 		deleteItem(at: cloudPath)
+		try afterMutationHook?("deleteFolder", cloudPath)
 	}
 
 	@concurrent
@@ -164,6 +190,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		record("moveFile")
 		try moveHook?()
 		moveItem(from: sourceCloudPath, to: targetCloudPath)
+		try afterMutationHook?("moveFile", sourceCloudPath)
 	}
 
 	@concurrent
@@ -171,6 +198,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		try Task.checkCancellation()
 		record("moveFolder")
 		moveItem(from: sourceCloudPath, to: targetCloudPath)
+		try afterMutationHook?("moveFolder", sourceCloudPath)
 	}
 
 	private func record(_ call: String) {

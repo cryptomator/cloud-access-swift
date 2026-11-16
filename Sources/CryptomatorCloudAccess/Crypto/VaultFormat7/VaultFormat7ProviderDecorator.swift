@@ -160,7 +160,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 			if let dirId {
 				do {
 					try await self.deleteCiphertextDir(dirId)
-				} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
+				} catch CloudProviderError.itemTypeMismatch {
 					// the directory is broken, so delete the `.c9r` anyway
 				}
 			}
@@ -184,11 +184,14 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		let ciphertextSourceCloudPath = try await getC9RPath(cleartextSourceCloudPath)
 		let ciphertextTargetCloudPath = try await getC9RPath(cleartextTargetCloudPath)
 		try Task.checkCancellation()
-		try await delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
-		if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
-			try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
+		try await completingMove {
+			try await delegate.moveFolder(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
+		} finalize: {
+			if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
+				try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)
+			}
+			try dirIdCache.invalidate(cleartextSourceCloudPath)
 		}
-		try dirIdCache.invalidate(cleartextSourceCloudPath)
 	}
 
 	// MARK: - Encryption
@@ -279,10 +282,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 
 	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
-		let dirPath = try getDirPath(dirId)
-		var pageToken: String?
-		repeat {
-			let itemList = try await delegate.fetchItemList(forFolderAt: dirPath, withPageToken: pageToken)
+		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { itemList in
 			let subDirs = itemList.items.filter { $0.itemType == .folder }
 			let subDirItemLists = try await withThrowingTaskGroup(of: CloudItemList.self) { group in
 				for subDir in subDirs {
@@ -296,14 +296,8 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 				}
 				return subDirItemLists
 			}
-			// find subdirectories
 			let allDirFiles = subDirItemLists.flatMap(\.items).filter { $0.name == "dir.c9r" }
-			let dirIds = try await allSettled(allDirFiles) { try await self.downloadFile(at: $0.cloudPath) }
-			// delete subdirectories recursively
-			_ = try await allSettled(dirIds) { try await self.deleteCiphertextDir($0) }
-			pageToken = itemList.nextPageToken
-		} while pageToken != nil
-		// delete self
-		try await delegate.deleteFolder(at: dirPath)
+			return try await allSettled(allDirFiles) { try await self.downloadFile(at: $0.cloudPath) }
+		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
 	}
 }

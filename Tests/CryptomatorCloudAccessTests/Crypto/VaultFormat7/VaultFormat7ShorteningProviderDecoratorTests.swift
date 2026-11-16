@@ -214,6 +214,91 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/name.c9s"))
 	}
 
+	func testMoveFolderFromShortToLongNameWithMoveCompletedUploadsNameFileAndRethrows() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 3 (Long)"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
+	}
+
+	func testMoveFolderWithMoveCompletedAndFailedNameFileUploadThrowsUploadError() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		provider.transferHook = { cloudPath, _ in
+			if cloudPath.lastPathComponent == "name.c9s" {
+				throw CloudProviderError.quotaInsufficient
+			}
+		}
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 3 (Long)"))) { error in
+			XCTAssertEqual(CloudProviderError.quotaInsufficient, error as? CloudProviderError)
+		}
+	}
+
+	func testMoveFolderFromLongToShortNameWithMoveCompletedDeletesNameFileAndRethrows() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/name.c9s"], provider.deleted)
+	}
+
+	/// The stale name file is never read, so failing to delete it doesn't replace the move's outcome.
+	func testMoveFolderFromLongToShortNameWithMoveCompletedAndFailedNameFileDeleteRethrowsMoveCompleted() async throws {
+		provider.afterMutationHook = { call, _ in
+			switch call {
+			case "moveFolder": throw CloudProviderError.moveCompletedWithSourceRemaining
+			case "deleteFile": throw CloudProviderError.noInternetConnection
+			default: break
+			}
+		}
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+	}
+
+	func testMoveFolderFromLongToShortNameWithMoveCompletedAndCancelledNameFileDeleteThrowsCancellationError() async throws {
+		provider.afterMutationHook = { call, _ in
+			switch call {
+			case "moveFolder": throw CloudProviderError.moveCompletedWithSourceRemaining
+			case "deleteFile": throw CancellationError()
+			default: break
+			}
+		}
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))) { error in
+			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		}
+	}
+
+	/// The stale name file is never read, so a refused delete of it leaves nothing to report.
+	func testMoveFolderFromLongToShortNameWithRefusedNameFileDeleteSucceeds() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("deleteFile", with: CloudProviderError.deletionIncomplete)
+		try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))
+		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"])
+	}
+
+	func testMoveFileFromLongToShortNameWithRefusedSourceDeleteThrowsMoveCompleted() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+	}
+
+	func testMoveFileFromLongToShortNameWithMoveCompletedKeepsSource() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFile", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual([], provider.deleted)
+	}
+
+	func testMoveFileFromLongToLongNameWithMoveCompletedUploadsNameFileAndRethrows() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(Data("\(String(repeating: "file5", count: 44)).c9r".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s"])
+	}
+
 	func testUploadFileWithLongNameWithCancellationAfterFirstRemoteChange() async throws {
 		let decorator: VaultFormat7ProviderDecorator = decorator
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)

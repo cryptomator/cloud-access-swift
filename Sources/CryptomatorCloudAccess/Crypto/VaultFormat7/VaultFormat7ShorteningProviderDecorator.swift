@@ -156,13 +156,21 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 			}
 		case (.shortened, .unshortened):
 			try await withoutCancellation {
+				// A move that left `contents.c9r` at the source keeps the source `.c9s` whole. Deleting the `.c9s` could remove `name.c9s` but not `contents.c9r`, and a `.c9s` without a name can't be listed.
 				try await self.delegate.moveFile(from: shortenedSource.cloudPath.appendingContentsFileComponent(), to: shortenedTarget.cloudPath)
-				try await self.delegate.deleteFolder(at: shortenedSource.cloudPath)
+				do {
+					try await self.delegate.deleteFolder(at: shortenedSource.cloudPath)
+				} catch CloudProviderError.deletionIncomplete {
+					throw CloudProviderError.moveCompletedWithSourceRemaining
+				}
 			}
 		case (.shortened, .shortened):
 			try await withoutCancellation {
-				try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-				try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				try await completingMove {
+					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+				} finalize: {
+					try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				}
 			}
 		}
 	}
@@ -182,13 +190,28 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 			try await delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 		case (.shortened, .unshortened):
 			try await withoutCancellation {
-				try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-				try await self.delegate.deleteFile(at: shortenedTarget.cloudPath.appendingNameFileComponent())
+				var isSourceRemaining = false
+				do {
+					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+				} catch CloudProviderError.moveCompletedWithSourceRemaining {
+					isSourceRemaining = true
+				}
+				do {
+					try await self.delegate.deleteFile(at: shortenedTarget.cloudPath.appendingNameFileComponent())
+				} catch where (isSourceRemaining || error as? CloudProviderError == .deletionIncomplete) && !(error is CancellationError) {
+					// Only a `.c9s` path loads a name file, so the stale one in the `.c9r` folder is never read. A refused delete of it therefore leaves nothing to report. After a move that left leftovers, no failure but cancellation replaces `moveCompletedWithSourceRemaining`.
+				}
+				if isSourceRemaining {
+					throw CloudProviderError.moveCompletedWithSourceRemaining
+				}
 			}
 		case (_, .shortened):
 			try await withoutCancellation {
-				try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-				try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				try await completingMove {
+					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+				} finalize: {
+					try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				}
 			}
 		}
 	}

@@ -84,11 +84,34 @@ final class S3Client: Sendable {
 		try await send(request(method: "DELETE", key: key)) { _ in }
 	}
 
-	/// Deletes the objects in quiet mode. The errors of single objects in a successful response are not reported.
-	func deleteObjects(keys: [String]) async throws {
+	/**
+	 Deletes the objects in quiet mode and returns those that S3 refused to delete. An object that doesn't exist (`NoSuchKey`) counts as deleted.
+
+	 A response whose refusals all have transient codes is retried as a transient failure, which resends the whole batch. That is harmless, because a key that an earlier attempt deleted counts as deleted. A response with any other refusal returns all of its refusals at once, because a resend can't undo the permanent one.
+
+	 - Throws: The `S3Error` of a transient refusal that persists through the retries. `S3DeletionInterrupted` with the transport failure that ends a batch after S3 refused some of its keys transiently.
+	 */
+	func deleteObjects(keys: [String]) async throws -> [S3DeletionFailure] {
 		let body = S3XML.deleteObjectsBody(keys: keys)
 		let contentMD5 = Data(Insecure.MD5.hash(data: body)).base64EncodedString()
-		try await send(request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)) { _ in }
+		var sawTransientRefusal = false
+		do {
+			return try await send(request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)) { body in
+				let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
+				guard let transientCode = refusals.first?.code, refusals.allSatisfy({ $0.code.map(S3Client.transientErrorCodes.contains) ?? false }) else {
+					return refusals
+				}
+				sawTransientRefusal = true
+				throw S3Error(statusCode: 200, code: transientCode)
+			}
+		} catch where sawTransientRefusal && !(S3Client.isErrorResponse(error) || error is CancellationError) {
+			throw S3DeletionInterrupted(underlying: error)
+		}
+	}
+
+	/// Whether S3 answered the request, with an error or with a result that can't be read. A transport failure leaves the request's outcome unknown.
+	static func isErrorResponse(_ error: Error) -> Bool {
+		return error is S3Error || error is S3ResponseError
 	}
 
 	func copyObject(sourceKey: String, targetKey: String) async throws {

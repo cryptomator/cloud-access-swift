@@ -395,6 +395,112 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
 	}
 
+	func testDeleteFolderWithDeletionIncompleteKeepsReference() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertFalse(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+		XCTAssertEqual(Data("dir1-id".utf8), try decorator.dirIdCache.get(CloudPath("/Directory 1")))
+	}
+
+	/// The sibling `Directory 3` is deleted, which would let `allSettled` skip an ordinary failure of `Directory 2`. The refusal of `Directory 4` must still keep its ancestors.
+	func testDeleteFolderWithRefusedNestedSubdirectoryKeepsAncestors() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir4.c9r": "dir4-id"])
+		provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"])
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertEqual(["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"], provider.deleted.sorted())
+	}
+
+	/// A refusal settles as a value, so `allSettled` skips the other subdirectory's failure and the refusal decides the outcome.
+	func testDeleteFolderWithRefusedAndFailedSubdirectoryOnSamePageThrowsDeletionIncomplete() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir4.c9r": "dir4-id"])
+		provider.afterMutationHook = { call, cloudPath in
+			guard call == "deleteFolder" else {
+				return
+			}
+			switch cloudPath.path {
+			case "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC": throw CloudProviderError.deletionIncomplete
+			case "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD": throw CloudProviderError.unauthorized
+			default: break
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertFalse(provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
+		XCTAssertFalse(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+	}
+
+	func testDeleteFolderWithRefusalThenLaterPageListingFailureThrowsDeletionIncomplete() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data()], maxPageSize: 1)
+		provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"])
+		provider.listingHook = { cloudPath, pageToken in
+			if cloudPath.path == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", pageToken != nil {
+				throw CloudProviderError.unauthorized
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertEqual(["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"], provider.deleted)
+	}
+
+	/// A listing also fails with `itemNotFound` for a missing name file while the directory exists, which must neither count as deleted nor let the folder's `.c9r` be deleted.
+	func testDeleteFolderWithItemNotFoundFromExistingSubdirectoryKeepsParent() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"])
+		provider.listingHook = { cloudPath, _ in
+			if cloudPath.path == "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" {
+				throw CloudProviderError.itemNotFound
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertEqual([], provider.deleted)
+	}
+
+	/// A refused delete leaves the reference to a subdirectory whose directory is already gone, which a later delete counts as deleted. Listing a missing directory fails, as with a real provider.
+	func testDeleteFolderRetryAfterRefusedFinalDeleteFinishes() async throws {
+		let fixture = VaultFormat7CloudProviderMock()
+		let provider = VaultFormat7CloudProviderMock(folders: fixture.folders.subtracting(["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"]), files: fixture.files)
+		provider.listingHook = { cloudPath, _ in
+			if cloudPath.path == "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" {
+				throw CloudProviderError.itemNotFound
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"], provider.deleted.sorted())
+	}
+
+	func testMoveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
+		try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2"))) { error in
+			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		}
+		XCTAssertEqual(Data("dir1-id".utf8), try decorator.dirIdCache.get(CloudPath("/Directory 2")))
+		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
+	}
+
+	/// A move that failed otherwise left no usable target, so the cache must not map one.
+	func testMoveFolderWithOtherMoveErrorSkipsCacheUpdate() async throws {
+		try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.itemAlreadyExists)
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2"))) { error in
+			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		}
+		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 2")))
+		XCTAssertEqual(Data("dir1-id".utf8), try decorator.dirIdCache.get(CloudPath("/Directory 1")))
+	}
+
 	func testMoveFile() async throws {
 		try await decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/Directory 1/File 2"))
 		XCTAssertEqual(1, provider.moved.count)
@@ -407,6 +513,15 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 	}
 
 	// MARK: - Internal
+
+	/// Returns a provider whose `Directory 1` holds the given subdirectory references, by path below `pathToVault/d` and dir ID. The directories of `dir1-id` to `dir4-id` exist.
+	func makeNestedProvider(subdirectories: [String: String], files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
+		let directories = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"]
+		let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r": "dir1-id"].merging(subdirectories) { $1 }
+		let folders = Set(["pathToVault", "pathToVault/d"] + (directories + references.keys).map { "pathToVault/d/\($0)" })
+		let dirFiles = Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)/dir.c9r", Data($0.value.utf8)) })
+		return CloudProviderMock(folders: folders, files: dirFiles.merging(files) { $1 }, maxPageSize: maxPageSize)
+	}
 
 	func assertDeleted(_ temporaryURLs: [URL], file: StaticString = #filePath, line: UInt = #line) {
 		XCTAssertFalse(temporaryURLs.isEmpty, file: file, line: line)

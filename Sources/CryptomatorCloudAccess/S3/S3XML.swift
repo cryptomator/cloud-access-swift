@@ -17,6 +17,12 @@ struct S3Object: Equatable {
 
 typealias S3CompletedPart = (partNumber: Int, eTag: String)
 
+/// An object that a `DeleteObjects` request didn't delete, with the code of its `<Error>` entry.
+struct S3DeletionFailure: Equatable {
+	let key: String?
+	let code: String?
+}
+
 struct S3ListObjectsResult: Equatable {
 	let contents: [S3Object]
 	let commonPrefixes: [String]
@@ -85,6 +91,21 @@ enum S3XML {
 		}
 	}
 
+	/**
+	 Returns the `<Error>` entries of a `DeleteResult`. In quiet mode, S3 reports only the objects it didn't delete, so a successful batch may have an empty body.
+
+	 - Throws: `S3ResponseError.unparseableResult` if the body is neither empty nor a `DeleteResult`.
+	 */
+	static func deletionFailures(in body: Data) throws -> [S3DeletionFailure] {
+		guard body.contains(where: { !S3XMLTreeBuilder.whitespace.contains($0) }) else {
+			return []
+		}
+		guard let root = S3XMLElement.parse(body), root.name == "DeleteResult" else {
+			throw S3ResponseError.unparseableResult
+		}
+		return root.children("Error").map { S3DeletionFailure(key: $0.text(of: "Key"), code: $0.text(of: "Code")) }
+	}
+
 	// MARK: - Request Bodies
 
 	static func deleteObjectsBody(keys: [String]) -> Data {
@@ -139,6 +160,8 @@ struct S3XMLElement {
 }
 
 private final class S3XMLTreeBuilder: NSObject, XMLParserDelegate {
+	static let whitespace: Set<UInt8> = [0x20, 0x09, 0x0A, 0x0D]
+
 	private let stopsAtRoot: Bool
 	private var openElements = [S3XMLElement]()
 	private var root: S3XMLElement?
@@ -149,7 +172,7 @@ private final class S3XMLTreeBuilder: NSObject, XMLParserDelegate {
 
 	/// S3 sends whitespace before the XML declaration to keep the connection of a long-running copy alive. `XMLParser` rejects leading whitespace, so it is dropped.
 	static func parse(_ body: Data, stopsAtRoot: Bool) -> S3XMLElement? {
-		let document = Data(body.drop(while: { [0x20, 0x09, 0x0A, 0x0D].contains($0) }))
+		let document = Data(body.drop(while: whitespace.contains))
 		let parser = XMLParser(data: document)
 		parser.shouldProcessNamespaces = true
 		let builder = S3XMLTreeBuilder(stopsAtRoot: stopsAtRoot)

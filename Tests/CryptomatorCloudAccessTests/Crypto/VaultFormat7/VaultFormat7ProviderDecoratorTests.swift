@@ -466,6 +466,37 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertEqual([], provider.deleted)
 	}
 
+	/// The sibling `Directory 3` is deleted, which would let `allSettled` skip the failure of `Directory 2`. The unlistable `Directory 4` must still keep its ancestors.
+	func testDeleteFolderWithUnlistableNestedSubdirectoryKeepsAncestors() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir4.c9r": "dir4-id"])
+		provider.listingHook = { cloudPath, _ in
+			if cloudPath.path == "pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE" {
+				throw CloudProviderError.itemNotFound
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertEqual(["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"], provider.deleted)
+	}
+
+	func testDeleteFolderWithUnlistableSubdirectoryThenLaterPageListingFailureThrowsItemNotFound() async throws {
+		let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data()], maxPageSize: 1)
+		provider.listingHook = { cloudPath, pageToken in
+			switch (cloudPath.path, pageToken) {
+			case ("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", _): throw CloudProviderError.itemNotFound
+			case ("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", .some): throw CloudProviderError.unauthorized
+			default: break
+			}
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		await XCTAssertThrowsErrorAsync(try await decorator.deleteFolder(at: CloudPath("/Directory 1"))) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+		XCTAssertEqual([], provider.deleted)
+	}
+
 	/// A refused delete leaves the reference to a subdirectory whose directory is already gone, which a later delete counts as deleted. Listing a missing directory fails, as with a real provider.
 	func testDeleteFolderRetryAfterRefusedFinalDeleteFinishes() async throws {
 		let fixture = VaultFormat7CloudProviderMock()

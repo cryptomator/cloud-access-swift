@@ -143,7 +143,7 @@ public protocol CloudProvider: Sendable {
 
 	 - Parameter cloudPath: The cloud path of the folder to delete.
 	 - Throws:
-	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`.
+	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`. A vault provider also throws it if the folder or a folder inside it exists but can't be listed, e.g., because a name file is missing. The folder then still exists.
 	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the folder, wholly or in part. The S3 provider throws it.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.

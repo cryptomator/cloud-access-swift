@@ -543,7 +543,7 @@ public final class S3CloudProvider: CloudProvider {
 	/**
 	 Deletes the objects and returns whether S3 refused to delete some of them, which it logs. An error response to the whole request refuses all of them. An object that doesn't exist counts as deleted.
 
-	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had refused some of the batch's objects transiently before it.
+	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had answered an earlier attempt of the batch with a transient error.
 	 */
 	private func isDeletionRefused(ofKeys keys: [String]) async throws -> Bool {
 		if keys.isEmpty {

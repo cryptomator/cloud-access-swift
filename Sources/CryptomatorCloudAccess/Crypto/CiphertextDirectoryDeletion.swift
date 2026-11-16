@@ -13,14 +13,14 @@ import Foundation
 
  A directory that doesn't exist counts as deleted, so that a later delete finishes what a refused one left behind.
 
- If the cloud refused to delete a subdirectory, this directory and the reference to it stay, so that a later delete can finish. Any later failure but cancellation then throws `deletionIncomplete` as well. Otherwise an ancestor could skip the failure, because a sibling was deleted, and delete the reference to this directory.
+ If the cloud refused to delete a subdirectory, this directory and the reference to it stay, so that a later delete can finish. They also stay if a subdirectory exists but can't be listed. Any later failure but cancellation then throws `deletionIncomplete` if a subdirectory was refused, and `itemNotFound` otherwise. Otherwise an ancestor could skip the failure, because a sibling was deleted, and delete the reference to this directory.
 
  - Parameter subdirectoryIds: Returns the dir IDs of the subdirectories that a page of the directory lists.
- - Parameter deleteSubdirectory: Deletes the ciphertext directory of a dir ID, throwing `CloudProviderError.deletionIncomplete` if the cloud refused part of it.
- - Throws: `CloudProviderError.deletionIncomplete` if the cloud refused to delete a subdirectory or the directory itself. `CloudProviderError.itemNotFound` if the directory exists but can't be listed, e.g., because a name file is missing. Without a refusal, the error of the last failed subdirectory of a page of which none was deleted, as `allSettled` does.
+ - Parameter deleteSubdirectory: Deletes the ciphertext directory of a dir ID, throwing `CloudProviderError.deletionIncomplete` if the cloud refused part of it and `CloudProviderError.itemNotFound` if it or a directory below it exists but can't be listed.
+ - Throws: `CloudProviderError.deletionIncomplete` if the cloud refused to delete a subdirectory or the directory itself. Otherwise `CloudProviderError.itemNotFound` if the directory or a subdirectory exists but can't be listed, e.g., because a name file is missing. Otherwise the error of the last failed subdirectory of a page of which none was deleted, as `allSettled` does.
  */
 func deleteCiphertextDirectory(at dirPath: CloudPath, of provider: CloudProvider, subdirectoryIds: (CloudItemList) async throws -> [Data], deleteSubdirectory: @escaping @Sendable (Data) async throws -> Void) async throws {
-	var isSubdirectoryRefused = false
+	var subdirectoryFailure: CloudProviderError?
 	var pageToken: String?
 	repeat {
 		do {
@@ -34,24 +34,28 @@ func deleteCiphertextDirectory(at dirPath: CloudPath, of provider: CloudProvider
 				}
 				return
 			}
-			let isRefused = try await allSettled(subdirectoryIds(itemList)) { dirId in
+			let failures = try await allSettled(subdirectoryIds(itemList)) { dirId -> CloudProviderError? in
 				do {
 					try await deleteSubdirectory(dirId)
-					return false
+					return nil
 				} catch CloudProviderError.deletionIncomplete {
-					return true
+					return .deletionIncomplete
+				} catch CloudProviderError.itemNotFound {
+					return .itemNotFound
 				}
-			}.contains(true)
-			if isRefused {
-				isSubdirectoryRefused = true
+			}
+			if failures.contains(.deletionIncomplete) {
+				subdirectoryFailure = .deletionIncomplete
+			} else if failures.contains(.itemNotFound), subdirectoryFailure == nil {
+				subdirectoryFailure = .itemNotFound
 			}
 			pageToken = itemList.nextPageToken
-		} catch where isSubdirectoryRefused && !(error is CancellationError) {
-			throw CloudProviderError.deletionIncomplete
+		} catch where !(error is CancellationError) {
+			throw subdirectoryFailure ?? error
 		}
 	} while pageToken != nil
-	if isSubdirectoryRefused {
-		throw CloudProviderError.deletionIncomplete
+	if let subdirectoryFailure {
+		throw subdirectoryFailure
 	}
 	do {
 		try await provider.deleteFolder(at: dirPath)

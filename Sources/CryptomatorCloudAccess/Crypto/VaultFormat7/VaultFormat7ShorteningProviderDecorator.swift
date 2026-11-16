@@ -188,21 +188,21 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 			try await delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 		case (.shortened, .unshortened):
 			try await withoutCancellation {
-				try await self.restoringNameFile(of: shortenedSource) {
-					var isSourceRemaining = false
-					do {
+				var isSourceRemaining = false
+				do {
+					try await self.restoringNameFile(of: shortenedSource) {
 						try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-					} catch CloudProviderError.moveCompletedWithSourceRemaining {
-						isSourceRemaining = true
 					}
-					do {
-						try await self.delegate.deleteFile(at: shortenedTarget.cloudPath.appendingNameFileComponent())
-					} catch where (isSourceRemaining || error as? CloudProviderError == .deletionIncomplete) && !(error is CancellationError) {
-						// Only a `.c9s` path loads a name file, so the stale one in the `.c9r` folder is never read. A refused delete of it therefore leaves nothing to report. After a move that left leftovers, no failure but cancellation replaces `moveCompletedWithSourceRemaining`.
-					}
-					if isSourceRemaining {
-						throw CloudProviderError.moveCompletedWithSourceRemaining
-					}
+				} catch CloudProviderError.moveCompletedWithSourceRemaining {
+					isSourceRemaining = true
+				}
+				do {
+					try await self.delegate.deleteFile(at: shortenedTarget.cloudPath.appendingNameFileComponent())
+				} catch where (isSourceRemaining || error as? CloudProviderError == .deletionIncomplete) && !(error is CancellationError) {
+					// Only a `.c9s` path loads a name file, so the stale one in the `.c9r` folder is never read. A refused delete of it therefore leaves nothing to report. After a move that left leftovers, no failure but cancellation replaces `moveCompletedWithSourceRemaining`.
+				}
+				if isSourceRemaining {
+					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
 			}
 		case (_, .shortened):
@@ -212,15 +212,18 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 
 	// MARK: - Internal
 
-	/// Moves a folder to a `.c9s` and uploads the target's name file, also if the move left leftovers at the source.
+	/// Moves a folder to a `.c9s` and uploads the target's name file, also if the move left leftovers at the source. A `.c9s` source with leftovers gets its name file back before that upload, so that the leftovers stay listable even if the upload fails.
 	private func moveFolder(from shortenedSource: VaultFormat7ShorteningResult, toC9S shortenedTarget: VaultFormat7ShorteningResult) async throws {
 		try await withoutCancellation {
-			try await self.restoringNameFile(of: shortenedSource) {
-				try await completingMove {
+			try await completingMove {
+				do {
 					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-				} finalize: {
-					try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				} catch CloudProviderError.moveCompletedWithSourceRemaining {
+					try await self.restoreNameFile(of: shortenedSource)
+					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
+			} finalize: {
+				try await self.uploadNameFile(shortenedTarget.c9sDir!)
 			}
 		}
 	}
@@ -285,23 +288,31 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		try await uploadNameFile(c9sDir)
 	}
 
-	/**
-	 Runs a delete or move of an item and, if it left leftovers of the item's `.c9s`, uploads the `.c9s`'s name file again.
-
-	 The cloud can delete the name file but refuse to delete the rest, and a `.c9s` without a name file fails a listing page on which no other item is restored. With the name file, the leftovers list under the item's name, so that a later delete can find them. An item that isn't shortened has no name file, so nothing is uploaded for it.
-
-	 - Throws: The error of `mutation`. A failed upload of the name file throws only cancellation, because that error already reports the leftovers.
-	 */
+	/// Runs a delete or move of an item and, if it left leftovers, restores the name file of the item's `.c9s`.
 	private func restoringNameFile(of shortened: VaultFormat7ShorteningResult, after mutation: () async throws -> Void) async throws {
 		do {
 			try await mutation()
-		} catch let leftoverError as CloudProviderError where shortened.pointsToC9S && [.deletionIncomplete, .moveCompletedWithSourceRemaining].contains(leftoverError) {
-			do {
-				try await uploadNameFile(shortened.c9sDir!)
-			} catch where !(error is CancellationError) {
-				// `leftoverError` still reports the leftovers.
-			}
+		} catch let leftoverError as CloudProviderError where [.deletionIncomplete, .moveCompletedWithSourceRemaining].contains(leftoverError) {
+			try await restoreNameFile(of: shortened)
 			throw leftoverError
+		}
+	}
+
+	/**
+	 Uploads the name file of an item's `.c9s` again after a delete or move left leftovers of it.
+
+	 The cloud can delete the name file but refuse to delete the rest, and a `.c9s` without a name file fails a listing page on which no other item is restored. With the name file, the leftovers list under the item's name, so that a later delete can find them. An item that isn't shortened has no name file, so nothing is uploaded for it.
+
+	 - Throws: Only cancellation. A failed upload is ignored, so that it doesn't replace the outcome of the delete or move.
+	 */
+	private func restoreNameFile(of shortened: VaultFormat7ShorteningResult) async throws {
+		guard shortened.pointsToC9S, let c9sDir = shortened.c9sDir else {
+			return
+		}
+		do {
+			try await uploadNameFile(c9sDir)
+		} catch where !(error is CancellationError) {
+			// The outcome of the delete or move stands.
 		}
 	}
 

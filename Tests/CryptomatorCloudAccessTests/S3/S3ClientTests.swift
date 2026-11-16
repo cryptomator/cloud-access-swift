@@ -149,6 +149,15 @@ class S3ClientTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	func testDeleteObjectsWithClockSkewRefusalThenTransportFailureThrowsInterrupted() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))])] + Array(repeating: S3MockResponse.failure(.timedOut), count: 4)
+
+		await XCTAssertThrowsErrorAsync(try await client.deleteObjects(keys: ["a.txt"])) { error in
+			XCTAssertEqual(.timedOut, ((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code, "Unexpected error: \(error)")
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	/// A transport failure leaves the batch's outcome unknown, so it is thrown as it is unless S3 answered an earlier attempt.
 	func testDeleteObjectsWithTransportFailuresThrowsTransportError() async throws {
 		URLProtocolMock.requestHandler = Array(repeating: S3MockResponse.failure(.timedOut), count: 4)

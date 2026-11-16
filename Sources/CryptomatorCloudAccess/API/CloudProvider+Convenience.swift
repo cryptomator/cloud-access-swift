@@ -63,13 +63,17 @@ public extension CloudProvider {
 
 	/**
 	 Convenience wrapper for `deleteFolder()` that also satisfies if the item is not present.
+
+	 A vault provider also throws `CloudProviderError.itemNotFound` when the folder or a folder inside it exists but can't be listed. The error is therefore rethrown if the folder still exists.
 	 */
 	@concurrent
 	func deleteFolderIfExisting(at cloudPath: CloudPath) async throws {
 		do {
 			try await deleteFolder(at: cloudPath)
 		} catch CloudProviderError.itemNotFound {
-			return
+			if try await checkForItemExistence(at: cloudPath) {
+				throw CloudProviderError.itemNotFound
+			}
 		}
 	}
 

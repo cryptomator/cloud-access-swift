@@ -339,6 +339,19 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		XCTAssertEqual(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
 	}
 
+	func testMoveFileFromLongToLongNameWithMoveCompletedAndFailedTargetNameFileUploadRestoresSourceNameFile() async throws {
+		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+		provider.transferHook = { cloudPath, _ in
+			if cloudPath.path == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s" {
+				throw CloudProviderError.quotaInsufficient
+			}
+		}
+		await XCTAssertThrowsErrorAsync(try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)"))) { error in
+			XCTAssertEqual(CloudProviderError.quotaInsufficient, error as? CloudProviderError)
+		}
+		XCTAssertEqual(Data("\(String(repeating: "file4", count: 44)).c9r".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"])
+	}
+
 	/// The target is complete, so failing to restore the source's name file doesn't replace the move's outcome.
 	func testMoveFileFromLongToLongNameWithMoveCompletedAndFailedSourceNameFileUploadRethrowsMoveCompleted() async throws {
 		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)

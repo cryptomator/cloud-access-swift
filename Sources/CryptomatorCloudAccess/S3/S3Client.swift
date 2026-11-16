@@ -89,17 +89,17 @@ final class S3Client: Sendable {
 
 	 A response whose refusals all have transient codes is retried as a transient failure, which resends the whole batch. That is harmless, because a key that an earlier attempt deleted counts as deleted. A response with any other refusal returns all of its refusals at once, because a resend can't undo the permanent one.
 
-	 - Throws: The `S3Error` of a transient refusal that persists through the retries. `S3DeletionInterrupted` with the transport failure that ends a batch after S3 answered an earlier attempt with a transient error.
+	 - Throws: The `S3Error` of a transient refusal that persists through the retries. `S3DeletionInterrupted` with the transport failure that ends a batch after S3 answered an earlier attempt with an error.
 	 */
 	func deleteObjects(keys: [String]) async throws -> [S3DeletionFailure] {
 		let body = S3XML.deleteObjectsBody(keys: keys)
 		let contentMD5 = Data(Insecure.MD5.hash(data: body)).base64EncodedString()
 		let deleteRequest = request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)
-		var sawTransientRefusal = false
+		var sawErrorResponse = false
 		do {
 			return try await send(deleteRequest, onRetry: { failure in
 				if S3Client.isErrorResponse(failure) {
-					sawTransientRefusal = true
+					sawErrorResponse = true
 				}
 			}, result: { body in
 				let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
@@ -108,7 +108,7 @@ final class S3Client: Sendable {
 				}
 				throw S3Error(statusCode: 200, code: transientCode)
 			})
-		} catch where sawTransientRefusal && !(S3Client.isErrorResponse(error) || error is CancellationError) {
+		} catch where sawErrorResponse && !(S3Client.isErrorResponse(error) || error is CancellationError) {
 			throw S3DeletionInterrupted(underlying: error)
 		}
 	}
@@ -244,9 +244,9 @@ final class S3Client: Sendable {
 
 	 A cancelled task stops the request instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
 
-	 - Parameter onRetry: Gets called with each transient failure before its retry. The resend with the server's clock doesn't call it.
+	 - Parameter onRetry: Gets called with each failure before the request is sent again, also before the resend with the server's clock.
 	 */
-	func send<Output>(_ request: URLRequest, onRetry: (Error) -> Void = { _ in }, result: (Data) throws -> Output) async throws -> Output {
+	func send<Output>(_ request: URLRequest, onRetry: (Error) -> Void = { _ in /* Nothing observes the retries. */ }, result: (Data) throws -> Output) async throws -> Output {
 		let payloadHash = request.httpBody.map(S3Signer.sha256Hex) ?? S3Signer.emptyPayloadHash
 		var retryCount = 0
 		var hasCorrectedClockSkew = false
@@ -265,6 +265,7 @@ final class S3Client: Sendable {
 			if !hasCorrectedClockSkew, correctClockSkew(after: failure, response: outcome.response, signingOffset: signingOffset) {
 				hasCorrectedClockSkew = true
 				try Task.checkCancellation()
+				onRetry(failure)
 				continue
 			}
 			try await waitBeforeRetry(after: failure, of: outcome, retryCount: &retryCount)

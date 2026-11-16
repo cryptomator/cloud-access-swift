@@ -72,7 +72,7 @@ enum S3ResponseError: Error {
 	case unparseableResult
 }
 
-/// A `DeleteObjects` batch that ended in a transport failure after S3 had refused some of its keys transiently. Its keys may still exist.
+/// A `DeleteObjects` batch that ended in a transport failure after S3 had answered an earlier attempt with an error. Its keys may still exist.
 struct S3DeletionInterrupted: Error {
 	let underlying: Error
 }

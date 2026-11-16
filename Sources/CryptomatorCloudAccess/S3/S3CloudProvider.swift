@@ -511,7 +511,7 @@ public final class S3CloudProvider: CloudProvider {
 
 	 S3 refusing to delete objects, or a whole `DeleteObjects` request, doesn't stop the deletion, so that every page is deleted that can be.
 
-	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well, including a transport failure that ends a batch of which S3 refused keys transiently.
+	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well, including a transport failure that ends a batch after S3 answered an earlier attempt with an error.
 	 */
 	func deleteFolderAfterCheck(at cloudPath: CloudPath) async throws {
 		var isIncomplete = false
@@ -543,7 +543,7 @@ public final class S3CloudProvider: CloudProvider {
 	/**
 	 Deletes the objects and returns whether S3 refused to delete some of them, which it logs. An error response to the whole request refuses all of them. An object that doesn't exist counts as deleted.
 
-	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had answered an earlier attempt of the batch with a transient error.
+	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had answered an earlier attempt of the batch with an error.
 	 */
 	private func isDeletionRefused(ofKeys keys: [String]) async throws -> Bool {
 		if keys.isEmpty {

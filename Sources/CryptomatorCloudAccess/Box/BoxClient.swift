@@ -18,6 +18,8 @@ import Foundation
 final class BoxClient: Sendable {
 	private static let logLabel = "BoxClient"
 	private static let listingFields = "name,size,modified_at"
+	/// Box answers a recursive folder delete only once it is done, and sends nothing before. A delete takes about 130 s per 1,000 items (measured in November 2026), and Box gives up with a 503 after 600 s. The timeout exceeds those 600 s, because a shorter one would fail a delete that Box completes.
+	private static let recursiveDeleteTimeout: TimeInterval = 660
 
 	private let session: SplitURLSession
 	private let sender: BearerRequestSender
@@ -73,7 +75,9 @@ final class BoxClient: Sendable {
 	}
 
 	func deleteFolder(id: String) async throws {
-		_ = try await data(HTTPClientSupport.request("DELETE", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))", parameters: [("recursive", "true")])))
+		var request = try HTTPClientSupport.request("DELETE", BoxClient.apiURL("/folders/\(HTTPClientSupport.pathComponent(id))", parameters: [("recursive", "true")]))
+		request.timeoutInterval = BoxClient.recursiveDeleteTimeout
+		_ = try await data(request)
 	}
 
 	func moveFile(id: String, name: String, parentID: String) async throws -> BoxEntry {

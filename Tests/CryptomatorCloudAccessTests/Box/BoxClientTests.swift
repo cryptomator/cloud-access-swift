@@ -197,6 +197,21 @@ class BoxClientTests: XCTestCase {
 		XCTAssertEqual(["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"], URLProtocolMock.parameters(inFormEncoded: query))
 	}
 
+	/// Box sends nothing before a recursive folder delete is done, so the request's timeout exceeds the 600 s after which Box gives up.
+	func testRecursiveFolderDeleteWaitsLongerThanBoxTimeLimit() async throws {
+		let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 204, onRequest: { request in
+			sentRequest.withLock { $0 = request }
+		})]
+
+		try await client.deleteFolder(id: "7")
+
+		let request = try XCTUnwrap(sentRequest.withLock { $0 })
+		XCTAssertEqual("/2.0/folders/7", request.url?.path)
+		XCTAssertEqual("recursive=true", request.url?.query)
+		XCTAssertGreaterThan(request.timeoutInterval, 600)
+	}
+
 	func testUploadSessionURLOutsideBoxIsRejectedWithoutRequest() async throws {
 		let partFileURL = tmpDirURL.appendingPathComponent("part")
 		try Data("part".utf8).write(to: partFileURL)

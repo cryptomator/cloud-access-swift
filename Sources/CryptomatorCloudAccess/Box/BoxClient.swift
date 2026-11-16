@@ -262,6 +262,14 @@ final class BoxClient: Sendable {
 
 	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> BoxError {
 		let errorResponse = outcome.data.flatMap { try? JSONDecoder().decode(BoxErrorResponse.self, from: $0) }
-		return .apiError(statusCode: response.statusCode, code: errorResponse?.code, message: errorResponse?.message)
+		return .apiError(statusCode: response.statusCode, code: errorResponse?.code ?? challengeError(of: response), message: errorResponse?.message)
+	}
+
+	/// The `error` parameter of the response's `WWW-Authenticate` challenge. Box can answer a 403 `insufficient_scope` without a body and name the code only there (box-python-sdk issue #599).
+	private static func challengeError(of response: HTTPURLResponse) -> String? {
+		guard let challenge = response.value(forHTTPHeaderField: "WWW-Authenticate"), let match = challenge.firstMatch(of: /(?:^|[\s,])error="?([^",\s]+)/) else {
+			return nil
+		}
+		return String(match.1)
 	}
 }

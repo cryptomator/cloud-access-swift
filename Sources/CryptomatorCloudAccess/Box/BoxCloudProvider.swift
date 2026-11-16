@@ -446,7 +446,8 @@ public final class BoxCloudProvider: CloudProvider {
 		switch error {
 		case BoxError.apiError(statusCode: 403, code: "storage_limit_exceeded", _):
 			return CloudProviderError.quotaInsufficient
-		case BoxError.apiError(statusCode: 401, _, _), BoxError.apiError(statusCode: 403, _, _):
+		case BoxError.apiError(statusCode: 401, _, _), BoxError.apiError(statusCode: 403, code: "insufficient_scope", _):
+			// Box's other 403 codes (e.g. `access_denied_insufficient_permissions`, `access_denied_item_locked`, `forbidden_by_policy`, `access_from_location_blocked`) concern an item, a policy or the account's state, which signing in again can't fix.
 			return CloudProviderError.unauthorized
 		case BoxError.apiError(statusCode: 404, _, _):
 			return CloudProviderError.itemNotFound

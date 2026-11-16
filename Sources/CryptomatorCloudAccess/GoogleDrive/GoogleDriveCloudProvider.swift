@@ -175,7 +175,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 				try Task.checkCancellation()
 				do {
 					try await items.append(resolveShortcut(shortcut, at: child.cloudPath))
-				} catch let error where GoogleDriveCloudProvider.isTargetUnavailable(error) {
+				} catch let error where isTargetUnavailable(error) {
 					// A shortcut whose target is unavailable is left out. Any other failure fails the listing, which would otherwise look complete without the shortcut.
 					continue
 				}
@@ -307,13 +307,17 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
-	/// Checks whether a shortcut's target can't be read because it was deleted or isn't shared with the user.
-	private static func isTargetUnavailable(_ error: Error) -> Bool {
+	/**
+	 Checks whether a shortcut's target request failed in a way that leaves the shortcut out of the listing: a 404, or a 403 that `convertStandardError` passes through raw and that isn't retried.
+
+	 Such a 403 usually refuses the target itself, e.g., one that isn't shared with the user. A project's daily limit or a domain policy that begins between the folder request and the target request also leaves the shortcut out.
+	 */
+	private func isTargetUnavailable(_ error: Error) -> Bool {
 		switch error {
 		case GoogleDriveError.apiError(statusCode: 404, _, _):
 			return true
 		case let GoogleDriveError.apiError(statusCode: 403, reason, _):
-			return !GoogleDriveError.isRetryable(statusCode: 403, reason: reason)
+			return !GoogleDriveError.isRetryable(statusCode: 403, reason: reason) && convertStandardError(error) is GoogleDriveError
 		default:
 			return false
 		}
@@ -343,7 +347,8 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		case let GoogleDriveError.apiError(statusCode: 403, reason, _) where GoogleDriveError.isRetryable(statusCode: 403, reason: reason):
 			// The requests were retried until no attempt was left, and a rate limit is no login failure.
 			return error
-		case GoogleDriveError.apiError(statusCode: 401, _, _), GoogleDriveError.apiError(statusCode: 403, _, _):
+		case GoogleDriveError.apiError(statusCode: 401, _, _), GoogleDriveError.apiError(statusCode: 403, reason: "insufficientPermissions", _):
+			// Google's 403 for a token without the needed scope is the only 403 that signing in again fixes. Its other 403 reasons concern an item, an action, a policy or a limit.
 			return CloudProviderError.unauthorized
 		case GoogleDriveError.apiError(statusCode: 404, _, _):
 			return CloudProviderError.itemNotFound

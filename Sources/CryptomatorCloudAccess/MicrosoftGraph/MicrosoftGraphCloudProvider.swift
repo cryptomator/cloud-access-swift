@@ -284,6 +284,10 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 				offset += chunkLength
 			case 200, 201:
 				return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
+			case 401, 404:
+				// The upload URL is pre-authenticated, so signing in again can't fix its 401.
+				// Its 404 concerns the upload session, e.g., an expired one, not the item.
+				throw MicrosoftGraphError.unexpectedHTTPStatusCode(code: response.statusCode)
 			default:
 				throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
 			}

@@ -130,8 +130,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 			}
 		} catch CocoaError.fileReadNoSuchFile {
 			throw CloudProviderError.itemNotFound
-		} catch CocoaError.fileReadNoPermission {
-			throw CloudProviderError.unauthorized
 		}
 	}
 
@@ -196,9 +194,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 					} catch CocoaError.fileReadNoSuchFile {
 						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoSuchFile")
 						resumer.resume(throwing: CloudProviderError.itemNotFound)
-					} catch CocoaError.fileReadNoPermission {
-						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with fileReadNoPermission")
-						resumer.resume(throwing: CloudProviderError.unauthorized)
 					} catch {
 						CloudAccessDDLogDebug("LocalFileSystemProvider: downloadFile(from: \(cloudPath.path) to: \(localURL)) failed with error: \(error)")
 						resumer.resume(throwing: error)
@@ -248,9 +243,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 				} catch CocoaError.fileWriteOutOfSpace {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileWriteOutOfSpace")
 					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
-				} catch CocoaError.fileReadNoPermission {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with fileReadNoPermission")
-					resumer.resume(throwing: CloudProviderError.unauthorized)
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with error: \(error)")
 					resumer.resume(throwing: error)
@@ -294,9 +286,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 				} catch CocoaError.fileWriteOutOfSpace {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileWriteOutOfSpace")
 					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
-				} catch CocoaError.fileReadNoPermission {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with fileReadNoPermission")
-					resumer.resume(throwing: CloudProviderError.unauthorized)
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
 					resumer.resume(throwing: error)
@@ -341,9 +330,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 				} catch CocoaError.fileNoSuchFile {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileNoSuchFile")
 					resumer.resume(throwing: CloudProviderError.itemNotFound)
-				} catch CocoaError.fileReadNoPermission {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with fileReadNoPermission")
-					resumer.resume(throwing: CloudProviderError.unauthorized)
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: deleteItem(at: \(cloudPath.path)) failed with error: \(error)")
 					resumer.resume(throwing: error)
@@ -399,9 +385,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 				} catch CocoaError.fileWriteOutOfSpace {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileWriteOutOfSpace")
 					resumer.resume(throwing: CloudProviderError.quotaInsufficient)
-				} catch CocoaError.fileReadNoPermission {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with fileReadNoPermission")
-					resumer.resume(throwing: CloudProviderError.unauthorized)
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
 					resumer.resume(throwing: error)
@@ -483,9 +466,6 @@ public final class LocalFileSystemProvider: CloudProvider {
 				} catch CocoaError.fileReadNoSuchFile {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoSuchFile")
 					resumer.resume(throwing: CloudProviderError.itemNotFound)
-				} catch CocoaError.fileReadNoPermission {
-					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with fileReadNoPermission")
-					resumer.resume(throwing: CloudProviderError.unauthorized)
 				} catch {
 					CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) failed with error: \(error)")
 					resumer.resume(throwing: error)

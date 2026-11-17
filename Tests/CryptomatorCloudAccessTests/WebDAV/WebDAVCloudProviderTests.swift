@@ -995,6 +995,26 @@ class WebDAVCloudProviderTests: XCTestCase {
 		}
 	}
 
+	/// RFC 4918 lists no 404 for MKCOL, so it passes through raw.
+	func testCreateFolderWithNotFoundError() async throws {
+		try enqueueResponse(statusCode: 404, for: XCTUnwrap(URL(string: "foo/", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo"))) { error in
+			XCTAssertEqual(WebDAVError.httpError(statusCode: 404), error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A read-only share answers 403, which editing the account wouldn't fix.
+	func testCreateFolderWithForbiddenError() async throws {
+		try enqueueResponse(statusCode: 403, for: XCTUnwrap(URL(string: "foo/", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/foo"))) { error in
+			XCTAssertEqual(WebDAVError.httpError(statusCode: 403), error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	func testDeleteFile() async throws {
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
@@ -1041,6 +1061,16 @@ class WebDAVCloudProviderTests: XCTestCase {
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
+	}
+
+	/// See the rationale on the forbidden create folder variant.
+	func testDeleteFileWithForbiddenError() async throws {
+		try enqueueResponse(statusCode: 403, for: XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/Documents/About.txt"))) { error in
+			XCTAssertEqual(WebDAVError.httpError(statusCode: 403), error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testMoveFile() async throws {
@@ -1127,6 +1157,27 @@ class WebDAVCloudProviderTests: XCTestCase {
 			XCTAssertTrue(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 			XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError)
 		}
+	}
+
+	func testMoveFileWithNoInternetConnectionError() async throws {
+		URLProtocolMock.requestHandler.append({ _ in
+			throw URLError(.notConnectedToInternet)
+		})
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
+			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// See the rationale on the forbidden create folder variant.
+	func testMoveFileWithForbiddenError() async throws {
+		try enqueueResponse(statusCode: 403, for: XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
+			XCTAssertEqual(WebDAVError.httpError(statusCode: 403), error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
 	func testThrowsCancellationErrorInCancelledTask() async {

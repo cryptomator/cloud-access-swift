@@ -57,6 +57,36 @@ extension UnitTests {
 		}
 
 		@Test
+		func cancellingValueStopsWaitingForTaskWhenGracePeriodRunsOut() async {
+			let sleep = ManualSleep()
+			let returned = TestSignal("cancellingValue returned before the task finished")
+			// The task ignores cancellation. Its wait runs out if the call doesn't return, so that a call that waits for the task beyond the grace period fails instead of hanging.
+			let task = Task { () throws in
+				await returned.wait()
+			}
+			let driver = Task {
+				_ = await sleep.requests(count: 1)
+				sleep.elapse()
+				_ = await sleep.requests(count: 2)
+				sleep.elapse()
+			}
+			var thrownError: Error?
+			await withKnownIssue {
+				do {
+					_ = try await cancellingValue(of: task, timeout: .seconds(1), sleep: sleep.sleep)
+				} catch {
+					thrownError = error
+				}
+			} matching: { issue in
+				issue.comments.contains { $0.rawValue == "Task did not finish within 1.0 seconds" }
+			}
+			returned.fulfill()
+			await sleep.finishDriver(driver)
+			#expect((thrownError as? UnfinishedTaskError)?.timeout == .seconds(1))
+			_ = await task.result
+		}
+
+		@Test
 		func signalWaitRecordsIssueWhenTimeoutRunsOut() async {
 			let sleep = ManualSleep()
 			let signal = TestSignal("signal", sleep: sleep.sleep)

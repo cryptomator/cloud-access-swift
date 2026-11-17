@@ -72,6 +72,17 @@ func cancellingValue<Value: Sendable>(of task: Task<Value, Error>, timeout: Dura
 	throw error
 }
 
+/// Runs `body` while `task` waits for `release`. If `body` throws, it fulfills `release` and waits for the task before rethrowing. Otherwise the task would run on into a later test, which its timed-out wait would fail.
+func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: TestSignal, sourceLocation: SourceLocation = #_sourceLocation, _ body: () async throws -> Value) async throws -> Value {
+	do {
+		return try await body()
+	} catch {
+		release.fulfill()
+		_ = try? await cancellingValue(of: task, sourceLocation: sourceLocation)
+		throw error
+	}
+}
+
 /**
  Returns the result of a task, or `nil` once the timeout runs out first, leaving the task running.
 
@@ -210,7 +221,7 @@ final class TestSignal: Sendable {
 	}
 }
 
-/// A step that a task waits for until the test opens it. Its wait has no timeout. A task that the test keeps suspended while it checks that a call returns therefore waits on a `TestSignal`, so that a call that waits for the task fails instead of hanging the run.
+/// A step that a task waits for until the test opens it. Its wait has no timeout. A task that the test keeps suspended while it checks that a call returns therefore waits on a `TestSignal`, so that a call that waits for the task fails instead of hanging the run, and the test checks that call in `releasingOnError(_:by:_:)`.
 final class Gate: Sendable {
 	private let state = OSAllocatedUnfairLock(initialState: (isOpen: false, waiters: [CheckedContinuation<Void, Never>]()))
 

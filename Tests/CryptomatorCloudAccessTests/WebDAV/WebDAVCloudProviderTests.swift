@@ -250,8 +250,10 @@ extension UnitTests {
 				try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
 			}
 			await gatedClient.firstPropfindHeld.wait()
-			let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
-			gatedClient.firstPropfindGate.open()
+			let otherItemList = try await releasingOnError(heldListing, by: gatedClient.firstPropfindReleased) {
+				try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+			}
+			gatedClient.firstPropfindReleased.fulfill()
 			let itemList = try await cancellingValue(of: heldListing)
 
 			#expect(WebDAVCloudProviderTests.itemListNames == itemList.items.map(\.name).sorted())
@@ -1251,12 +1253,12 @@ extension UnitTests {
 	}
 }
 
-/// Holds back the client's first `PROPFIND` until the test opens `firstPropfindGate`, before the request reaches the URL protocol mock.
+/// Holds back the client's first `PROPFIND`, before it reaches the URL protocol mock, until the test fulfills `firstPropfindReleased`.
 ///
-/// `@unchecked Sendable`: restates the conformance of `WebDAVClientMock`; the gate's state is protected by a lock or is itself `Sendable`.
+/// `@unchecked Sendable`: restates the conformance of `WebDAVClientMock`; its own state is protected by a lock or is itself `Sendable`.
 private final class FirstPropfindGateClient: WebDAVClientMock, @unchecked Sendable {
 	let firstPropfindHeld = TestSignal("first PROPFIND held")
-	let firstPropfindGate = Gate()
+	let firstPropfindReleased = TestSignal("first PROPFIND released")
 	private let isFirstPropfind = OSAllocatedUnfairLock(initialState: true)
 
 	override func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) async throws -> HTTPURLResponse {
@@ -1266,7 +1268,7 @@ private final class FirstPropfindGateClient: WebDAVClientMock, @unchecked Sendab
 		}
 		if isFirst {
 			firstPropfindHeld.fulfill()
-			await firstPropfindGate.wait()
+			await firstPropfindReleased.wait()
 		}
 		return try await super.PROPFIND(url: url, depth: depth, to: localURL, propertyNames: propertyNames)
 	}

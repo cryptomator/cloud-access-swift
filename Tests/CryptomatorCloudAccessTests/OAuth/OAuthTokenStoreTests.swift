@@ -86,7 +86,7 @@ extension UnitTests {
 		func concurrentRefreshesOfOneAccountShareOneRefresh() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let gate = Gate()
-			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let refresher = RefresherMock(wait: gate.wait) { _ in OAuthTokenStoreTests.tokenB }
 			let acquisitions = OSAllocatedUnfairLock(initialState: 0)
 			let lockEvents = CrossProcessFileLock.Events(acquired: { acquisitions.withLock { $0 += 1 } })
 			let coordinator = OAuthTokenCoordinator()
@@ -122,7 +122,7 @@ extension UnitTests {
 		func refreshInAnotherProcessIsReusedAfterWaitingForLock() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let gate = Gate()
-			let firstRefresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let firstRefresher = RefresherMock(wait: gate.wait) { _ in OAuthTokenStoreTests.tokenB }
 			let secondRefresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
 			let contention = TestSignal("second process waits for the lock", allowsOverFulfillment: true)
 			let firstStore = try makeStore(refresher: firstRefresher, coordinator: OAuthTokenCoordinator())
@@ -199,7 +199,7 @@ extension UnitTests {
 		func cancelledCallerDoesNotCancelSharedRefresh() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let gate = Gate()
-			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let refresher = RefresherMock(wait: gate.wait) { _ in OAuthTokenStoreTests.tokenB }
 			let storage = MemoryTokenStorage(buffer: buffer)
 			let store = try makeStore(storage: storage, refresher: refresher)
 
@@ -224,7 +224,7 @@ extension UnitTests {
 		func refresherErrorReachesAllWaitersAndNextCallRefreshesAgain() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let gate = Gate()
-			let refresher = RefresherMock(gate: gate) { callCount in
+			let refresher = RefresherMock(wait: gate.wait) { callCount in
 				guard callCount > 1 else {
 					throw URLError(.timedOut)
 				}
@@ -488,20 +488,22 @@ extension UnitTests {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
 			let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
-			let gate = Gate()
 			let revocationStarted = TestSignal("revocation started")
+			let revocationReleased = TestSignal("revocation released")
 
 			let delete = Task {
 				try await store.delete(revoking: { _ in
 					revocationStarted.fulfill()
-					await gate.wait()
+					await revocationReleased.wait()
 				})
 			}
 			await revocationStarted.wait()
-			try await cancellingValue(of: Task {
-				try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
-			})
-			gate.open()
+			try await releasingOnError(delete, by: revocationReleased) {
+				try await cancellingValue(of: Task {
+					try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+				})
+			}
+			revocationReleased.fulfill()
 
 			try await cancellingValue(of: delete)
 			#expect(OAuthTokenStoreTests.tokenC == buffer.token)
@@ -513,13 +515,15 @@ extension UnitTests {
 				buffer.store(OAuthTokenStoreTests.tokenA)
 				let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
 				lateRefresh.otherHolder.release()
-				let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
-				if meanwhile == "delete" {
-					try await otherProcessStore.delete(revoking: { _ in })
-				} else if meanwhile == "replace" {
-					try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+				try await releasingOnError(lateRefresh.refresh, by: lateRefresh.refreshReleased) {
+					let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
+					if meanwhile == "delete" {
+						try await otherProcessStore.delete(revoking: { _ in })
+					} else if meanwhile == "replace" {
+						try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+					}
 				}
-				lateRefresh.gate.open()
+				lateRefresh.refreshReleased.fulfill()
 
 				if meanwhile == "delete" {
 					await #expect(throws: CloudProviderError.unauthorized) { try await cancellingValue(of: lateRefresh.refresh) }
@@ -560,7 +564,7 @@ extension UnitTests {
 				if failure != "lock timeout" {
 					lateRefresh.otherHolder.release()
 				}
-				lateRefresh.gate.open()
+				lateRefresh.refreshReleased.fulfill()
 
 				let accessToken = try await cancellingValue(of: lateRefresh.refresh)
 
@@ -711,8 +715,10 @@ extension UnitTests {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
 			lateRefresh.otherHolder.release()
-			try await otherProcessStore.updateUsername("Late")
-			lateRefresh.gate.open()
+			try await releasingOnError(lateRefresh.refresh, by: lateRefresh.refreshReleased) {
+				try await otherProcessStore.updateUsername("Late")
+			}
+			lateRefresh.refreshReleased.fulfill()
 			_ = try await cancellingValue(of: lateRefresh.refresh)
 
 			#expect(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Late") == buffer.token)
@@ -746,20 +752,22 @@ extension UnitTests {
 
 		// MARK: - Helpers
 
-		/// Starts a refresh of token A to token B whose assertion expires while the refresher waits for the gate, and returns once another holder acquired the released lock.
+		/// Starts a refresh of token A to token B whose assertion expires while the refresher waits for `refreshReleased`. Returns once another holder acquired the lock that the refresh released.
 		private func startLateRefresh(storage: MemoryTokenStorage, script: ActivityScript, lockTimeout: Duration = .seconds(testWaitTimeout)) async throws -> LateRefresh {
-			let gate = Gate()
-			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let refreshReleased = TestSignal("late refresh released")
+			let refresher = RefresherMock(wait: { await refreshReleased.wait() }, result: { _ in OAuthTokenStoreTests.tokenB })
 			let store = try makeStore(storage: storage, refresher: refresher, script: script, lockTimeout: lockTimeout, coordinator: OAuthTokenCoordinator())
 			let refresh = Task {
 				try await store.refresh(rejecting: "A")
 			}
 			await refresher.entered.wait()
 			script.expireRunningAssertion()
-			let otherHolder = try await cancellingValue(of: Task {
-				try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
-			})
-			return LateRefresh(store: store, refresher: refresher, gate: gate, refresh: refresh, otherHolder: otherHolder)
+			let otherHolder = try await releasingOnError(refresh, by: refreshReleased) {
+				try await cancellingValue(of: Task {
+					try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+				})
+			}
+			return LateRefresh(store: store, refresher: refresher, refreshReleased: refreshReleased, refresh: refresh, otherHolder: otherHolder)
 		}
 
 		private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(testWaitTimeout), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
@@ -771,7 +779,7 @@ extension UnitTests {
 private struct LateRefresh {
 	let store: OAuthTokenStore
 	let refresher: RefresherMock
-	let gate: Gate
+	let refreshReleased: TestSignal
 	let refresh: Task<String, Error>
 	/// Holds the lock that the refresh released when its assertion expired.
 	let otherHolder: CrossProcessFileLock.Holder
@@ -870,15 +878,15 @@ final class MemoryTokenStorage: OAuthTokenStorage {
 	}
 }
 
-/// Records the tokens of the refreshes and, if it has a gate, holds each back until the gate opens.
+/// Records the tokens of the refreshes and holds each back until `wait` returns.
 final class RefresherMock: Sendable {
 	let entered = TestSignal("refresher entered", allowsOverFulfillment: true)
-	private let gate: Gate?
+	private let wait: @Sendable () async -> Void
 	private let result: @Sendable (_ callCount: Int) throws -> OAuthToken
 	private let receivedTokens = OSAllocatedUnfairLock(initialState: [OAuthToken]())
 
-	init(gate: Gate? = nil, result: @escaping @Sendable (_ callCount: Int) throws -> OAuthToken) {
-		self.gate = gate
+	init(wait: @escaping @Sendable () async -> Void = {}, result: @escaping @Sendable (_ callCount: Int) throws -> OAuthToken) {
+		self.wait = wait
 		self.result = result
 	}
 
@@ -896,7 +904,7 @@ final class RefresherMock: Sendable {
 			return tokens.count
 		}
 		entered.fulfill()
-		await gate?.wait()
+		await wait()
 		return try result(callCount)
 	}
 }

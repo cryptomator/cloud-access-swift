@@ -625,12 +625,18 @@ extension IntegrationTests {
 				let filePath = sandbox.appendingPathComponent(String(repeating: "f", count: 200))
 				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
+				let overwritingURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let overwrittenContent = "Overwritten content"
+				try overwrittenContent.write(to: overwritingURL, atomically: true, encoding: .utf8)
 				let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 				let (writer, writerRecorder) = try context.makeRecordingProvider()
 
 				try await writer.createFolder(at: folderPath)
 				_ = try await writer.uploadFile(from: localURL, to: filePath, replaceExisting: false)
 				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				_ = try await writer.uploadFile(from: overwritingURL, to: filePath, replaceExisting: true)
+				try await Conformance.waitUntilCreatedItemsAreVisible(of: writerRecorder, in: context)
+				try await expectCloudProviderError(.itemAlreadyExists) { try await writer.uploadFile(from: localURL, to: filePath, replaceExisting: false) }
 				let uploadedPaths = writerRecorder.paths(of: .uploadFile)
 				let createdShortenedNames = Set((writerRecorder.paths(of: .createFolder) + uploadedPaths).compactMap { Conformance.shortenedName(in: $0, of: format) })
 				let uploadedNameFiles = Set(uploadedPaths.compactMap { Conformance.shortenedName(ofNameFileAt: $0, of: format) })
@@ -651,7 +657,7 @@ extension IntegrationTests {
 				#expect(folderMetadata.itemType == .folder)
 				#expect(fileMetadata.cloudPath == filePath)
 				#expect(fileMetadata.itemType == .file)
-				#expect(try String(contentsOf: downloadURL, encoding: .utf8) == Conformance.testContentForSandboxItems)
+				#expect(try String(contentsOf: downloadURL, encoding: .utf8) == overwrittenContent)
 			}
 		}
 
@@ -731,7 +737,7 @@ extension IntegrationTests {
 		/**
 		 Lists the folder with a new provider until it lists the expected paths, which must be in the order of `listedItems()`.
 
-		 A listing that doesn't match yet is retried. A moved `.c9s` directory holds the name file of its old name until the new one is uploaded, so its item is left out until then. An eventually consistent provider can list an item before its name file or before the contents of its `.c9s` directory, which fails the listing as not found.
+		 A listing that doesn't match yet is retried. A moved `.c9s` directory holds the name file of its old name until the new one is uploaded, so its item is left out until then. An eventually consistent provider can list an item before the contents of its `.c9s` directory, which leaves the item out. It can also list an item before its name file, which leaves the item out too, or fails the listing as not found if no other item of the page is restored.
 		 */
 		private static func coldListing(of cloudPath: CloudPath, expecting expectedCloudPaths: [CloudPath], in context: IntegrationTestContext) async throws -> ColdListing {
 			let (provider, recorder) = try context.makeRecordingProvider()
@@ -739,7 +745,7 @@ extension IntegrationTests {
 			_ = try await eventually(on: context.backend.kind) {
 				do {
 					cloudPaths = try await provider.fetchItemListExhaustively(forFolderAt: cloudPath).items.listedItems().map(\.cloudPath)
-				} catch CloudProviderError.itemNotFound, VaultFormat7ShorteningError.c9sItemNotFound {
+				} catch CloudProviderError.itemNotFound {
 					cloudPaths = nil
 				}
 				return cloudPaths == expectedCloudPaths

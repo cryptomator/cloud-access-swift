@@ -6,289 +6,290 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class BoxClientTests: XCTestCase {
-	private var tokenSource: OAuthTokenSourceStub!
-	private var sleeps: SleepRecorder!
-	private var client: BoxClient!
-	private var tmpDirURL: URL!
+extension UnitTests {
+	final class BoxClientTests {
+		private let tokenSource: OAuthTokenSourceStub
+		private let sleeps: SleepRecorder
+		private let client: BoxClient
+		private let tmpDirURL: URL
 
-	override func setUpWithError() throws {
-		tokenSource = OAuthTokenSourceStub()
-		sleeps = SleepRecorder()
-		client = BoxClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
-		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-	}
-
-	override func tearDownWithError() throws {
-		URLProtocolMock.requestHandler = []
-		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	// MARK: - Retries
-
-	func testThrottledRequestWaitsForLowercaseRetryAfter() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(statusCode: 429, headerFields: ["retry-after": "2"]),
-			URLProtocolMock.handler(body: BoxMockResponse.user)
-		]
-
-		_ = try await client.user()
-
-		XCTAssertEqual([.seconds(2)], sleeps.durations)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testServerErrorsAreRetriedUntilFiveAttempts() async throws {
-		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-		_ = try await client.user()
-
-		XCTAssertEqual(4, sleeps.durations.count)
-
-		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503, body: #"{"code":"unavailable","message":"Unavailable"}"#), count: 6)
-
-		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
-			XCTAssertEqual(.apiError(statusCode: 503, code: "unavailable", message: "Unavailable"), error as? BoxError)
+		init() throws {
+			URLProtocolMock.requestHandler = []
+			self.tokenSource = OAuthTokenSourceStub()
+			self.sleeps = SleepRecorder()
+			self.client = BoxClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
+			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
 
-	func testUnauthorizedRequestIsRetriedOnceWithRefreshedToken() async throws {
-		let authorizations = OSAllocatedUnfairLock(initialState: [String?]())
-		let recordAuthorization: @Sendable (URLRequest) -> Void = { request in
-			authorizations.withLock { $0.append(request.value(forHTTPHeaderField: "Authorization")) }
+		deinit {
+			removeItemRecordingFailure(at: tmpDirURL)
 		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(statusCode: 401, onRequest: recordAuthorization),
-			URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recordAuthorization)
-		]
 
-		_ = try await client.user()
+		// MARK: - Retries
 
-		XCTAssertEqual(["Bearer TOKEN", "Bearer REFRESHED"], authorizations.withLock { $0 })
-		XCTAssertEqual(["TOKEN"], tokenSource.rejectedTokens)
-		XCTAssertTrue(sleeps.durations.isEmpty)
+		@Test
+		func throttledRequestWaitsForLowercaseRetryAfter() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 429, headerFields: ["retry-after": "2"]),
+				URLProtocolMock.handler(body: BoxMockResponse.user)
+			]
 
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
+			_ = try await client.user()
 
-		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
-			XCTAssertEqual(.apiError(statusCode: 401, code: nil, message: nil), error as? BoxError)
+			#expect([.seconds(2)] == sleeps.durations)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
 
-	func testUnauthorizedLastAttemptIsNotRefreshed() async throws {
-		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
+		@Test
+		func serverErrorsAreRetriedUntilFiveAttempts() async throws {
+			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
-			XCTAssertEqual(.apiError(statusCode: 401, code: nil, message: nil), error as? BoxError)
+			_ = try await client.user()
+
+			#expect(sleeps.durations.count == 4)
+
+			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503, body: #"{"code":"unavailable","message":"Unavailable"}"#), count: 6)
+
+			await #expect(throws: BoxError.apiError(statusCode: 503, code: "unavailable", message: "Unavailable")) { try await client.user() }
+			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-		XCTAssertTrue(tokenSource.rejectedTokens.isEmpty)
-	}
 
-	func testTransportErrorsAreRetriedOnlyForGet() async throws {
-		URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.user)]
+		@Test
+		func unauthorizedRequestIsRetriedOnceWithRefreshedToken() async throws {
+			let authorizations = OSAllocatedUnfairLock(initialState: [String?]())
+			let recordAuthorization: @Sendable (URLRequest) -> Void = { request in
+				authorizations.withLock { $0.append(request.value(forHTTPHeaderField: "Authorization")) }
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 401, onRequest: recordAuthorization),
+				URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: recordAuthorization)
+			]
 
-		_ = try await client.user()
+			_ = try await client.user()
 
-		XCTAssertEqual(1, sleeps.durations.count)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+			#expect(authorizations.withLock { $0 } == ["Bearer TOKEN", "Bearer REFRESHED"])
+			#expect(tokenSource.rejectedTokens == ["TOKEN"])
+			#expect(sleeps.durations.isEmpty)
 
-		URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "1", name: "folder"))]
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await client.createFolder(name: "folder", parentID: "0")) { error in
-			XCTAssertEqual(.timedOut, (error as? URLError)?.code)
+			await #expect(throws: BoxError.apiError(statusCode: 401, code: nil, message: nil)) { try await client.user() }
+			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
 
-		URLProtocolMock.requestHandler = [{ _ in throw URLError(.notConnectedToInternet) }]
+		@Test
+		func unauthorizedLastAttemptIsNotRefreshed() async throws {
+			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
-			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
+			await #expect(throws: BoxError.apiError(statusCode: 401, code: nil, message: nil)) { try await client.user() }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+			#expect(tokenSource.rejectedTokens.isEmpty)
 		}
-	}
 
-	func testCommitThatStaysNotReadyThrowsFileNotReady() async throws {
-		URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 202, headerFields: ["Retry-After": "1"]), count: 5)
+		@Test
+		func transportErrorsAreRetriedOnlyForGet() async throws {
+			URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await client.commit(url: "https://upload.box.com/api/2.0/files/upload_sessions/S/commit", parts: [], digest: "sha=")) { error in
-			XCTAssertEqual(.fileNotReady, error as? BoxError)
+			_ = try await client.user()
+
+			#expect(sleeps.durations.count == 1)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+
+			URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut) }, URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "1", name: "folder"))]
+
+			let error = try await #require(throws: (any Error).self) { try await client.createFolder(name: "folder", parentID: "0") }
+			#expect((error as? URLError)?.code == .timedOut)
+			#expect(URLProtocolMock.requestHandler.count == 1)
+
+			URLProtocolMock.requestHandler = [{ _ in throw URLError(.notConnectedToInternet) }]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.user() }
 		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-		XCTAssertEqual(4, sleeps.durations.count)
-	}
 
-	func testMetadataBodyOverLimitFails() async throws {
-		URLProtocolMock.requestHandler = [{ request in
-			(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
-		}]
+		@Test
+		func commitThatStaysNotReadyThrowsFileNotReady() async throws {
+			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 202, headerFields: ["Retry-After": "1"]), count: 5)
 
-		await XCTAssertThrowsErrorAsync(try await client.user()) { error in
+			await #expect(throws: BoxError.fileNotReady) { try await client.commit(url: "https://upload.box.com/api/2.0/files/upload_sessions/S/commit", parts: [], digest: "sha=") }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+			#expect(sleeps.durations.count == 4)
+		}
+
+		@Test
+		func metadataBodyOverLimitFails() async throws {
+			URLProtocolMock.requestHandler = [{ request in
+				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
+			}]
+
+			let error = try await #require(throws: (any Error).self) { try await client.user() }
 			guard case SplitURLSessionError.responseBodyTooLarge = error else {
-				return XCTFail("Unexpected error: \(error)")
+				Issue.record("Unexpected error: \(error)")
+				return
 			}
 		}
-	}
 
-	func testCancelledTaskGetsNoToken() async throws {
-		let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
-		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
+		@Test
+		func cancelledTaskGetsNoToken() async throws {
+			let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
+			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await value(of: Task {
-			withUnsafeCurrentTask { $0?.cancel() }
-			return try await client.user()
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: Task {
+					withUnsafeCurrentTask { $0?.cancel() }
+					return try await client.user()
+				})
+			}
+			#expect(accessTokenCount.withLock { $0 } == 0)
+			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
-		XCTAssertEqual(0, accessTokenCount.withLock { $0 })
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
 
-	func testCancellationWhileGettingTokenStopsFirstAttempt() async throws {
-		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
+		@Test
+		func cancellationWhileGettingTokenStopsFirstAttempt() async throws {
+			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await value(of: Task { try await client.user() })) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.user() }) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
 
-	func testCancellationDuringRefreshStopsRetry() async throws {
-		let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
+		@Test
+		func cancellationDuringRefreshStopsRetry() async throws {
+			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
 
-		await XCTAssertThrowsErrorAsync(try await value(of: Task { try await client.user() })) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.user() }) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
 
-	func testBackgroundConfiguration() {
-		let configuration = BoxClient.backgroundConfiguration(sessionIdentifier: "BoxClientTests", sharedContainerIdentifier: "group.test")
+		@Test
+		func testBackgroundConfiguration() {
+			let configuration = BoxClient.backgroundConfiguration(sessionIdentifier: "BoxClientTests", sharedContainerIdentifier: "group.test")
 
-		XCTAssertEqual("BoxClientTests", configuration.identifier)
-		XCTAssertEqual("group.test", configuration.sharedContainerIdentifier)
-	}
+			#expect(configuration.identifier == "BoxClientTests")
+			#expect(configuration.sharedContainerIdentifier == "group.test")
+		}
 
-	// MARK: - Requests
+		// MARK: - Requests
 
-	func testListingSendsFieldsAndEscapedMarker() async throws {
-		let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"entries":[]}"#, onRequest: { request in
-			sentRequest.withLock { $0 = request }
-		})]
+		@Test
+		func listingSendsFieldsAndEscapedMarker() async throws {
+			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"entries":[]}"#, onRequest: { request in
+				sentRequest.withLock { $0 = request }
+			})]
 
-		_ = try await client.folderItems(id: "7", marker: "a+b c", limit: 100)
+			_ = try await client.folderItems(id: "7", marker: "a+b c", limit: 100)
 
-		let url = try XCTUnwrap(sentRequest.withLock { $0 }?.url)
-		XCTAssertEqual("https", url.scheme)
-		XCTAssertEqual("api.box.com", url.host)
-		XCTAssertEqual("/2.0/folders/7/items", url.path)
-		let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
-		XCTAssertTrue(query.contains("marker=a%2Bb%20c"), query)
-		XCTAssertEqual(["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"], URLProtocolMock.parameters(inFormEncoded: query))
-	}
+			let url = try #require(sentRequest.withLock { $0 }?.url)
+			#expect(url.scheme == "https")
+			#expect(url.host == "api.box.com")
+			#expect(url.path == "/2.0/folders/7/items")
+			let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
+			#expect(query.contains("marker=a%2Bb%20c"), "\(query)")
+			#expect(URLProtocolMock.parameters(inFormEncoded: query) == ["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"])
+		}
 
-	/// Box sends nothing before a recursive folder delete is done, so the request's timeout exceeds the 600 s after which Box gives up.
-	func testRecursiveFolderDeleteWaitsLongerThanBoxTimeLimit() async throws {
-		let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 204, onRequest: { request in
-			sentRequest.withLock { $0 = request }
-		})]
+		/// Box sends nothing before a recursive folder delete is done, so the request's timeout exceeds the 600 s after which Box gives up.
+		@Test
+		func recursiveFolderDeleteWaitsLongerThanBoxTimeLimit() async throws {
+			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 204, onRequest: { request in
+				sentRequest.withLock { $0 = request }
+			})]
 
-		try await client.deleteFolder(id: "7")
+			try await client.deleteFolder(id: "7")
 
-		let request = try XCTUnwrap(sentRequest.withLock { $0 })
-		XCTAssertEqual("/2.0/folders/7", request.url?.path)
-		XCTAssertEqual("recursive=true", request.url?.query)
-		XCTAssertGreaterThan(request.timeoutInterval, 600)
-	}
+			let request = try #require(sentRequest.withLock { $0 })
+			#expect(request.url?.path == "/2.0/folders/7")
+			#expect(request.url?.query == "recursive=true")
+			#expect(request.timeoutInterval > 600)
+		}
 
-	func testUploadSessionURLOutsideBoxIsRejectedWithoutRequest() async throws {
-		let partFileURL = tmpDirURL.appendingPathComponent("part")
-		try Data("part".utf8).write(to: partFileURL)
+		@Test
+		func uploadSessionURLOutsideBoxIsRejectedWithoutRequest() async throws {
+			let partFileURL = tmpDirURL.appendingPathComponent("part")
+			try Data("part".utf8).write(to: partFileURL)
 
-		for url in ["https://evil.example/upload", "http://upload.box.com/api/2.0/files/upload_sessions/S", "https://evilbox.com/upload"] {
-			await XCTAssertThrowsErrorAsync(try await client.uploadPart(url: url, from: partFileURL, range: 0 ... 3, fileSize: 4, digest: "sha=", progress: nil), url) { error in
-				XCTAssertEqual(.unexpectedContent, error as? BoxError, url)
+			for url in ["https://evil.example/upload", "http://upload.box.com/api/2.0/files/upload_sessions/S", "https://evilbox.com/upload"] {
+				await #expect(throws: BoxError.unexpectedContent, "\(url)") { try await client.uploadPart(url: url, from: partFileURL, range: 0 ... 3, fileSize: 4, digest: "sha=", progress: nil) }
 			}
 		}
-	}
 
-	// MARK: - Logging
+		// MARK: - Logging
 
-	func testResponseBodiesAreNotLogged() async throws {
-		let logCapture = LogCapture.start()
-		defer {
-			logCapture.stop()
-		}
-		let fileURL = tmpDirURL.appendingPathComponent("upload")
-		try Data("content".utf8).write(to: fileURL)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#),
-			URLProtocolMock.handler(body: #"{"type":"folder","id":"7","name":"folder","owned_by":{"login":"owner@example.com"}}"#),
-			URLProtocolMock.handler(statusCode: 201, body: #"{"entries":[{"type":"file","id":"9","name":"file.txt","size":7,"owned_by":{"login":"uploader@example.com"}}]}"#)
-		]
+		@Test
+		func responseBodiesAreNotLogged() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			let fileURL = tmpDirURL.appendingPathComponent("upload")
+			try Data("content".utf8).write(to: fileURL)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#),
+				URLProtocolMock.handler(body: #"{"type":"folder","id":"7","name":"folder","owned_by":{"login":"owner@example.com"}}"#),
+				URLProtocolMock.handler(statusCode: 201, body: #"{"entries":[{"type":"file","id":"9","name":"file.txt","size":7,"owned_by":{"login":"uploader@example.com"}}]}"#)
+			]
 
-		let user = try await client.user()
-		_ = try await client.folder(id: "7")
-		_ = try await client.uploadNewFile(from: fileURL, name: "file.txt", parentID: "7", progress: nil, onTaskCreation: nil)
+			let user = try await client.user()
+			_ = try await client.folder(id: "7")
+			_ = try await client.uploadNewFile(from: fileURL, name: "file.txt", parentID: "7", progress: nil, onTaskCreation: nil)
 
-		XCTAssertEqual("User", user.name)
-		let log = logCapture.joinedMessages
-		XCTAssertTrue(log.contains("https://api.box.com"), log)
-		XCTAssertTrue(log.contains("https://upload.box.com"), log)
-		for email in ["secret@example.com", "owner@example.com", "uploader@example.com"] {
-			XCTAssertFalse(log.contains(email), "\(email) in \(log)")
-		}
-	}
-
-	func testDownloadLogsAPIPathAndOnlyOriginOfRedirectTarget() async throws {
-		let logCapture = LogCapture.start()
-		defer {
-			logCapture.stop()
-		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt"]),
-			URLProtocolMock.handler(body: "content")
-		]
-		let stagingURL = tmpDirURL.appendingPathComponent("download")
-
-		try await client.download(fileID: "5", to: stagingURL, progress: nil, onTaskCreation: nil)
-
-		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: stagingURL))
-		let log = logCapture.joinedMessages
-		XCTAssertTrue(logCapture.messages.contains("--> GET https://api.box.com/2.0/files/5/content"), log)
-		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://dl.boxcloud.com/<redacted>"), log)
-		for secret in ["SECRET-PATH", "TOKEN"] {
-			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")
-		}
-	}
-
-	func testBodiesOfDownloadsAreNotLogged() async throws {
-		let logCapture = LogCapture.start()
-		defer {
-			logCapture.stop()
-		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/PATH/file.txt"]),
-			URLProtocolMock.handler(statusCode: 404, body: "<Error>https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt</Error>")
-		]
-
-		await XCTAssertThrowsErrorAsync(try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.apiError(statusCode: 404, code: nil, message: nil), error as? BoxError)
+			#expect(user.name == "User")
+			let log = logCapture.joinedMessages
+			#expect(log.contains("https://api.box.com"), "\(log)")
+			#expect(log.contains("https://upload.box.com"), "\(log)")
+			for email in ["secret@example.com", "owner@example.com", "uploader@example.com"] {
+				#expect(!log.contains(email), "\(email) in \(log)")
+			}
 		}
 
-		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://dl.boxcloud.com") }, logCapture.joinedMessages)
-		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+		@Test
+		func downloadLogsAPIPathAndOnlyOriginOfRedirectTarget() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt"]),
+				URLProtocolMock.handler(body: "content")
+			]
+			let stagingURL = tmpDirURL.appendingPathComponent("download")
+
+			try await client.download(fileID: "5", to: stagingURL, progress: nil, onTaskCreation: nil)
+
+			#expect(try Data("content".utf8) == Data(contentsOf: stagingURL))
+			let log = logCapture.joinedMessages
+			#expect(logCapture.messages.contains("--> GET https://api.box.com/2.0/files/5/content"), "\(log)")
+			#expect(logCapture.messages.contains("<-- 200 no error https://dl.boxcloud.com/<redacted>"), "\(log)")
+			for secret in ["SECRET-PATH", "TOKEN"] {
+				#expect(!log.contains(secret), "\(secret) in \(log)")
+			}
+		}
+
+		@Test
+		func bodiesOfDownloadsAreNotLogged() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/PATH/file.txt"]),
+				URLProtocolMock.handler(statusCode: 404, body: "<Error>https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt</Error>")
+			]
+
+			await #expect(throws: BoxError.apiError(statusCode: 404, code: nil, message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil) }
+
+			#expect(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://dl.boxcloud.com") }, "\(logCapture.joinedMessages)")
+			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
+		}
 	}
 }
 

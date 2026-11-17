@@ -6,109 +6,118 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class DirectoryIdCacheTests: XCTestCase {
-	var cache: DirectoryIdCache!
+extension UnitTests {
+	struct DirectoryIdCacheTests {
+		let cache: DirectoryIdCache
 
-	override func setUpWithError() throws {
-		cache = try DirectoryIdCache()
-	}
+		init() throws {
+			self.cache = try DirectoryIdCache()
+		}
 
-	func testContainsRootPath() throws {
-		let path = CloudPath("/")
+		@Test
+		func containsRootPath() throws {
+			let path = CloudPath("/")
 
-		XCTAssertEqual(Data([]), try cache.get(path))
-	}
+			#expect(try Data([]) == cache.get(path))
+		}
 
-	func testGet() throws {
-		let path = CloudPath("/foo/bar")
-		let dirId = Data("foobar".utf8)
+		@Test
+		func testGet() throws {
+			let path = CloudPath("/foo/bar")
+			let dirId = Data("foobar".utf8)
 
-		try cache.addOrUpdate(path, dirId: dirId)
+			try cache.addOrUpdate(path, dirId: dirId)
 
-		XCTAssertEqual(dirId, try cache.get(path))
-	}
+			#expect(try dirId == cache.get(path))
+		}
 
-	func testInvalidate() throws {
-		let path = CloudPath("/foo")
-		let subPath1 = CloudPath("/foo/bar")
-		let subPath2 = CloudPath("/foo/baz")
-		let siblingPath = CloudPath("/bar/foo")
-		let dirId = Data("foobar".utf8)
+		@Test
+		func testInvalidate() throws {
+			let path = CloudPath("/foo")
+			let subPath1 = CloudPath("/foo/bar")
+			let subPath2 = CloudPath("/foo/baz")
+			let siblingPath = CloudPath("/bar/foo")
+			let dirId = Data("foobar".utf8)
 
-		try cache.addOrUpdate(path, dirId: dirId)
-		try cache.addOrUpdate(subPath1, dirId: dirId)
-		try cache.addOrUpdate(subPath2, dirId: dirId)
-		try cache.addOrUpdate(siblingPath, dirId: dirId)
-		try cache.invalidate(path)
+			try cache.addOrUpdate(path, dirId: dirId)
+			try cache.addOrUpdate(subPath1, dirId: dirId)
+			try cache.addOrUpdate(subPath2, dirId: dirId)
+			try cache.addOrUpdate(siblingPath, dirId: dirId)
+			try cache.invalidate(path)
 
-		XCTAssertNil(try cache.get(path))
-		XCTAssertNil(try cache.get(subPath1))
-		XCTAssertNil(try cache.get(subPath2))
-		XCTAssertEqual(dirId, try cache.get(siblingPath))
-	}
+			#expect(try cache.get(path) == nil)
+			#expect(try cache.get(subPath1) == nil)
+			#expect(try cache.get(subPath2) == nil)
+			#expect(try dirId == cache.get(siblingPath))
+		}
 
-	func testInvalidateMatchesPathsLiterally() throws {
-		let dirId = Data("foobar".utf8)
-		let cases: [(invalidated: String, kept: [String])] = [
-			("/a", ["/ab", "/A/x", "/a_b"]),
-			("/a_b", ["/aXb/x"]),
-			("/a%", ["/abc"])
-		]
-		for (invalidated, kept) in cases {
-			let cache = try DirectoryIdCache()
-			for path in [invalidated, invalidated + "/x"] + kept {
-				try cache.addOrUpdate(CloudPath(path), dirId: dirId)
-			}
+		@Test
+		func invalidateMatchesPathsLiterally() throws {
+			let dirId = Data("foobar".utf8)
+			let cases: [(invalidated: String, kept: [String])] = [
+				("/a", ["/ab", "/A/x", "/a_b"]),
+				("/a_b", ["/aXb/x"]),
+				("/a%", ["/abc"])
+			]
+			for (invalidated, kept) in cases {
+				let cache = try DirectoryIdCache()
+				for path in [invalidated, invalidated + "/x"] + kept {
+					try cache.addOrUpdate(CloudPath(path), dirId: dirId)
+				}
 
-			try cache.invalidate(CloudPath(invalidated))
+				try cache.invalidate(CloudPath(invalidated))
 
-			XCTAssertNil(try cache.get(CloudPath(invalidated)), invalidated)
-			XCTAssertNil(try cache.get(CloudPath(invalidated + "/x")), invalidated)
-			for path in kept {
-				XCTAssertEqual(dirId, try cache.get(CloudPath(path)), "\(path) after invalidating \(invalidated)")
+				#expect(try cache.get(CloudPath(invalidated)) == nil, "\(invalidated)")
+				#expect(try cache.get(CloudPath(invalidated + "/x")) == nil, "\(invalidated)")
+				for path in kept {
+					#expect(try dirId == cache.get(CloudPath(path)), "\(path) after invalidating \(invalidated)")
+				}
 			}
 		}
-	}
 
-	func testInvalidateRootRemovesEveryPath() throws {
-		try cache.addOrUpdate(CloudPath("/foo/bar"), dirId: Data("foobar".utf8))
+		@Test
+		func invalidateRootRemovesEveryPath() throws {
+			try cache.addOrUpdate(CloudPath("/foo/bar"), dirId: Data("foobar".utf8))
 
-		try cache.invalidate(CloudPath("/"))
+			try cache.invalidate(CloudPath("/"))
 
-		XCTAssertNil(try cache.get(CloudPath("/")))
-		XCTAssertNil(try cache.get(CloudPath("/foo/bar")))
-	}
+			#expect(try cache.get(CloudPath("/")) == nil)
+			#expect(try cache.get(CloudPath("/foo/bar")) == nil)
+		}
 
-	func testRecursiveGet() async throws {
-		let path = CloudPath("/one/two/three")
+		@Test
+		func recursiveGet() async throws {
+			let path = CloudPath("/one/two/three")
 
-		let misses = OSAllocatedUnfairLock(initialState: [String]())
-		let data = try await cache.get(path, onMiss: { cleartextPath, parentDirId in
-			let dirId: String = {
-				switch cleartextPath.lastPathComponent {
-				case "one":
-					XCTAssertEqual(Data(), parentDirId)
-					return "ONE"
-				case "two":
-					XCTAssertEqual(Data("ONE".utf8), parentDirId)
-					return "TWO"
-				case "three":
-					XCTAssertEqual(Data("TWO".utf8), parentDirId)
-					return "THREE"
-				default:
-					XCTFail("Unexpected path component: \(cleartextPath.lastPathComponent)")
-					return "UNEXPECTED"
-				}
-			}()
-			misses.withLock { $0.append(dirId) }
-			return Data(dirId.utf8)
-		})
-		XCTAssertEqual(Data("THREE".utf8), data)
+			let misses = OSAllocatedUnfairLock(initialState: [String]())
+			let data = try await cache.get(path, onMiss: { cleartextPath, parentDirId in
+				let dirId: String = {
+					switch cleartextPath.lastPathComponent {
+					case "one":
+						#expect(Data() == parentDirId)
+						return "ONE"
+					case "two":
+						#expect(Data("ONE".utf8) == parentDirId)
+						return "TWO"
+					case "three":
+						#expect(Data("TWO".utf8) == parentDirId)
+						return "THREE"
+					default:
+						Issue.record("Unexpected path component: \(cleartextPath.lastPathComponent)")
+						return "UNEXPECTED"
+					}
+				}()
+				misses.withLock { $0.append(dirId) }
+				return Data(dirId.utf8)
+			})
+			#expect(Data("THREE".utf8) == data)
 
-		XCTAssertEqual(["ONE", "TWO", "THREE"], misses.withLock { $0 })
+			#expect(misses.withLock { $0 } == ["ONE", "TWO", "THREE"])
+		}
 	}
 }

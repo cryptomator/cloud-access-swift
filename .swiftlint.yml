@@ -9,8 +9,6 @@ included:
   - Sources/CryptomatorCloudAccess
   - Tests/CryptomatorCloudAccessTests
   - Tests/CryptomatorCloudAccessIntegrationTests
-excluded:
-  - Tests/CryptomatorCloudAccessTests/XCTestManifests.swift
 
 identifier_name:
   min_length: 1

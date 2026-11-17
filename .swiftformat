@@ -3,7 +3,6 @@
 
 # format options
 
---asynccapturing XCTAssertThrowsErrorAsync
 --closurevoid preserve
 --commas inline
 --ifdef no-indent

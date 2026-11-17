@@ -6,32 +6,34 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class SDKContinuationTests: XCTestCase {
-	func testResumesExactlyOnceUnderConcurrentDoubleCompletion() async throws {
-		for _ in 0 ..< 1000 {
-			// Resuming the underlying continuation twice would trap.
-			let value: Int = try await withSDKContinuation { resumer in
-				for completion in 0 ..< 2 {
-					DispatchQueue.global().async {
-						resumer.resume(returning: completion)
+extension UnitTests {
+	struct SDKContinuationTests {
+		@Test
+		func resumesExactlyOnceUnderConcurrentDoubleCompletion() async throws {
+			for _ in 0 ..< 1000 {
+				// Resuming the underlying continuation twice would trap.
+				let value: Int = try await withSDKContinuation { resumer in
+					for completion in 0 ..< 2 {
+						DispatchQueue.global().async {
+							resumer.resume(returning: completion)
+						}
 					}
 				}
+				#expect((0 ..< 2).contains(value))
 			}
-			XCTAssert((0 ..< 2).contains(value))
 		}
-	}
 
-	func testPropagatesError() async {
-		do {
-			try await withSDKContinuation { (resumer: Resumer<Void>) in
-				resumer.resume(throwing: CloudProviderError.itemNotFound)
+		@Test
+		func propagatesError() async {
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				try await withSDKContinuation { (resumer: Resumer<Void>) in
+					resumer.resume(throwing: CloudProviderError.itemNotFound)
+				}
 			}
-			XCTFail("Expected withSDKContinuation to throw")
-		} catch {
-			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
 		}
 	}
 }

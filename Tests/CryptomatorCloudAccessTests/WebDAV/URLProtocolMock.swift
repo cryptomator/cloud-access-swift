@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-import XCTest
+import Testing
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
@@ -59,7 +59,8 @@ class URLProtocolMock: URLProtocol {
 	static func handler(statusCode: Int = 200, body: String = "", headerFields: [String: String]? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
 		return { request in
 			onRequest(request)
-			let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headerFields))
+			let url = try #require(request.url)
+			let response = try #require(HTTPURLResponse(url: url, statusCode: statusCode, httpVersion: "HTTP/1.1", headerFields: headerFields))
 			return (response, Data(body.utf8))
 		}
 	}

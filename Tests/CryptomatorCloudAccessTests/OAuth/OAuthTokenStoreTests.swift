@@ -6,540 +6,399 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class OAuthTokenStoreTests: XCTestCase {
-	private static let tokenA = OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil)
-	private static let tokenB = OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil)
-	private static let tokenC = OAuthToken(accessToken: "C", refreshToken: "RC", expiresAt: nil)
+extension UnitTests {
+	final class OAuthTokenStoreTests {
+		private static let tokenA = OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil)
+		private static let tokenB = OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil)
+		private static let tokenC = OAuthToken(accessToken: "C", refreshToken: "RC", expiresAt: nil)
 
-	private var lockDirectoryURL: URL!
-	private var buffer: TokenBuffer!
+		private let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		private let buffer = TokenBuffer()
 
-	override func setUpWithError() throws {
-		lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		buffer = TokenBuffer()
-	}
-
-	override func tearDownWithError() throws {
-		try? FileManager.default.removeItem(at: lockDirectoryURL)
-	}
-
-	// MARK: - Stored Formats
-
-	func testLegacyTokenIsUsedWithoutRefreshAndRefreshSavesVersionedToken() async throws {
-		buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","expires_in":3600,"token_type":"bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","restricted_to":[{"scope":"item_download","object":{"type":"folder","id":"1"}},{"scope":"item_upload"}]}"#.utf8)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let store = try makeStore(refresher: refresher)
-
-		let accessToken = try await store.accessToken()
-
-		XCTAssertEqual("LEGACY", accessToken)
-		XCTAssertEqual(0, refresher.callCount)
-
-		let refreshedToken = try await store.refresh(rejecting: "LEGACY")
-
-		XCTAssertEqual("B", refreshedToken)
-		XCTAssertEqual([OAuthToken(accessToken: "LEGACY", refreshToken: "LEGACY-REFRESH", expiresAt: nil)], refresher.tokens)
-		let storedJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(buffer.data)) as? [String: Any])
-		XCTAssertEqual(1, storedJSON["version"] as? Int)
-		XCTAssertEqual("B", storedJSON["accessToken"] as? String)
-	}
-
-	func testVersionedTokenKeepsItsStoredFormat() throws {
-		let cases = [
-			(#"{"version":1,"accessToken":"A","refreshToken":"RA","expiresAt":1800000000}"#, OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: Date(timeIntervalSince1970: 1_800_000_000))),
-			(#"{"version":1,"accessToken":"A","apiHost":"eapi.pcloud.com"}"#, OAuthToken(accessToken: "A", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com"))
-		]
-		for (storedJSON, token) in cases {
-			let decodedToken = try OAuthTokenEncoding.decode(Data(storedJSON.utf8), legacyDecoder: { _ in throw CocoaError(.coderReadCorrupt) })
-			let encodedJSON = try JSONSerialization.jsonObject(with: OAuthTokenEncoding.encode(token)) as? NSDictionary
-
-			XCTAssertEqual(token, decodedToken, storedJSON)
-			XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(storedJSON.utf8)) as? NSDictionary, encodedJSON, storedJSON)
-		}
-	}
-
-	func testNewerVersionThrowsWithoutOverwritingIt() async throws {
-		let newerToken = Data(#"{"version":2,"accessToken":"A"}"#.utf8)
-		buffer.data = newerToken
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let storage = MemoryTokenStorage(buffer: buffer)
-		let store = try makeStore(storage: storage, refresher: refresher)
-
-		await XCTAssertThrowsErrorAsync(try await store.accessToken()) { error in
-			XCTAssertEqual(.unsupportedVersion(2), error as? OAuthTokenStoreError)
-		}
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "A")) { error in
-			XCTAssertEqual(.unsupportedVersion(2), error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(0, storage.saveCount)
-		XCTAssertEqual(0, refresher.callCount)
-		XCTAssertEqual(newerToken, buffer.data)
-	}
-
-	// MARK: - Coalescing
-
-	func testConcurrentRefreshesOfOneAccountShareOneRefresh() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let gate = Gate()
-		let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
-		let acquisitions = OSAllocatedUnfairLock(initialState: 0)
-		let lockEvents = CrossProcessFileLock.Events(acquired: { acquisitions.withLock { $0 += 1 } })
-		let coordinator = OAuthTokenCoordinator()
-		let firstStorage = MemoryTokenStorage(buffer: buffer)
-		let secondStorage = MemoryTokenStorage(buffer: buffer)
-		let firstStore = try makeStore(storage: firstStorage, refresher: refresher, lockEvents: lockEvents, coordinator: coordinator)
-		let secondStore = try makeStore(storage: secondStorage, refresher: refresher, lockEvents: lockEvents, coordinator: coordinator)
-		let callersStarted = XCTestExpectation(description: "callers started")
-		callersStarted.expectedFulfillmentCount = 10
-
-		let callers = (0 ..< 10).map { index in
-			let store = index.isMultiple(of: 2) ? firstStore : secondStore
-			return Task { @MainActor in
-				callersStarted.fulfill()
-				return try await store.refresh(rejecting: "A")
+		deinit {
+			guard FileManager.default.fileExists(atPath: lockDirectoryURL.path) else {
+				return
 			}
-		}
-		await fulfillment(of: [callersStarted, refresher.entered], timeout: testWaitTimeout)
-		await MainActor.run {
-			gate.open()
+			removeItemRecordingFailure(at: lockDirectoryURL)
 		}
 
-		for caller in callers {
-			let accessToken = try await value(of: caller)
-			XCTAssertEqual("B", accessToken)
-		}
-		XCTAssertEqual(1, refresher.callCount)
-		XCTAssertEqual(1, acquisitions.withLock { $0 })
-		XCTAssertEqual(1, firstStorage.loadCount + secondStorage.loadCount)
-	}
+		// MARK: - Stored Formats
 
-	func testRefreshInAnotherProcessIsReusedAfterWaitingForLock() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let gate = Gate()
-		let firstRefresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
-		let secondRefresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
-		let contention = XCTestExpectation(description: "second process waits for the lock")
-		contention.assertForOverFulfill = false
-		let firstStore = try makeStore(refresher: firstRefresher, coordinator: OAuthTokenCoordinator())
-		let secondStore = try makeStore(refresher: secondRefresher, lockEvents: CrossProcessFileLock.Events(contention: { contention.fulfill() }), coordinator: OAuthTokenCoordinator())
-
-		let firstRefresh = Task {
-			try await firstStore.refresh(rejecting: "A")
-		}
-		await fulfillment(of: [firstRefresher.entered], timeout: testWaitTimeout)
-		let secondRefresh = Task {
-			try await secondStore.refresh(rejecting: "A")
-		}
-		await fulfillment(of: [contention], timeout: testWaitTimeout)
-		gate.open()
-
-		let firstAccessToken = try await value(of: firstRefresh)
-		let secondAccessToken = try await value(of: secondRefresh)
-		XCTAssertEqual("B", firstAccessToken)
-		XCTAssertEqual("B", secondAccessToken)
-		XCTAssertEqual(0, secondRefresher.callCount)
-	}
-
-	func testStaleRejectionReturnsStoredTokenWithoutRefresh() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenB)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
-		let store = try makeStore(refresher: refresher)
-
-		let accessToken = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(0, refresher.callCount)
-	}
-
-	// MARK: - Expiry
-
-	func testAccessTokenIsRefreshedWithinFiveMinutesOfExpiry() async throws {
-		let now = Date()
-		for (minutesAhead, expectedAccessToken, expectedCallCount) in [(4.0, "B", 1), (6.0, "A", 0)] {
-			buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: now.addingTimeInterval(minutesAhead * 60)))
+		@Test
+		func legacyTokenIsUsedWithoutRefreshAndRefreshSavesVersionedToken() async throws {
+			buffer.data = Data(#"{"access_token":"LEGACY","refresh_token":"LEGACY-REFRESH","expires_in":3600,"token_type":"bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token","restricted_to":[{"scope":"item_download","object":{"type":"folder","id":"1"}},{"scope":"item_upload"}]}"#.utf8)
 			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-			let store = try makeStore(refresher: refresher, now: { now }, coordinator: OAuthTokenCoordinator())
+			let store = try makeStore(refresher: refresher)
 
 			let accessToken = try await store.accessToken()
 
-			XCTAssertEqual(expectedAccessToken, accessToken, "\(minutesAhead) minutes ahead")
-			XCTAssertEqual(expectedCallCount, refresher.callCount, "\(minutesAhead) minutes ahead")
+			#expect(accessToken == "LEGACY")
+			#expect(refresher.callCount == 0)
+
+			let refreshedToken = try await store.refresh(rejecting: "LEGACY")
+
+			#expect(refreshedToken == "B")
+			#expect([OAuthToken(accessToken: "LEGACY", refreshToken: "LEGACY-REFRESH", expiresAt: nil)] == refresher.tokens)
+			let storedData = try #require(buffer.data)
+			let storedJSON = try #require(JSONSerialization.jsonObject(with: storedData) as? [String: Any])
+			#expect((storedJSON["version"] as? Int) == 1)
+			#expect((storedJSON["accessToken"] as? String) == "B")
 		}
-	}
 
-	func testFailedRefreshBeforeExpiryReturnsCurrentTokenAndThrowsAfterExpiry() async throws {
-		let now = Date()
-		for (minutesAhead, throwsError) in [(4.0, false), (-1.0, true)] {
-			buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: now.addingTimeInterval(minutesAhead * 60)))
-			let refresher = RefresherMock { _ in throw URLError(.timedOut) }
-			let store = try makeStore(refresher: refresher, now: { now }, coordinator: OAuthTokenCoordinator())
+		@Test
+		func versionedTokenKeepsItsStoredFormat() throws {
+			let cases = [
+				(#"{"version":1,"accessToken":"A","refreshToken":"RA","expiresAt":1800000000}"#, OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: Date(timeIntervalSince1970: 1_800_000_000))),
+				(#"{"version":1,"accessToken":"A","apiHost":"eapi.pcloud.com"}"#, OAuthToken(accessToken: "A", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com"))
+			]
+			for (storedJSON, token) in cases {
+				let decodedToken = try OAuthTokenEncoding.decode(Data(storedJSON.utf8), legacyDecoder: { _ in throw CocoaError(.coderReadCorrupt) })
+				let encodedJSON = try JSONSerialization.jsonObject(with: OAuthTokenEncoding.encode(token)) as? NSDictionary
 
-			do {
-				let accessToken = try await store.accessToken()
-				XCTAssertFalse(throwsError, "\(minutesAhead) minutes ahead")
-				XCTAssertEqual("A", accessToken)
-			} catch {
-				XCTAssertTrue(throwsError, "\(minutesAhead) minutes ahead")
-				XCTAssertEqual(.timedOut, (error as? URLError)?.code)
+				#expect(token == decodedToken, "\(storedJSON)")
+				#expect(try (JSONSerialization.jsonObject(with: Data(storedJSON.utf8)) as? NSDictionary) == encodedJSON, "\(storedJSON)")
 			}
 		}
-	}
 
-	// MARK: - Failures
+		@Test
+		func newerVersionThrowsWithoutOverwritingIt() async throws {
+			let newerToken = Data(#"{"version":2,"accessToken":"A"}"#.utf8)
+			buffer.data = newerToken
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let storage = MemoryTokenStorage(buffer: buffer)
+			let store = try makeStore(storage: storage, refresher: refresher)
 
-	func testCancelledCallerDoesNotCancelSharedRefresh() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let gate = Gate()
-		let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
-		let storage = MemoryTokenStorage(buffer: buffer)
-		let store = try makeStore(storage: storage, refresher: refresher)
-
-		let cancelledCaller = Task {
-			try await store.refresh(rejecting: "A")
+			await #expect(throws: OAuthTokenStoreError.unsupportedVersion(2)) { try await store.accessToken() }
+			await #expect(throws: OAuthTokenStoreError.unsupportedVersion(2)) { try await store.refresh(rejecting: "A") }
+			#expect(storage.saveCount == 0)
+			#expect(refresher.callCount == 0)
+			#expect(newerToken == buffer.data)
 		}
-		await fulfillment(of: [refresher.entered], timeout: testWaitTimeout)
-		let otherCaller = Task {
-			try await store.refresh(rejecting: "A")
-		}
-		cancelledCaller.cancel()
-		gate.open()
 
-		let accessToken = try await value(of: otherCaller)
-		_ = try? await value(of: cancelledCaller)
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(1, storage.saveCount)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenB, buffer.token)
-	}
+		// MARK: - Coalescing
 
-	func testRefresherErrorReachesAllWaitersAndNextCallRefreshesAgain() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let gate = Gate()
-		let refresher = RefresherMock(gate: gate) { callCount in
-			guard callCount > 1 else {
-				throw URLError(.timedOut)
+		@Test
+		func concurrentRefreshesOfOneAccountShareOneRefresh() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let gate = Gate()
+			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let acquisitions = OSAllocatedUnfairLock(initialState: 0)
+			let lockEvents = CrossProcessFileLock.Events(acquired: { acquisitions.withLock { $0 += 1 } })
+			let coordinator = OAuthTokenCoordinator()
+			let firstStorage = MemoryTokenStorage(buffer: buffer)
+			let secondStorage = MemoryTokenStorage(buffer: buffer)
+			let firstStore = try makeStore(storage: firstStorage, refresher: refresher, lockEvents: lockEvents, coordinator: coordinator)
+			let secondStore = try makeStore(storage: secondStorage, refresher: refresher, lockEvents: lockEvents, coordinator: coordinator)
+			let callersStarted = TestSignal("callers started", expectedCount: 10)
+
+			let callers = (0 ..< 10).map { index in
+				let store = index.isMultiple(of: 2) ? firstStore : secondStore
+				return Task { @MainActor in
+					callersStarted.fulfill()
+					return try await store.refresh(rejecting: "A")
+				}
 			}
-			return OAuthTokenStoreTests.tokenB
-		}
-		let storage = MemoryTokenStorage(buffer: buffer)
-		let store = try makeStore(storage: storage, refresher: refresher)
-		let callersStarted = XCTestExpectation(description: "callers started")
-		callersStarted.expectedFulfillmentCount = 2
-
-		let callers = (0 ..< 2).map { _ in
-			Task { @MainActor in
-				callersStarted.fulfill()
-				return try await store.refresh(rejecting: "A")
+			await callersStarted.wait()
+			await refresher.entered.wait()
+			await MainActor.run {
+				gate.open()
 			}
+
+			for caller in callers {
+				let accessToken = try await cancellingValue(of: caller)
+				#expect(accessToken == "B")
+			}
+			#expect(refresher.callCount == 1)
+			#expect(acquisitions.withLock { $0 } == 1)
+			#expect(firstStorage.loadCount + secondStorage.loadCount == 1)
 		}
-		await fulfillment(of: [callersStarted, refresher.entered], timeout: testWaitTimeout)
-		await MainActor.run {
+
+		@Test
+		func refreshInAnotherProcessIsReusedAfterWaitingForLock() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let gate = Gate()
+			let firstRefresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let secondRefresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
+			let contention = TestSignal("second process waits for the lock", allowsOverFulfillment: true)
+			let firstStore = try makeStore(refresher: firstRefresher, coordinator: OAuthTokenCoordinator())
+			let secondStore = try makeStore(refresher: secondRefresher, lockEvents: CrossProcessFileLock.Events(contention: { contention.fulfill() }), coordinator: OAuthTokenCoordinator())
+
+			let firstRefresh = Task {
+				try await firstStore.refresh(rejecting: "A")
+			}
+			await firstRefresher.entered.wait()
+			let secondRefresh = Task {
+				try await secondStore.refresh(rejecting: "A")
+			}
+			await contention.wait()
 			gate.open()
+
+			let firstAccessToken = try await cancellingValue(of: firstRefresh)
+			let secondAccessToken = try await cancellingValue(of: secondRefresh)
+			#expect(firstAccessToken == "B")
+			#expect(secondAccessToken == "B")
+			#expect(secondRefresher.callCount == 0)
 		}
-		for caller in callers {
-			await XCTAssertThrowsErrorAsync(try await value(of: caller)) { error in
-				XCTAssertEqual(.timedOut, (error as? URLError)?.code)
+
+		@Test
+		func staleRejectionReturnsStoredTokenWithoutRefresh() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenB)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
+			let store = try makeStore(refresher: refresher)
+
+			let accessToken = try await store.refresh(rejecting: "A")
+
+			#expect(accessToken == "B")
+			#expect(refresher.callCount == 0)
+		}
+
+		// MARK: - Expiry
+
+		@Test
+		func accessTokenIsRefreshedWithinFiveMinutesOfExpiry() async throws {
+			let now = Date()
+			for (minutesAhead, expectedAccessToken, expectedCallCount) in [(4.0, "B", 1), (6.0, "A", 0)] {
+				buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: now.addingTimeInterval(minutesAhead * 60)))
+				let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+				let store = try makeStore(refresher: refresher, now: { now }, coordinator: OAuthTokenCoordinator())
+
+				let accessToken = try await store.accessToken()
+
+				#expect(expectedAccessToken == accessToken, "\(minutesAhead) minutes ahead")
+				#expect(expectedCallCount == refresher.callCount, "\(minutesAhead) minutes ahead")
 			}
 		}
-		XCTAssertEqual(0, storage.saveCount)
 
-		let accessToken = try await store.refresh(rejecting: "A")
+		@Test
+		func failedRefreshBeforeExpiryReturnsCurrentTokenAndThrowsAfterExpiry() async throws {
+			let now = Date()
+			for (minutesAhead, throwsError) in [(4.0, false), (-1.0, true)] {
+				buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: now.addingTimeInterval(minutesAhead * 60)))
+				let refresher = RefresherMock { _ in throw URLError(.timedOut) }
+				let store = try makeStore(refresher: refresher, now: { now }, coordinator: OAuthTokenCoordinator())
 
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(2, refresher.callCount)
-	}
-
-	func testRejectedRefreshDeletesNothing() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let store = try makeStore(refresher: RefresherMock { _ in throw CloudProviderError.unauthorized })
-
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "A")) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+				do {
+					let accessToken = try await store.accessToken()
+					#expect(!throwsError, "\(minutesAhead) minutes ahead")
+					#expect(accessToken == "A")
+				} catch {
+					#expect(throwsError, "\(minutesAhead) minutes ahead")
+					#expect((error as? URLError)?.code == .timedOut)
+				}
+			}
 		}
-		XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token)
-	}
 
-	func testMissingStoredTokenThrowsUnauthorizedWithoutRefresh() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let store = try makeStore(refresher: refresher)
-		_ = try await store.accessToken()
-		buffer.data = nil
+		// MARK: - Failures
 
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "A")) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		@Test
+		func cancelledCallerDoesNotCancelSharedRefresh() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let gate = Gate()
+			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let storage = MemoryTokenStorage(buffer: buffer)
+			let store = try makeStore(storage: storage, refresher: refresher)
+
+			let cancelledCaller = Task {
+				try await store.refresh(rejecting: "A")
+			}
+			await refresher.entered.wait()
+			let otherCaller = Task {
+				try await store.refresh(rejecting: "A")
+			}
+			cancelledCaller.cancel()
+			gate.open()
+
+			let accessToken = try await cancellingValue(of: otherCaller)
+			_ = try? await cancellingValue(of: cancelledCaller)
+			#expect(accessToken == "B")
+			#expect(storage.saveCount == 1)
+			#expect(OAuthTokenStoreTests.tokenB == buffer.token)
 		}
-		await XCTAssertThrowsErrorAsync(try await store.accessToken()) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+
+		@Test
+		func refresherErrorReachesAllWaitersAndNextCallRefreshesAgain() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let gate = Gate()
+			let refresher = RefresherMock(gate: gate) { callCount in
+				guard callCount > 1 else {
+					throw URLError(.timedOut)
+				}
+				return OAuthTokenStoreTests.tokenB
+			}
+			let storage = MemoryTokenStorage(buffer: buffer)
+			let store = try makeStore(storage: storage, refresher: refresher)
+			let callersStarted = TestSignal("callers started", expectedCount: 2)
+
+			let callers = (0 ..< 2).map { _ in
+				Task { @MainActor in
+					callersStarted.fulfill()
+					return try await store.refresh(rejecting: "A")
+				}
+			}
+			await callersStarted.wait()
+			await refresher.entered.wait()
+			await MainActor.run {
+				gate.open()
+			}
+			for caller in callers {
+				let error = try await #require(throws: (any Error).self) { try await cancellingValue(of: caller) }
+				#expect((error as? URLError)?.code == .timedOut)
+			}
+			#expect(storage.saveCount == 0)
+
+			let accessToken = try await store.refresh(rejecting: "A")
+
+			#expect(accessToken == "B")
+			#expect(refresher.callCount == 2)
 		}
-		XCTAssertEqual(0, refresher.callCount)
-	}
 
-	func testUnsavedTokenIsSavedBeforeNextRefresh() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let storage = MemoryTokenStorage(buffer: buffer)
-		storage.failsSaves = true
-		let store = try makeStore(storage: storage, refresher: refresher)
+		@Test
+		func rejectedRefreshDeletesNothing() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let store = try makeStore(refresher: RefresherMock { _ in throw CloudProviderError.unauthorized })
 
-		let rotatedAccessToken = try await store.refresh(rejecting: "A")
-		let currentAccessToken = try await store.accessToken()
+			await #expect(throws: CloudProviderError.unauthorized) { try await store.refresh(rejecting: "A") }
+			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
+		}
 
-		XCTAssertEqual("B", rotatedAccessToken)
-		XCTAssertEqual("B", currentAccessToken)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token)
+		@Test
+		func missingStoredTokenThrowsUnauthorizedWithoutRefresh() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let store = try makeStore(refresher: refresher)
+			_ = try await store.accessToken()
+			buffer.data = nil
 
-		storage.failsSaves = false
-		let accessToken = try await store.refresh(rejecting: "A")
+			await #expect(throws: CloudProviderError.unauthorized) { try await store.refresh(rejecting: "A") }
+			await #expect(throws: CloudProviderError.unauthorized) { try await store.accessToken() }
+			#expect(refresher.callCount == 0)
+		}
 
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(1, refresher.callCount)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenB, buffer.token)
-	}
-
-	func testUnsavedTokenDoesNotRestoreDeletedOrReplacedLogin() async throws {
-		for replacesLogin in [false, true] {
+		@Test
+		func unsavedTokenIsSavedBeforeNextRefresh() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
 			let storage = MemoryTokenStorage(buffer: buffer)
 			storage.failsSaves = true
-			let store = try makeStore(storage: storage, refresher: refresher, coordinator: OAuthTokenCoordinator())
-			let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
-			_ = try await store.refresh(rejecting: "A")
+			let store = try makeStore(storage: storage, refresher: refresher)
+
+			let rotatedAccessToken = try await store.refresh(rejecting: "A")
+			let currentAccessToken = try await store.accessToken()
+
+			#expect(rotatedAccessToken == "B")
+			#expect(currentAccessToken == "B")
+			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
+
 			storage.failsSaves = false
+			let accessToken = try await store.refresh(rejecting: "A")
 
-			if replacesLogin {
-				try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
-				let accessToken = try await store.refresh(rejecting: "B")
-				XCTAssertEqual("C", accessToken)
-				XCTAssertEqual(OAuthTokenStoreTests.tokenC, buffer.token)
-			} else {
-				try await otherProcessStore.delete(revoking: { _ in })
-				await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "B")) { error in
-					XCTAssertEqual(.unauthorized, error as? CloudProviderError)
-				}
-				XCTAssertNil(buffer.data)
-			}
-			XCTAssertEqual(1, refresher.callCount)
+			#expect(accessToken == "B")
+			#expect(refresher.callCount == 1)
+			#expect(OAuthTokenStoreTests.tokenB == buffer.token)
 		}
-	}
 
-	func testDeleteRevokesUnsavedToken() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let storage = MemoryTokenStorage(buffer: buffer)
-		storage.failsSaves = true
-		let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
-		_ = try await store.refresh(rejecting: "A")
-		let revokedTokens = OSAllocatedUnfairLock(initialState: [OAuthToken]())
+		@Test
+		func unsavedTokenDoesNotRestoreDeletedOrReplacedLogin() async throws {
+			for replacesLogin in [false, true] {
+				buffer.store(OAuthTokenStoreTests.tokenA)
+				let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+				let storage = MemoryTokenStorage(buffer: buffer)
+				storage.failsSaves = true
+				let store = try makeStore(storage: storage, refresher: refresher, coordinator: OAuthTokenCoordinator())
+				let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
+				_ = try await store.refresh(rejecting: "A")
+				storage.failsSaves = false
 
-		try await store.delete(revoking: { token in
-			revokedTokens.withLock { $0.append(token) }
-		})
+				if replacesLogin {
+					try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+					let accessToken = try await store.refresh(rejecting: "B")
+					#expect(accessToken == "C")
+					#expect(OAuthTokenStoreTests.tokenC == buffer.token)
+				} else {
+					try await otherProcessStore.delete(revoking: { _ in })
+					await #expect(throws: CloudProviderError.unauthorized) { try await store.refresh(rejecting: "B") }
+					#expect(buffer.data == nil)
+				}
+				#expect(refresher.callCount == 1)
+			}
+		}
 
-		XCTAssertEqual([OAuthTokenStoreTests.tokenB], revokedTokens.withLock { $0 })
-		XCTAssertNil(buffer.data)
-	}
+		@Test
+		func deleteRevokesUnsavedToken() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let storage = MemoryTokenStorage(buffer: buffer)
+			storage.failsSaves = true
+			let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+			_ = try await store.refresh(rejecting: "A")
+			let revokedTokens = OSAllocatedUnfairLock(initialState: [OAuthToken]())
 
-	// MARK: - Execution Assertion
+			try await store.delete(revoking: { token in
+				revokedTokens.withLock { $0.append(token) }
+			})
 
-	func testRefreshWithoutExecutionTimeThrowsWithoutRequest() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let store = try makeStore(refresher: refresher, script: ActivityScript(refusesAssertions: true))
+			#expect([OAuthTokenStoreTests.tokenB] == revokedTokens.withLock { $0 })
+			#expect(buffer.data == nil)
+		}
 
-		let callers = (0 ..< 2).map { _ in
-			Task {
+		// MARK: - Execution Assertion
+
+		@Test
+		func refreshWithoutExecutionTimeThrowsWithoutRequest() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let store = try makeStore(refresher: refresher, script: ActivityScript(refusesAssertions: true))
+
+			let callers = (0 ..< 2).map { _ in
+				Task {
+					try await store.refresh(rejecting: "A")
+				}
+			}
+
+			for caller in callers {
+				await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) { try await cancellingValue(of: caller) }
+			}
+			#expect(refresher.callCount == 0)
+		}
+
+		@Test
+		func expiryWhileWaitingForLockThrowsWithoutRequest() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let script = ActivityScript()
+			let contention = TestSignal("refresh waits for the lock", allowsOverFulfillment: true)
+			let store = try makeStore(refresher: refresher, script: script, lockEvents: CrossProcessFileLock.Events(contention: { contention.fulfill() }))
+			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+
+			let refresh = Task {
 				try await store.refresh(rejecting: "A")
 			}
-		}
-
-		for caller in callers {
-			await XCTAssertThrowsErrorAsync(try await value(of: caller)) { error in
-				XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-			}
-		}
-		XCTAssertEqual(0, refresher.callCount)
-	}
-
-	func testExpiryWhileWaitingForLockThrowsWithoutRequest() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let script = ActivityScript()
-		let contention = XCTestExpectation(description: "refresh waits for the lock")
-		contention.assertForOverFulfill = false
-		let store = try makeStore(refresher: refresher, script: script, lockEvents: CrossProcessFileLock.Events(contention: { contention.fulfill() }))
-		let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
-
-		let refresh = Task {
-			try await store.refresh(rejecting: "A")
-		}
-		await fulfillment(of: [contention], timeout: testWaitTimeout)
-		script.expireRunningAssertion()
-		otherHolder.release()
-
-		await XCTAssertThrowsErrorAsync(try await value(of: refresh)) { error in
-			XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(0, refresher.callCount)
-	}
-
-	func testExpiryWhileLoadingStoredTokenThrowsWithoutRequest() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let script = ActivityScript()
-		let storage = MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() })
-		let store = try makeStore(storage: storage, refresher: refresher, script: script)
-
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "A")) { error in
-			XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(0, refresher.callCount)
-	}
-
-	func testExpiryWhileLoadingUnsavedTokensSourceKeepsItUnsaved() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let script = ActivityScript()
-		let expiresOnLoad = OSAllocatedUnfairLock(initialState: false)
-		let storage = MemoryTokenStorage(buffer: buffer, onLoad: {
-			if expiresOnLoad.withLock({ $0 }) {
-				script.expireRunningAssertion()
-			}
-		})
-		storage.failsSaves = true
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let store = try makeStore(storage: storage, refresher: refresher, script: script)
-		_ = try await store.refresh(rejecting: "A")
-		storage.failsSaves = false
-		expiresOnLoad.withLock { $0 = true }
-
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "A")) { error in
-			XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token)
-
-		expiresOnLoad.withLock { $0 = false }
-		let accessToken = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenB, buffer.token)
-		XCTAssertEqual(1, refresher.callCount)
-	}
-
-	func testExpiryWhileDeletingKeepsItemWithoutRevocation() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let script = ActivityScript()
-		let storage = MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() })
-		let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
-		let revocationCount = OSAllocatedUnfairLock(initialState: 0)
-
-		await XCTAssertThrowsErrorAsync(try await store.delete(revoking: { _ in
-			revocationCount.withLock { $0 += 1 }
-		})) { error in
-			XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(0, revocationCount.withLock { $0 })
-		XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token)
-	}
-
-	func testExpiryDuringStorageWriteReleasesLockAfterWrite() async throws {
-		for write in ["save", "delete"] {
-			buffer.store(OAuthTokenStoreTests.tokenA)
-			let script = ActivityScript()
-			let writeStarted = XCTestExpectation(description: "write started")
-			let writeGate = DispatchSemaphore(value: 0)
-			let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
-				writeStarted.fulfill()
-				_ = writeGate.wait(timeout: .now() + testWaitTimeout)
-			})
-			let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
-			let operation = Task {
-				if write == "save" {
-					try await store.replace(with: OAuthTokenStoreTests.tokenC)
-				} else {
-					try await store.delete(revoking: { _ in })
-				}
-			}
-			await fulfillment(of: [writeStarted], timeout: testWaitTimeout)
-			let expiryStarted = XCTestExpectation(description: "expiry started")
-			let expiryReturned = XCTestExpectation(description: "expiry returned")
-			// The expiry waits for the write, so it runs on another thread.
-			DispatchQueue.global().async {
-				expiryStarted.fulfill()
-				script.expireRunningAssertion()
-				expiryReturned.fulfill()
-			}
-			await fulfillment(of: [expiryStarted], timeout: testWaitTimeout)
-
-			await XCTAssertThrowsErrorAsync(try await store.makeLock().acquire(timeout: .milliseconds(500), pollInterval: .milliseconds(10)), write) { error in
-				XCTAssertEqual(.lockTimeout, error as? OAuthTokenStoreError, write)
-			}
-			writeGate.signal()
-			try await value(of: operation)
-			await fulfillment(of: [expiryReturned], timeout: testWaitTimeout)
-			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			await contention.wait()
+			script.expireRunningAssertion()
 			otherHolder.release()
 
-			XCTAssertEqual(write == "save" ? OAuthTokenStoreTests.tokenC : nil, buffer.token, write)
+			await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) { try await cancellingValue(of: refresh) }
+			#expect(refresher.callCount == 0)
 		}
-	}
 
-	func testDeleteReleasesLockBeforeRevoking() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
-		let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
-		let gate = Gate()
-		let revocationStarted = XCTestExpectation(description: "revocation started")
-
-		let delete = Task {
-			try await store.delete(revoking: { _ in
-				revocationStarted.fulfill()
-				await gate.wait()
-			})
-		}
-		await fulfillment(of: [revocationStarted], timeout: testWaitTimeout)
-		try await value(of: Task {
-			try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
-		})
-		gate.open()
-
-		try await value(of: delete)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenC, buffer.token)
-	}
-
-	func testExpiryDuringRefreshReleasesLockAndLateResponseIsSavedOnlyOverItsSource() async throws {
-		for meanwhile in ["nothing", "delete", "replace"] {
+		@Test
+		func expiryWhileLoadingStoredTokenThrowsWithoutRequest() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
-			let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
-			lateRefresh.otherHolder.release()
-			let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
-			if meanwhile == "delete" {
-				try await otherProcessStore.delete(revoking: { _ in })
-			} else if meanwhile == "replace" {
-				try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
-			}
-			lateRefresh.gate.open()
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let script = ActivityScript()
+			let storage = MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() })
+			let store = try makeStore(storage: storage, refresher: refresher, script: script)
 
-			if meanwhile == "delete" {
-				await XCTAssertThrowsErrorAsync(try await value(of: lateRefresh.refresh)) { error in
-					XCTAssertEqual(.unauthorized, error as? CloudProviderError)
-				}
-				XCTAssertNil(buffer.data)
-			} else {
-				let expectedToken = meanwhile == "replace" ? OAuthTokenStoreTests.tokenC : OAuthTokenStoreTests.tokenB
-				let accessToken = try await value(of: lateRefresh.refresh)
-				let currentAccessToken = try await lateRefresh.store.accessToken()
-				XCTAssertEqual(expectedToken.accessToken, accessToken, meanwhile)
-				XCTAssertEqual(expectedToken.accessToken, currentAccessToken, meanwhile)
-				XCTAssertEqual(expectedToken, buffer.token, meanwhile)
-			}
+			await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) { try await store.refresh(rejecting: "A") }
+			#expect(refresher.callCount == 0)
 		}
-	}
 
-	func testLateResponseThatCannotBeSavedNowIsSavedBeforeNextRefresh() async throws {
-		for failure in ["assertion refused", "lock timeout", "load failure", "expiry while loading"] {
+		@Test
+		func expiryWhileLoadingUnsavedTokensSourceKeepsItUnsaved() async throws {
 			buffer.store(OAuthTokenStoreTests.tokenA)
 			let script = ActivityScript()
 			let expiresOnLoad = OSAllocatedUnfairLock(initialState: false)
@@ -548,234 +407,374 @@ class OAuthTokenStoreTests: XCTestCase {
 					script.expireRunningAssertion()
 				}
 			})
-			let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == "lock timeout" ? .milliseconds(100) : .seconds(testWaitTimeout))
-			switch failure {
-			case "assertion refused":
-				script.refusesAssertions = true
-			case "load failure":
-				storage.failsLoads = true
-			case "expiry while loading":
-				expiresOnLoad.withLock { $0 = true }
-			default:
-				break
-			}
-			if failure != "lock timeout" {
-				lateRefresh.otherHolder.release()
-			}
-			lateRefresh.gate.open()
+			storage.failsSaves = true
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let store = try makeStore(storage: storage, refresher: refresher, script: script)
+			_ = try await store.refresh(rejecting: "A")
+			storage.failsSaves = false
+			expiresOnLoad.withLock { $0 = true }
 
-			let accessToken = try await value(of: lateRefresh.refresh)
+			await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) { try await store.refresh(rejecting: "A") }
+			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
 
-			XCTAssertEqual("B", accessToken, failure)
-			XCTAssertEqual(OAuthTokenStoreTests.tokenA, buffer.token, failure)
-
-			lateRefresh.otherHolder.release()
-			script.refusesAssertions = false
-			storage.failsLoads = false
 			expiresOnLoad.withLock { $0 = false }
-			let savedAccessToken = try await lateRefresh.store.refresh(rejecting: "A")
+			let accessToken = try await store.refresh(rejecting: "A")
 
-			XCTAssertEqual("B", savedAccessToken, failure)
-			XCTAssertEqual(OAuthTokenStoreTests.tokenB, buffer.token, failure)
-			XCTAssertEqual(1, lateRefresh.refresher.callCount, failure)
-		}
-	}
-
-	// MARK: - Lock Timeout
-
-	func testLockTimeoutReturnsChangedStoredTokenAndOtherwiseThrows() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenB)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
-		let store = try makeStore(refresher: refresher, lockTimeout: .milliseconds(100))
-		let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
-		defer {
-			otherHolder.release()
+			#expect(accessToken == "B")
+			#expect(OAuthTokenStoreTests.tokenB == buffer.token)
+			#expect(refresher.callCount == 1)
 		}
 
-		let accessToken = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual("B", accessToken)
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "B")) { error in
-			XCTAssertEqual(.lockTimeout, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual(0, refresher.callCount)
-	}
-
-	func testLockTimeoutWithUnsavedTokenThrowsAndKeepsIt() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
-		let storage = MemoryTokenStorage(buffer: buffer)
-		storage.failsSaves = true
-		let store = try makeStore(storage: storage, refresher: refresher, lockTimeout: .milliseconds(100))
-		_ = try await store.refresh(rejecting: "A")
-		storage.failsSaves = false
-		let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
-
-		await XCTAssertThrowsErrorAsync(try await store.refresh(rejecting: "B")) { error in
-			XCTAssertEqual(.lockTimeout, error as? OAuthTokenStoreError)
-		}
-		otherHolder.release()
-		let accessToken = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual("B", accessToken)
-		XCTAssertEqual(OAuthTokenStoreTests.tokenB, buffer.token)
-		XCTAssertEqual(1, refresher.callCount)
-	}
-
-	// MARK: - Delete
-
-	func testDeleteDeletesAlsoIfRevocationFails() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
-
-		await XCTAssertThrowsErrorAsync(try await store.delete(revoking: { _ in throw URLError(.timedOut) })) { error in
-			XCTAssertEqual(.timedOut, (error as? URLError)?.code)
-		}
-		XCTAssertNil(buffer.data)
-	}
-
-	func testDeleteOfMissingOrUndecodableItemSkipsRevocation() async throws {
-		for storedData in [nil, Data("garbage".utf8)] {
-			buffer.data = storedData
-			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+		@Test
+		func expiryWhileDeletingKeepsItemWithoutRevocation() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let script = ActivityScript()
+			let storage = MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() })
+			let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
 			let revocationCount = OSAllocatedUnfairLock(initialState: 0)
 
-			try await store.delete(revoking: { _ in
-				revocationCount.withLock { $0 += 1 }
-			})
-
-			XCTAssertEqual(0, revocationCount.withLock { $0 })
-			XCTAssertNil(buffer.data)
+			await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) {
+				try await store.delete(revoking: { _ in
+					revocationCount.withLock { $0 += 1 }
+				})
+			}
+			#expect(revocationCount.withLock { $0 } == 0)
+			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
 		}
-	}
 
-	// MARK: - Username
+		@Test
+		func expiryDuringStorageWriteReleasesLockAfterWrite() async throws {
+			for write in ["save", "delete"] {
+				buffer.store(OAuthTokenStoreTests.tokenA)
+				let script = ActivityScript()
+				let writeStarted = TestSignal("write started")
+				let writeGate = DispatchSemaphore(value: 0)
+				let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
+					writeStarted.fulfill()
+					_ = writeGate.wait(timeout: .now() + testWaitTimeout)
+				})
+				let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
+				let operation = Task {
+					if write == "save" {
+						try await store.replace(with: OAuthTokenStoreTests.tokenC)
+					} else {
+						try await store.delete(revoking: { _ in })
+					}
+				}
+				await writeStarted.wait()
+				let expiryStarted = TestSignal("expiry started")
+				let expiryReturned = TestSignal("expiry returned")
+				// The expiry waits for the write, so it runs on another thread.
+				DispatchQueue.global().async {
+					expiryStarted.fulfill()
+					script.expireRunningAssertion()
+					expiryReturned.fulfill()
+				}
+				await expiryStarted.wait()
 
-	func testRefreshKeepsStoredUsername() async throws {
-		buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil, username: "Name"))
-		let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+				await #expect(throws: OAuthTokenStoreError.lockTimeout, "\(write)") { try await store.makeLock().acquire(timeout: .milliseconds(500), pollInterval: .milliseconds(10)) }
+				writeGate.signal()
+				try await cancellingValue(of: operation)
+				await expiryReturned.wait()
+				let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+				otherHolder.release()
 
-		_ = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Name"), buffer.token)
-		XCTAssertEqual("Name", try store.storedUsername())
-	}
-
-	func testUpdateUsernameWritesUnderLockAndIsRefusedAfterExpiry() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let acquisitions = OSAllocatedUnfairLock(initialState: 0)
-		let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, lockEvents: CrossProcessFileLock.Events(acquired: { acquisitions.withLock { $0 += 1 } }))
-
-		try await store.updateUsername("Name")
-
-		XCTAssertEqual(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil, username: "Name"), buffer.token)
-		XCTAssertEqual(1, acquisitions.withLock { $0 })
-
-		let script = ActivityScript()
-		let expiringStore = try makeStore(storage: MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() }), refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
-
-		await XCTAssertThrowsErrorAsync(try await expiringStore.updateUsername("Other")) { error in
-			XCTAssertEqual(.executionTimeUnavailable, error as? OAuthTokenStoreError)
-		}
-		XCTAssertEqual("Name", buffer.token?.username)
-	}
-
-	func testUpdateUsernameWithoutStoredLoginThrowsUnauthorized() async throws {
-		let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
-
-		await XCTAssertThrowsErrorAsync(try await store.updateUsername("Name")) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
-		}
-		XCTAssertNil(buffer.data)
-	}
-
-	/// The username is stored with the tokens that the rotated token replaces, so the next refresh still saves the rotated token before sending its refresh token.
-	func testUpdateUsernameKeepsUnsavedToken() async throws {
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let refresher = RefresherMock { callCount in callCount == 1 ? OAuthTokenStoreTests.tokenB : OAuthTokenStoreTests.tokenC }
-		let storage = MemoryTokenStorage(buffer: buffer)
-		storage.failsSaves = true
-		let store = try makeStore(storage: storage, refresher: refresher)
-		_ = try await store.refresh(rejecting: "A")
-		storage.failsSaves = false
-
-		try await store.updateUsername("Name")
-		let accessToken = try await store.refresh(rejecting: "B")
-
-		XCTAssertEqual("C", accessToken)
-		XCTAssertEqual(["RA", "RB"], refresher.tokens.map(\.refreshToken))
-		XCTAssertEqual(OAuthToken(accessToken: "C", refreshToken: "RC", expiresAt: nil, username: "Name"), buffer.token)
-	}
-
-	func testTokensSavedLaterKeepUsernameStoredMeanwhile() async throws {
-		let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
-
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
-		lateRefresh.otherHolder.release()
-		try await otherProcessStore.updateUsername("Late")
-		lateRefresh.gate.open()
-		_ = try await value(of: lateRefresh.refresh)
-
-		XCTAssertEqual(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Late"), buffer.token)
-
-		buffer.store(OAuthTokenStoreTests.tokenA)
-		let storage = MemoryTokenStorage(buffer: buffer)
-		storage.failsSaves = true
-		let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
-		_ = try await store.refresh(rejecting: "A")
-		storage.failsSaves = false
-		try await otherProcessStore.updateUsername("Unsaved")
-		_ = try await store.refresh(rejecting: "A")
-
-		XCTAssertEqual(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Unsaved"), buffer.token)
-	}
-
-	// MARK: - Persistence
-
-	func testLockDirectoryMustBeFileURL() throws {
-		let url = try XCTUnwrap(URL(string: "https://example.com/locks"))
-		for persistence in [{ try OAuthPersistence.keychain(accessGroup: nil, tokenLockDirectory: url) }, { try OAuthPersistence.custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: url) }] {
-			XCTAssertThrowsError(try persistence()) { error in
-				XCTAssertEqual(.invalidLockDirectory, error as? OAuthTokenStoreError)
+				#expect((write == "save" ? OAuthTokenStoreTests.tokenC : nil) == buffer.token, "\(write)")
 			}
 		}
-	}
 
-	func testLegacyDropboxService() {
-		XCTAssertEqual("org.cryptomator.ios.dropbox.authv2", OAuthPersistence.legacyDropboxService(keychainService: "org.cryptomator.ios"))
-	}
+		@Test
+		func deleteReleasesLockBeforeRevoking() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
+			let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
+			let gate = Gate()
+			let revocationStarted = TestSignal("revocation started")
 
-	// MARK: - Helpers
+			let delete = Task {
+				try await store.delete(revoking: { _ in
+					revocationStarted.fulfill()
+					await gate.wait()
+				})
+			}
+			await revocationStarted.wait()
+			try await cancellingValue(of: Task {
+				try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+			})
+			gate.open()
 
-	private struct LateRefresh {
-		let store: OAuthTokenStore
-		let refresher: RefresherMock
-		let gate: Gate
-		let refresh: Task<String, Error>
-		/// Holds the lock that the refresh released when its assertion expired.
-		let otherHolder: CrossProcessFileLock.Holder
-	}
-
-	/// Starts a refresh of token A to token B whose assertion expires while the refresher waits for the gate, and returns once another holder acquired the released lock.
-	private func startLateRefresh(storage: MemoryTokenStorage, script: ActivityScript, lockTimeout: Duration = .seconds(testWaitTimeout)) async throws -> LateRefresh {
-		let gate = Gate()
-		let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
-		let store = try makeStore(storage: storage, refresher: refresher, script: script, lockTimeout: lockTimeout, coordinator: OAuthTokenCoordinator())
-		let refresh = Task {
-			try await store.refresh(rejecting: "A")
+			try await cancellingValue(of: delete)
+			#expect(OAuthTokenStoreTests.tokenC == buffer.token)
 		}
-		await fulfillment(of: [refresher.entered], timeout: testWaitTimeout)
-		script.expireRunningAssertion()
-		let otherHolder = try await value(of: Task {
-			try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
-		})
-		return LateRefresh(store: store, refresher: refresher, gate: gate, refresh: refresh, otherHolder: otherHolder)
-	}
 
-	private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(testWaitTimeout), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
-		return try OAuthTokenStore(provider: OAuthProvider(rawValue: "test"), account: "user", persistence: .custom(storage: storage ?? MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), legacyDecoder: BoxLegacyToken.decode, refresher: { try await refresher.refresh($0) }, assertion: script.assertion, now: now, lockTimeout: lockTimeout, lockPollInterval: .milliseconds(10), lockEvents: lockEvents, coordinator: coordinator)
+		@Test
+		func expiryDuringRefreshReleasesLockAndLateResponseIsSavedOnlyOverItsSource() async throws {
+			for meanwhile in ["nothing", "delete", "replace"] {
+				buffer.store(OAuthTokenStoreTests.tokenA)
+				let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
+				lateRefresh.otherHolder.release()
+				let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
+				if meanwhile == "delete" {
+					try await otherProcessStore.delete(revoking: { _ in })
+				} else if meanwhile == "replace" {
+					try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
+				}
+				lateRefresh.gate.open()
+
+				if meanwhile == "delete" {
+					await #expect(throws: CloudProviderError.unauthorized) { try await cancellingValue(of: lateRefresh.refresh) }
+					#expect(buffer.data == nil)
+				} else {
+					let expectedToken = meanwhile == "replace" ? OAuthTokenStoreTests.tokenC : OAuthTokenStoreTests.tokenB
+					let accessToken = try await cancellingValue(of: lateRefresh.refresh)
+					let currentAccessToken = try await lateRefresh.store.accessToken()
+					#expect(expectedToken.accessToken == accessToken, "\(meanwhile)")
+					#expect(expectedToken.accessToken == currentAccessToken, "\(meanwhile)")
+					#expect(expectedToken == buffer.token, "\(meanwhile)")
+				}
+			}
+		}
+
+		@Test
+		func lateResponseThatCannotBeSavedNowIsSavedBeforeNextRefresh() async throws {
+			for failure in ["assertion refused", "lock timeout", "load failure", "expiry while loading"] {
+				buffer.store(OAuthTokenStoreTests.tokenA)
+				let script = ActivityScript()
+				let expiresOnLoad = OSAllocatedUnfairLock(initialState: false)
+				let storage = MemoryTokenStorage(buffer: buffer, onLoad: {
+					if expiresOnLoad.withLock({ $0 }) {
+						script.expireRunningAssertion()
+					}
+				})
+				let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == "lock timeout" ? .milliseconds(100) : .seconds(testWaitTimeout))
+				switch failure {
+				case "assertion refused":
+					script.refusesAssertions = true
+				case "load failure":
+					storage.failsLoads = true
+				case "expiry while loading":
+					expiresOnLoad.withLock { $0 = true }
+				default:
+					break
+				}
+				if failure != "lock timeout" {
+					lateRefresh.otherHolder.release()
+				}
+				lateRefresh.gate.open()
+
+				let accessToken = try await cancellingValue(of: lateRefresh.refresh)
+
+				#expect(accessToken == "B", "\(failure)")
+				#expect(OAuthTokenStoreTests.tokenA == buffer.token, "\(failure)")
+
+				lateRefresh.otherHolder.release()
+				script.refusesAssertions = false
+				storage.failsLoads = false
+				expiresOnLoad.withLock { $0 = false }
+				let savedAccessToken = try await lateRefresh.store.refresh(rejecting: "A")
+
+				#expect(savedAccessToken == "B", "\(failure)")
+				#expect(OAuthTokenStoreTests.tokenB == buffer.token, "\(failure)")
+				#expect(lateRefresh.refresher.callCount == 1, "\(failure)")
+			}
+		}
+
+		// MARK: - Lock Timeout
+
+		@Test
+		func lockTimeoutReturnsChangedStoredTokenAndOtherwiseThrows() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenB)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
+			let store = try makeStore(refresher: refresher, lockTimeout: .milliseconds(100))
+			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			defer {
+				otherHolder.release()
+			}
+
+			let accessToken = try await store.refresh(rejecting: "A")
+
+			#expect(accessToken == "B")
+			await #expect(throws: OAuthTokenStoreError.lockTimeout) { try await store.refresh(rejecting: "B") }
+			#expect(refresher.callCount == 0)
+		}
+
+		@Test
+		func lockTimeoutWithUnsavedTokenThrowsAndKeepsIt() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenB }
+			let storage = MemoryTokenStorage(buffer: buffer)
+			storage.failsSaves = true
+			let store = try makeStore(storage: storage, refresher: refresher, lockTimeout: .milliseconds(100))
+			_ = try await store.refresh(rejecting: "A")
+			storage.failsSaves = false
+			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+
+			await #expect(throws: OAuthTokenStoreError.lockTimeout) { try await store.refresh(rejecting: "B") }
+			otherHolder.release()
+			let accessToken = try await store.refresh(rejecting: "A")
+
+			#expect(accessToken == "B")
+			#expect(OAuthTokenStoreTests.tokenB == buffer.token)
+			#expect(refresher.callCount == 1)
+		}
+
+		// MARK: - Delete
+
+		@Test
+		func deleteDeletesAlsoIfRevocationFails() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+
+			let error = try await #require(throws: (any Error).self) { try await store.delete(revoking: { _ in throw URLError(.timedOut) }) }
+			#expect((error as? URLError)?.code == .timedOut)
+			#expect(buffer.data == nil)
+		}
+
+		@Test
+		func deleteOfMissingOrUndecodableItemSkipsRevocation() async throws {
+			for storedData in [nil, Data("garbage".utf8)] {
+				buffer.data = storedData
+				let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+				let revocationCount = OSAllocatedUnfairLock(initialState: 0)
+
+				try await store.delete(revoking: { _ in
+					revocationCount.withLock { $0 += 1 }
+				})
+
+				#expect(revocationCount.withLock { $0 } == 0)
+				#expect(buffer.data == nil)
+			}
+		}
+
+		// MARK: - Username
+
+		@Test
+		func refreshKeepsStoredUsername() async throws {
+			buffer.store(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil, username: "Name"))
+			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+
+			_ = try await store.refresh(rejecting: "A")
+
+			#expect(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Name") == buffer.token)
+			#expect(try store.storedUsername() == "Name")
+		}
+
+		@Test
+		func updateUsernameWritesUnderLockAndIsRefusedAfterExpiry() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let acquisitions = OSAllocatedUnfairLock(initialState: 0)
+			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, lockEvents: CrossProcessFileLock.Events(acquired: { acquisitions.withLock { $0 += 1 } }))
+
+			try await store.updateUsername("Name")
+
+			#expect(OAuthToken(accessToken: "A", refreshToken: "RA", expiresAt: nil, username: "Name") == buffer.token)
+			#expect(acquisitions.withLock { $0 } == 1)
+
+			let script = ActivityScript()
+			let expiringStore = try makeStore(storage: MemoryTokenStorage(buffer: buffer, onLoad: { script.expireRunningAssertion() }), refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
+
+			await #expect(throws: OAuthTokenStoreError.executionTimeUnavailable) { try await expiringStore.updateUsername("Other") }
+			#expect(buffer.token?.username == "Name")
+		}
+
+		@Test
+		func updateUsernameWithoutStoredLoginThrowsUnauthorized() async throws {
+			let store = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB })
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await store.updateUsername("Name") }
+			#expect(buffer.data == nil)
+		}
+
+		/// The username is stored with the tokens that the rotated token replaces, so the next refresh still saves the rotated token before sending its refresh token.
+		@Test
+		func updateUsernameKeepsUnsavedToken() async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let refresher = RefresherMock { callCount in callCount == 1 ? OAuthTokenStoreTests.tokenB : OAuthTokenStoreTests.tokenC }
+			let storage = MemoryTokenStorage(buffer: buffer)
+			storage.failsSaves = true
+			let store = try makeStore(storage: storage, refresher: refresher)
+			_ = try await store.refresh(rejecting: "A")
+			storage.failsSaves = false
+
+			try await store.updateUsername("Name")
+			let accessToken = try await store.refresh(rejecting: "B")
+
+			#expect(accessToken == "C")
+			#expect(refresher.tokens.map(\.refreshToken) == ["RA", "RB"])
+			#expect(OAuthToken(accessToken: "C", refreshToken: "RC", expiresAt: nil, username: "Name") == buffer.token)
+		}
+
+		@Test
+		func tokensSavedLaterKeepUsernameStoredMeanwhile() async throws {
+			let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
+
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
+			lateRefresh.otherHolder.release()
+			try await otherProcessStore.updateUsername("Late")
+			lateRefresh.gate.open()
+			_ = try await cancellingValue(of: lateRefresh.refresh)
+
+			#expect(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Late") == buffer.token)
+
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let storage = MemoryTokenStorage(buffer: buffer)
+			storage.failsSaves = true
+			let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, coordinator: OAuthTokenCoordinator())
+			_ = try await store.refresh(rejecting: "A")
+			storage.failsSaves = false
+			try await otherProcessStore.updateUsername("Unsaved")
+			_ = try await store.refresh(rejecting: "A")
+
+			#expect(OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil, username: "Unsaved") == buffer.token)
+		}
+
+		// MARK: - Persistence
+
+		@Test
+		func lockDirectoryMustBeFileURL() throws {
+			let url = try #require(URL(string: "https://example.com/locks"))
+			for persistence in [{ try OAuthPersistence.keychain(accessGroup: nil, tokenLockDirectory: url) }, { try OAuthPersistence.custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: url) }] {
+				#expect(throws: OAuthTokenStoreError.invalidLockDirectory) { try persistence() }
+			}
+		}
+
+		@Test
+		func testLegacyDropboxService() {
+			#expect(OAuthPersistence.legacyDropboxService(keychainService: "org.cryptomator.ios") == "org.cryptomator.ios.dropbox.authv2")
+		}
+
+		// MARK: - Helpers
+
+		/// Starts a refresh of token A to token B whose assertion expires while the refresher waits for the gate, and returns once another holder acquired the released lock.
+		private func startLateRefresh(storage: MemoryTokenStorage, script: ActivityScript, lockTimeout: Duration = .seconds(testWaitTimeout)) async throws -> LateRefresh {
+			let gate = Gate()
+			let refresher = RefresherMock(gate: gate) { _ in OAuthTokenStoreTests.tokenB }
+			let store = try makeStore(storage: storage, refresher: refresher, script: script, lockTimeout: lockTimeout, coordinator: OAuthTokenCoordinator())
+			let refresh = Task {
+				try await store.refresh(rejecting: "A")
+			}
+			await refresher.entered.wait()
+			script.expireRunningAssertion()
+			let otherHolder = try await cancellingValue(of: Task {
+				try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			})
+			return LateRefresh(store: store, refresher: refresher, gate: gate, refresh: refresh, otherHolder: otherHolder)
+		}
+
+		private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(testWaitTimeout), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
+			return try OAuthTokenStore(provider: OAuthProvider(rawValue: "test"), account: "user", persistence: .custom(storage: storage ?? MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), legacyDecoder: BoxLegacyToken.decode, refresher: { try await refresher.refresh($0) }, assertion: script.assertion, now: now, lockTimeout: lockTimeout, lockPollInterval: .milliseconds(10), lockEvents: lockEvents, coordinator: coordinator)
+		}
 	}
+}
+
+private struct LateRefresh {
+	let store: OAuthTokenStore
+	let refresher: RefresherMock
+	let gate: Gate
+	let refresh: Task<String, Error>
+	/// Holds the lock that the refresh released when its assertion expired.
+	let otherHolder: CrossProcessFileLock.Holder
 }
 
 /// The persisted item of one account, which several storage objects can share, as the processes of an app share a keychain item.
@@ -873,7 +872,7 @@ final class MemoryTokenStorage: OAuthTokenStorage {
 
 /// Records the tokens of the refreshes and, if it has a gate, holds each back until the gate opens.
 final class RefresherMock: Sendable {
-	let entered = XCTestExpectation(description: "refresher entered")
+	let entered = TestSignal("refresher entered", allowsOverFulfillment: true)
 	private let gate: Gate?
 	private let result: @Sendable (_ callCount: Int) throws -> OAuthToken
 	private let receivedTokens = OSAllocatedUnfairLock(initialState: [OAuthToken]())
@@ -881,7 +880,6 @@ final class RefresherMock: Sendable {
 	init(gate: Gate? = nil, result: @escaping @Sendable (_ callCount: Int) throws -> OAuthToken) {
 		self.gate = gate
 		self.result = result
-		entered.assertForOverFulfill = false
 	}
 
 	var callCount: Int {

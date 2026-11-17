@@ -6,106 +6,111 @@
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import JOSESwift
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class VaultConfigTests: XCTestCase {
-	let tokenNone = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6Im5vbmUifQ.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.".utf8)
-	let tokenHS256 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMjU2In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.V7pqSXX1tBRgmntL1sXovnhNR4Z1_7z3Jzrq7NMqPO8".utf8)
-	let tokenHS384 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMzg0In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.rx03sCVAyrCmT6halPaFU46lu-DOd03iwDgvdw362hfgJj782q6xPXjAxdKeVKxG".utf8)
-	let tokenHS512 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTNTEyIn0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.fzkVI34Ou3z7RaFarS9VPCaA0NX9z7My14gAISTXJGKGNSID7xEcoaY56SBdWbU7Ta17KhxcHhbXffxk3Mzing".utf8)
+extension UnitTests {
+	struct VaultConfigTests {
+		let tokenNone = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6Im5vbmUifQ.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.".utf8)
+		let tokenHS256 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMjU2In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.V7pqSXX1tBRgmntL1sXovnhNR4Z1_7z3Jzrq7NMqPO8".utf8)
+		let tokenHS384 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTMzg0In0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.rx03sCVAyrCmT6halPaFU46lu-DOd03iwDgvdw362hfgJj782q6xPXjAxdKeVKxG".utf8)
+		let tokenHS512 = Data("eyJraWQiOiJURVNUX0tFWSIsInR5cCI6IkpXVCIsImFsZyI6IkhTNTEyIn0.eyJmb3JtYXQiOjgsInNob3J0ZW5pbmdUaHJlc2hvbGQiOjIyMCwianRpIjoiZjRiMjlmM2EtNDdkNi00NjlmLTk2NGMtZjRjMmRhZWU4ZWI2IiwiY2lwaGVyQ29tYm8iOiJTSVZfQ1RSTUFDIn0.fzkVI34Ou3z7RaFarS9VPCaA0NX9z7My14gAISTXJGKGNSID7xEcoaY56SBdWbU7Ta17KhxcHhbXffxk3Mzing".utf8)
 
-	func testCreateNew() {
-		let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
-		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
-		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
-	}
-
-	func testUnsupportedSignature() throws {
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		XCTAssertThrowsError(try VaultConfig.load(token: tokenNone, rawKey: rawKey), "unsupported signature algorithm: none") { error in
-			guard case VaultConfigError.unsupportedAlgorithm = error else {
-				XCTFail("Unexpected error: \(error)")
-				return
-			}
+		@Test
+		func testCreateNew() {
+			let vaultConfig = VaultConfig.createNew(format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
+			#expect(vaultConfig.format == 8)
+			#expect(vaultConfig.cipherCombo == .sivCtrMac)
+			#expect(vaultConfig.shorteningThreshold == 220)
 		}
-	}
 
-	func testSuccessfulLoadHS256() throws {
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let vaultConfig = try VaultConfig.load(token: tokenHS256, rawKey: rawKey)
-		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
-		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
-	}
+		@Test
+		func unsupportedSignature() {
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			#expect(throws: VaultConfigError.unsupportedAlgorithm, "unsupported signature algorithm: none") { try VaultConfig.load(token: tokenNone, rawKey: rawKey) }
+		}
 
-	func testSuccessfulLoadHS384() throws {
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let vaultConfig = try VaultConfig.load(token: tokenHS384, rawKey: rawKey)
-		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
-		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
-	}
+		@Test
+		func successfulLoadHS256() throws {
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			let vaultConfig = try VaultConfig.load(token: tokenHS256, rawKey: rawKey)
+			#expect(vaultConfig.format == 8)
+			#expect(vaultConfig.cipherCombo == .sivCtrMac)
+			#expect(vaultConfig.shorteningThreshold == 220)
+		}
 
-	func testSuccessfulLoadHS512() throws {
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let vaultConfig = try VaultConfig.load(token: tokenHS512, rawKey: rawKey)
-		XCTAssertEqual(8, vaultConfig.format)
-		XCTAssertEqual(.sivCtrMac, vaultConfig.cipherCombo)
-		XCTAssertEqual(220, vaultConfig.shorteningThreshold)
-	}
+		@Test
+		func successfulLoadHS384() throws {
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			let vaultConfig = try VaultConfig.load(token: tokenHS384, rawKey: rawKey)
+			#expect(vaultConfig.format == 8)
+			#expect(vaultConfig.cipherCombo == .sivCtrMac)
+			#expect(vaultConfig.shorteningThreshold == 220)
+		}
 
-	func testLoadWithMalformedToken() throws {
-		let token = Data("hello world".utf8)
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		XCTAssertThrowsError(try VaultConfig.load(token: token, rawKey: rawKey), "input was not a valid token") { error in
+		@Test
+		func successfulLoadHS512() throws {
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			let vaultConfig = try VaultConfig.load(token: tokenHS512, rawKey: rawKey)
+			#expect(vaultConfig.format == 8)
+			#expect(vaultConfig.cipherCombo == .sivCtrMac)
+			#expect(vaultConfig.shorteningThreshold == 220)
+		}
+
+		@Test
+		func loadWithMalformedToken() throws {
+			let token = Data("hello world".utf8)
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			let error = try #require(throws: (any Error).self, "input was not a valid token") { try VaultConfig.load(token: token, rawKey: rawKey) }
 			guard case JOSESwiftError.invalidCompactSerializationComponentCount(count: 1) = error else {
-				XCTFail("Unexpected error: \(error)")
+				Issue.record("Unexpected error: \(error)")
 				return
 			}
 		}
-	}
 
-	func testLoadWithInvalidKey() throws {
-		let rawKey = [UInt8](repeating: 0x77, count: 64)
-		XCTAssertThrowsError(try VaultConfig.load(token: tokenHS256, rawKey: rawKey), "signature verification failed") { error in
+		@Test
+		func loadWithInvalidKey() throws {
+			let rawKey = [UInt8](repeating: 0x77, count: 64)
+			let error = try #require(throws: (any Error).self, "signature verification failed") { try VaultConfig.load(token: tokenHS256, rawKey: rawKey) }
 			guard case JOSESwiftError.verifyingFailed(description: JOSESwiftError.signatureInvalid.localizedDescription) = error else {
-				XCTFail("Unexpected error: \(error)")
+				Issue.record("Unexpected error: \(error)")
 				return
 			}
 		}
-	}
 
-	func testAllegedHubConfigWithNullAndNonStringMembers() throws {
-		let header = #"{"kid":"hub+https://hub.example.com/vaults/1","typ":"JWT","alg":"HS256","hub":{"clientId":"cryptomator","authEndpoint":"https://auth.example.com/auth","tokenEndpoint":"https://auth.example.com/token","authSuccessUrl":"https://hub.example.com/success","authErrorUrl":"https://hub.example.com/error","apiBaseUrl":null,"devicesResourceUrl":"https://hub.example.com/devices","version":1}}"#
-		let encodedHeader = Data(header.utf8).base64URLEncodedString()
-		let tokenComponents = try XCTUnwrap(String(data: tokenHS256, encoding: .utf8)?.split(separator: "."))
-		let token = Data(([Substring(encodedHeader)] + tokenComponents.dropFirst()).joined(separator: ".").utf8)
-		let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
-		XCTAssertEqual(HubConfig(clientId: "cryptomator", authEndpoint: "https://auth.example.com/auth", tokenEndpoint: "https://auth.example.com/token", authSuccessUrl: "https://hub.example.com/success", authErrorUrl: "https://hub.example.com/error", apiBaseUrl: nil, devicesResourceUrl: "https://hub.example.com/devices"), unverifiedVaultConfig.allegedHubConfig)
-	}
+		@Test
+		func allegedHubConfigWithNullAndNonStringMembers() throws {
+			let header = #"{"kid":"hub+https://hub.example.com/vaults/1","typ":"JWT","alg":"HS256","hub":{"clientId":"cryptomator","authEndpoint":"https://auth.example.com/auth","tokenEndpoint":"https://auth.example.com/token","authSuccessUrl":"https://hub.example.com/success","authErrorUrl":"https://hub.example.com/error","apiBaseUrl":null,"devicesResourceUrl":"https://hub.example.com/devices","version":1}}"#
+			let encodedHeader = Data(header.utf8).base64URLEncodedString()
+			let tokenComponents = try #require(String(data: tokenHS256, encoding: .utf8)?.split(separator: "."))
+			let token = Data(([Substring(encodedHeader)] + tokenComponents.dropFirst()).joined(separator: ".").utf8)
+			let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+			#expect(HubConfig(clientId: "cryptomator", authEndpoint: "https://auth.example.com/auth", tokenEndpoint: "https://auth.example.com/token", authSuccessUrl: "https://hub.example.com/success", authErrorUrl: "https://hub.example.com/error", apiBaseUrl: nil, devicesResourceUrl: "https://hub.example.com/devices") == unverifiedVaultConfig.allegedHubConfig)
+		}
 
-	func testToToken() throws {
-		let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
-		let rawKey = [UInt8](repeating: 0x55, count: 64)
-		let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
-		let tokenComponents = try XCTUnwrap(String(data: token, encoding: .utf8)?.split(separator: "."))
-		// check header
-		let header: [String: String] = try decodeTokenComponent(String(tokenComponents[0]))
-		XCTAssertEqual(["typ": "JWT", "alg": "HS256", "kid": "masterkeyfile:masterkey.cryptomator"], header)
-		// check payload
-		let payload: VaultConfigPayload = try decodeTokenComponent(String(tokenComponents[1]))
-		XCTAssertEqual(VaultConfigPayload(jti: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: "SIV_CTRMAC", shorteningThreshold: 220), payload)
-		// skip signature check
-	}
+		@Test
+		func testToToken() throws {
+			let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 220)
+			let rawKey = [UInt8](repeating: 0x55, count: 64)
+			let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: rawKey)
+			let tokenComponents = try #require(String(data: token, encoding: .utf8)?.split(separator: "."))
+			// check header
+			let header: [String: String] = try decodeTokenComponent(String(tokenComponents[0]))
+			#expect(header == ["typ": "JWT", "alg": "HS256", "kid": "masterkeyfile:masterkey.cryptomator"])
+			// check payload
+			let payload: VaultConfigPayload = try decodeTokenComponent(String(tokenComponents[1]))
+			#expect(VaultConfigPayload(jti: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: "SIV_CTRMAC", shorteningThreshold: 220) == payload)
+			// skip signature check
+		}
 
-	// MARK: - Helpers
+		// MARK: - Helpers
 
-	private func decodeTokenComponent<T: Decodable>(_ tokenComponent: String) throws -> T {
-		let jsonDecoder = JSONDecoder()
-		let data = Data(base64URLEncoded: String(tokenComponent))!
-		return try jsonDecoder.decode(T.self, from: data)
+		private func decodeTokenComponent<T: Decodable>(_ tokenComponent: String) throws -> T {
+			let jsonDecoder = JSONDecoder()
+			let data = Data(base64URLEncoded: String(tokenComponent))!
+			return try jsonDecoder.decode(T.self, from: data)
+		}
 	}
 }

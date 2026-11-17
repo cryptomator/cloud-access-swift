@@ -6,99 +6,101 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCloudAccessCore
 
-@MainActor
-class WebAuthenticationSessionTests: XCTestCase {
-	private static let callbackURL = URL(string: "scheme://callback?code=CODE")!
+extension UnitTests {
+	@MainActor
+	struct WebAuthenticationSessionTests {
+		private static let callbackURL = URL(string: "scheme://callback?code=CODE")!
 
-	func testReturnsCallbackURL() async throws {
-		let session = WebLoginSessionMock()
-		let login = Task {
-			try await WebAuthenticationSessionTests.run(session)
+		@Test
+		func returnsCallbackURL() async throws {
+			let session = WebLoginSessionMock()
+			let login = Task {
+				try await WebAuthenticationSessionTests.run(session)
+			}
+			await session.started.wait()
+
+			session.complete(callbackURL: WebAuthenticationSessionTests.callbackURL, error: nil)
+
+			let url = try await cancellingValue(of: login)
+			#expect(WebAuthenticationSessionTests.callbackURL == url)
 		}
-		await fulfillment(of: [session.started], timeout: testWaitTimeout)
 
-		session.complete(callbackURL: WebAuthenticationSessionTests.callbackURL, error: nil)
+		@Test
+		func convertsCompletionError() async throws {
+			let session = WebLoginSessionMock()
+			let login = Task {
+				try await WebAuthenticationSessionTests.run(session)
+			}
+			await session.started.wait()
 
-		let url = try await value(of: login)
-		XCTAssertEqual(WebAuthenticationSessionTests.callbackURL, url)
-	}
+			session.complete(callbackURL: nil, error: CocoaError(.featureUnsupported))
 
-	func testConvertsCompletionError() async throws {
-		let session = WebLoginSessionMock()
-		let login = Task {
-			try await WebAuthenticationSessionTests.run(session)
+			let error = try await #require(throws: (any Error).self) { try await cancellingValue(of: login) }
+			#expect((error as? ConvertedError)?.error?.code == .featureUnsupported)
 		}
-		await fulfillment(of: [session.started], timeout: testWaitTimeout)
 
-		session.complete(callbackURL: nil, error: CocoaError(.featureUnsupported))
+		@Test
+		func throwsConvertedErrorIfSessionDidNotStart() async throws {
+			let session = WebLoginSessionMock(starts: false)
 
-		await XCTAssertThrowsErrorAsync(try await value(of: login)) { error in
-			XCTAssertEqual(.featureUnsupported, (error as? ConvertedError)?.error?.code)
+			let error = try await #require(throws: (any Error).self) { try await WebAuthenticationSessionTests.run(session) }
+			#expect((error as? ConvertedError) != nil, "Unexpected error: \(error)")
+			#expect((error as? ConvertedError)?.error == nil)
 		}
-	}
 
-	func testThrowsConvertedErrorIfSessionDidNotStart() async throws {
-		let session = WebLoginSessionMock(starts: false)
+		@Test
+		func cancellationCancelsSession() async throws {
+			let session = WebLoginSessionMock()
+			let login = Task {
+				try await WebAuthenticationSessionTests.run(session)
+			}
+			await session.started.wait()
 
-		await XCTAssertThrowsErrorAsync(try await WebAuthenticationSessionTests.run(session)) { error in
-			XCTAssertNotNil(error as? ConvertedError, "Unexpected error: \(error)")
-			XCTAssertNil((error as? ConvertedError)?.error)
+			login.cancel()
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: login) }
+			await session.cancelled.wait()
 		}
-	}
 
-	func testCancellationCancelsSession() async throws {
-		let session = WebLoginSessionMock()
-		let login = Task {
-			try await WebAuthenticationSessionTests.run(session)
+		@Test
+		func completionAfterCancellationIsIgnored() async throws {
+			let session = WebLoginSessionMock()
+			let login = Task {
+				try await WebAuthenticationSessionTests.run(session)
+			}
+			await session.started.wait()
+			login.cancel()
+			await session.cancelled.wait()
+
+			session.complete(callbackURL: nil, error: CocoaError(.userCancelled))
+			session.complete(callbackURL: WebAuthenticationSessionTests.callbackURL, error: nil)
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: login) }
 		}
-		await fulfillment(of: [session.started], timeout: testWaitTimeout)
 
-		login.cancel()
+		@Test
+		func cancelledTaskStartsNoSession() async throws {
+			let session = WebLoginSessionMock()
 
-		await XCTAssertThrowsErrorAsync(try await value(of: login)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: cancelledTask {
+					try await WebAuthenticationSessionTests.run(session)
+				})
+			}
+			await session.started.expectNoFulfillment(within: .milliseconds(100))
 		}
-		await fulfillment(of: [session.cancelled], timeout: testWaitTimeout)
-	}
 
-	func testCompletionAfterCancellationIsIgnored() async throws {
-		let session = WebLoginSessionMock()
-		let login = Task {
-			try await WebAuthenticationSessionTests.run(session)
+		private static func run(_ session: WebLoginSessionMock) async throws -> URL {
+			return try await runWebAuthenticationSession(logPrefix: "WebAuthenticationSessionTests", convertError: { ConvertedError(error: $0 as? CocoaError) }, makeSession: { completion in
+				session.completion = completion
+				return session
+			})
 		}
-		await fulfillment(of: [session.started], timeout: testWaitTimeout)
-		login.cancel()
-		await fulfillment(of: [session.cancelled], timeout: testWaitTimeout)
-
-		session.complete(callbackURL: nil, error: CocoaError(.userCancelled))
-		session.complete(callbackURL: WebAuthenticationSessionTests.callbackURL, error: nil)
-
-		await XCTAssertThrowsErrorAsync(try await value(of: login)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-	}
-
-	func testCancelledTaskStartsNoSession() async throws {
-		let session = WebLoginSessionMock()
-		session.started.isInverted = true
-
-		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
-			try await WebAuthenticationSessionTests.run(session)
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-		await fulfillment(of: [session.started], timeout: 0.1)
-	}
-
-	private static func run(_ session: WebLoginSessionMock) async throws -> URL {
-		return try await runWebAuthenticationSession(logPrefix: "WebAuthenticationSessionTests", convertError: { ConvertedError(error: $0 as? CocoaError) }, makeSession: { completion in
-			session.completion = completion
-			return session
-		})
 	}
 }
 
@@ -108,8 +110,8 @@ private struct ConvertedError: Error {
 
 @MainActor
 private final class WebLoginSessionMock: WebLoginSession {
-	let started = XCTestExpectation(description: "started")
-	let cancelled = XCTestExpectation(description: "cancelled")
+	let started = TestSignal("started")
+	let cancelled = TestSignal("cancelled")
 	var completion: (@Sendable (URL?, Error?) -> Void)?
 	private let starts: Bool
 

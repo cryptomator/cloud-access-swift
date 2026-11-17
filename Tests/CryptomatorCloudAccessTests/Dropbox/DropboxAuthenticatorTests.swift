@@ -7,246 +7,254 @@
 //
 
 import AuthenticationServices
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCloudAccessCore
 
-@MainActor
-class DropboxAuthenticatorTests: XCTestCase {
-	private static let appKey = "appkey"
-	private static let redirectURL = URL(string: "db-appkey://1/connect?state=STATE&oauth_code=CODE")!
-	/// The example of RFC 7636, appendix B.
-	private static let pkce = DropboxPKCE(codeVerifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", webState: "WEB-STATE")
+extension UnitTests {
+	@MainActor
+	final class DropboxAuthenticatorTests {
+		private static let appKey = "appkey"
+		private static let redirectURL = URL(string: "db-appkey://1/connect?state=STATE&oauth_code=CODE")!
+		/// The example of RFC 7636, appendix B.
+		private static let pkce = DropboxPKCE(codeVerifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", webState: "WEB-STATE")
 
-	private var setup: DropboxSetup!
+		private var setup: DropboxSetup!
 
-	// MARK: - Hand-Off
+		// MARK: - Hand-Off
 
-	func testAwaitRedirectResumesWithRedirectURL() async throws {
-		try setUpDropbox()
-		let started = XCTestExpectation(description: "started")
-		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+		@Test
+		func awaitRedirectResumesWithRedirectURL() async throws {
+			try setUpDropbox()
+			let started = TestSignal("started")
+			let redirect = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+			}
+			await started.wait()
+
+			#expect(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
+
+			let url = try await cancellingValue(of: redirect)
+			#expect(DropboxAuthenticatorTests.redirectURL == url)
 		}
-		await fulfillment(of: [started], timeout: testWaitTimeout)
 
-		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
+		@Test
+		func newerHandOffFailsOlderOneWhoseFailureLeavesNewerPending() async throws {
+			try setUpDropbox()
+			let failFirst = OSAllocatedUnfairLock<(@Sendable (Error) -> Void)?>(initialState: nil)
+			let firstStarted = TestSignal("first started")
+			let secondStarted = TestSignal("second started")
+			let first = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { fail in
+					failFirst.withLock { $0 = fail }
+					firstStarted.fulfill()
+				})
+			}
+			await firstStarted.wait()
+			let second = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in secondStarted.fulfill() })
+			}
+			await secondStarted.wait()
 
-		let url = try await value(of: redirect)
-		XCTAssertEqual(DropboxAuthenticatorTests.redirectURL, url)
-	}
-
-	func testNewerHandOffFailsOlderOneWhoseFailureLeavesNewerPending() async throws {
-		try setUpDropbox()
-		let failFirst = OSAllocatedUnfairLock<(@Sendable (Error) -> Void)?>(initialState: nil)
-		let firstStarted = XCTestExpectation(description: "first started")
-		let secondStarted = XCTestExpectation(description: "second started")
-		let first = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { fail in
-				failFirst.withLock { $0 = fail }
-				firstStarted.fulfill()
-			})
+			await #expect(throws: DropboxAuthenticatorError.authenticationFailed) { try await cancellingValue(of: first) }
+			failFirst.withLock { $0 }?(CocoaError(.featureUnsupported))
+			#expect(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
+			let url = try await cancellingValue(of: second)
+			#expect(DropboxAuthenticatorTests.redirectURL == url)
 		}
-		await fulfillment(of: [firstStarted], timeout: testWaitTimeout)
-		let second = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in secondStarted.fulfill() })
+
+		@Test
+		func cancellationEndsHandOff() async throws {
+			try setUpDropbox()
+			let started = TestSignal("started")
+			let redirect = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+			}
+			await started.wait()
+
+			redirect.cancel()
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: redirect) }
+			#expect(!DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
 		}
-		await fulfillment(of: [secondStarted], timeout: testWaitTimeout)
 
-		await XCTAssertThrowsErrorAsync(try await value(of: first)) { error in
-			XCTAssertEqual(.authenticationFailed, error as? DropboxAuthenticatorError)
+		@Test
+		func cancelledTaskStartsNoHandOff() async throws {
+			try setUpDropbox()
+			let started = TestSignal("started")
+
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: cancelledTask {
+					try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+				})
+			}
+			await started.expectNoFulfillment(within: .seconds(0.1))
+			#expect(!DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
 		}
-		failFirst.withLock { $0 }?(CocoaError(.featureUnsupported))
-		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
-		let url = try await value(of: second)
-		XCTAssertEqual(DropboxAuthenticatorTests.redirectURL, url)
-	}
 
-	func testCancellationEndsHandOff() async throws {
-		try setUpDropbox()
-		let started = XCTestExpectation(description: "started")
-		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+		@Test
+		func handleRedirectURLAcceptsOnlyRedirectsOfDropboxAppForPendingHandOff() async throws {
+			try setUpDropbox()
+			#expect(!DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
+			let started = TestSignal("started")
+			let redirect = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+			}
+			await started.wait()
+
+			let ignoredURLs = [
+				"db-appkey://2/token?state=STATE&code=CODE",
+				"db-other://1/connect?state=STATE&oauth_code=CODE",
+				// `/connect` redirects without the pending hand-off's state, e.g., late ones of an earlier hand-off.
+				"db-appkey://1/connect?state=OTHER&oauth_code=CODE",
+				"db-appkey://1/connect?oauth_code=CODE"
+			]
+			for url in ignoredURLs {
+				try #expect(!DropboxAuthenticator.handleRedirectURL(#require(URL(string: url)), setup: setup), "\(url)")
+			}
+			// The hand-off started with another app key.
+			let otherSetup = DropboxSetup(appKey: "other", oauth: setup.oauth)
+			try #expect(!DropboxAuthenticator.handleRedirectURL(#require(URL(string: "db-other://1/connect?state=STATE&oauth_code=CODE")), setup: otherSetup))
+
+			#expect(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
+			let url = try await cancellingValue(of: redirect)
+			#expect(DropboxAuthenticatorTests.redirectURL == url)
 		}
-		await fulfillment(of: [started], timeout: testWaitTimeout)
 
-		redirect.cancel()
+		@Test
+		func cancelRedirectWithoutStateCompletesHandOff() async throws {
+			try setUpDropbox()
+			let started = TestSignal("started")
+			let redirect = Task {
+				try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
+			}
+			await started.wait()
+			let cancelURL = try #require(URL(string: "db-appkey://1/cancel"))
 
-		await XCTAssertThrowsErrorAsync(try await value(of: redirect)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			#expect(DropboxAuthenticator.handleRedirectURL(cancelURL, setup: setup))
+
+			let url = try await cancellingValue(of: redirect)
+			#expect(cancelURL == url)
 		}
-		XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
-	}
 
-	func testCancelledTaskStartsNoHandOff() async throws {
-		try setUpDropbox()
-		let started = XCTestExpectation(description: "started")
-		started.isInverted = true
+		// MARK: - Callback URLs
 
-		await XCTAssertThrowsErrorAsync(try await value(of: cancelledTask {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-		await fulfillment(of: [started], timeout: 0.1)
-		XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
-	}
-
-	func testHandleRedirectURLAcceptsOnlyRedirectsOfDropboxAppForPendingHandOff() async throws {
-		try setUpDropbox()
-		XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
-		let started = XCTestExpectation(description: "started")
-		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
-		}
-		await fulfillment(of: [started], timeout: testWaitTimeout)
-
-		let ignoredURLs = [
-			"db-appkey://2/token?state=STATE&code=CODE",
-			"db-other://1/connect?state=STATE&oauth_code=CODE",
-			// `/connect` redirects without the pending hand-off's state, e.g., late ones of an earlier hand-off.
-			"db-appkey://1/connect?state=OTHER&oauth_code=CODE",
-			"db-appkey://1/connect?oauth_code=CODE"
-		]
-		for url in ignoredURLs {
-			try XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(XCTUnwrap(URL(string: url)), setup: setup), url)
-		}
-		// The hand-off started with another app key.
-		let otherSetup = DropboxSetup(appKey: "other", oauth: setup.oauth)
-		try XCTAssertFalse(DropboxAuthenticator.handleRedirectURL(XCTUnwrap(URL(string: "db-other://1/connect?state=STATE&oauth_code=CODE")), setup: otherSetup))
-
-		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(DropboxAuthenticatorTests.redirectURL, setup: setup))
-		let url = try await value(of: redirect)
-		XCTAssertEqual(DropboxAuthenticatorTests.redirectURL, url)
-	}
-
-	func testCancelRedirectWithoutStateCompletesHandOff() async throws {
-		try setUpDropbox()
-		let started = XCTestExpectation(description: "started")
-		let redirect = Task {
-			try await DropboxAuthenticator.awaitRedirect(appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE", startingWith: { _ in started.fulfill() })
-		}
-		await fulfillment(of: [started], timeout: testWaitTimeout)
-		let cancelURL = try XCTUnwrap(URL(string: "db-appkey://1/cancel"))
-
-		XCTAssertTrue(DropboxAuthenticator.handleRedirectURL(cancelURL, setup: setup))
-
-		let url = try await value(of: redirect)
-		XCTAssertEqual(cancelURL, url)
-	}
-
-	// MARK: - Callback URLs
-
-	func testAuthorizationCodeFromCallbackURLs() throws {
-		let callbackURLs = [
-			"db-appkey://1/connect?state=STATE&oauth_code=CODE%2B1",
-			"db-appkey://1/connect?state=STATE&oauth_token=oauth2code:&oauth_token_secret=CODE%2B1",
-			"db-appkey://2/token?state=STATE&code=CODE%2B1"
-		]
-		for callbackURL in callbackURLs {
-			XCTAssertEqual("CODE+1", try authorizationCode(fromCallbackURL: callbackURL), callbackURL)
-		}
-	}
-
-	func testCancelledCallbackURLsAreUserCancelled() {
-		let callbackURLs = [
-			"db-appkey://1/cancel",
-			"db-appkey://2/cancel",
-			"db-appkey://1/other",
-			"db-appkey://2/token?state=STATE&error=access_denied&error_description=The+user+chose+not+to+give+your+app+access"
-		]
-		for callbackURL in callbackURLs {
-			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.userCancelled, (error as? CocoaError)?.code, callbackURL)
+		@Test
+		func authorizationCodeFromCallbackURLs() throws {
+			let callbackURLs = [
+				"db-appkey://1/connect?state=STATE&oauth_code=CODE%2B1",
+				"db-appkey://1/connect?state=STATE&oauth_token=oauth2code:&oauth_token_secret=CODE%2B1",
+				"db-appkey://2/token?state=STATE&code=CODE%2B1"
+			]
+			for callbackURL in callbackURLs {
+				#expect(try authorizationCode(fromCallbackURL: callbackURL) == "CODE+1", "\(callbackURL)")
 			}
 		}
-	}
 
-	func testRejectsInvalidCallbackURLs() {
-		let callbackURLs = [
-			"db-other://1/connect?state=STATE&oauth_code=CODE",
-			"db-appkey://3/connect?state=STATE&oauth_code=CODE",
-			"db-appkey://1/connect?state=OTHER&oauth_code=CODE",
-			"db-appkey://2/token?state=OTHER&code=CODE",
-			"db-appkey://2/token?code=CODE",
-			"db-appkey://2/token?state=STATE&error=server_error",
-			"db-appkey://1/connect?state=STATE&oauth_token=other&oauth_token_secret=CODE",
-			"db-appkey://2/token?state=STATE&code="
-		]
-		for callbackURL in callbackURLs {
-			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.authenticationFailed, error as? DropboxAuthenticatorError, callbackURL)
+		@Test
+		func cancelledCallbackURLsAreUserCancelled() throws {
+			let callbackURLs = [
+				"db-appkey://1/cancel",
+				"db-appkey://2/cancel",
+				"db-appkey://1/other",
+				"db-appkey://2/token?state=STATE&error=access_denied&error_description=The+user+chose+not+to+give+your+app+access"
+			]
+			for callbackURL in callbackURLs {
+				let error = try #require(throws: (any Error).self, "\(callbackURL)") { try authorizationCode(fromCallbackURL: callbackURL) }
+				#expect((error as? CocoaError)?.code == .userCancelled, "\(callbackURL)")
 			}
 		}
-	}
 
-	func testConvertLoginFlowError() {
-		XCTAssertEqual(.userCancelled, (DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code)
-		XCTAssertEqual(.authenticationFailed, DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? DropboxAuthenticatorError)
-	}
+		@Test
+		func rejectsInvalidCallbackURLs() {
+			let callbackURLs = [
+				"db-other://1/connect?state=STATE&oauth_code=CODE",
+				"db-appkey://3/connect?state=STATE&oauth_code=CODE",
+				"db-appkey://1/connect?state=OTHER&oauth_code=CODE",
+				"db-appkey://2/token?state=OTHER&code=CODE",
+				"db-appkey://2/token?code=CODE",
+				"db-appkey://2/token?state=STATE&error=server_error",
+				"db-appkey://1/connect?state=STATE&oauth_token=other&oauth_token_secret=CODE",
+				"db-appkey://2/token?state=STATE&code="
+			]
+			for callbackURL in callbackURLs {
+				#expect(throws: DropboxAuthenticatorError.authenticationFailed, "\(callbackURL)") { try authorizationCode(fromCallbackURL: callbackURL) }
+			}
+		}
 
-	// MARK: - PKCE
+		@Test
+		func testConvertLoginFlowError() {
+			#expect((DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code == .userCancelled)
+			#expect((DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? DropboxAuthenticatorError) == .authenticationFailed)
+		}
 
-	func testCodeChallengeAndStatesOfPKCE() {
-		let pkce = DropboxAuthenticatorTests.pkce
+		// MARK: - PKCE
 
-		XCTAssertEqual("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", pkce.codeChallenge)
-		XCTAssertEqual("oauth2code:E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM:S256:offline:files.metadata.read files.metadata.write files.content.read files.content.write account_info.read", pkce.dAuthState)
+		@Test
+		func codeChallengeAndStatesOfPKCE() {
+			let pkce = DropboxAuthenticatorTests.pkce
 
-		let random = DropboxPKCE.random()
-		XCTAssertEqual(128, random.codeVerifier.count)
-		XCTAssertTrue(random.codeVerifier.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }, random.codeVerifier)
-		XCTAssertEqual(43, random.webState.count)
-		XCTAssertTrue(random.webState.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }, random.webState)
-		XCTAssertNotEqual(random.codeVerifier, DropboxPKCE.random().codeVerifier)
-	}
+			#expect(pkce.codeChallenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+			#expect(pkce.dAuthState == "oauth2code:E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM:S256:offline:files.metadata.read files.metadata.write files.content.read files.content.write account_info.read")
 
-	func testDAuthURLCarriesPKCEParameters() throws {
-		let url = try DropboxAuthenticator.dAuthURL(scheme: "dbapi-2", appKey: DropboxAuthenticatorTests.appKey, pkce: DropboxAuthenticatorTests.pkce)
+			let random = DropboxPKCE.random()
+			#expect(random.codeVerifier.count == 128)
+			#expect(random.codeVerifier.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }, "\(random.codeVerifier)")
+			#expect(random.webState.count == 43)
+			#expect(random.webState.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }, "\(random.webState)")
+			#expect(random.codeVerifier != DropboxPKCE.random().codeVerifier)
+		}
 
-		let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-		XCTAssertEqual("dbapi-2", components.scheme)
-		XCTAssertEqual("1", components.host)
-		XCTAssertEqual("/connect", components.path)
-		XCTAssertEqual([
-			"k": "appkey",
-			"s": "",
-			"state": DropboxAuthenticatorTests.pkce.dAuthState,
-			"extra_query_params": "code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&token_access_type=offline&response_type=code&scope=files.metadata.read files.metadata.write files.content.read files.content.write account_info.read"
-		], DropboxAuthenticatorTests.queryParameters(of: components))
-	}
+		@Test
+		func dAuthURLCarriesPKCEParameters() throws {
+			let url = try DropboxAuthenticator.dAuthURL(scheme: "dbapi-2", appKey: DropboxAuthenticatorTests.appKey, pkce: DropboxAuthenticatorTests.pkce)
 
-	func testAuthorizeURLCarriesPKCEParametersAndWebState() throws {
-		let url = try DropboxAuthenticator.authorizeURL(appKey: DropboxAuthenticatorTests.appKey, pkce: DropboxAuthenticatorTests.pkce)
+			let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+			#expect(components.scheme == "dbapi-2")
+			#expect(components.host == "1")
+			#expect(components.path == "/connect")
+			#expect([
+				"k": "appkey",
+				"s": "",
+				"state": DropboxAuthenticatorTests.pkce.dAuthState,
+				"extra_query_params": "code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&token_access_type=offline&response_type=code&scope=files.metadata.read files.metadata.write files.content.read files.content.write account_info.read"
+			] == DropboxAuthenticatorTests.queryParameters(of: components))
+		}
 
-		let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-		XCTAssertEqual("https://www.dropbox.com/oauth2/authorize", "\(components.scheme ?? "")://\(components.host ?? "")\(components.path)")
-		XCTAssertEqual([
-			"client_id": "appkey",
-			"redirect_uri": "db-appkey://2/token",
-			"response_type": "code",
-			"token_access_type": "offline",
-			"code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-			"code_challenge_method": "S256",
-			"scope": "files.metadata.read files.metadata.write files.content.read files.content.write account_info.read",
-			"state": "WEB-STATE",
-			"disable_signup": "true"
-		], DropboxAuthenticatorTests.queryParameters(of: components))
-	}
+		@Test
+		func authorizeURLCarriesPKCEParametersAndWebState() throws {
+			let url = try DropboxAuthenticator.authorizeURL(appKey: DropboxAuthenticatorTests.appKey, pkce: DropboxAuthenticatorTests.pkce)
 
-	// MARK: - Helpers
+			let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+			#expect("https://www.dropbox.com/oauth2/authorize" == "\(components.scheme ?? "")://\(components.host ?? "")\(components.path)")
+			#expect(DropboxAuthenticatorTests.queryParameters(of: components) == [
+				"client_id": "appkey",
+				"redirect_uri": "db-appkey://2/token",
+				"response_type": "code",
+				"token_access_type": "offline",
+				"code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+				"code_challenge_method": "S256",
+				"scope": "files.metadata.read files.metadata.write files.content.read files.content.write account_info.read",
+				"state": "WEB-STATE",
+				"disable_signup": "true"
+			])
+		}
 
-	private func setUpDropbox() throws {
-		let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		setup = try DropboxSetup(appKey: DropboxAuthenticatorTests.appKey, oauth: .custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: lockDirectoryURL))
-	}
+		// MARK: - Helpers
 
-	private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
-		return try DropboxAuthenticator.authorizationCode(fromCallbackURL: XCTUnwrap(URL(string: callbackURL)), appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE")
-	}
+		private func setUpDropbox() throws {
+			let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			setup = try DropboxSetup(appKey: DropboxAuthenticatorTests.appKey, oauth: .custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: lockDirectoryURL))
+		}
 
-	private static func queryParameters(of components: URLComponents) -> [String: String] {
-		return Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+		private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
+			return try DropboxAuthenticator.authorizationCode(fromCallbackURL: #require(URL(string: callbackURL)), appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE")
+		}
+
+		private static func queryParameters(of components: URLComponents) -> [String: String] {
+			return Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+		}
 	}
 }

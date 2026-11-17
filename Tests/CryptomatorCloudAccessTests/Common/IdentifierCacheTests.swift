@@ -8,11 +8,12 @@
 
 import Foundation
 import GRDB
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 /// The cache of one item type, with the items built from a path, a number for the identifier and an item type.
 struct IdentifierCacheProbe {
+	let itemType: Any.Type
 	let add: (_ path: String, _ identifier: Int, _ itemType: CloudItemType) throws -> Void
 	let invalidate: (_ path: String) throws -> Void
 	let contains: (_ path: String, _ identifier: Int, _ itemType: CloudItemType) -> Bool
@@ -21,6 +22,7 @@ struct IdentifierCacheProbe {
 
 	init<Item: IdentifierCacheItem & Equatable>(makeItem: @escaping (_ cloudPath: CloudPath, _ identifier: Int, _ itemType: CloudItemType) -> Item) throws {
 		let cache = try IdentifierCache<Item>()
+		self.itemType = Item.self
 		self.add = { try cache.addOrUpdate(makeItem(CloudPath($0), $1, $2)) }
 		self.invalidate = { try cache.invalidate(makeItem(CloudPath($0), 0, .folder)) }
 		self.contains = { cache.get(CloudPath($0)) == makeItem(CloudPath($0), $1, $2) }
@@ -29,175 +31,202 @@ struct IdentifierCacheProbe {
 	}
 }
 
-/// The tests of every item type's cache. Each subclass runs them for its item type.
-class IdentifierCacheTests: XCTestCase {
-	private var cache: IdentifierCacheProbe!
+/// The item types whose caches the tests run for.
+enum CacheKind: CaseIterable, CustomTestStringConvertible {
+	case box
+	case pCloud
+	case googleDrive
+	case microsoftGraph
 
-	/// XCTest runs the tests of this class only in its subclasses.
-	override class var defaultTestSuite: XCTestSuite {
-		return self == IdentifierCacheTests.self ? XCTestSuite(name: "IdentifierCacheTests") : super.defaultTestSuite
+	var testDescription: String {
+		return "\(self)"
 	}
 
-	func makeCache() throws -> IdentifierCacheProbe {
-		preconditionFailure("A subclass returns the cache of its item type")
+	func makeProbe() throws -> IdentifierCacheProbe {
+		switch self {
+		case .box:
+			return try IdentifierCacheProbe { BoxItem(cloudPath: $0, identifier: String($1), itemType: $2) }
+		case .pCloud:
+			return try IdentifierCacheProbe { PCloudItem(cloudPath: $0, identifier: UInt64($1), itemType: $2) }
+		case .googleDrive:
+			return try IdentifierCacheProbe { GoogleDriveItem(cloudPath: $0, identifier: "TestABC--\($1)@^", itemType: $2, shortcut: nil) }
+		case .microsoftGraph:
+			return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2) }
+		}
+	}
+}
+
+extension UnitTests {
+	struct IdentifierCacheTests {
+		@Test(arguments: CacheKind.allCases)
+		func probeCachesItemTypeOfKind(kind: CacheKind) throws {
+			let expectedItemType: Any.Type = switch kind {
+			case .box:
+				BoxItem.self
+			case .pCloud:
+				PCloudItem.self
+			case .googleDrive:
+				GoogleDriveItem.self
+			case .microsoftGraph:
+				MicrosoftGraphItem.self
+			}
+			let itemType = try kind.makeProbe().itemType
+			#expect(ObjectIdentifier(itemType) == ObjectIdentifier(expectedItemType), "\(itemType)")
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func rootItemIsCachedAtStart(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			#expect(cache.containsRootItem())
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func addAndGetForFileCloudPath(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/abc/test.txt", 1234, .file)
+
+			#expect(cache.contains("/abc/test.txt", 1234, .file))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func addAndGetForFolderCloudPath(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/abc/test--a-", 1234, .folder)
+
+			#expect(cache.contains("/abc/test--a-", 1234, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func updateWithDifferentIdentifierForCachedCloudPath(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/abc/test--a-", 1234, .folder)
+			try cache.add("/abc/test--a-", 5678, .folder)
+
+			#expect(cache.contains("/abc/test--a-", 5678, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func invalidateIncludingSubPaths(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/foo", 123, .folder)
+			try cache.add("/foo/bar", 234, .folder)
+			try cache.add("/foo/baz", 345, .folder)
+			try cache.add("/bar/foo", 456, .folder)
+
+			try cache.invalidate("/foo")
+
+			#expect(cache.containsNothing("/foo"))
+			#expect(cache.containsNothing("/foo/bar"))
+			#expect(cache.containsNothing("/foo/baz"))
+			#expect(cache.contains("/bar/foo", 456, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func invalidateMatchesPathsLiterally(kind: CacheKind) throws {
+			let cases: [(invalidated: String, kept: [String])] = [
+				("/a", ["/ab", "/A/x", "/a_b"]),
+				("/a_b", ["/aXb/x"]),
+				("/a%", ["/abc"])
+			]
+			for (invalidated, kept) in cases {
+				let cache = try kind.makeProbe()
+				for path in [invalidated, invalidated + "/x"] + kept {
+					try cache.add(path, 1, .folder)
+				}
+
+				try cache.invalidate(invalidated)
+
+				#expect(cache.containsNothing(invalidated), "\(invalidated)")
+				#expect(cache.containsNothing(invalidated + "/x"), "\(invalidated)")
+				for path in kept {
+					#expect(cache.contains(path, 1, .folder), "\(path) after invalidating \(invalidated)")
+				}
+			}
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func invalidateRootRemovesEveryItem(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/foo/bar", 123, .folder)
+
+			try cache.invalidate("/")
+
+			#expect(cache.containsNothing("/"))
+			#expect(cache.containsNothing("/foo/bar"))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func getAfterInvalidatingDifferentIdentifier(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/abc/test--a-", 1234, .folder)
+			try cache.add("/test/AAAAAAAAAAAA/test.txt", 9012, .folder)
+
+			try cache.invalidate("/abc/test--a-")
+
+			#expect(cache.containsNothing("/abc/test--a-"))
+			#expect(cache.contains("/test/AAAAAAAAAAAA/test.txt", 9012, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func invalidateForNonExistentCloudPath(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			#expect(cache.containsNothing("/abc/test--a-"))
+
+			try cache.invalidate("/abc/test--a-")
+		}
+
+		@Test
+		func addAndGetForShortcut() throws {
+			let cache = try IdentifierCache<GoogleDriveItem>()
+			let shortcut = GoogleDriveShortcut(targetIdentifier: "TestABC--1234@^", targetItemType: .file)
+			let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/shortcut"), identifier: "ShortcutIdentifier", itemType: .symlink, shortcut: shortcut)
+
+			try cache.addOrUpdate(itemToStore)
+
+			#expect(itemToStore == cache.get(itemToStore.cloudPath))
+		}
 	}
 
-	override func setUpWithError() throws {
-		cache = try makeCache()
-	}
+	struct IdentifierCacheDatabaseTests {
+		@Test
+		func databaseFileIsDeletedWithCache() throws {
+			var cache: IdentifierCache<PCloudItem>? = try IdentifierCache<PCloudItem>()
+			let databaseURL = try #require(cache).directoryURL.appendingPathComponent("identifiers.sqlite")
 
-	func testRootItemIsCachedAtStart() {
-		XCTAssertTrue(cache.containsRootItem())
-	}
+			#expect(FileManager.default.fileExists(atPath: databaseURL.path))
+			#expect(try databaseURL.path.hasPrefix(ProcessTemporaryDirectory.shared.directoryURL().path))
+			cache = nil
+			#expect(!FileManager.default.fileExists(atPath: databaseURL.deletingLastPathComponent().path))
+		}
 
-	func testAddAndGetForFileCloudPath() throws {
-		try cache.add("/abc/test.txt", 1234, .file)
+		@Test
+		func databaseNeedsNoDurability() throws {
+			let cache = try IdentifierCache<PCloudItem>()
 
-		XCTAssertTrue(cache.contains("/abc/test.txt", 1234, .file))
-	}
-
-	func testAddAndGetForFolderCloudPath() throws {
-		try cache.add("/abc/test--a-", 1234, .folder)
-
-		XCTAssertTrue(cache.contains("/abc/test--a-", 1234, .folder))
-	}
-
-	func testUpdateWithDifferentIdentifierForCachedCloudPath() throws {
-		try cache.add("/abc/test--a-", 1234, .folder)
-		try cache.add("/abc/test--a-", 5678, .folder)
-
-		XCTAssertTrue(cache.contains("/abc/test--a-", 5678, .folder))
-	}
-
-	func testInvalidateIncludingSubPaths() throws {
-		try cache.add("/foo", 123, .folder)
-		try cache.add("/foo/bar", 234, .folder)
-		try cache.add("/foo/baz", 345, .folder)
-		try cache.add("/bar/foo", 456, .folder)
-
-		try cache.invalidate("/foo")
-
-		XCTAssertTrue(cache.containsNothing("/foo"))
-		XCTAssertTrue(cache.containsNothing("/foo/bar"))
-		XCTAssertTrue(cache.containsNothing("/foo/baz"))
-		XCTAssertTrue(cache.contains("/bar/foo", 456, .folder))
-	}
-
-	func testInvalidateMatchesPathsLiterally() throws {
-		let cases: [(invalidated: String, kept: [String])] = [
-			("/a", ["/ab", "/A/x", "/a_b"]),
-			("/a_b", ["/aXb/x"]),
-			("/a%", ["/abc"])
-		]
-		for (invalidated, kept) in cases {
-			let cache = try makeCache()
-			for path in [invalidated, invalidated + "/x"] + kept {
-				try cache.add(path, 1, .folder)
+			let (journalMode, synchronous, cacheSize) = try cache.dbQueue.read { db in
+				try (String.fetchOne(db, sql: "PRAGMA journal_mode"), Int.fetchOne(db, sql: "PRAGMA synchronous"), Int.fetchOne(db, sql: "PRAGMA cache_size"))
 			}
 
-			try cache.invalidate(invalidated)
+			#expect(journalMode == "wal")
+			#expect(synchronous == 0)
+			#expect(cacheSize == -500)
+		}
 
-			XCTAssertTrue(cache.containsNothing(invalidated), invalidated)
-			XCTAssertTrue(cache.containsNothing(invalidated + "/x"), invalidated)
-			for path in kept {
-				XCTAssertTrue(cache.contains(path, 1, .folder), "\(path) after invalidating \(invalidated)")
+		@Test
+		func invalidateRemovesLargeSubtree() throws {
+			let cache = try IdentifierCache<PCloudItem>()
+			for identifier in 1 ... 2000 {
+				try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/foo/\(identifier)"), identifier: UInt64(identifier), itemType: .file))
 			}
+			try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/bar"), identifier: 1, itemType: .folder))
+
+			try cache.invalidate(PCloudItem(cloudPath: CloudPath("/foo"), identifier: 0, itemType: .folder))
+
+			let itemCount = try cache.dbQueue.read { db in
+				try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(PCloudItem.databaseTableName)")
+			}
+			#expect(itemCount == 2)
+			#expect(cache.get(CloudPath("/bar")) != nil)
 		}
-	}
-
-	func testInvalidateRootRemovesEveryItem() throws {
-		try cache.add("/foo/bar", 123, .folder)
-
-		try cache.invalidate("/")
-
-		XCTAssertTrue(cache.containsNothing("/"))
-		XCTAssertTrue(cache.containsNothing("/foo/bar"))
-	}
-
-	func testGetAfterInvalidatingDifferentIdentifier() throws {
-		try cache.add("/abc/test--a-", 1234, .folder)
-		try cache.add("/test/AAAAAAAAAAAA/test.txt", 9012, .folder)
-
-		try cache.invalidate("/abc/test--a-")
-
-		XCTAssertTrue(cache.containsNothing("/abc/test--a-"))
-		XCTAssertTrue(cache.contains("/test/AAAAAAAAAAAA/test.txt", 9012, .folder))
-	}
-
-	func testInvalidateForNonExistentCloudPath() throws {
-		XCTAssertTrue(cache.containsNothing("/abc/test--a-"))
-
-		try cache.invalidate("/abc/test--a-")
-	}
-}
-
-class BoxIdentifierCacheTests: IdentifierCacheTests {
-	override func makeCache() throws -> IdentifierCacheProbe {
-		return try IdentifierCacheProbe { BoxItem(cloudPath: $0, identifier: String($1), itemType: $2) }
-	}
-}
-
-class PCloudIdentifierCacheTests: IdentifierCacheTests {
-	override func makeCache() throws -> IdentifierCacheProbe {
-		return try IdentifierCacheProbe { PCloudItem(cloudPath: $0, identifier: UInt64($1), itemType: $2) }
-	}
-}
-
-class GoogleDriveIdentifierCacheTests: IdentifierCacheTests {
-	override func makeCache() throws -> IdentifierCacheProbe {
-		return try IdentifierCacheProbe { GoogleDriveItem(cloudPath: $0, identifier: "TestABC--\($1)@^", itemType: $2, shortcut: nil) }
-	}
-
-	func testAddAndGetForShortcut() throws {
-		let cache = try IdentifierCache<GoogleDriveItem>()
-		let shortcut = GoogleDriveShortcut(targetIdentifier: "TestABC--1234@^", targetItemType: .file)
-		let itemToStore = GoogleDriveItem(cloudPath: CloudPath("/abc/shortcut"), identifier: "ShortcutIdentifier", itemType: .symlink, shortcut: shortcut)
-
-		try cache.addOrUpdate(itemToStore)
-
-		XCTAssertEqual(itemToStore, cache.get(itemToStore.cloudPath))
-	}
-}
-
-class MicrosoftGraphIdentifierCacheTests: IdentifierCacheTests {
-	override func makeCache() throws -> IdentifierCacheProbe {
-		return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2) }
-	}
-}
-
-class IdentifierCacheDatabaseTests: XCTestCase {
-	func testDatabaseFileIsDeletedWithCache() throws {
-		var cache: IdentifierCache<PCloudItem>? = try IdentifierCache<PCloudItem>()
-		let databaseURL = try XCTUnwrap(cache).directoryURL.appendingPathComponent("identifiers.sqlite")
-
-		XCTAssertTrue(FileManager.default.fileExists(atPath: databaseURL.path))
-		XCTAssertTrue(try databaseURL.path.hasPrefix(ProcessTemporaryDirectory.shared.directoryURL().path))
-		cache = nil
-		XCTAssertFalse(FileManager.default.fileExists(atPath: databaseURL.deletingLastPathComponent().path))
-	}
-
-	func testDatabaseNeedsNoDurability() throws {
-		let cache = try IdentifierCache<PCloudItem>()
-
-		try cache.dbQueue.read { db in
-			XCTAssertEqual("wal", try String.fetchOne(db, sql: "PRAGMA journal_mode"))
-			XCTAssertEqual(0, try Int.fetchOne(db, sql: "PRAGMA synchronous"))
-			XCTAssertEqual(-500, try Int.fetchOne(db, sql: "PRAGMA cache_size"))
-		}
-	}
-
-	func testInvalidateRemovesLargeSubtree() throws {
-		let cache = try IdentifierCache<PCloudItem>()
-		for identifier in 1 ... 2000 {
-			try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/foo/\(identifier)"), identifier: UInt64(identifier), itemType: .file))
-		}
-		try cache.addOrUpdate(PCloudItem(cloudPath: CloudPath("/bar"), identifier: 1, itemType: .folder))
-
-		try cache.invalidate(PCloudItem(cloudPath: CloudPath("/foo"), identifier: 0, itemType: .folder))
-
-		try cache.dbQueue.read { db in
-			XCTAssertEqual(2, try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(PCloudItem.databaseTableName)"))
-		}
-		XCTAssertNotNil(cache.get(CloudPath("/bar")))
 	}
 }

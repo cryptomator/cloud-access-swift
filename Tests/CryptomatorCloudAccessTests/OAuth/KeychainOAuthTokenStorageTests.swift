@@ -6,103 +6,105 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
 import Security
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class KeychainOAuthTokenStorageTests: XCTestCase {
-	private static let googleKey = OAuthAccountKey(provider: .googleDrive, account: "112233")
-	private static let boxKey = OAuthAccountKey(provider: .box, account: "USER-ID")
+extension UnitTests {
+	struct KeychainOAuthTokenStorageTests {
+		private static let googleKey = OAuthAccountKey(provider: .googleDrive, account: "112233")
+		private static let boxKey = OAuthAccountKey(provider: .box, account: "USER-ID")
 
-	func testLoadReturnsNilOnlyForMissingItem() throws {
-		let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound)
+		@Test
+		func loadReturnsNilOnlyForMissingItem() throws {
+			let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound)
 
-		XCTAssertNil(try keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey))
+			#expect(try keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey) == nil)
 
-		keychain.copyMatchingStatus = errSecInteractionNotAllowed
+			keychain.copyMatchingStatus = errSecInteractionNotAllowed
 
-		XCTAssertThrowsError(try keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey)) { error in
-			XCTAssertEqual(.keychain(status: errSecInteractionNotAllowed), error as? OAuthTokenStoreError)
+			#expect(throws: OAuthTokenStoreError.keychain(status: errSecInteractionNotAllowed)) { try keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey) }
+
+			keychain.copyMatchingStatus = errSecSuccess
+
+			#expect(try Data("stored".utf8) == keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey))
+			let query = try #require(keychain.calls.last?.query)
+			#expect((query[kSecReturnData as String] as? Bool) == true)
+			#expect((kSecMatchLimitOne as String) == (query[kSecMatchLimit as String] as? String))
 		}
 
-		keychain.copyMatchingStatus = errSecSuccess
+		@Test
+		func saveUpdatesItemAndAddsItOnlyIfMissing() throws {
+			let keychain = KeychainRecorder(updateStatus: errSecSuccess)
 
-		XCTAssertEqual(Data("stored".utf8), try keychain.storage().load(KeychainOAuthTokenStorageTests.googleKey))
-		let query = try XCTUnwrap(keychain.calls.last?.query)
-		XCTAssertEqual(true, query[kSecReturnData as String] as? Bool)
-		XCTAssertEqual(kSecMatchLimitOne as String, query[kSecMatchLimit as String] as? String)
-	}
+			try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
 
-	func testSaveUpdatesItemAndAddsItOnlyIfMissing() throws {
-		let keychain = KeychainRecorder(updateStatus: errSecSuccess)
+			#expect(keychain.calls.map(\.operation) == ["update"])
+			#expect(Data("new".utf8) == (keychain.calls.first?.attributes?[kSecValueData as String] as? Data))
 
-		try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
+			keychain.reset(updateStatus: errSecItemNotFound)
+			try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
 
-		XCTAssertEqual(["update"], keychain.calls.map(\.operation))
-		XCTAssertEqual(Data("new".utf8), keychain.calls.first?.attributes?[kSecValueData as String] as? Data)
+			#expect(keychain.calls.map(\.operation) == ["update", "add"])
+			let added = try #require(keychain.calls.last?.query)
+			#expect(Data("new".utf8) == (added[kSecValueData as String] as? Data))
+			#expect((kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String) == (added[kSecAttrAccessible as String] as? String))
 
-		keychain.reset(updateStatus: errSecItemNotFound)
-		try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
+			keychain.reset(updateStatus: errSecInteractionNotAllowed)
 
-		XCTAssertEqual(["update", "add"], keychain.calls.map(\.operation))
-		let added = try XCTUnwrap(keychain.calls.last?.query)
-		XCTAssertEqual(Data("new".utf8), added[kSecValueData as String] as? Data)
-		XCTAssertEqual(kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String, added[kSecAttrAccessible as String] as? String)
+			#expect(throws: OAuthTokenStoreError.keychain(status: errSecInteractionNotAllowed)) { try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey) }
+			#expect(keychain.calls.map(\.operation) == ["update"])
 
-		keychain.reset(updateStatus: errSecInteractionNotAllowed)
+			keychain.reset(updateStatus: errSecItemNotFound, addStatus: errSecMissingEntitlement)
 
-		XCTAssertThrowsError(try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)) { error in
-			XCTAssertEqual(.keychain(status: errSecInteractionNotAllowed), error as? OAuthTokenStoreError)
+			#expect(throws: OAuthTokenStoreError.keychain(status: errSecMissingEntitlement)) { try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey) }
 		}
-		XCTAssertEqual(["update"], keychain.calls.map(\.operation))
 
-		keychain.reset(updateStatus: errSecItemNotFound, addStatus: errSecMissingEntitlement)
+		@Test
+		func deleteOfMissingItemSucceeds() throws {
+			let keychain = KeychainRecorder(deleteStatus: errSecItemNotFound)
 
-		XCTAssertThrowsError(try keychain.storage().save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)) { error in
-			XCTAssertEqual(.keychain(status: errSecMissingEntitlement), error as? OAuthTokenStoreError)
+			try keychain.storage().delete(KeychainOAuthTokenStorageTests.googleKey)
+
+			keychain.reset(deleteStatus: errSecInteractionNotAllowed)
+			#expect(throws: (any Error).self) { try keychain.storage().delete(KeychainOAuthTokenStorageTests.googleKey) }
 		}
-	}
 
-	func testDeleteOfMissingItemSucceeds() throws {
-		let keychain = KeychainRecorder(deleteStatus: errSecItemNotFound)
+		@Test
+		func onlyAddSetsAccessibility() throws {
+			let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound, updateStatus: errSecItemNotFound)
+			let storage = keychain.storage()
 
-		try keychain.storage().delete(KeychainOAuthTokenStorageTests.googleKey)
+			_ = try storage.load(KeychainOAuthTokenStorageTests.googleKey)
+			try storage.save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
+			try storage.delete(KeychainOAuthTokenStorageTests.googleKey)
 
-		keychain.reset(deleteStatus: errSecInteractionNotAllowed)
-		XCTAssertThrowsError(try keychain.storage().delete(KeychainOAuthTokenStorageTests.googleKey))
-	}
-
-	func testOnlyAddSetsAccessibility() throws {
-		let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound, updateStatus: errSecItemNotFound)
-		let storage = keychain.storage()
-
-		_ = try storage.load(KeychainOAuthTokenStorageTests.googleKey)
-		try storage.save(Data("new".utf8), for: KeychainOAuthTokenStorageTests.googleKey)
-		try storage.delete(KeychainOAuthTokenStorageTests.googleKey)
-
-		XCTAssertEqual(["copyMatching", "update", "add", "delete"], keychain.calls.map(\.operation))
-		for call in keychain.calls {
-			XCTAssertEqual(call.operation == "add", call.query[kSecAttrAccessible as String] != nil, call.operation)
-			XCTAssertNil(call.attributes?[kSecAttrAccessible as String], call.operation)
+			#expect(keychain.calls.map(\.operation) == ["copyMatching", "update", "add", "delete"])
+			for call in keychain.calls {
+				#expect((call.operation == "add") == (call.query[kSecAttrAccessible as String] != nil), "\(call.operation)")
+				#expect(call.attributes?[kSecAttrAccessible as String] == nil, "\(call.operation)")
+			}
 		}
-	}
 
-	func testItemLocations() throws {
-		let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound)
+		@Test
+		func itemLocations() throws {
+			let keychain = KeychainRecorder(copyMatchingStatus: errSecItemNotFound)
 
-		_ = try keychain.storage(services: [.box: "org.cryptomator.ios.box.auth", .googleDrive: "ignored"]).load(KeychainOAuthTokenStorageTests.googleKey)
-		_ = try keychain.storage(services: [.box: "org.cryptomator.ios.box.auth"]).load(KeychainOAuthTokenStorageTests.boxKey)
-		_ = try keychain.storage().load(KeychainOAuthTokenStorageTests.boxKey)
-		_ = try keychain.storage(accessGroup: "TEAM.org.cryptomator").load(KeychainOAuthTokenStorageTests.boxKey)
+			_ = try keychain.storage(services: [.box: "org.cryptomator.ios.box.auth", .googleDrive: "ignored"]).load(KeychainOAuthTokenStorageTests.googleKey)
+			_ = try keychain.storage(services: [.box: "org.cryptomator.ios.box.auth"]).load(KeychainOAuthTokenStorageTests.boxKey)
+			_ = try keychain.storage().load(KeychainOAuthTokenStorageTests.boxKey)
+			_ = try keychain.storage(accessGroup: "TEAM.org.cryptomator").load(KeychainOAuthTokenStorageTests.boxKey)
 
-		let queries = keychain.calls.map(\.query)
-		XCTAssertEqual(["GoogleDriveAuth112233", "org.cryptomator.ios.box.auth", "CryptomatorCloudAccess.OAuth.box", "CryptomatorCloudAccess.OAuth.box"], queries.map { $0[kSecAttrService as String] as? String })
-		XCTAssertEqual(["OAuth", "USER-ID", "USER-ID", "USER-ID"], queries.map { $0[kSecAttrAccount as String] as? String })
-		XCTAssertEqual([nil, nil, nil, "TEAM.org.cryptomator"], queries.map { $0[kSecAttrAccessGroup as String] as? String })
-		for query in queries {
-			XCTAssertEqual(kSecClassGenericPassword as String, query[kSecClass as String] as? String)
-			XCTAssertEqual(true, query[kSecUseDataProtectionKeychain as String] as? Bool)
+			let queries = keychain.calls.map(\.query)
+			#expect(queries.map { $0[kSecAttrService as String] as? String } == ["GoogleDriveAuth112233", "org.cryptomator.ios.box.auth", "CryptomatorCloudAccess.OAuth.box", "CryptomatorCloudAccess.OAuth.box"])
+			#expect(queries.map { $0[kSecAttrAccount as String] as? String } == ["OAuth", "USER-ID", "USER-ID", "USER-ID"])
+			#expect(queries.map { $0[kSecAttrAccessGroup as String] as? String } == [nil, nil, nil, "TEAM.org.cryptomator"])
+			for query in queries {
+				#expect((kSecClassGenericPassword as String) == (query[kSecClass as String] as? String))
+				#expect((query[kSecUseDataProtectionKeychain as String] as? Bool) == true)
+			}
 		}
 	}
 }

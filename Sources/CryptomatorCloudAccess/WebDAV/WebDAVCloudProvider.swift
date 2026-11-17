@@ -205,8 +205,9 @@ public final class WebDAVCloudProvider: CloudProvider {
 			_ = try await client.MKCOL(url: url)
 		} catch {
 			switch error {
-			case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
-				throw CloudProviderError.unauthorized
+			case WebDAVError.httpError(statusCode: 404):
+				// RFC 4918 reports a missing parent of a MKCOL as 409 and lists no 404 for it, so a 404 stays raw instead of claiming that an item is missing.
+				throw error
 			case WebDAVError.httpError(statusCode: 405):
 				throw CloudProviderError.itemAlreadyExists
 			case WebDAVError.httpError(statusCode: 409):
@@ -214,10 +215,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 			case WebDAVError.httpError(statusCode: 507):
 				throw CloudProviderError.quotaInsufficient
 			default:
-				if isNetworkConnectionError(error) {
-					throw CloudProviderError.noInternetConnection
-				}
-				throw error
+				throw convertStandardError(error)
 			}
 		}
 	}
@@ -265,10 +263,6 @@ public final class WebDAVCloudProvider: CloudProvider {
 			_ = try await client.MOVE(sourceURL: sourceURL, destinationURL: targetURL)
 		} catch {
 			switch error {
-			case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
-				throw CloudProviderError.unauthorized
-			case WebDAVError.httpError(statusCode: 404):
-				throw CloudProviderError.itemNotFound
 			case WebDAVError.httpError(statusCode: 409):
 				throw CloudProviderError.parentFolderDoesNotExist
 			case WebDAVError.httpError(statusCode: 412):
@@ -276,17 +270,15 @@ public final class WebDAVCloudProvider: CloudProvider {
 			case WebDAVError.httpError(statusCode: 507):
 				throw CloudProviderError.quotaInsufficient
 			default:
-				if isNetworkConnectionError(error) {
-					throw CloudProviderError.noInternetConnection
-				}
-				throw error
+				throw convertStandardError(error)
 			}
 		}
 	}
 
 	func convertStandardError(_ error: Error) -> Error {
 		switch error {
-		case WebDAVError.httpError(statusCode: 401), WebDAVError.httpError(statusCode: 403):
+		case WebDAVError.httpError(statusCode: 401):
+			// A rejected credential arrives as 401. A 403 concerns the item or the share (e.g., a read-only share), and editing the account can't fix it.
 			return CloudProviderError.unauthorized
 		case WebDAVError.httpError(statusCode: 404):
 			return CloudProviderError.itemNotFound

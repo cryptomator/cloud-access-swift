@@ -149,6 +149,18 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		], requests.requests.map(\.url))
 	}
 
+	/// An inaccessible item answers 403, which signing in again wouldn't fix.
+	func testForbiddenItemThrowsRawError() async throws {
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403)]
+
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))) { error in
+			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 403) = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	// MARK: - Transfers
 
 	func testDownloadAwaitsOnTaskCreationBeforeResumingTask() async throws {
@@ -266,6 +278,25 @@ class MicrosoftGraphCloudProviderTests: XCTestCase {
 		XCTAssertEqual(0.999, try XCTUnwrap(fractions.withLock { $0 }.last), accuracy: 0.001)
 		XCTAssertEqual(0, taskCount.withLock { $0 })
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// The upload URL is pre-authenticated, so signing in again can't fix a refused chunk. A 404 concerns the upload session, not the item.
+	func testRefusedChunkThrowsErrorOfItsStatus() async throws {
+		let cases: [(statusCode: Int, expectedError: Error)] = [
+			(401, MicrosoftGraphError.unexpectedHTTPStatusCode(code: 401)),
+			(403, MicrosoftGraphError.unexpectedHTTPStatusCode(code: 403)),
+			(404, MicrosoftGraphError.unexpectedHTTPStatusCode(code: 404)),
+			(507, CloudProviderError.quotaInsufficient)
+		]
+		let localURL = try makeLocalFile(content: "content")
+		for testCase in cases {
+			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: testCase.statusCode)]
+
+			await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil), "\(testCase.statusCode)") { error in
+				XCTAssertEqual(String(describing: testCase.expectedError), String(describing: error), "\(testCase.statusCode)")
+			}
+			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, "\(testCase.statusCode)")
+		}
 	}
 
 	func testDownloadReportsBytesOfTask() async throws {

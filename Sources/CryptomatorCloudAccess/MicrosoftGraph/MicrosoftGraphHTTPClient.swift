@@ -107,7 +107,8 @@ final class MicrosoftGraphHTTPClient: Sendable {
 
 	static func error(forStatusCode statusCode: Int) -> Error {
 		switch statusCode {
-		case 401, 403:
+		case 401:
+			// Graph answers a rejected token with 401. A 403 concerns the item, the site or a policy, and Graph's `accessDenied` doesn't tell these apart from a missing scope, so it passes through raw.
 			return CloudProviderError.unauthorized
 		case 404:
 			return CloudProviderError.itemNotFound

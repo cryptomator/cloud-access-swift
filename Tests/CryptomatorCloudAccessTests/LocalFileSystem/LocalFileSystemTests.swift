@@ -308,6 +308,41 @@ class LocalFileSystemTests: XCTestCase {
 		}
 	}
 
+	/// A local folder that the system refuses to read can't be fixed by signing in, so the system's error passes through.
+	func testFetchItemMetadataWithReadPermissionError() async throws {
+		try makeLockedFolder()
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/locked/file"))) { error in
+			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		}
+	}
+
+	/// See the rationale on the metadata variant.
+	func testFetchItemListWithReadPermissionError() async throws {
+		try makeLockedFolder()
+		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/locked/dir"), withPageToken: nil)) { error in
+			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		}
+	}
+
+	/// See the rationale on the metadata variant.
+	func testDownloadFileWithReadPermissionError() async throws {
+		try makeLockedFolder()
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/locked/file"), to: localURL)) { error in
+			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		}
+	}
+
+	/// See the rationale on the metadata variant.
+	func testUploadFileWithReadPermissionError() async throws {
+		try makeLockedFolder()
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/locked/file"), replaceExisting: true)) { error in
+			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		}
+	}
+
 	func testSecurityScopedAccessIsStoppedAfterEachOperation() async throws {
 		let tmpDirURL: URL = tmpDirURL
 		let filePath = tmpDirURL.appendingPathComponent("file").path
@@ -453,6 +488,17 @@ class LocalFileSystemTests: XCTestCase {
 
 		let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
 		XCTAssertEqual(".Foo", provider.getItemName(forItemAt: otherHiddenFolderURL))
+	}
+
+	/// Creates the file `/locked/file` and the folder `/locked/dir`, and takes every permission from `/locked` until the test ends.
+	private func makeLockedFolder() throws {
+		let lockedURL = tmpDirURL.appendingPathComponent("locked", isDirectory: true)
+		try FileManager.default.createDirectory(at: lockedURL.appendingPathComponent("dir", isDirectory: true), withIntermediateDirectories: true)
+		try "hello world".write(to: lockedURL.appendingPathComponent("file", isDirectory: false), atomically: true, encoding: .utf8)
+		try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: lockedURL.path)
+		addTeardownBlock {
+			try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedURL.path)
+		}
 	}
 }
 

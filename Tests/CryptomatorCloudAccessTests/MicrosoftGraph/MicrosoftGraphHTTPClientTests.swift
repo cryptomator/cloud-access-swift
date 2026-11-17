@@ -261,12 +261,15 @@ class MicrosoftGraphHTTPClientTests: XCTestCase {
 
 	// MARK: - Discovery
 
-	func testDiscoveryMapsForbiddenToUnauthorized() async throws {
+	/// A 403 concerns the site or the drive, which signing in again wouldn't fix.
+	func testDiscoveryPassesForbiddenThrough() async throws {
 		let discovery = MicrosoftGraphDiscovery(client: client)
 		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403)]
 
 		await XCTAssertThrowsErrorAsync(try await discovery.fetchDrive(for: "DRIVE")) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 403) = error else {
+				return XCTFail("Unexpected error: \(error)")
+			}
 		}
 	}
 

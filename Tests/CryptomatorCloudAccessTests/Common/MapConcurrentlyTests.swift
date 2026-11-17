@@ -7,58 +7,57 @@
 //
 
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class MapConcurrentlyTests: XCTestCase {
-	func testReturnsValuesInOrderOfElements() async throws {
-		let values = try await mapConcurrently([1, 2, 3, 4], limit: 4) { element in
-			try await Task.sleep(for: .milliseconds(10 * (4 - element)))
-			return element
-		}
-		XCTAssertEqual([1, 2, 3, 4], values)
-	}
-
-	func testRunsAtMostLimitOperationsAtOnce() async throws {
-		let runningCount = OSAllocatedUnfairLock(initialState: 0)
-		let gate = Gate()
-		let limitStarted = expectation(description: "two operations started")
-		limitStarted.expectedFulfillmentCount = 2
-		limitStarted.assertForOverFulfill = false
-		let limitExceeded = expectation(description: "more than two operations ran at once")
-		limitExceeded.isInverted = true
-		limitExceeded.assertForOverFulfill = false
-		let mapping = Task {
-			try await mapConcurrently([1, 2, 3, 4], limit: 2) { element in
-				let running = runningCount.withLock { count in
-					count += 1
-					return count
-				}
-				if running > 2 {
-					limitExceeded.fulfill()
-				} else {
-					limitStarted.fulfill()
-				}
-				await gate.wait()
-				runningCount.withLock { $0 -= 1 }
+extension UnitTests {
+	struct MapConcurrentlyTests {
+		@Test
+		func returnsValuesInOrderOfElements() async throws {
+			let values = try await mapConcurrently([1, 2, 3, 4], limit: 4) { element in
+				try await Task.sleep(for: .milliseconds(10 * (4 - element)))
 				return element
 			}
+			#expect(values == [1, 2, 3, 4])
 		}
 
-		await fulfillment(of: [limitStarted], timeout: testWaitTimeout)
-		await fulfillment(of: [limitExceeded], timeout: 0.2)
-		gate.open()
+		@Test
+		func runsAtMostLimitOperationsAtOnce() async throws {
+			let runningCount = OSAllocatedUnfairLock(initialState: 0)
+			let gate = Gate()
+			let limitStarted = TestSignal("two operations started", expectedCount: 2, allowsOverFulfillment: true)
+			let limitExceeded = TestSignal("more than two operations ran at once", allowsOverFulfillment: true)
+			let mapping = Task {
+				try await mapConcurrently([1, 2, 3, 4], limit: 2) { element in
+					let running = runningCount.withLock { count in
+						count += 1
+						return count
+					}
+					if running > 2 {
+						limitExceeded.fulfill()
+					} else {
+						limitStarted.fulfill()
+					}
+					await gate.wait()
+					runningCount.withLock { $0 -= 1 }
+					return element
+				}
+			}
 
-		let values = try await value(of: mapping)
-		XCTAssertEqual([1, 2, 3, 4], values)
-	}
+			await limitStarted.wait()
+			await limitExceeded.expectNoFulfillment(within: .seconds(0.2))
+			gate.open()
 
-	func testThrowsCancellationErrorInCancelledTask() async {
-		let mapping = cancelledTask {
-			try await mapConcurrently([1, 2], limit: 2) { $0 }
+			let values = try await cancellingValue(of: mapping)
+			#expect(values == [1, 2, 3, 4])
 		}
-		await XCTAssertThrowsErrorAsync(try await value(of: mapping)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		@Test
+		func throwsCancellationErrorInCancelledTask() async {
+			let mapping = cancelledTask {
+				try await mapConcurrently([1, 2], limit: 2) { $0 }
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: mapping) }
 		}
 	}
 }

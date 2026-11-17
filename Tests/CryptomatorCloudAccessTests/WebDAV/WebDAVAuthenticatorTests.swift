@@ -7,58 +7,58 @@
 //
 
 import Foundation
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 enum WebDAVAuthenticatorTestsError: Error {
 	case missingTestResource
 }
 
-class WebDAVAuthenticatorTests: XCTestCase {
-	var baseURL: URL!
-	var client: WebDAVClientMock!
+extension UnitTests {
+	struct WebDAVAuthenticatorTests {
+		let baseURL: URL
+		let client: WebDAVClientMock
 
-	override func setUp() {
-		baseURL = URL(string: "/cloud/remote.php/webdav/")
-		client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
-	}
-
-	override func tearDown() {
-		URLProtocolMock.requestHandler = []
-	}
-
-	func testVerifyClient() async throws {
-		let baseURL: URL = baseURL
-		let optionsResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"]))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == baseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (optionsResponse, nil)
-		})
-
-		let propfindData = try getTestData(forResource: "authentication-success", withExtension: "xml")
-		let propfindResponse = try XCTUnwrap(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-		URLProtocolMock.requestHandler.append({ request in
-			guard let url = request.url, url.path == baseURL.path else {
-				throw URLProtocolMockError.unexpectedRequest
-			}
-			return (propfindResponse, propfindData)
-		})
-
-		try await WebDAVAuthenticator.verifyClient(client: client)
-		XCTAssertTrue(client.optionsRequests.contains(baseURL.relativePath))
-		XCTAssertEqual(.zero, client.propfindRequests[baseURL.relativePath])
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	// MARK: - Internal
-
-	private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
-		let testBundle = Bundle.module
-		guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
-			throw WebDAVAuthenticatorTestsError.missingTestResource
+		init() throws {
+			URLProtocolMock.requestHandler = []
+			self.baseURL = try #require(URL(string: "/cloud/remote.php/webdav/"))
+			self.client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
 		}
-		return try Data(contentsOf: fileURL)
+
+		@Test
+		func testVerifyClient() async throws {
+			let baseURL: URL = baseURL
+			let optionsResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["DAV": "1"]))
+			URLProtocolMock.requestHandler.append({ request in
+				guard let url = request.url, url.path == baseURL.path else {
+					throw URLProtocolMockError.unexpectedRequest
+				}
+				return (optionsResponse, nil)
+			})
+
+			let propfindData = try getTestData(forResource: "authentication-success", withExtension: "xml")
+			let propfindResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+			URLProtocolMock.requestHandler.append({ request in
+				guard let url = request.url, url.path == baseURL.path else {
+					throw URLProtocolMockError.unexpectedRequest
+				}
+				return (propfindResponse, propfindData)
+			})
+
+			try await WebDAVAuthenticator.verifyClient(client: client)
+			#expect(client.optionsRequests.contains(baseURL.relativePath))
+			#expect(client.propfindRequests[baseURL.relativePath] == .zero)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		// MARK: - Internal
+
+		private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
+			let testBundle = Bundle.module
+			guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
+				throw WebDAVAuthenticatorTestsError.missingTestResource
+			}
+			return try Data(contentsOf: fileURL)
+		}
 	}
 }

@@ -7,47 +7,46 @@
 //
 
 @preconcurrency import MSAL
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCloudAccessCore
 
-@MainActor
-class MicrosoftGraphAuthenticatorTests: XCTestCase {
-	func testReturnsAccountIdentifier() async throws {
-		let identifier = try await MicrosoftGraphAuthenticator.acquireAccountIdentifier(acquire: { completion in
-			completion("ACCOUNT", nil)
-		}, cancel: {})
+extension UnitTests {
+	@MainActor
+	struct MicrosoftGraphAuthenticatorTests {
+		@Test
+		func returnsAccountIdentifier() async throws {
+			let identifier = try await MicrosoftGraphAuthenticator.acquireAccountIdentifier(acquire: { completion in
+				completion("ACCOUNT", nil)
+			}, cancel: {})
 
-		XCTAssertEqual("ACCOUNT", identifier)
-	}
-
-	func testCancellationCancelsWebAuthSession() async throws {
-		let started = XCTestExpectation(description: "started")
-		let cancelled = XCTestExpectation(description: "cancelled")
-		let login = Task { @MainActor in
-			try await MicrosoftGraphAuthenticator.acquireAccountIdentifier(acquire: { _ in
-				started.fulfill()
-			}, cancel: {
-				cancelled.fulfill()
-			})
+			#expect(identifier == "ACCOUNT")
 		}
-		await fulfillment(of: [started], timeout: testWaitTimeout)
 
-		login.cancel()
+		@Test
+		func cancellationCancelsWebAuthSession() async throws {
+			let started = TestSignal("started")
+			let cancelled = TestSignal("cancelled")
+			let login = Task { @MainActor in
+				try await MicrosoftGraphAuthenticator.acquireAccountIdentifier(acquire: { _ in
+					started.fulfill()
+				}, cancel: {
+					cancelled.fulfill()
+				})
+			}
+			await started.wait()
 
-		await XCTAssertThrowsErrorAsync(try await value(of: login)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+			login.cancel()
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: login) }
+			await cancelled.wait()
 		}
-		await fulfillment(of: [cancelled], timeout: testWaitTimeout)
-	}
 
-	func testConvertLoginFlowError() {
-		XCTAssertEqual(.userCancelled, (MicrosoftGraphAuthenticator.convertLoginFlowError(NSError(domain: MSALErrorDomain, code: MSALError.userCanceled.rawValue)) as? CocoaError)?.code)
-		guard case MicrosoftGraphAuthenticatorError.serverDeclinedScopes? = MicrosoftGraphAuthenticator.convertLoginFlowError(NSError(domain: MSALErrorDomain, code: MSALError.serverDeclinedScopes.rawValue)) as? MicrosoftGraphAuthenticatorError else {
-			return XCTFail("Declined scopes aren't converted")
-		}
-		guard case MicrosoftGraphAuthenticatorError.missingAccountIdentifier? = MicrosoftGraphAuthenticator.convertLoginFlowError(nil) as? MicrosoftGraphAuthenticatorError else {
-			return XCTFail("A login without an account and without an error isn't converted")
+		@Test
+		func testConvertLoginFlowError() {
+			#expect((MicrosoftGraphAuthenticator.convertLoginFlowError(NSError(domain: MSALErrorDomain, code: MSALError.userCanceled.rawValue)) as? CocoaError)?.code == .userCancelled)
+			#expect((MicrosoftGraphAuthenticator.convertLoginFlowError(NSError(domain: MSALErrorDomain, code: MSALError.serverDeclinedScopes.rawValue)) as? MicrosoftGraphAuthenticatorError) == .serverDeclinedScopes, "Declined scopes aren't converted")
+			#expect((MicrosoftGraphAuthenticator.convertLoginFlowError(nil) as? MicrosoftGraphAuthenticatorError) == .missingAccountIdentifier, "A login without an account and without an error isn't converted")
 		}
 	}
 }

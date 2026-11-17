@@ -6,31 +6,37 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class S3CredentialTests: XCTestCase {
-	/// The app stores credentials as JSON, and one that no longer decodes loses its account.
-	func testDecodesStoredCredentialWithoutForcePathStyle() throws {
-		let json = Data(#"{"accessKey":"access","secretKey":"secret","url":"https:\/\/s3.example.com","bucket":"examplebucket","region":"us-east-1","identifier":"ID"}"#.utf8)
+extension UnitTests {
+	struct S3CredentialTests {
+		/// The app stores credentials as JSON, and one that no longer decodes loses its account.
+		@Test
+		func decodesStoredCredentialWithoutForcePathStyle() throws {
+			let json = Data(#"{"accessKey":"access","secretKey":"secret","url":"https:\/\/s3.example.com","bucket":"examplebucket","region":"us-east-1","identifier":"ID"}"#.utf8)
 
-		let credential = try JSONDecoder().decode(S3Credential.self, from: json)
+			let credential = try JSONDecoder().decode(S3Credential.self, from: json)
 
-		XCTAssertNil(credential.forcePathStyle)
-		XCTAssertEqual(try S3Credential(accessKey: "access", secretKey: "secret", url: XCTUnwrap(URL(string: "https://s3.example.com")), bucket: "examplebucket", region: "us-east-1", identifier: "ID"), credential)
-	}
+			#expect(credential.forcePathStyle == nil)
+			#expect(try S3Credential(accessKey: "access", secretKey: "secret", url: #require(URL(string: "https://s3.example.com")), bucket: "examplebucket", region: "us-east-1", identifier: "ID") == credential)
+		}
 
-	/// A credential stored with forced path style must keep it, so its stored JSON key must not change.
-	func testDecodesStoredForcePathStyle() throws {
-		let json = Data(#"{"accessKey":"access","secretKey":"secret","url":"https:\/\/s3.example.com","bucket":"examplebucket","region":"us-east-1","forcePathStyle":true,"identifier":"ID"}"#.utf8)
+		/// A credential stored with forced path style must keep it, so its stored JSON key must not change.
+		@Test
+		func decodesStoredForcePathStyle() throws {
+			let json = Data(#"{"accessKey":"access","secretKey":"secret","url":"https:\/\/s3.example.com","bucket":"examplebucket","region":"us-east-1","forcePathStyle":true,"identifier":"ID"}"#.utf8)
 
-		XCTAssertEqual(true, try JSONDecoder().decode(S3Credential.self, from: json).forcePathStyle)
-	}
+			#expect(try JSONDecoder().decode(S3Credential.self, from: json).forcePathStyle == true)
+		}
 
-	func testEncodesForcePathStyleUnderItsStoredKey() throws {
-		let credential = try S3Credential(accessKey: "access", secretKey: "secret", url: XCTUnwrap(URL(string: "https://s3.example.com")), bucket: "examplebucket", region: "us-east-1", forcePathStyle: true, identifier: "ID")
+		@Test
+		func encodesForcePathStyleUnderItsStoredKey() throws {
+			let credential = try S3Credential(accessKey: "access", secretKey: "secret", url: #require(URL(string: "https://s3.example.com")), bucket: "examplebucket", region: "us-east-1", forcePathStyle: true, identifier: "ID")
 
-		let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(credential)) as? [String: Any])
-		XCTAssertEqual(true, object["forcePathStyle"] as? Bool)
+			let object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(credential)) as? [String: Any])
+			#expect((object["forcePathStyle"] as? Bool) == true)
+		}
 	}
 }

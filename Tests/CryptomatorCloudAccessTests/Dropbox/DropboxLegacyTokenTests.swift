@@ -6,33 +6,40 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class DropboxLegacyTokenTests: XCTestCase {
-	func testDecodeShortLivedAccessTokenOfObjCSDK() throws {
-		XCTAssertEqual(OAuthToken(accessToken: "sl.short-lived-access-token", refreshToken: "refresh-token", expiresAt: Date(timeIntervalSince1970: 1_760_000_000)), try DropboxLegacyToken.decode(DropboxFixtures.objCShortLivedArchive))
-	}
+extension UnitTests {
+	struct DropboxLegacyTokenTests {
+		@Test
+		func decodeShortLivedAccessTokenOfObjCSDK() throws {
+			#expect(try OAuthToken(accessToken: "sl.short-lived-access-token", refreshToken: "refresh-token", expiresAt: Date(timeIntervalSince1970: 1_760_000_000)) == DropboxLegacyToken.decode(DropboxFixtures.objCShortLivedArchive))
+		}
 
-	func testDecodeLongLivedAccessTokenOfObjCSDK() throws {
-		XCTAssertEqual(OAuthToken(accessToken: "long-lived-access-token", refreshToken: nil, expiresAt: nil), try DropboxLegacyToken.decode(DropboxFixtures.objCLongLivedArchive))
-	}
+		@Test
+		func decodeLongLivedAccessTokenOfObjCSDK() throws {
+			#expect(try OAuthToken(accessToken: "long-lived-access-token", refreshToken: nil, expiresAt: nil) == DropboxLegacyToken.decode(DropboxFixtures.objCLongLivedArchive))
+		}
 
-	func testDecodeShortLivedAccessTokenOfSwiftyDropbox() throws {
-		XCTAssertEqual(OAuthToken(accessToken: "sl.short-lived-access-token", refreshToken: "refresh-token", expiresAt: Date(timeIntervalSince1970: 1_760_000_000)), try DropboxLegacyToken.decode(DropboxFixtures.swiftyDropboxShortLived))
-	}
+		@Test
+		func decodeShortLivedAccessTokenOfSwiftyDropbox() throws {
+			#expect(try OAuthToken(accessToken: "sl.short-lived-access-token", refreshToken: "refresh-token", expiresAt: Date(timeIntervalSince1970: 1_760_000_000)) == DropboxLegacyToken.decode(DropboxFixtures.swiftyDropboxShortLived))
+		}
 
-	func testDecodeLongLivedAccessTokenOfSwiftyDropbox() throws {
-		XCTAssertEqual(OAuthToken(accessToken: "long-lived-access-token", refreshToken: nil, expiresAt: nil), try DropboxLegacyToken.decode(DropboxFixtures.swiftyDropboxLongLived))
-	}
+		@Test
+		func decodeLongLivedAccessTokenOfSwiftyDropbox() throws {
+			#expect(try OAuthToken(accessToken: "long-lived-access-token", refreshToken: nil, expiresAt: nil) == DropboxLegacyToken.decode(DropboxFixtures.swiftyDropboxLongLived))
+		}
 
-	func testDecodePlainAccessToken() throws {
-		XCTAssertEqual(OAuthToken(accessToken: "access-token", refreshToken: nil, expiresAt: nil), try DropboxLegacyToken.decode(Data("access-token".utf8)))
-	}
+		@Test
+		func decodePlainAccessToken() throws {
+			#expect(try OAuthToken(accessToken: "access-token", refreshToken: nil, expiresAt: nil) == DropboxLegacyToken.decode(Data("access-token".utf8)))
+		}
 
-	func testEmptyDataIsUnauthorized() {
-		XCTAssertThrowsError(try DropboxLegacyToken.decode(Data())) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		@Test
+		func emptyDataIsUnauthorized() {
+			#expect(throws: CloudProviderError.unauthorized) { try DropboxLegacyToken.decode(Data()) }
 		}
 	}
 }

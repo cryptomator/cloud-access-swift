@@ -8,7 +8,7 @@
 
 import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 /// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
@@ -240,7 +240,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 /// A transfer of `CloudProviderMock` that reports all of its bytes and then stays in flight until the test resumes it.
 final class SuspendedTransfer: Sendable {
-	let suspended = XCTestExpectation(description: "transfer suspended")
+	let suspended = TestSignal("transfer suspended")
 	private let outcomes: AsyncStream<Result<Void, Error>>
 	private let continuation: AsyncStream<Result<Void, Error>>.Continuation
 
@@ -263,20 +263,18 @@ final class SuspendedTransfer: Sendable {
 	}
 }
 
-extension XCTestCase {
-	/// Waits for the value of the operation, which runs in a task that gets cancelled as soon as the provider made a remote change.
-	func valueCancelledAfterFirstRemoteChange<Value: Sendable>(of provider: CloudProviderMock, _ operation: @escaping @Sendable () async throws -> Value, file: StaticString = #filePath, line: UInt = #line) async throws -> Value {
-		let (started, startedContinuation) = AsyncStream.makeStream(of: Void.self)
-		let task = Task {
-			for await _ in started {
-				break
-			}
-			return try await operation()
+/// Waits for the value of the operation, which runs in a task that gets cancelled as soon as the provider made a remote change.
+func valueCancelledAfterFirstRemoteChange<Value: Sendable>(of provider: CloudProviderMock, _ operation: @escaping @Sendable () async throws -> Value, sourceLocation: SourceLocation = #_sourceLocation) async throws -> Value {
+	let (started, startedContinuation) = AsyncStream.makeStream(of: Void.self)
+	let task = Task {
+		for await _ in started {
+			break
 		}
-		provider.mutationHook = { task.cancel() }
-		startedContinuation.yield()
-		let result = try await value(of: task, file: file, line: line)
-		XCTAssertTrue(task.isCancelled, "No remote change cancelled the task", file: file, line: line)
-		return result
+		return try await operation()
 	}
+	provider.mutationHook = { task.cancel() }
+	startedContinuation.yield()
+	let result = try await cancellingValue(of: task, sourceLocation: sourceLocation)
+	#expect(task.isCancelled, "No remote change cancelled the task", sourceLocation: sourceLocation)
+	return result
 }

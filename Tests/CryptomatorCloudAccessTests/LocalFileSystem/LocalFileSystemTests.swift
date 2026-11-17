@@ -8,496 +8,500 @@
 
 import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class LocalFileSystemTests: XCTestCase {
-	var tmpDirURL: URL!
-	var provider: LocalFileSystemProvider!
+extension UnitTests {
+	final class LocalFileSystemTests {
+		let tmpDirURL: URL
+		let provider: LocalFileSystemProvider
+		private var lockedURLs: [URL] = []
 
-	override func setUpWithError() throws {
-		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		provider = try LocalFileSystemProvider(rootURL: tmpDirURL)
-	}
-
-	override func tearDownWithError() throws {
-		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	func testFetchItemMetadata() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file"))
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual("/file", metadata.cloudPath.path)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertNotNil(metadata.lastModifiedDate)
-		XCTAssertEqual(11, metadata.size)
-	}
-
-	func testFetchItemMetadataWithNotFoundError() async {
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/file"))) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
-		}
-	}
-
-	func testFetchItemList() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-		XCTAssertEqual(2, itemList.items.count)
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
-		XCTAssertNil(itemList.nextPageToken)
-		try assertDirectoryContentCacheIsEmpty(provider.cache)
-	}
-
-	func testFetchItemListInterleavedWithAnotherListingOfTheSameFolder() async throws {
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, maxPageSize: 2)
-		let names = (0 ..< 5).map { "file \($0)" }
-		for name in names {
-			FileManager.default.createFile(atPath: tmpDirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+		init() throws {
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.provider = try LocalFileSystemProvider(rootURL: tmpDirURL)
+			self.tmpDirURL = tmpDirURL
 		}
 
-		let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-		let deletedName = try XCTUnwrap(firstPage.items.first).name
-		try FileManager.default.removeItem(at: tmpDirURL.appendingPathComponent(deletedName, isDirectory: false))
-		let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
-		let itemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"), appendTo: firstPage)
-
-		XCTAssertEqual(names, itemList.items.map(\.name).sorted())
-		XCTAssertEqual(names.filter { $0 != deletedName }, otherItemList.items.map(\.name).sorted())
-	}
-
-	func testFetchItemListWithNotFoundError() async {
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		deinit {
+			for lockedURL in lockedURLs {
+				do {
+					try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedURL.path)
+				} catch {
+					Issue.record(error)
+				}
+			}
+			removeItemRecordingFailure(at: tmpDirURL)
 		}
-	}
 
-	func testFetchItemListWithTypeMismatchError() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		FileManager.default.createFile(atPath: dirURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)) { error in
-			XCTAssertEqual(CloudProviderError.itemTypeMismatch, error as? CloudProviderError)
+		@Test
+		func testFetchItemMetadata() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file"))
+			#expect(metadata.name == "file")
+			#expect(metadata.cloudPath.path == "/file")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.lastModifiedDate != nil)
+			#expect(metadata.size == 11)
 		}
-	}
 
-	func testFetchItemListFiltersHiddenItems() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		let hiddenDirURL = tmpDirURL.appendingPathComponent(".hiddenDir", isDirectory: true)
-		try FileManager.default.createDirectory(at: hiddenDirURL, withIntermediateDirectories: false, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		let hiddenFileURL = tmpDirURL.appendingPathComponent(".hiddenFile", isDirectory: false)
-		FileManager.default.createFile(atPath: hiddenFileURL.path, contents: nil, attributes: nil)
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-		XCTAssertEqual(2, itemList.items.count)
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
-	}
-
-	func testDownloadFile() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let progress = Progress(totalUnitCount: 1)
-		let metadata = try await provider.downloadFile(from: CloudPath("/file"), to: localURL, progress: progress, onTaskCreation: nil)
-		let expectedData = try Data(contentsOf: fileURL)
-		let actualData = try Data(contentsOf: localURL)
-		XCTAssertEqual(expectedData, actualData)
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual("/file", metadata.cloudPath.path)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual(try fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, metadata.lastModifiedDate)
-		XCTAssertEqual(11, metadata.size)
-		XCTAssertEqual(1, progress.fractionCompleted)
-	}
-
-	func testDownloadFileWithNotFoundError() async {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file"), to: localURL)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		@Test
+		func fetchItemMetadataWithNotFoundError() async {
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file")) }
 		}
-	}
 
-	func testDownloadFileWithNotFoundErrorBelowFile() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file/child"), to: localURL)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		@Test
+		func testFetchItemList() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			#expect(itemList.items.count == 2)
+			#expect(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
+			#expect(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
+			#expect(itemList.nextPageToken == nil)
+			try assertDirectoryContentCacheIsEmpty(provider.cache)
 		}
-	}
 
-	func testDownloadFileWithAlreadyExistsError() async {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file"), to: localURL)) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func fetchItemListInterleavedWithAnotherListingOfTheSameFolder() async throws {
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, maxPageSize: 2)
+			let names = (0 ..< 5).map { "file \($0)" }
+			for name in names {
+				FileManager.default.createFile(atPath: tmpDirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+			}
+
+			let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			let deletedName = try #require(firstPage.items.first).name
+			try FileManager.default.removeItem(at: tmpDirURL.appendingPathComponent(deletedName, isDirectory: false))
+			let otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+			let itemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"), appendTo: firstPage)
+
+			#expect(names == itemList.items.map(\.name).sorted())
+			#expect(names.filter { $0 != deletedName } == otherItemList.items.map(\.name).sorted())
 		}
-	}
 
-	func testDownloadFileWithTypeMismatchError() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false, attributes: nil)
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file"), to: localURL)) { error in
-			XCTAssertEqual(CloudProviderError.itemTypeMismatch, error as? CloudProviderError)
+		@Test
+		func fetchItemListWithNotFoundError() async {
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil) }
 		}
-	}
 
-	func testUploadFile() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual("/file", metadata.cloudPath.path)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertNotNil(metadata.lastModifiedDate)
-		XCTAssertEqual(11, metadata.size)
-	}
-
-	func testUploadFileWithReplaceExistingOnMissingRemoteFile() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: true)
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual("/file", metadata.cloudPath.path)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertNotNil(metadata.lastModifiedDate)
-		XCTAssertEqual(11, metadata.size)
-	}
-
-	func testUploadFileWithReplaceExistingOnExistingRemoteFile() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try "foo bar".write(to: fileURL, atomically: true, encoding: .utf8)
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: true)
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual("/file", metadata.cloudPath.path)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertNotNil(metadata.lastModifiedDate)
-		XCTAssertEqual(11, metadata.size)
-	}
-
-	func testUploadFileWithNotFoundError() async {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		@Test
+		func fetchItemListWithTypeMismatchError() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			FileManager.default.createFile(atPath: dirURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil) }
 		}
-	}
 
-	func testUploadFileWithAlreadyExistsError() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func fetchItemListFiltersHiddenItems() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			let hiddenDirURL = tmpDirURL.appendingPathComponent(".hiddenDir", isDirectory: true)
+			try FileManager.default.createDirectory(at: hiddenDirURL, withIntermediateDirectories: false, attributes: nil)
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			let hiddenFileURL = tmpDirURL.appendingPathComponent(".hiddenFile", isDirectory: false)
+			FileManager.default.createFile(atPath: hiddenFileURL.path, contents: nil, attributes: nil)
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			#expect(itemList.items.count == 2)
+			#expect(itemList.items.contains(where: { $0.name == "dir" && $0.cloudPath.path == "/dir" }))
+			#expect(itemList.items.contains(where: { $0.name == "file" && $0.cloudPath.path == "/file" }))
 		}
-	}
 
-	func testUploadFileWithTypeMismatchError() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)) { error in
-			XCTAssertEqual(CloudProviderError.itemTypeMismatch, error as? CloudProviderError)
+		@Test
+		func testDownloadFile() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let progress = Progress(totalUnitCount: 1)
+			let metadata = try await provider.downloadFile(from: CloudPath("/file"), to: localURL, progress: progress, onTaskCreation: nil)
+			let expectedData = try Data(contentsOf: fileURL)
+			let actualData = try Data(contentsOf: localURL)
+			#expect(expectedData == actualData)
+			#expect(metadata.name == "file")
+			#expect(metadata.cloudPath.path == "/file")
+			#expect(metadata.itemType == .file)
+			#expect(try fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate == metadata.lastModifiedDate)
+			#expect(metadata.size == 11)
+			#expect(progress.fractionCompleted == 1)
 		}
-	}
 
-	func testUploadFileWithReplaceExistingAndAlreadyExistsError() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("dir", isDirectory: false)
-		try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/dir"), replaceExisting: true)) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func downloadFileWithNotFoundError() async {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file"), to: localURL) }
 		}
-	}
 
-	func testUploadFileWithParentFolderDoesNotExistError() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/dir/file"), replaceExisting: false)) { error in
-			XCTAssertEqual(CloudProviderError.parentFolderDoesNotExist, error as? CloudProviderError)
+		@Test
+		func downloadFileWithNotFoundErrorBelowFile() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file/child"), to: localURL) }
 		}
-	}
 
-	func testCreateFolder() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try await provider.createFolder(at: CloudPath("/dir"))
-		var isDirectory: ObjCBool = false
-		XCTAssertTrue(FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDirectory))
-		XCTAssertTrue(isDirectory.boolValue)
-	}
-
-	func testCreateFolderWithAlreadyExistsError() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/dir"))) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func downloadFileWithAlreadyExistsError() async {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.downloadFile(from: CloudPath("/file"), to: localURL) }
 		}
-	}
 
-	func testCreateFolderWithParentFolderDoesNotExistError() async {
-		await XCTAssertThrowsErrorAsync(try await provider.createFolder(at: CloudPath("/dir/dir"))) { error in
-			XCTAssertEqual(CloudProviderError.parentFolderDoesNotExist, error as? CloudProviderError)
+		@Test
+		func downloadFileWithTypeMismatchError() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false, attributes: nil)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/file"), to: localURL) }
 		}
-	}
 
-	func testDeleteFile() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		try await provider.deleteFile(at: CloudPath("/file"))
-		XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
-	}
-
-	func testDeleteFileWithNotFoundError() async {
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/file"))) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		@Test
+		func testUploadFile() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
+			#expect(metadata.name == "file")
+			#expect(metadata.cloudPath.path == "/file")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.lastModifiedDate != nil)
+			#expect(metadata.size == 11)
 		}
-	}
 
-	func testDeleteFolder() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		let fileURL = tmpDirURL.appendingPathComponent("dir/file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		try await provider.deleteFolder(at: CloudPath("/dir"))
-		XCTAssertFalse(FileManager.default.fileExists(atPath: dirURL.path))
-	}
-
-	func testMoveFile() async throws {
-		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
-		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
-		let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
-		try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar"))
-		XCTAssertFalse(FileManager.default.fileExists(atPath: sourceURL.path))
-		XCTAssertTrue(FileManager.default.fileExists(atPath: destinationURL.path))
-	}
-
-	func testMoveFileWithNotFoundError() async {
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar"))) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		@Test
+		func uploadFileWithReplaceExistingOnMissingRemoteFile() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: true)
+			#expect(metadata.name == "file")
+			#expect(metadata.cloudPath.path == "/file")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.lastModifiedDate != nil)
+			#expect(metadata.size == 11)
 		}
-	}
 
-	func testMoveFileWithAlreadyExistsError() async {
-		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
-		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
-		let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
-		FileManager.default.createFile(atPath: destinationURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar"))) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func uploadFileWithReplaceExistingOnExistingRemoteFile() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try "foo bar".write(to: fileURL, atomically: true, encoding: .utf8)
+			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: true)
+			#expect(metadata.name == "file")
+			#expect(metadata.cloudPath.path == "/file")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.lastModifiedDate != nil)
+			#expect(metadata.size == 11)
 		}
-	}
 
-	func testMoveFileWithParentFolderDoesNotExistError() async {
-		let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
-		FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar/baz"))) { error in
-			XCTAssertEqual(CloudProviderError.parentFolderDoesNotExist, error as? CloudProviderError)
+		@Test
+		func uploadFileWithNotFoundError() async {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false) }
 		}
-	}
 
-	/// A local folder that the system refuses to read can't be fixed by signing in, so the system's error passes through.
-	func testFetchItemMetadataWithReadPermissionError() async throws {
-		try makeLockedFolder()
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/locked/file"))) { error in
-			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		@Test
+		func uploadFileWithAlreadyExistsError() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false) }
 		}
-	}
 
-	/// See the rationale on the metadata variant.
-	func testFetchItemListWithReadPermissionError() async throws {
-		try makeLockedFolder()
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/locked/dir"), withPageToken: nil)) { error in
-			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		@Test
+		func uploadFileWithTypeMismatchError() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false, attributes: nil)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false) }
 		}
-	}
 
-	/// See the rationale on the metadata variant.
-	func testDownloadFileWithReadPermissionError() async throws {
-		try makeLockedFolder()
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/locked/file"), to: localURL)) { error in
-			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		@Test
+		func uploadFileWithReplaceExistingAndAlreadyExistsError() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
+			let fileURL = tmpDirURL.appendingPathComponent("dir", isDirectory: false)
+			try FileManager.default.createDirectory(at: fileURL, withIntermediateDirectories: false, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/dir"), replaceExisting: true) }
 		}
-	}
 
-	/// See the rationale on the metadata variant.
-	func testUploadFileWithReadPermissionError() async throws {
-		try makeLockedFolder()
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/locked/file"), replaceExisting: true)) { error in
-			XCTAssertEqual(.fileReadNoPermission, (error as? CocoaError)?.code, "\(error)")
+		@Test
+		func uploadFileWithParentFolderDoesNotExistError() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/dir/file"), replaceExisting: false) }
 		}
-	}
 
-	func testSecurityScopedAccessIsStoppedAfterEachOperation() async throws {
-		let tmpDirURL: URL = tmpDirURL
-		let filePath = tmpDirURL.appendingPathComponent("file").path
-		let movedFilePath = tmpDirURL.appendingPathComponent("movedFile").path
-		let dirPath = tmpDirURL.appendingPathComponent("dir").path
-		let movedDirPath = tmpDirURL.appendingPathComponent("movedDir").path
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		let downloadURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		XCTAssertEqual([.start(tmpDirURL.path)], recorder.takeEvents())
-		let fileExists: @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
-
-		recorder.isOperationFinished = { fileExists(filePath) }
-		_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
-		XCTAssertEqual([.start(filePath), .stop(filePath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { true }
-		_ = try await provider.fetchItemMetadata(at: CloudPath("/file"))
-		XCTAssertEqual([.start(filePath), .stop(filePath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { fileExists(downloadURL.path) }
-		_ = try await provider.downloadFile(from: CloudPath("/file"), to: downloadURL)
-		XCTAssertEqual([.start(filePath), .stop(filePath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { fileExists(movedFilePath) && !fileExists(filePath) }
-		try await provider.moveFile(from: CloudPath("/file"), to: CloudPath("/movedFile"))
-		XCTAssertEqual([.start(filePath), .stop(filePath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { !fileExists(movedFilePath) }
-		try await provider.deleteFile(at: CloudPath("/movedFile"))
-		XCTAssertEqual([.start(movedFilePath), .stop(movedFilePath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { fileExists(dirPath) }
-		try await provider.createFolder(at: CloudPath("/dir"))
-		XCTAssertEqual([.start(dirPath), .stop(dirPath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { true }
-		_ = try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
-		XCTAssertEqual([.start(dirPath), .stop(dirPath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { fileExists(movedDirPath) && !fileExists(dirPath) }
-		try await provider.moveFolder(from: CloudPath("/dir"), to: CloudPath("/movedDir"))
-		XCTAssertEqual([.start(dirPath), .stop(dirPath, isOperationFinished: true)], recorder.takeEvents())
-
-		recorder.isOperationFinished = { !fileExists(movedDirPath) }
-		try await provider.deleteFolder(at: CloudPath("/movedDir"))
-		XCTAssertEqual([.start(movedDirPath), .stop(movedDirPath, isOperationFinished: true)], recorder.takeEvents())
-	}
-
-	func testThrowsCancellationErrorInCancelledTask() async throws {
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		_ = recorder.takeEvents()
-		await assertThrowsCancellationErrorInCancelledTask(provider)
-		XCTAssertEqual([], recorder.takeEvents())
-	}
-
-	func testDownloadFileWithCancellationDuringDownload() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		recorder.cancelsTaskOnStart = true
-		let download = Task {
-			try await provider.downloadFile(from: CloudPath("/file"), to: localURL)
+		@Test
+		func testCreateFolder() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try await provider.createFolder(at: CloudPath("/dir"))
+			var isDirectory: ObjCBool = false
+			#expect(FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDirectory))
+			#expect(isDirectory.boolValue)
 		}
-		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		@Test
+		func createFolderWithAlreadyExistsError() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.createFolder(at: CloudPath("/dir")) }
 		}
-		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
-	}
 
-	func testUploadFileWithCancellationDuringUpload() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		recorder.cancelsTaskOnStart = true
-		let upload = Task {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
+		@Test
+		func createFolderWithParentFolderDoesNotExistError() async {
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.createFolder(at: CloudPath("/dir/dir")) }
 		}
-		let metadata = try await value(of: upload)
-		XCTAssertEqual("file", metadata.name)
-		XCTAssertEqual(11, metadata.size)
-	}
 
-	func testFetchItemListWithCancellationDuringListing() async throws {
-		let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-		FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		recorder.cancelsTaskOnStart = true
-		let listing = Task {
-			try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+		@Test
+		func testDeleteFile() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			try await provider.deleteFile(at: CloudPath("/file"))
+			#expect(!FileManager.default.fileExists(atPath: fileURL.path))
 		}
-		await XCTAssertThrowsErrorAsync(try await value(of: listing)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		@Test
+		func deleteFileWithNotFoundError() async {
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/file")) }
 		}
-		recorder.cancelsTaskOnStart = false
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-		XCTAssertEqual(["file"], itemList.items.map(\.name))
-	}
 
-	func testFetchItemListWithCancellationAfterFillLeavesNoRows() async throws {
-		let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
-		try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
-		for name in ["file 0", "file 1", "file 2"] {
-			FileManager.default.createFile(atPath: dirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+		@Test
+		func testDeleteFolder() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			let fileURL = tmpDirURL.appendingPathComponent("dir/file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			try await provider.deleteFolder(at: CloudPath("/dir"))
+			#expect(!FileManager.default.fileExists(atPath: dirURL.path))
 		}
-		let recorder = SecurityScopedAccessRecorder()
-		let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
-		// Stopping the access to the folder is the last step of the fill, after every child was saved.
-		recorder.isOperationFinished = {
-			withUnsafeCurrentTask { $0?.cancel() }
-			return true
+
+		@Test
+		func testMoveFile() async throws {
+			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
+			FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
+			let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
+			try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar"))
+			#expect(!FileManager.default.fileExists(atPath: sourceURL.path))
+			#expect(FileManager.default.fileExists(atPath: destinationURL.path))
 		}
-		let listing = Task {
-			try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
+
+		@Test
+		func moveFileWithNotFoundError() async {
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar")) }
 		}
-		await XCTAssertThrowsErrorAsync(try await value(of: listing)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		@Test
+		func moveFileWithAlreadyExistsError() async {
+			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
+			FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
+			let destinationURL = tmpDirURL.appendingPathComponent("bar", isDirectory: false)
+			FileManager.default.createFile(atPath: destinationURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar")) }
 		}
-		recorder.isOperationFinished = { true }
 
-		try assertDirectoryContentCacheIsEmpty(provider.cache)
-	}
+		@Test
+		func moveFileWithParentFolderDoesNotExistError() async {
+			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
+			FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar/baz")) }
+		}
 
-	func testGetItemName() {
-		let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
-		XCTAssertEqual("test.txt", provider.getItemName(forItemAt: iCloudPlaceholderFileURL))
+		/// A local folder that the system refuses to read can't be fixed by signing in, so the system's error passes through.
+		@Test
+		func fetchItemMetadataWithReadPermissionError() async throws {
+			try makeLockedFolder()
+			let error = try await #require(throws: (any Error).self) { try await provider.fetchItemMetadata(at: CloudPath("/locked/file")) }
+			#expect((error as? CocoaError)?.code == .fileReadNoPermission, "\(error)")
+		}
 
-		let normalFileURL = tmpDirURL.appendingPathComponent("test.txt")
-		XCTAssertEqual("test.txt", provider.getItemName(forItemAt: normalFileURL))
+		/// See the rationale on the metadata variant.
+		@Test
+		func fetchItemListWithReadPermissionError() async throws {
+			try makeLockedFolder()
+			let error = try await #require(throws: (any Error).self) { try await provider.fetchItemList(forFolderAt: CloudPath("/locked/dir"), withPageToken: nil) }
+			#expect((error as? CocoaError)?.code == .fileReadNoPermission, "\(error)")
+		}
 
-		let normalFolderURL = tmpDirURL.appendingPathComponent("Foo")
-		XCTAssertEqual("Foo", provider.getItemName(forItemAt: normalFolderURL))
+		/// See the rationale on the metadata variant.
+		@Test
+		func downloadFileWithReadPermissionError() async throws {
+			try makeLockedFolder()
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let error = try await #require(throws: (any Error).self) { try await provider.downloadFile(from: CloudPath("/locked/file"), to: localURL) }
+			#expect((error as? CocoaError)?.code == .fileReadNoPermission, "\(error)")
+		}
 
-		let otherHiddenFileURL = tmpDirURL.appendingPathComponent(".test.txt")
-		XCTAssertEqual(".test.txt", provider.getItemName(forItemAt: otherHiddenFileURL))
+		/// See the rationale on the metadata variant.
+		@Test
+		func uploadFileWithReadPermissionError() async throws {
+			try makeLockedFolder()
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/locked/file"), replaceExisting: true) }
+			#expect((error as? CocoaError)?.code == .fileReadNoPermission, "\(error)")
+		}
 
-		let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
-		XCTAssertEqual(".Foo", provider.getItemName(forItemAt: otherHiddenFolderURL))
-	}
+		@Test
+		func securityScopedAccessIsStoppedAfterEachOperation() async throws {
+			let tmpDirURL: URL = tmpDirURL
+			let filePath = tmpDirURL.appendingPathComponent("file").path
+			let movedFilePath = tmpDirURL.appendingPathComponent("movedFile").path
+			let dirPath = tmpDirURL.appendingPathComponent("dir").path
+			let movedDirPath = tmpDirURL.appendingPathComponent("movedDir").path
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let downloadURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			#expect([.start(tmpDirURL.path)] == recorder.takeEvents())
+			let fileExists: @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
 
-	/// Creates the file `/locked/file` and the folder `/locked/dir`, and takes every permission from `/locked` until the test ends.
-	private func makeLockedFolder() throws {
-		let lockedURL = tmpDirURL.appendingPathComponent("locked", isDirectory: true)
-		try FileManager.default.createDirectory(at: lockedURL.appendingPathComponent("dir", isDirectory: true), withIntermediateDirectories: true)
-		try "hello world".write(to: lockedURL.appendingPathComponent("file", isDirectory: false), atomically: true, encoding: .utf8)
-		try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: lockedURL.path)
-		addTeardownBlock {
-			try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedURL.path)
+			recorder.isOperationFinished = { fileExists(filePath) }
+			_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { true }
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file"))
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { fileExists(downloadURL.path) }
+			_ = try await provider.downloadFile(from: CloudPath("/file"), to: downloadURL)
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { fileExists(movedFilePath) && !fileExists(filePath) }
+			try await provider.moveFile(from: CloudPath("/file"), to: CloudPath("/movedFile"))
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { !fileExists(movedFilePath) }
+			try await provider.deleteFile(at: CloudPath("/movedFile"))
+			#expect([.start(movedFilePath), .stop(movedFilePath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { fileExists(dirPath) }
+			try await provider.createFolder(at: CloudPath("/dir"))
+			#expect([.start(dirPath), .stop(dirPath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { true }
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
+			#expect([.start(dirPath), .stop(dirPath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { fileExists(movedDirPath) && !fileExists(dirPath) }
+			try await provider.moveFolder(from: CloudPath("/dir"), to: CloudPath("/movedDir"))
+			#expect([.start(dirPath), .stop(dirPath, isOperationFinished: true)] == recorder.takeEvents())
+
+			recorder.isOperationFinished = { !fileExists(movedDirPath) }
+			try await provider.deleteFolder(at: CloudPath("/movedDir"))
+			#expect([.start(movedDirPath), .stop(movedDirPath, isOperationFinished: true)] == recorder.takeEvents())
+		}
+
+		@Test
+		func throwsCancellationErrorInCancelledTask() async throws {
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			_ = recorder.takeEvents()
+			await assertThrowsCancellationErrorInCancelledTask(provider)
+			#expect(recorder.takeEvents() == [])
+		}
+
+		@Test
+		func downloadFileWithCancellationDuringDownload() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			recorder.cancelsTaskOnStart = true
+			let download = Task {
+				try await provider.downloadFile(from: CloudPath("/file"), to: localURL)
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
+			#expect(!FileManager.default.fileExists(atPath: localURL.path))
+		}
+
+		@Test
+		func uploadFileWithCancellationDuringUpload() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			recorder.cancelsTaskOnStart = true
+			let upload = Task {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false)
+			}
+			let metadata = try await cancellingValue(of: upload)
+			#expect(metadata.name == "file")
+			#expect(metadata.size == 11)
+		}
+
+		@Test
+		func fetchItemListWithCancellationDuringListing() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			recorder.cancelsTaskOnStart = true
+			let listing = Task {
+				try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: listing) }
+			recorder.cancelsTaskOnStart = false
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			#expect(itemList.items.map(\.name) == ["file"])
+		}
+
+		@Test
+		func fetchItemListWithCancellationAfterFillLeavesNoRows() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			for name in ["file 0", "file 1", "file 2"] {
+				FileManager.default.createFile(atPath: dirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+			}
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			// Stopping the access to the folder is the last step of the fill, after every child was saved.
+			recorder.isOperationFinished = {
+				withUnsafeCurrentTask { $0?.cancel() }
+				return true
+			}
+			let listing = Task {
+				try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: listing) }
+			recorder.isOperationFinished = { true }
+
+			try assertDirectoryContentCacheIsEmpty(provider.cache)
+		}
+
+		@Test
+		func testGetItemName() {
+			let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
+			#expect(provider.getItemName(forItemAt: iCloudPlaceholderFileURL) == "test.txt")
+
+			let normalFileURL = tmpDirURL.appendingPathComponent("test.txt")
+			#expect(provider.getItemName(forItemAt: normalFileURL) == "test.txt")
+
+			let normalFolderURL = tmpDirURL.appendingPathComponent("Foo")
+			#expect(provider.getItemName(forItemAt: normalFolderURL) == "Foo")
+
+			let otherHiddenFileURL = tmpDirURL.appendingPathComponent(".test.txt")
+			#expect(provider.getItemName(forItemAt: otherHiddenFileURL) == ".test.txt")
+
+			let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
+			#expect(provider.getItemName(forItemAt: otherHiddenFolderURL) == ".Foo")
+		}
+
+		/// Creates the file `/locked/file` and the folder `/locked/dir`, and takes every permission from `/locked` until the test ends.
+		private func makeLockedFolder() throws {
+			let lockedURL = tmpDirURL.appendingPathComponent("locked", isDirectory: true)
+			try FileManager.default.createDirectory(at: lockedURL.appendingPathComponent("dir", isDirectory: true), withIntermediateDirectories: true)
+			try "hello world".write(to: lockedURL.appendingPathComponent("file", isDirectory: false), atomically: true, encoding: .utf8)
+			try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: lockedURL.path)
+			lockedURLs.append(lockedURL)
 		}
 	}
 }

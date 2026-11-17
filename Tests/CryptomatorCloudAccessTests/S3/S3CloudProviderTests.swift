@@ -6,1186 +6,1196 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class S3CloudProviderTests: XCTestCase {
-	var provider: S3CloudProvider!
-	var tmpDirURL: URL!
+extension UnitTests {
+	final class S3CloudProviderTests {
+		let provider: S3CloudProvider
+		let tmpDirURL: URL
 
-	override func setUpWithError() throws {
-		provider = try S3CloudProvider(client: .mocked(), maxPageSize: .max)
-		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-	}
-
-	override func tearDownWithError() throws {
-		URLProtocolMock.requestHandler = []
-		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	func testThrowsCancellationErrorInCancelledTask() async {
-		await assertThrowsCancellationErrorInCancelledTask(provider)
-	}
-
-	func testCheckContinuationTokenForInvalidityWithCancelledRequest() async {
-		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: CancellationError())
-		XCTAssertTrue(error is CancellationError)
-	}
-
-	/// No response is queued, so a probe of the folder below the root would fail with another error.
-	func testCheckContinuationTokenForInvalidityKeepsMissingConnection() async {
-		for folderPath in [CloudPath.root, CloudPath("/foo")] {
-			let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: folderPath, error: URLError(.notConnectedToInternet))
-			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, folderPath.path)
+		init() throws {
+			URLProtocolMock.requestHandler = []
+			self.provider = try S3CloudProvider(client: .mocked(), maxPageSize: .max)
+			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		}
-	}
 
-	func testCheckContinuationTokenForInvalidityWithOtherErrorAtRoot() async {
-		let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: S3Error(statusCode: 500, code: "InternalError"))
-		XCTAssertEqual(.pageTokenInvalid, error as? CloudProviderError)
-	}
+		deinit {
+			removeItemRecordingFailure(at: tmpDirURL)
+		}
 
-	/// Only the listing's response is queued, so a probe of the folder below the root would fail with another error.
-	func testFetchItemListWithPageTokenAndRejectedCredentialsThrowsUnauthorized() async throws {
-		let provider: S3CloudProvider = provider
-		for folderPath in [CloudPath.root, CloudPath("/foo")] {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>ExpiredToken</Code></Error>")]
-			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: folderPath, withPageToken: "token")) { error in
-				XCTAssertEqual(CloudProviderError.unauthorized, error as? CloudProviderError, folderPath.path)
+		@Test
+		func throwsCancellationErrorInCancelledTask() async {
+			await assertThrowsCancellationErrorInCancelledTask(provider)
+		}
+
+		@Test
+		func checkContinuationTokenForInvalidityWithCancelledRequest() async {
+			let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: CancellationError())
+			#expect(error is CancellationError)
+		}
+
+		/// No response is queued, so a probe of the folder below the root would fail with another error.
+		@Test
+		func checkContinuationTokenForInvalidityKeepsMissingConnection() async {
+			for folderPath in [CloudPath.root, CloudPath("/foo")] {
+				let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: folderPath, error: URLError(.notConnectedToInternet))
+				#expect((error as? CloudProviderError) == .noInternetConnection, "\(folderPath.path)")
 			}
-			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, folderPath.path)
-		}
-	}
-
-	func testGetPrefix() {
-		let rootCloudPath = CloudPath("/")
-		XCTAssertEqual("", provider.getPrefix(for: rootCloudPath))
-
-		XCTAssertEqual("foo/", provider.getPrefix(for: CloudPath("/foo")))
-		XCTAssertEqual("foo/", provider.getPrefix(for: CloudPath("/foo/")))
-
-		XCTAssertEqual("foo/bar/", provider.getPrefix(for: CloudPath("/foo/bar")))
-	}
-
-	func testGetKey() {
-		XCTAssertEqual("foo.txt", provider.getKey(for: CloudPath("/foo.txt")))
-		XCTAssertEqual("foo/bar.txt", provider.getKey(for: CloudPath("/foo/bar.txt")))
-		XCTAssertEqual("\u{301}foo.txt", provider.getKey(for: CloudPath("/\u{301}foo.txt")))
-	}
-
-	// MARK: - Error Conversion
-
-	func testConvertStandardErrorPassesCancellationThrough() {
-		XCTAssertTrue(provider.convertStandardError(CancellationError()) is CancellationError)
-	}
-
-	func testConvertUnauthorizedErrors() {
-		for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "InvalidTokenId", "InvalidSecurity"] {
-			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403, code: code)) as? CloudProviderError, code)
-		}
-		// These codes name a rejected security token, not a continuation token.
-		for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
-			XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError, code)
-		}
-		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401, code: "Unauthorized")) as? CloudProviderError)
-		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 401)) as? CloudProviderError)
-		XCTAssertEqual(.unauthorized, provider.convertStandardError(S3Error(statusCode: 403)) as? CloudProviderError)
-		XCTAssertEqual(.unauthorized, provider.convertStandardError(NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue))) as? CloudProviderError)
-	}
-
-	func testConvertInvalidPageTokenErrors() {
-		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "continuation-token")) as? CloudProviderError)
-		XCTAssertEqual(.pageTokenInvalid, provider.convertStandardError(S3Error(statusCode: 500, code: "InternalError", reason: "Incorrect padding")) as? CloudProviderError)
-	}
-
-	func testConvertItemNotFoundError() {
-		XCTAssertEqual(.itemNotFound, provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchKey")) as? CloudProviderError)
-	}
-
-	func testConvertNoInternetConnectionError() {
-		XCTAssertEqual(.noInternetConnection, provider.convertStandardError(URLError(.notConnectedToInternet)) as? CloudProviderError)
-	}
-
-	func testConvertOtherErrorsUnchanged() {
-		XCTAssertEqual(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys"), provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys")) as? S3Error)
-		XCTAssertEqual(S3Error(statusCode: 404, code: "NoSuchBucket"), provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchBucket")) as? S3Error)
-		XCTAssertEqual(S3Error(statusCode: 404), provider.convertStandardError(S3Error(statusCode: 404)) as? S3Error)
-		XCTAssertEqual(S3Error(statusCode: 403, code: "Unauthorized"), provider.convertStandardError(S3Error(statusCode: 403, code: "Unauthorized")) as? S3Error)
-	}
-
-	// MARK: - Transfers
-
-	func testDownloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
-		let provider: S3CloudProvider = provider
-		let localURL = tmpDirURL.appendingPathComponent("file.txt")
-		let progress = Progress(totalUnitCount: 1)
-		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			URLProtocolMock.handler(body: "content", onRequest: { _ in
-				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})
-		]
-
-		let metadata = try await value(of: Task {
-			try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: progress, onTaskCreation: { task in
-				taskStates.withLock { $0.append(task.state) }
-				try? await Task.sleep(for: .milliseconds(100))
-				onTaskCreationReturned.withLock { $0 = true }
-			})
-		})
-
-		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
-		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: localURL))
-		XCTAssertEqual(7, metadata.size)
-		XCTAssertEqual(1, progress.fractionCompleted)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testUploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
-		let provider: S3CloudProvider = provider
-		let localURL = try makeLocalFile()
-		let progress = Progress(totalUnitCount: 1)
-		let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-		let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler(onRequest: { _ in
-				XCTAssertTrue(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			}),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
-				XCTAssertGreaterThan(progress.fractionCompleted, 0.5, "The progress of the upload task isn't part of the upload's progress")
-				XCTAssertLessThan(progress.fractionCompleted, 1, "The progress completed before the upload returned")
-			})
-		]
-
-		let metadata = try await value(of: Task {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: { task in
-				taskStates.withLock { $0.append(task.state) }
-				try? await Task.sleep(for: .milliseconds(100))
-				onTaskCreationReturned.withLock { $0 = true }
-			})
-		})
-
-		XCTAssertEqual([.suspended], taskStates.withLock { $0 })
-		XCTAssertEqual(CloudPath("/file.txt"), metadata.cloudPath)
-		XCTAssertEqual(1, progress.fractionCompleted)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testDownloadFileWithCancellationDuringOnTaskCreation() async throws {
-		let provider: S3CloudProvider = provider
-		let localURL = tmpDirURL.appendingPathComponent("file.txt")
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			URLProtocolMock.handler(body: "content")
-		]
-
-		let download = Task {
-			try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-				withUnsafeCurrentTask { $0?.cancel() }
-			})
-		}
-		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
 		}
 
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled download must not be resumed")
-		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
-	}
-
-	func testUploadFileWithCancellationDuringOnTaskCreation() async throws {
-		let provider: S3CloudProvider = provider
-		let localURL = try makeLocalFile()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler()
-		]
-
-		let upload = Task {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-				withUnsafeCurrentTask { $0?.cancel() }
-			})
-		}
-		await XCTAssertThrowsErrorAsync(try await value(of: upload)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		@Test
+		func checkContinuationTokenForInvalidityWithOtherErrorAtRoot() async {
+			let error = await provider.checkContinuationTokenForInvalidity(continuationToken: "token", folderPath: .root, error: S3Error(statusCode: 500, code: "InternalError"))
+			#expect((error as? CloudProviderError) == .pageTokenInvalid)
 		}
 
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "The task of a cancelled upload must not be resumed")
-	}
-
-	/// The error body of a download may be missing, so any 404 means that the file is gone.
-	func testDownloadFileOfMissingFileThrowsItemNotFound() async throws {
-		let localURL = tmpDirURL.appendingPathComponent("file.txt")
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
-			URLProtocolMock.handler(statusCode: 404)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
+		/// Only the listing's response is queued, so a probe of the folder below the root would fail with another error.
+		@Test
+		func fetchItemListWithPageTokenAndRejectedCredentialsThrowsUnauthorized() async throws {
+			let provider: S3CloudProvider = provider
+			for folderPath in [CloudPath.root, CloudPath("/foo")] {
+				URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>ExpiredToken</Code></Error>")]
+				await #expect(throws: CloudProviderError.unauthorized, "\(folderPath.path)") { try await provider.fetchItemList(forFolderAt: folderPath, withPageToken: "token") }
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(folderPath.path)")
+			}
 		}
-		XCTAssertFalse(FileManager.default.fileExists(atPath: localURL.path))
-	}
 
-	/// The upload committed with its PUT, so a cancellation afterwards must not cut short the retries of the metadata request.
-	func testUploadFileCancelledAfterPutReturnsMetadata() async throws {
-		let provider: S3CloudProvider = provider
-		let localURL = try makeLocalFile()
-		let upload = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
-		let uploadStored = DispatchSemaphore(value: 0)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: { _ in
-				_ = uploadStored.wait(timeout: .now() + testWaitTimeout)
-			}),
-			URLProtocolMock.handler(onRequest: { _ in
-				upload.withLock { $0 }?.cancel()
-			}),
-			URLProtocolMock.handler(statusCode: 503),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
-		]
+		@Test
+		func testGetPrefix() {
+			let rootCloudPath = CloudPath("/")
+			#expect(provider.getPrefix(for: rootCloudPath) == "")
 
-		let uploadTask = Task {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			#expect(provider.getPrefix(for: CloudPath("/foo")) == "foo/")
+			#expect(provider.getPrefix(for: CloudPath("/foo/")) == "foo/")
+
+			#expect(provider.getPrefix(for: CloudPath("/foo/bar")) == "foo/bar/")
 		}
-		upload.withLock { $0 = uploadTask }
-		uploadStored.signal()
-		let metadata = try await value(of: uploadTask)
 
-		XCTAssertEqual(CloudPath("/file.txt"), metadata.cloudPath)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	// MARK: - Multipart Uploads
-
-	func testUploadFileOverThresholdUploadsPartsInOrder() async throws {
-		let progress = Progress(totalUnitCount: 1)
-		let fractions = OSAllocatedUnfairLock(initialState: [Double]())
-		let provider = try makeMultipartProvider(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions))
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let requests = RequestRecorder()
-		let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
-			S3CloudProviderTests.initiateMultipartUpload(requests),
-			S3CloudProviderTests.part(1, requests),
-			S3CloudProviderTests.part(2, requests),
-			S3CloudProviderTests.part(3, requests),
-			S3CloudProviderTests.completeMultipartUpload(requests),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
-		]
-
-		let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: progress, onTaskCreation: { _ in
-			onTaskCreationCalled.withLock { $0 = true }
-		})
-
-		XCTAssertEqual(10, metadata.size)
-		let sent = requests.requests
-		XCTAssertEqual(["GET", "POST", "PUT", "PUT", "PUT", "POST", "GET"], sent.map(\.httpMethod))
-		XCTAssertEqual(["uploads": ""], S3CloudProviderTests.queryParameters(of: sent[1]))
-		XCTAssertEqual("application/octet-stream", sent[1].value(forHTTPHeaderField: "Content-Type"))
-		for (index, request) in sent[2 ... 4].enumerated() {
-			let query = S3CloudProviderTests.queryParameters(of: request)
-			XCTAssertEqual(String(index + 1), query["partNumber"])
-			XCTAssertEqual("upload-id", query["uploadId"])
+		@Test
+		func testGetKey() {
+			#expect(provider.getKey(for: CloudPath("/foo.txt")) == "foo.txt")
+			#expect(provider.getKey(for: CloudPath("/foo/bar.txt")) == "foo/bar.txt")
+			#expect(provider.getKey(for: CloudPath("/\u{301}foo.txt")) == "\u{301}foo.txt")
 		}
-		XCTAssertEqual(["0123", "4567", "89"], sent[2 ... 4].map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) })
-		XCTAssertEqual(["uploadId": "upload-id"], S3CloudProviderTests.queryParameters(of: sent[5]))
-		let completionBody = String(bytes: sent[5].httpBody ?? Data(), encoding: .utf8) ?? ""
-		XCTAssertTrue(completionBody.contains("<Part><PartNumber>1</PartNumber><ETag>&quot;etag-1&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;etag-2&quot;</ETag></Part><Part><PartNumber>3</PartNumber><ETag>&quot;etag-3&quot;</ETag></Part></CompleteMultipartUpload>"), completionBody)
-		XCTAssertFalse(onTaskCreationCalled.withLock { $0 }, "A task that uploads only a part was passed to onTaskCreation")
-		let recordedFractions = fractions.withLock { $0 }
-		XCTAssertEqual(3, recordedFractions.count)
-		for (index, (fraction, (bytesBefore, partLength))) in zip(recordedFractions, [(0.0, 4.0), (4.0, 4.0), (8.0, 2.0)]).enumerated() {
-			XCTAssertGreaterThan(fraction, (bytesBefore + partLength / 2) / 10, "part \(index)")
-			XCTAssertLessThan(fraction, 1, "part \(index)")
+
+		// MARK: - Error Conversion
+
+		@Test
+		func convertStandardErrorPassesCancellationThrough() {
+			#expect(provider.convertStandardError(CancellationError()) is CancellationError)
 		}
-		XCTAssertEqual(1, progress.fractionCompleted)
-		XCTAssertEqual(temporaryFiles, try uuidNamedTemporaryFiles())
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
 
-	func testUploadFileAtThresholdUsesSinglePut() async throws {
-		let provider = try makeMultipartProvider(multipartUploadThreshold: 10)
-		let requests = RequestRecorder()
-		let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
-			URLProtocolMock.handler(onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
-		]
-
-		_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-			onTaskCreationCalled.withLock { $0 = true }
-		})
-
-		let sent = requests.requests
-		XCTAssertEqual(["GET", "PUT", "GET"], sent.map(\.httpMethod))
-		XCTAssertNil(S3CloudProviderTests.queryParameters(of: sent[1])["uploadId"])
-		XCTAssertEqual(Data("0123456789".utf8), sent[1].httpBody)
-		XCTAssertTrue(onTaskCreationCalled.withLock { $0 })
-	}
-
-	/// The size of a symbolic link's target counts, not the link's own.
-	func testUploadFileThroughSymbolicLinkUsesSizeOfTarget() async throws {
-		let provider = try makeMultipartProvider()
-		let linkURL = tmpDirURL.appendingPathComponent("link.bin")
-		try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "0123456789"))
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			S3CloudProviderTests.part(1, requests),
-			S3CloudProviderTests.part(2, requests),
-			S3CloudProviderTests.part(3, requests),
-			S3CloudProviderTests.completeMultipartUpload(),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10))
-		]
-
-		_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
-
-		XCTAssertEqual(["0123", "4567", "89"], requests.requests.map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) })
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testFailedPartAbortsMultipartUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>"),
-			S3CloudProviderTests.abortMultipartUpload(requests)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		@Test
+		func convertUnauthorizedErrors() {
+			for code in ["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidSignatureException", "AuthFailure", "AccessDeniedException", "AuthMissingFailure", "InvalidClientTokenId", "MissingAuthenticationToken", "InvalidTokenId", "InvalidSecurity"] {
+				#expect((provider.convertStandardError(S3Error(statusCode: 403, code: code)) as? CloudProviderError) == .unauthorized, "\(code)")
+			}
+			// These codes name a rejected security token, not a continuation token.
+			for code in ["ExpiredToken", "InvalidToken", "TokenRefreshRequired"] {
+				#expect((provider.convertStandardError(S3Error(statusCode: 400, code: code)) as? CloudProviderError) == .unauthorized, "\(code)")
+			}
+			#expect((provider.convertStandardError(S3Error(statusCode: 401, code: "Unauthorized")) as? CloudProviderError) == .unauthorized)
+			#expect((provider.convertStandardError(S3Error(statusCode: 401)) as? CloudProviderError) == .unauthorized)
+			#expect((provider.convertStandardError(S3Error(statusCode: 403)) as? CloudProviderError) == .unauthorized)
+			#expect((provider.convertStandardError(NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue))) as? CloudProviderError) == .unauthorized)
 		}
-		try assertAborted(requests, temporaryFiles: temporaryFiles)
-	}
 
-	/// S3 refuses a completion whose parts don't match the uploaded ones, after which the multipart upload would stay pending.
-	func testFailedCompletionAbortsMultipartUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			S3CloudProviderTests.part(1),
-			S3CloudProviderTests.part(2),
-			S3CloudProviderTests.part(3),
-			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidPart</Code></Error>"),
-			S3CloudProviderTests.abortMultipartUpload(requests)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual("InvalidPart", (error as? S3Error)?.code)
+		@Test
+		func convertInvalidPageTokenErrors() {
+			#expect((provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "continuation-token")) as? CloudProviderError) == .pageTokenInvalid)
+			#expect((provider.convertStandardError(S3Error(statusCode: 500, code: "InternalError", reason: "Incorrect padding")) as? CloudProviderError) == .pageTokenInvalid)
 		}
-		try assertAborted(requests, temporaryFiles: temporaryFiles)
-	}
 
-	/// A file that got shorter during the upload must not complete as a shorter object, also when only its last part is short. A failed abort doesn't replace that error.
-	func testFileThatGetsShorterDuringMultipartUploadAborts() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			S3CloudProviderTests.part(1),
-			URLProtocolMock.handler(headerFields: ["ETag": "\"etag-2\""], onRequest: { _ in
-				try? FileHandle(forWritingTo: localURL).truncate(atOffset: 9)
-			}),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.fileReadCorruptFile, (error as? CocoaError)?.code)
+		@Test
+		func convertItemNotFoundError() {
+			#expect((provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchKey")) as? CloudProviderError) == .itemNotFound)
 		}
-		try assertAborted(requests, temporaryFiles: temporaryFiles)
-	}
 
-	func testUnreadableFileAbortsMultipartUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: { _ in
-				try? FileManager.default.removeItem(at: localURL)
-			}),
-			S3CloudProviderTests.abortMultipartUpload(requests)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.fileNoSuchFile, (error as? CocoaError)?.code)
+		@Test
+		func convertNoInternetConnectionError() {
+			#expect((provider.convertStandardError(URLError(.notConnectedToInternet)) as? CloudProviderError) == .noInternetConnection)
 		}
-		try assertAborted(requests, temporaryFiles: temporaryFiles)
-	}
 
-	/// The abort of a cancelled upload is retried after a transient failure, so that no multipart upload is left behind.
-	func testCancellationDuringPartAbortsMultipartUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let canceller = TaskCanceller<CloudItemMetadata>()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""], onRequest: { _ in
-				canceller.cancel()
-			}),
-			URLProtocolMock.handler(statusCode: 503, onRequest: requests.record),
-			S3CloudProviderTests.abortMultipartUpload(requests)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await value(of: canceller.start {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
+		@Test
+		func convertOtherErrorsUnchanged() {
+			#expect(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys") == (provider.convertStandardError(S3Error(statusCode: 400, code: "InvalidArgument", argumentName: "max-keys")) as? S3Error))
+			#expect(S3Error(statusCode: 404, code: "NoSuchBucket") == (provider.convertStandardError(S3Error(statusCode: 404, code: "NoSuchBucket")) as? S3Error))
+			#expect(S3Error(statusCode: 404) == (provider.convertStandardError(S3Error(statusCode: 404)) as? S3Error))
+			#expect(S3Error(statusCode: 403, code: "Unauthorized") == (provider.convertStandardError(S3Error(statusCode: 403, code: "Unauthorized")) as? S3Error))
 		}
-		try assertAborted(requests, attempts: 2, temporaryFiles: temporaryFiles)
-	}
 
-	/// The last part leaves no check in the loop, so the check before the completion stops the upload.
-	func testCancellationDuringLastPartAbortsMultipartUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let temporaryFiles = try uuidNamedTemporaryFiles()
-		let canceller = TaskCanceller<CloudItemMetadata>()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			S3CloudProviderTests.part(1),
-			S3CloudProviderTests.part(2),
-			URLProtocolMock.handler(headerFields: ["ETag": "\"etag-3\""], onRequest: { _ in
-				canceller.cancel()
-			}),
-			S3CloudProviderTests.abortMultipartUpload(requests)
-		]
+		// MARK: - Transfers
 
-		await XCTAssertThrowsErrorAsync(try await value(of: canceller.start {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-		try assertAborted(requests, temporaryFiles: temporaryFiles)
-	}
-
-	/// The completion commits the upload, so a cancellation during it must not cut short its retries or abort the upload.
-	func testCancellationDuringCompletionCompletesUpload() async throws {
-		let provider = try makeMultipartProvider()
-		let localURL = try makeLocalFile(content: "0123456789")
-		let canceller = TaskCanceller<CloudItemMetadata>()
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			S3CloudProviderTests.initiateMultipartUpload(),
-			S3CloudProviderTests.part(1),
-			S3CloudProviderTests.part(2),
-			S3CloudProviderTests.part(3),
-			URLProtocolMock.handler(statusCode: 503, onRequest: { request in
-				requests.record(request)
-				canceller.cancel()
-			}),
-			S3CloudProviderTests.completeMultipartUpload(requests),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
-		]
-
-		let metadata = try await value(of: canceller.start {
-			try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
-		})
-
-		XCTAssertEqual(CloudPath("/file.bin"), metadata.cloudPath)
-		XCTAssertEqual(["POST", "POST", "GET"], requests.requests.map(\.httpMethod))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testUploadFileOverMaximumSizeThrowsBeforeAnyRequest() async throws {
-		let provider = try makeMultipartProvider(maxPartCount: 1)
-		let localURL = tmpDirURL.appendingPathComponent("sparse.bin")
-		XCTAssertTrue(FileManager.default.createFile(atPath: localURL.path, contents: nil))
-		try FileHandle(forWritingTo: localURL).truncate(atOffset: UInt64(S3Client.maxPartSize + 1))
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))]
-
-		await XCTAssertThrowsErrorAsync(try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)) { error in
-			XCTAssertEqual(.dataLengthExceedsMaximum, (error as? URLError)?.code)
-		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
-
-	func testPartSize() {
-		let mebibyte = 1024 * 1024
-		XCTAssertEqual(32 * mebibyte, S3CloudProvider.partSize(forFileSize: 4768 * mebibyte + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
-		XCTAssertEqual(41 * mebibyte, S3CloudProvider.partSize(forFileSize: 1000 * 40 * mebibyte + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
-		XCTAssertEqual(S3Client.maxPartSize, S3CloudProvider.partSize(forFileSize: 1000 * S3Client.maxPartSize, minPartSize: 32 * mebibyte, maxPartCount: 1000))
-		XCTAssertEqual(S3Client.maxPartSize + mebibyte, S3CloudProvider.partSize(forFileSize: 1000 * S3Client.maxPartSize + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
-	}
-
-	// MARK: - Requests
-
-	func testFetchItemListRequestsOnePageOfFolder() async throws {
-		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
-				requests.withLock { $0.append(request) }
-			})
-		]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: "token")
-
-		let request = try XCTUnwrap(requests.withLock { $0 }.first)
-		XCTAssertEqual("GET", request.httpMethod)
-		XCTAssertEqual("/exampleBucket", request.url?.path)
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"], S3CloudProviderTests.queryParameters(of: request))
-		XCTAssertEqual([CloudPath("/folder/a.txt"), CloudPath("/folder/sub")], itemList.items.map(\.cloudPath))
-		XCTAssertEqual([.file, .folder], itemList.items.map(\.itemType))
-		XCTAssertEqual("next", itemList.nextPageToken)
-	}
-
-	func testFetchItemListParsesLastModified() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
-		]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
-
-		XCTAssertEqual([Date(timeIntervalSince1970: 1_792_326_896.5)], itemList.items.map(\.lastModifiedDate))
-	}
-
-	func testListingSkipsKeysWithSegmentsThatAreNoSinglePathComponent() async throws {
-		let logCapture = LogCapture.start()
-		defer {
-			logCapture.stop()
-		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt", "f/.."], commonPrefixes: ["f/../", "f//", "f/./", "f/sub/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["ok.txt", ""], commonPrefixes: ["/"]))
-		]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
-		let rootItemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-
-		XCTAssertEqual([CloudPath("/f/ok.txt"), CloudPath("/f/sub")], itemList.items.map(\.cloudPath))
-		XCTAssertEqual([CloudPath("/ok.txt")], rootItemList.items.map(\.cloudPath))
-		let skippedKeys = logCapture.messages.filter { $0.hasSuffix("because one of its segments is no single path component") }
-		XCTAssertEqual(["f/..", "f/../", "f//", "f/./", "/", ""].map { "S3CloudProvider: skipping key \($0), because one of its segments is no single path component" }.sorted(), skippedKeys.sorted())
-	}
-
-	/// The folder's marker and the left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
-	func testListingReturnsEmptyPageWithTokenIfPageHoldsOnlyMarkerOrSkippedKeys() async throws {
-		for keys in [["f/"], ["f/.", "f/.."]] {
+		@Test
+		func downloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+			let provider: S3CloudProvider = provider
+			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let progress = Progress(totalUnitCount: 1)
+			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, nextContinuationToken: "next")),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				URLProtocolMock.handler(body: "content", onRequest: { _ in
+					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
+				})
 			]
 
-			let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
-			XCTAssertEqual(1, URLProtocolMock.requestHandler.count, "\(keys)")
-			let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: firstPage.nextPageToken)
+			let metadata = try await cancellingValue(of: Task {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: progress, onTaskCreation: { task in
+					taskStates.withLock { $0.append(task.state) }
+					try? await Task.sleep(for: .milliseconds(100))
+					onTaskCreationReturned.withLock { $0 = true }
+				})
+			})
 
-			XCTAssertTrue(firstPage.items.isEmpty, "\(keys)")
-			XCTAssertEqual("next", firstPage.nextPageToken, "\(keys)")
-			XCTAssertEqual([CloudPath("/f/ok.txt")], secondPage.items.map(\.cloudPath), "\(keys)")
+			#expect(taskStates.withLock { $0 } == [.suspended])
+			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
+			#expect(metadata.size == 7)
+			#expect(progress.fractionCompleted == 1)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-	}
 
-	/// A server that ignores the delimiter or the prefix must not get items listed that aren't directly in the folder, where the vault layer would trap on a path that is too deep.
-	func testListingSkipsKeysThatAreNotDirectlyBelowFolder() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/", "f/ok.txt", "f/sub/deep.txt", "g/other.txt", "f"], commonPrefixes: ["f/sub/deeper/", "f/a/\u{301}b/"]))
-		]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
-
-		XCTAssertEqual([CloudPath("/f/ok.txt")], itemList.items.map(\.cloudPath))
-	}
-
-	func testListingKeepsNameStartingWithCombiningMark() async throws {
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/\u{301}report.txt"]))]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
-
-		XCTAssertEqual(["\u{301}report.txt"], itemList.items.map(\.name))
-		XCTAssertEqual([CloudPath("/f")], itemList.items.map { $0.cloudPath.deletingLastPathComponent() })
-	}
-
-	/// A page without keys below the prefix may be the listing of a missing folder, so the listing checks the folder even if it left out keys outside the prefix.
-	func testListingOfMissingFolderThrowsItemNotFound() async throws {
-		for keys in [[], ["g/other.txt"]] {
+		@Test
+		func uploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
+			let provider: S3CloudProvider = provider
+			let localURL = try makeLocalFile()
+			let progress = Progress(totalUnitCount: 1)
+			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
+			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys)),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(onRequest: { _ in
+					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
+				}),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
+					#expect(progress.fractionCompleted > 0.5, "The progress of the upload task isn't part of the upload's progress")
+					#expect(progress.fractionCompleted < 1, "The progress completed before the upload returned")
+				})
+			]
+
+			let metadata = try await cancellingValue(of: Task {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: { task in
+					taskStates.withLock { $0.append(task.state) }
+					try? await Task.sleep(for: .milliseconds(100))
+					onTaskCreationReturned.withLock { $0 = true }
+				})
+			})
+
+			#expect(taskStates.withLock { $0 } == [.suspended])
+			#expect(CloudPath("/file.txt") == metadata.cloudPath)
+			#expect(progress.fractionCompleted == 1)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func downloadFileWithCancellationDuringOnTaskCreation() async throws {
+			let provider: S3CloudProvider = provider
+			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			let download = Task {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
+					withUnsafeCurrentTask { $0?.cancel() }
+				})
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
+
+			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
+			#expect(!FileManager.default.fileExists(atPath: localURL.path))
+		}
+
+		@Test
+		func uploadFileWithCancellationDuringOnTaskCreation() async throws {
+			let provider: S3CloudProvider = provider
+			let localURL = try makeLocalFile()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler()
+			]
+
+			let upload = Task {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+					withUnsafeCurrentTask { $0?.cancel() }
+				})
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
+
+			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
+		}
+
+		/// The error body of a download may be missing, so any 404 means that the file is gone.
+		@Test
+		func downloadFileOfMissingFileThrowsItemNotFound() async throws {
+			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				URLProtocolMock.handler(statusCode: 404)
+			]
+
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
+			#expect(!FileManager.default.fileExists(atPath: localURL.path))
+		}
+
+		/// The upload committed with its PUT, so a cancellation afterwards must not cut short the retries of the metadata request.
+		@Test
+		func uploadFileCancelledAfterPutReturnsMetadata() async throws {
+			let provider: S3CloudProvider = provider
+			let localURL = try makeLocalFile()
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(onRequest: { _ in
+					canceller.cancel()
+				}),
+				URLProtocolMock.handler(statusCode: 503),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
+			]
+
+			let uploadTask = canceller.start {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			}
+			let metadata = try await cancellingValue(of: uploadTask)
+
+			#expect(CloudPath("/file.txt") == metadata.cloudPath)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		// MARK: - Multipart Uploads
+
+		@Test
+		func uploadFileOverThresholdUploadsPartsInOrder() async throws {
+			let progress = Progress(totalUnitCount: 1)
+			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
+			let provider = try makeMultipartProvider(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions))
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let requests = RequestRecorder()
+			let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
+				S3CloudProviderTests.initiateMultipartUpload(requests),
+				S3CloudProviderTests.part(1, requests),
+				S3CloudProviderTests.part(2, requests),
+				S3CloudProviderTests.part(3, requests),
+				S3CloudProviderTests.completeMultipartUpload(requests),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+			]
+
+			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: progress, onTaskCreation: { _ in
+				onTaskCreationCalled.withLock { $0 = true }
+			})
+
+			#expect(metadata.size == 10)
+			let sent = requests.requests
+			#expect(sent.map(\.httpMethod) == ["GET", "POST", "PUT", "PUT", "PUT", "POST", "GET"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[1]) == ["uploads": ""])
+			#expect(sent[1].value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
+			for (index, request) in sent[2 ... 4].enumerated() {
+				let query = S3CloudProviderTests.queryParameters(of: request)
+				#expect(String(index + 1) == query["partNumber"])
+				#expect(query["uploadId"] == "upload-id")
+			}
+			#expect(sent[2 ... 4].map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) } == ["0123", "4567", "89"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[5]) == ["uploadId": "upload-id"])
+			let completionBody = String(bytes: sent[5].httpBody ?? Data(), encoding: .utf8) ?? ""
+			#expect(completionBody.contains("<Part><PartNumber>1</PartNumber><ETag>&quot;etag-1&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;etag-2&quot;</ETag></Part><Part><PartNumber>3</PartNumber><ETag>&quot;etag-3&quot;</ETag></Part></CompleteMultipartUpload>"), "\(completionBody)")
+			#expect(!onTaskCreationCalled.withLock { $0 }, "A task that uploads only a part was passed to onTaskCreation")
+			let recordedFractions = fractions.withLock { $0 }
+			#expect(recordedFractions.count == 3)
+			for (index, (fraction, (bytesBefore, partLength))) in zip(recordedFractions, [(0.0, 4.0), (4.0, 4.0), (8.0, 2.0)]).enumerated() {
+				#expect(fraction > (bytesBefore + partLength / 2) / 10, "part \(index)")
+				#expect(fraction < 1, "part \(index)")
+			}
+			#expect(progress.fractionCompleted == 1)
+			#expect(try temporaryFiles == uuidNamedTemporaryFiles())
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func uploadFileAtThresholdUsesSinglePut() async throws {
+			let provider = try makeMultipartProvider(multipartUploadThreshold: 10)
+			let requests = RequestRecorder()
+			let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
+				URLProtocolMock.handler(onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+			]
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+				onTaskCreationCalled.withLock { $0 = true }
+			})
+
+			let sent = requests.requests
+			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "GET"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[1])["uploadId"] == nil)
+			#expect(Data("0123456789".utf8) == sent[1].httpBody)
+			#expect(onTaskCreationCalled.withLock { $0 })
+		}
+
+		/// The size of a symbolic link's target counts, not the link's own.
+		@Test
+		func uploadFileThroughSymbolicLinkUsesSizeOfTarget() async throws {
+			let provider = try makeMultipartProvider()
+			let linkURL = tmpDirURL.appendingPathComponent("link.bin")
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "0123456789"))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				S3CloudProviderTests.part(1, requests),
+				S3CloudProviderTests.part(2, requests),
+				S3CloudProviderTests.part(3, requests),
+				S3CloudProviderTests.completeMultipartUpload(),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10))
+			]
+
+			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+
+			#expect(requests.requests.map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) } == ["0123", "4567", "89"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func failedPartAbortsMultipartUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>"),
+				S3CloudProviderTests.abortMultipartUpload(requests)
+			]
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			try assertAborted(requests, temporaryFiles: temporaryFiles)
+		}
+
+		/// S3 refuses a completion whose parts don't match the uploaded ones, after which the multipart upload would stay pending.
+		@Test
+		func failedCompletionAbortsMultipartUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				S3CloudProviderTests.part(1),
+				S3CloudProviderTests.part(2),
+				S3CloudProviderTests.part(3),
+				URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidPart</Code></Error>"),
+				S3CloudProviderTests.abortMultipartUpload(requests)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			#expect((error as? S3Error)?.code == "InvalidPart")
+			try assertAborted(requests, temporaryFiles: temporaryFiles)
+		}
+
+		/// A file that got shorter during the upload must not complete as a shorter object, also when only its last part is short. A failed abort doesn't replace that error.
+		@Test
+		func fileThatGetsShorterDuringMultipartUploadAborts() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				S3CloudProviderTests.part(1),
+				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-2\""], onRequest: { _ in
+					try? FileHandle(forWritingTo: localURL).truncate(atOffset: 9)
+				}),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			#expect((error as? CocoaError)?.code == .fileReadCorruptFile)
+			try assertAborted(requests, temporaryFiles: temporaryFiles)
+		}
+
+		@Test
+		func unreadableFileAbortsMultipartUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: { _ in
+					try? FileManager.default.removeItem(at: localURL)
+				}),
+				S3CloudProviderTests.abortMultipartUpload(requests)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			#expect((error as? CocoaError)?.code == .fileNoSuchFile)
+			try assertAborted(requests, temporaryFiles: temporaryFiles)
+		}
+
+		/// The abort of a cancelled upload is retried after a transient failure, so that no multipart upload is left behind.
+		@Test
+		func cancellationDuringPartAbortsMultipartUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""], onRequest: { _ in
+					canceller.cancel()
+				}),
+				URLProtocolMock.handler(statusCode: 503, onRequest: requests.record),
+				S3CloudProviderTests.abortMultipartUpload(requests)
+			]
+
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: canceller.start {
+					try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+				})
+			}
+			try assertAborted(requests, attempts: 2, temporaryFiles: temporaryFiles)
+		}
+
+		/// The last part leaves no check in the loop, so the check before the completion stops the upload.
+		@Test
+		func cancellationDuringLastPartAbortsMultipartUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let temporaryFiles = try uuidNamedTemporaryFiles()
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				S3CloudProviderTests.part(1),
+				S3CloudProviderTests.part(2),
+				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-3\""], onRequest: { _ in
+					canceller.cancel()
+				}),
+				S3CloudProviderTests.abortMultipartUpload(requests)
+			]
+
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: canceller.start {
+					try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+				})
+			}
+			try assertAborted(requests, temporaryFiles: temporaryFiles)
+		}
+
+		/// The completion commits the upload, so a cancellation during it must not cut short its retries or abort the upload.
+		@Test
+		func cancellationDuringCompletionCompletesUpload() async throws {
+			let provider = try makeMultipartProvider()
+			let localURL = try makeLocalFile(content: "0123456789")
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.initiateMultipartUpload(),
+				S3CloudProviderTests.part(1),
+				S3CloudProviderTests.part(2),
+				S3CloudProviderTests.part(3),
+				URLProtocolMock.handler(statusCode: 503, onRequest: { request in
+					requests.record(request)
+					canceller.cancel()
+				}),
+				S3CloudProviderTests.completeMultipartUpload(requests),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+			]
+
+			let metadata = try await cancellingValue(of: canceller.start {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			})
+
+			#expect(CloudPath("/file.bin") == metadata.cloudPath)
+			#expect(requests.requests.map(\.httpMethod) == ["POST", "POST", "GET"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func uploadFileOverMaximumSizeThrowsBeforeAnyRequest() async throws {
+			let provider = try makeMultipartProvider(maxPartCount: 1)
+			let localURL = tmpDirURL.appendingPathComponent("sparse.bin")
+			#expect(FileManager.default.createFile(atPath: localURL.path, contents: nil))
+			try FileHandle(forWritingTo: localURL).truncate(atOffset: UInt64(S3Client.maxPartSize + 1))
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			#expect((error as? URLError)?.code == .dataLengthExceedsMaximum)
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func testPartSize() {
+			let mebibyte = 1024 * 1024
+			#expect(32 * mebibyte == S3CloudProvider.partSize(forFileSize: 4768 * mebibyte + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
+			#expect(41 * mebibyte == S3CloudProvider.partSize(forFileSize: 1000 * 40 * mebibyte + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
+			#expect(S3Client.maxPartSize == S3CloudProvider.partSize(forFileSize: 1000 * S3Client.maxPartSize, minPartSize: 32 * mebibyte, maxPartCount: 1000))
+			#expect(S3Client.maxPartSize + mebibyte == S3CloudProvider.partSize(forFileSize: 1000 * S3Client.maxPartSize + 1, minPartSize: 32 * mebibyte, maxPartCount: 1000))
+		}
+
+		// MARK: - Requests
+
+		@Test
+		func fetchItemListRequestsOnePageOfFolder() async throws {
+			let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
+					requests.withLock { $0.append(request) }
+				})
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: "token")
+
+			let request = try #require(requests.withLock { $0 }.first)
+			#expect(request.httpMethod == "GET")
+			#expect(request.url?.path == "/exampleBucket")
+			#expect(S3CloudProviderTests.queryParameters(of: request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"])
+			#expect([CloudPath("/folder/a.txt"), CloudPath("/folder/sub")] == itemList.items.map(\.cloudPath))
+			#expect(itemList.items.map(\.itemType) == [.file, .folder])
+			#expect(itemList.nextPageToken == "next")
+		}
+
+		@Test
+		func fetchItemListParsesLastModified() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+
+			#expect([Date(timeIntervalSince1970: 1_792_326_896.5)] == itemList.items.map(\.lastModifiedDate))
+		}
+
+		@Test
+		func listingSkipsKeysWithSegmentsThatAreNoSinglePathComponent() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt", "f/.."], commonPrefixes: ["f/../", "f//", "f/./", "f/sub/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["ok.txt", ""], commonPrefixes: ["/"]))
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+			let rootItemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+			#expect([CloudPath("/f/ok.txt"), CloudPath("/f/sub")] == itemList.items.map(\.cloudPath))
+			#expect([CloudPath("/ok.txt")] == rootItemList.items.map(\.cloudPath))
+			let skippedKeys = logCapture.messages.filter { $0.hasSuffix("because one of its segments is no single path component") }
+			#expect(["f/..", "f/../", "f//", "f/./", "/", ""].map { "S3CloudProvider: skipping key \($0), because one of its segments is no single path component" }.sorted() == skippedKeys.sorted())
+		}
+
+		/// The folder's marker and the left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
+		@Test
+		func listingReturnsEmptyPageWithTokenIfPageHoldsOnlyMarkerOrSkippedKeys() async throws {
+			for keys in [["f/"], ["f/.", "f/.."]] {
+				URLProtocolMock.requestHandler = [
+					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, nextContinuationToken: "next")),
+					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
+				]
+
+				let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+				#expect(URLProtocolMock.requestHandler.count == 1, "\(keys)")
+				let secondPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: firstPage.nextPageToken)
+
+				#expect(firstPage.items.isEmpty, "\(keys)")
+				#expect(firstPage.nextPageToken == "next", "\(keys)")
+				#expect([CloudPath("/f/ok.txt")] == secondPage.items.map(\.cloudPath), "\(keys)")
+			}
+		}
+
+		/// A server that ignores the delimiter or the prefix must not get items listed that aren't directly in the folder, where the vault layer would trap on a path that is too deep.
+		@Test
+		func listingSkipsKeysThatAreNotDirectlyBelowFolder() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/", "f/ok.txt", "f/sub/deep.txt", "g/other.txt", "f"], commonPrefixes: ["f/sub/deeper/", "f/a/\u{301}b/"]))
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+
+			#expect([CloudPath("/f/ok.txt")] == itemList.items.map(\.cloudPath))
+		}
+
+		@Test
+		func listingKeepsNameStartingWithCombiningMark() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/\u{301}report.txt"]))]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
+
+			#expect(itemList.items.map(\.name) == ["\u{301}report.txt"])
+			#expect([CloudPath("/f")] == itemList.items.map { $0.cloudPath.deletingLastPathComponent() })
+		}
+
+		/// A page without keys below the prefix may be the listing of a missing folder, so the listing checks the folder even if it left out keys outside the prefix.
+		@Test
+		func listingOfMissingFolderThrowsItemNotFound() async throws {
+			for keys in [[], ["g/other.txt"]] {
+				URLProtocolMock.requestHandler = [
+					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys)),
+					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+				]
+
+				await #expect(throws: CloudProviderError.itemNotFound, "\(keys)") { try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil) }
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(keys)")
+			}
+		}
+
+		@Test
+		func listingOfFileThrowsItemTypeMismatch() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f"]))
+			]
+
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A prepended mark such as U+0600 forms one `Character` with the slash that follows it, so the key's segments and the marker's trailing slash are found by scalar.
+		@Test
+		func listingOfFolderWhoseNameEndsWithPrependedMark() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f\u{600}/", "f\u{600}/x.txt"]))]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f\u{600}"), withPageToken: nil)
+
+			#expect(itemList.items.map(\.cloudPath.path) == ["/f\u{600}/x.txt"])
+		}
+
+		/// A degenerate listed path keeps its dot segment in the prefix, so the key is checked as a whole, not only below the prefix.
+		@Test
+		func listingSkipsKeysWithDotSegmentInListedPrefix() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["../x.txt"]))]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/.."), withPageToken: nil)
+
+			#expect(itemList.items.isEmpty)
+		}
+
+		@Test
+		func fetchItemMetadataOfNestedFileAndFolder() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a/b.txt"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["a/c/"]))
+			]
+
+			let file = try await provider.fetchItemMetadata(at: CloudPath("/a/b.txt"))
+			let folder = try await provider.fetchItemMetadata(at: CloudPath("/a/c"))
+
+			#expect([CloudPath("/a/b.txt"), CloudPath("/a/c")] == [file.cloudPath, folder.cloudPath])
+			#expect([file.itemType, folder.itemType] == [.file, .folder])
+		}
+
+		@Test
+		func fetchItemMetadataOfRootIgnoresKeyThatStandardizesToRoot() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [".", ""]))]
+
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/")) }
+		}
+
+		@Test
+		func fetchItemMetadataOfFolderListedAfterSibling() async throws {
+			let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+			let recordRequest: @Sendable (URLRequest) -> Void = { request in
+				requests.withLock { $0.append(request) }
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
+			]
+
+			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+
+			#expect(CloudPath("/folder") == metadata.cloudPath)
+			#expect(metadata.itemType == .folder)
+			#expect(requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)) == [
+				["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
+				["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
+			])
+		}
+
+		@Test
+		func fetchItemMetadataDoesNotListFolderAfterSiblingInCancelledTask() async throws {
+			let provider: S3CloudProvider = provider
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
+					canceller.cancel()
+				}),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]))
+			]
+
+			let fetchTask = canceller.start {
+				try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+			}
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: fetchTask) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func fetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
 				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
 			]
 
-			await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil), "\(keys)") { error in
-				XCTAssertEqual(.itemNotFound, error as? CloudProviderError, "\(keys)")
-			}
-			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, "\(keys)")
-		}
-	}
-
-	func testListingOfFileThrowsItemTypeMismatch() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f"]))
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)) { error in
-			XCTAssertEqual(.itemTypeMismatch, error as? CloudProviderError)
-		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// A prepended mark such as U+0600 forms one `Character` with the slash that follows it, so the key's segments and the marker's trailing slash are found by scalar.
-	func testListingOfFolderWhoseNameEndsWithPrependedMark() async throws {
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f\u{600}/", "f\u{600}/x.txt"]))]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f\u{600}"), withPageToken: nil)
-
-		XCTAssertEqual(["/f\u{600}/x.txt"], itemList.items.map(\.cloudPath.path))
-	}
-
-	/// A degenerate listed path keeps its dot segment in the prefix, so the key is checked as a whole, not only below the prefix.
-	func testListingSkipsKeysWithDotSegmentInListedPrefix() async throws {
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["../x.txt"]))]
-
-		let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/.."), withPageToken: nil)
-
-		XCTAssertTrue(itemList.items.isEmpty)
-	}
-
-	func testFetchItemMetadataOfNestedFileAndFolder() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a/b.txt"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["a/c/"]))
-		]
-
-		let file = try await provider.fetchItemMetadata(at: CloudPath("/a/b.txt"))
-		let folder = try await provider.fetchItemMetadata(at: CloudPath("/a/c"))
-
-		XCTAssertEqual([CloudPath("/a/b.txt"), CloudPath("/a/c")], [file.cloudPath, folder.cloudPath])
-		XCTAssertEqual([.file, .folder], [file.itemType, folder.itemType])
-	}
-
-	func testFetchItemMetadataOfRootIgnoresKeyThatStandardizesToRoot() async throws {
-		URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [".", ""]))]
-
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/"))) { error in
-			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
-		}
-	}
-
-	func testFetchItemMetadataOfFolderListedAfterSibling() async throws {
-		let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-		let recordRequest: @Sendable (URLRequest) -> Void = { request in
-			requests.withLock { $0.append(request) }
-		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
-		]
-
-		let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
-
-		XCTAssertEqual(CloudPath("/folder"), metadata.cloudPath)
-		XCTAssertEqual(.folder, metadata.itemType)
-		XCTAssertEqual([
-			["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
-			["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
-		], requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)))
-	}
-
-	func testFetchItemMetadataDoesNotListFolderAfterSiblingInCancelledTask() async throws {
-		let provider: S3CloudProvider = provider
-		let fetch = OSAllocatedUnfairLock<Task<CloudItemMetadata, Error>?>(initialState: nil)
-		let fetchStored = DispatchSemaphore(value: 0)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
-				_ = fetchStored.wait(timeout: .now() + testWaitTimeout)
-				fetch.withLock { $0 }?.cancel()
-			}),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]))
-		]
-
-		let fetchTask = Task {
-			try await provider.fetchItemMetadata(at: CloudPath("/folder"))
-		}
-		fetch.withLock { $0 = fetchTask }
-		fetchStored.signal()
-
-		await XCTAssertThrowsErrorAsync(try await value(of: fetchTask)) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
-
-	func testFetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.fetchItemMetadata(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.itemNotFound, error as? CloudProviderError)
-		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testCreateFolderPutsFolderMarker() async throws {
-		let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler(onRequest: { request in
-				markerRequest.withLock { $0 = request }
-			})
-		]
-
-		try await provider.createFolder(at: CloudPath("/folder"))
-
-		let request = try XCTUnwrap(markerRequest.withLock { $0 })
-		XCTAssertEqual("PUT", request.httpMethod)
-		XCTAssertEqual("/exampleBucket/folder/", request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath })
-		XCTAssertEqual("application/x-directory", request.value(forHTTPHeaderField: "Content-Type"))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testDeleteFolderDeletesEveryPage() async throws {
-		let requests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: String)]())
-		let recordRequest: @Sendable (URLRequest) -> Void = { request in
-			let body = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) ?? ""
-			requests.withLock { $0.append((request, body)) }
-		}
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest)
-		]
-
-		try await provider.deleteFolder(at: CloudPath("/folder"))
-
-		let sent = requests.withLock { $0 }
-		XCTAssertEqual(["GET", "POST", "GET", "POST"], sent.map(\.request.httpMethod))
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000"], S3CloudProviderTests.queryParameters(of: sent[0].request))
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"], S3CloudProviderTests.queryParameters(of: sent[2].request))
-		XCTAssertEqual(["delete": ""], S3CloudProviderTests.queryParameters(of: sent[1].request))
-		XCTAssertTrue(sent[1].body.contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), sent[1].body)
-		XCTAssertTrue(sent[3].body.contains("<Object><Key>folder/b.txt</Key></Object>"), sent[3].body)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testDeleteFolderLeavesKeysOutsideFolder() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt", "folder2/b.txt"])),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		try await provider.deleteFolder(at: CloudPath("/folder"))
-
-		XCTAssertEqual([["folder/a.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testMoveFolderCopiesAndDeletesEveryPage() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/sub/b.txt"]), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
-
-		let sent = requests.requests
-		XCTAssertEqual(["GET", "PUT", "PUT", "POST", "GET", "PUT", "POST"], sent.map(\.httpMethod))
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000"], S3CloudProviderTests.queryParameters(of: sent[0]))
-		XCTAssertEqual(["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"], S3CloudProviderTests.queryParameters(of: sent[4]))
-		XCTAssertEqual(["/exampleBucket/target/": "exampleBucket/folder/", "/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt"], S3CloudProviderTests.copySources(of: sent[1 ... 2]))
-		XCTAssertEqual(["/exampleBucket/target/sub/b.txt": "exampleBucket/folder/sub/b.txt"], S3CloudProviderTests.copySources(of: sent[5 ... 5]))
-		XCTAssertEqual(["folder/", "folder/a.txt"], S3CloudProviderTests.deletedKeys(of: sent[3]))
-		XCTAssertEqual(["folder/sub/b.txt"], S3CloudProviderTests.deletedKeys(of: sent[6]))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testMoveFolderLeavesKeysOutsideFolderAndCopiesKeyWithoutSize() async throws {
-		let requests = RequestRecorder()
-		let contents = "<Contents><Key>folder/a.txt</Key><Size>7</Size></Contents><Contents><Key>folder2/b.txt</Key><Size>7</Size></Contents><Contents><Key>folder/c.txt</Key></Contents>"
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated>\(contents)</ListBucketResult>", onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
-
-		let sent = requests.requests
-		XCTAssertEqual(["GET", "PUT", "PUT", "POST"], sent.map(\.httpMethod))
-		XCTAssertEqual(["/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt", "/exampleBucket/target/c.txt": "exampleBucket/folder/c.txt"], S3CloudProviderTests.copySources(of: sent[1 ... 2]))
-		XCTAssertEqual(["folder/a.txt", "folder/c.txt"], S3CloudProviderTests.deletedKeys(of: sent[3]))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testMoveFolderWithFailedCopyDeletesNothing() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"]), onRequest: requests.record),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/folder")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
-		XCTAssertEqual(["GET", "PUT"], requests.requests.map(\.httpMethod))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	// MARK: - Refused Deletions
-
-	func testDeleteFolderWithRefusedKeysDeletesEveryPageAndThrowsDeletionIncomplete() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
-		}
-		XCTAssertEqual([["folder/", "folder/a.txt"], ["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// A 403 for the whole request is a refusal rather than a sign of wrong credentials, because the listings before it succeeded.
-	func testDeleteFolderWithFailedDeleteRequestOnFirstPageDeletesEveryPage() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
-		}
-		XCTAssertEqual([["folder/a.txt"], ["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// A later failure must not replace the refusal, because a vault could then skip the error and delete the folder's reference.
-	func testDeleteFolderWithRefusalThenListingFailureThrowsDeletionIncomplete() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
-			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidArgument</Code></Error>")
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
-		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testDeleteFolderWithTransportFailureDuringBatchResendThrowsDeletionIncomplete() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"])),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
-		] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3)
-
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
-		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// S3 answered, although with a result that can't be read, so the batch counts as refused and the next page is still deleted.
-	func testDeleteFolderWithUnreadableDeleteResultOnFirstPageDeletesEveryPage() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))
-		] + Array(repeating: URLProtocolMock.handler(body: S3MockResponse.copyObjectResult), count: 4) + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/folder"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
-		}
-		XCTAssertEqual([["folder/b.txt"]], requests.requests.map(S3CloudProviderTests.deletedKeys(of:)))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// The task is cancelled while page 2 is listed, so the check before its deletion stops the delete.
-	func testDeleteFolderCancelledAfterRefusalThrowsCancellationError() async throws {
-		let provider: S3CloudProvider = provider
-		let canceller = TaskCanceller<Void>()
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: { _ in
-				canceller.cancel()
-			}),
-			URLProtocolMock.handler(body: "<DeleteResult/>")
-		]
-
-		await XCTAssertThrowsErrorAsync(try await value(of: canceller.start {
-			try await provider.deleteFolder(at: CloudPath("/folder"))
-		})) { error in
-			XCTAssertTrue(error is CancellationError, "Unexpected error: \(error)")
-		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
-
-	func testMoveFolderWithRefusedKeysCopiesEveryPageAndThrowsMoveCompleted() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
-		}
-		let sent = requests.requests
-		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT", "POST"], sent.map(\.httpMethod))
-		XCTAssertEqual([["folder/a.txt"], ["folder/b.txt"]], sent.filter { $0.httpMethod == "POST" }.map(S3CloudProviderTests.deletedKeys(of:)))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	func testMoveFolderWithFailedDeleteRequestCopiesEveryPageAndThrowsMoveCompleted() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
-		}
-		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT", "POST"], requests.requests.map(\.httpMethod))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// A failed copy means that the target is incomplete, so a refusal before it doesn't make the move complete.
-	func testMoveFolderWithRefusalThenCopyFailureThrowsCopyError() async throws {
-		let requests = RequestRecorder()
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
-			S3CloudProviderTests.copyObject(requests),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
-			URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidRequest</Code></Error>", onRequest: requests.record)
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual("InvalidRequest", (error as? S3Error)?.code, "Unexpected error: \(error)")
-		}
-		XCTAssertEqual(["GET", "PUT", "POST", "GET", "PUT"], requests.requests.map(\.httpMethod))
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// Whether the batch was deleted is unknown after a transport failure, so the move stops before the next page.
-	func testMoveFolderWithTransportFailureDuringBatchResendThrowsAtOnce() async throws {
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
-		] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3) + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]))
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, "Unexpected error: \(error)")
-		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
-
-	func testMoveFolderWithTransportFailureOnDeleteRequestThrowsAtOnce() async throws {
-		URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
-			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
-			URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"], nextContinuationToken: "next2")),
-			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
-			S3MockResponse.failure(.notConnectedToInternet),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/c.txt"]))
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))) { error in
-			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError, "Unexpected error: \(error)")
-		}
-		XCTAssertEqual(1, URLProtocolMock.requestHandler.count)
-	}
-
-	func testMoveFileWithRefusedSourceDeleteThrowsMoveCompleted() async throws {
-		URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
-		]
-
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))) { error in
-			XCTAssertEqual(.moveCompletedWithSourceRemaining, error as? CloudProviderError)
-		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
-
-	/// The error body of a 404 may be missing, so any 404 means that the source is gone.
-	func testMoveFileWithNoSuchKeyOnSourceDeleteSucceeds() async throws {
-		for body in ["<Error><Code>NoSuchKey</Code></Error>", ""] {
-			URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
-				URLProtocolMock.handler(statusCode: 404, body: body)
+		@Test
+		func createFolderPutsFolderMarker() async throws {
+			let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(onRequest: { request in
+					markerRequest.withLock { $0 = request }
+				})
 			]
 
-			try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))
+			try await provider.createFolder(at: CloudPath("/folder"))
 
-			XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, body)
+			let request = try #require(markerRequest.withLock { $0 })
+			#expect(request.httpMethod == "PUT")
+			#expect(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } == "/exampleBucket/folder/")
+			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-directory")
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-	}
 
-	/// The listing before the DELETE succeeded with the same credentials, so a 403 refuses this object rather than the login.
-	func testDeleteFileWithRefusedDeleteThrowsDeletionIncomplete() async throws {
-		URLProtocolMock.requestHandler = [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
-			URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
-		]
+		@Test
+		func deleteFolderDeletesEveryPage() async throws {
+			let requests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: String)]())
+			let recordRequest: @Sendable (URLRequest) -> Void = { request in
+				let body = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) ?? ""
+				requests.withLock { $0.append((request, body)) }
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest)
+			]
 
-		await XCTAssertThrowsErrorAsync(try await provider.deleteFile(at: CloudPath("/a.txt"))) { error in
-			XCTAssertEqual(.deletionIncomplete, error as? CloudProviderError)
+			try await provider.deleteFolder(at: CloudPath("/folder"))
+
+			let sent = requests.withLock { $0 }
+			#expect(sent.map(\.request.httpMethod) == ["GET", "POST", "GET", "POST"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[0].request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[2].request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[1].request) == ["delete": ""])
+			#expect(sent[1].body.contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), "\(sent[1].body)")
+			#expect(sent[3].body.contains("<Object><Key>folder/b.txt</Key></Object>"), "\(sent[3].body)")
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
 
-	/// Whether the source was deleted is unknown after a transport failure, so it doesn't count as a refusal.
-	func testMoveFileWithTransportFailureOnSourceDeleteKeepsError() async throws {
-		URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
-			S3MockResponse.failure(.notConnectedToInternet)
-		]
+		@Test
+		func deleteFolderLeavesKeysOutsideFolder() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt", "folder2/b.txt"])),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
 
-		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))) { error in
-			XCTAssertEqual(.noInternetConnection, error as? CloudProviderError)
+			try await provider.deleteFolder(at: CloudPath("/folder"))
+
+			#expect(requests.requests.map(S3CloudProviderTests.deletedKeys(of:)) == [["folder/a.txt"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
-	}
 
-	// MARK: - Helpers
+		@Test
+		func moveFolderCopiesAndDeletesEveryPage() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/sub/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
 
-	/// The responses to the checks and the copy of a file move from `/a.txt` to `/b.txt`.
-	private static func fileMoveChecksAndCopy() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
-		return [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-			URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
-		]
-	}
+			try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
 
-	private static func queryParameters(of request: URLRequest) -> [String: String] {
-		let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
-		return Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
-	}
-
-	/// The responses to the checks of a folder move from `/folder` to `/target`: the source exists and the target doesn't.
-	private static func folderMoveChecks() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
-		return [
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
-			URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
-		]
-	}
-
-	private static func copyObject(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return URLProtocolMock.handler(body: S3MockResponse.copyObjectResult, onRequest: requests.record)
-	}
-
-	/// The copy source of each copy request by the path of its target. The copies of a page run concurrently, so their order isn't fixed.
-	private static func copySources(of requests: ArraySlice<URLRequest>) -> [String: String] {
-		let copies = requests.map { request in
-			let targetPath = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } ?? ""
-			let copySource = request.value(forHTTPHeaderField: "x-amz-copy-source") ?? ""
-			return (targetPath, copySource)
+			let sent = requests.requests
+			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "PUT", "POST", "GET", "PUT", "POST"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[4]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
+			#expect(S3CloudProviderTests.copySources(of: sent[1 ... 2]) == ["/exampleBucket/target/": "exampleBucket/folder/", "/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt"])
+			#expect(S3CloudProviderTests.copySources(of: sent[5 ... 5]) == ["/exampleBucket/target/sub/b.txt": "exampleBucket/folder/sub/b.txt"])
+			#expect(S3CloudProviderTests.deletedKeys(of: sent[3]) == ["folder/", "folder/a.txt"])
+			#expect(S3CloudProviderTests.deletedKeys(of: sent[6]) == ["folder/sub/b.txt"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
-		return Dictionary(copies, uniquingKeysWith: { first, _ in first })
-	}
 
-	private static func deletedKeys(of request: URLRequest) -> [String] {
-		return S3XMLElement.parse(request.httpBody ?? Data())?.children("Object").compactMap { $0.text(of: "Key") } ?? []
-	}
+		@Test
+		func moveFolderLeavesKeysOutsideFolderAndCopiesKeyWithoutSize() async throws {
+			let requests = RequestRecorder()
+			let contents = "<Contents><Key>folder/a.txt</Key><Size>7</Size></Contents><Contents><Key>folder2/b.txt</Key><Size>7</Size></Contents><Contents><Key>folder/c.txt</Key></Contents>"
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated>\(contents)</ListBucketResult>", onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
 
-	/// With the default threshold, returns a provider that uploads a file of more than 9 bytes in parts of 4 bytes.
-	private func makeMultipartProvider(multipartUploadThreshold: Int = 9, maxPartCount: Int = 1000, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) throws -> S3CloudProvider {
-		return try S3CloudProvider(client: .mocked(hooks: hooks), maxPageSize: .max, multipartUploadThreshold: multipartUploadThreshold, minPartSize: 4, maxPartCount: maxPartCount)
-	}
+			try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target"))
 
-	private static func initiateMultipartUpload(_ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: requests.record)
-	}
+			let sent = requests.requests
+			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "PUT", "POST"])
+			#expect(S3CloudProviderTests.copySources(of: sent[1 ... 2]) == ["/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt", "/exampleBucket/target/c.txt": "exampleBucket/folder/c.txt"])
+			#expect(S3CloudProviderTests.deletedKeys(of: sent[3]) == ["folder/a.txt", "folder/c.txt"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
 
-	private static func part(_ partNumber: Int, _ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return URLProtocolMock.handler(headerFields: ["ETag": "\"etag-\(partNumber)\""], onRequest: requests.record)
-	}
+		@Test
+		func moveFolderWithFailedCopyDeletesNothing() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"]), onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
+			]
 
-	private static func completeMultipartUpload(_ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return URLProtocolMock.handler(body: S3MockResponse.completeMultipartUploadResult, onRequest: requests.record)
-	}
+			await #expect(throws: CloudProviderError.unauthorized) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
 
-	private static func abortMultipartUpload(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-		return URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
-	}
+			#expect(requests.requests.map(\.httpMethod) == ["GET", "PUT"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
 
-	/// Asserts that the recorded requests are the attempts to abort the multipart upload, that every queued response was used, and that the temporary files of the parts are gone.
-	private func assertAborted(_ requests: RequestRecorder, attempts: Int = 1, temporaryFiles: Set<String>, file: StaticString = #filePath, line: UInt = #line) throws {
-		let aborts = requests.requests
-		XCTAssertEqual(Array(repeating: "DELETE", count: attempts), aborts.map(\.httpMethod), file: file, line: line)
-		XCTAssertEqual(Array(repeating: ["uploadId": "upload-id"], count: attempts), aborts.map(S3CloudProviderTests.queryParameters(of:)), file: file, line: line)
-		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty, file: file, line: line)
-		XCTAssertEqual(temporaryFiles, try uuidNamedTemporaryFiles(), file: file, line: line)
-	}
+		// MARK: - Refused Deletions
 
-	private func makeLocalFile(content: String) throws -> URL {
-		let localURL = tmpDirURL.appendingPathComponent("local.bin")
-		try Data(content.utf8).write(to: localURL)
-		return localURL
-	}
+		@Test
+		func deleteFolderWithRefusedKeysDeletesEveryPageAndThrowsDeletionIncomplete() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
 
-	private func makeLocalFile() throws -> URL {
-		let localURL = tmpDirURL.appendingPathComponent("local.txt")
-		try Data("content".utf8).write(to: localURL)
-		return localURL
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFolder(at: CloudPath("/folder")) }
+			#expect(requests.requests.map(S3CloudProviderTests.deletedKeys(of:)) == [["folder/", "folder/a.txt"], ["folder/b.txt"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A 403 for the whole request is a refusal rather than a sign of wrong credentials, because the listings before it succeeded.
+		@Test
+		func deleteFolderWithFailedDeleteRequestOnFirstPageDeletesEveryPage() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFolder(at: CloudPath("/folder")) }
+			#expect(requests.requests.map(S3CloudProviderTests.deletedKeys(of:)) == [["folder/a.txt"], ["folder/b.txt"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A later failure must not replace the refusal, because a vault could then skip the error and delete the folder's reference.
+		@Test
+		func deleteFolderWithRefusalThenListingFailureThrowsDeletionIncomplete() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+				URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidArgument</Code></Error>")
+			]
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFolder(at: CloudPath("/folder")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func deleteFolderWithTransportFailureDuringBatchResendThrowsDeletionIncomplete() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"])),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
+			] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3)
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFolder(at: CloudPath("/folder")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// S3 answered, although with a result that can't be read, so the batch counts as refused and the next page is still deleted.
+		@Test
+		func deleteFolderWithUnreadableDeleteResultOnFirstPageDeletesEveryPage() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))
+			] + Array(repeating: URLProtocolMock.handler(body: S3MockResponse.copyObjectResult), count: 4) + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFolder(at: CloudPath("/folder")) }
+			#expect(requests.requests.map(S3CloudProviderTests.deletedKeys(of:)) == [["folder/b.txt"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The task is cancelled while page 2 is listed, so the check before its deletion stops the delete.
+		@Test
+		func deleteFolderCancelledAfterRefusalThrowsCancellationError() async throws {
+			let provider: S3CloudProvider = provider
+			let canceller = TaskCanceller<Void>()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: { _ in
+					canceller.cancel()
+				}),
+				URLProtocolMock.handler(body: "<DeleteResult/>")
+			]
+
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: canceller.start {
+					try await provider.deleteFolder(at: CloudPath("/folder"))
+				})
+			}
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func moveFolderWithRefusedKeysCopiesEveryPageAndThrowsMoveCompleted() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
+			let sent = requests.requests
+			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "POST", "GET", "PUT", "POST"])
+			#expect(sent.filter { $0.httpMethod == "POST" }.map(S3CloudProviderTests.deletedKeys(of:)) == [["folder/a.txt"], ["folder/b.txt"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func moveFolderWithFailedDeleteRequestCopiesEveryPageAndThrowsMoveCompleted() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
+			#expect(requests.requests.map(\.httpMethod) == ["GET", "PUT", "POST", "GET", "PUT", "POST"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A failed copy means that the target is incomplete, so a refusal before it doesn't make the move complete.
+		@Test
+		func moveFolderWithRefusalThenCopyFailureThrowsCopyError() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record),
+				S3CloudProviderTests.copyObject(requests),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidRequest</Code></Error>", onRequest: requests.record)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
+			#expect((error as? S3Error)?.code == "InvalidRequest", "Unexpected error: \(error)")
+			#expect(requests.requests.map(\.httpMethod) == ["GET", "PUT", "POST", "GET", "PUT"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Whether the batch was deleted is unknown after a transport failure, so the move stops before the next page.
+		@Test
+		func moveFolderWithTransportFailureDuringBatchResendThrowsAtOnce() async throws {
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
+			] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3) + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]))
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func moveFolderWithTransportFailureOnDeleteRequestThrowsAtOnce() async throws {
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks() + [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"], nextContinuationToken: "next2")),
+				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
+				S3MockResponse.failure(.notConnectedToInternet),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/c.txt"]))
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func moveFileWithRefusedSourceDeleteThrowsMoveCompleted() async throws {
+			URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
+			]
+
+			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The error body of a 404 may be missing, so any 404 means that the source is gone.
+		@Test
+		func moveFileWithNoSuchKeyOnSourceDeleteSucceeds() async throws {
+			for body in ["<Error><Code>NoSuchKey</Code></Error>", ""] {
+				URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+					URLProtocolMock.handler(statusCode: 404, body: body)
+				]
+
+				try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt"))
+
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(body)")
+			}
+		}
+
+		/// The listing before the DELETE succeeded with the same credentials, so a 403 refuses this object rather than the login.
+		@Test
+		func deleteFileWithRefusedDeleteThrowsDeletionIncomplete() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
+			]
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFile(at: CloudPath("/a.txt")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Whether the source was deleted is unknown after a transport failure, so it doesn't count as a refusal.
+		@Test
+		func moveFileWithTransportFailureOnSourceDeleteKeepsError() async throws {
+			URLProtocolMock.requestHandler = S3CloudProviderTests.fileMoveChecksAndCopy() + [
+				S3MockResponse.failure(.notConnectedToInternet)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		// MARK: - Helpers
+
+		/// The responses to the checks and the copy of a file move from `/a.txt` to `/b.txt`.
+		private static func fileMoveChecksAndCopy() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
+			]
+		}
+
+		private static func queryParameters(of request: URLRequest) -> [String: String] {
+			let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+			return Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+		}
+
+		/// The responses to the checks of a folder move from `/folder` to `/target`: the source exists and the target doesn't.
+		private static func folderMoveChecks() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return [
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"])),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+			]
+		}
+
+		private static func copyObject(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return URLProtocolMock.handler(body: S3MockResponse.copyObjectResult, onRequest: requests.record)
+		}
+
+		/// The copy source of each copy request by the path of its target. The copies of a page run concurrently, so their order isn't fixed.
+		private static func copySources(of requests: ArraySlice<URLRequest>) -> [String: String] {
+			let copies = requests.map { request in
+				let targetPath = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } ?? ""
+				let copySource = request.value(forHTTPHeaderField: "x-amz-copy-source") ?? ""
+				return (targetPath, copySource)
+			}
+			return Dictionary(copies, uniquingKeysWith: { first, _ in first })
+		}
+
+		private static func deletedKeys(of request: URLRequest) -> [String] {
+			return S3XMLElement.parse(request.httpBody ?? Data())?.children("Object").compactMap { $0.text(of: "Key") } ?? []
+		}
+
+		/// With the default threshold, returns a provider that uploads a file of more than 9 bytes in parts of 4 bytes.
+		private func makeMultipartProvider(multipartUploadThreshold: Int = 9, maxPartCount: Int = 1000, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) throws -> S3CloudProvider {
+			return try S3CloudProvider(client: .mocked(hooks: hooks), maxPageSize: .max, multipartUploadThreshold: multipartUploadThreshold, minPartSize: 4, maxPartCount: maxPartCount)
+		}
+
+		private static func initiateMultipartUpload(_ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: requests.record)
+		}
+
+		private static func part(_ partNumber: Int, _ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return URLProtocolMock.handler(headerFields: ["ETag": "\"etag-\(partNumber)\""], onRequest: requests.record)
+		}
+
+		private static func completeMultipartUpload(_ requests: RequestRecorder = RequestRecorder()) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return URLProtocolMock.handler(body: S3MockResponse.completeMultipartUploadResult, onRequest: requests.record)
+		}
+
+		private static func abortMultipartUpload(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+		}
+
+		/// Asserts that the recorded requests are the attempts to abort the multipart upload, that every queued response was used, and that the temporary files of the parts are gone.
+		private func assertAborted(_ requests: RequestRecorder, attempts: Int = 1, temporaryFiles: Set<String>, sourceLocation: SourceLocation = #_sourceLocation) throws {
+			let aborts = requests.requests
+			#expect(Array(repeating: "DELETE", count: attempts) == aborts.map(\.httpMethod), sourceLocation: sourceLocation)
+			#expect(Array(repeating: ["uploadId": "upload-id"], count: attempts) == aborts.map(S3CloudProviderTests.queryParameters(of:)), sourceLocation: sourceLocation)
+			#expect(URLProtocolMock.requestHandler.isEmpty, sourceLocation: sourceLocation)
+			#expect(try temporaryFiles == uuidNamedTemporaryFiles(), sourceLocation: sourceLocation)
+		}
+
+		private func makeLocalFile(content: String) throws -> URL {
+			let localURL = tmpDirURL.appendingPathComponent("local.bin")
+			try Data(content.utf8).write(to: localURL)
+			return localURL
+		}
+
+		private func makeLocalFile() throws -> URL {
+			let localURL = tmpDirURL.appendingPathComponent("local.txt")
+			try Data("content".utf8).write(to: localURL)
+			return localURL
+		}
 	}
 }
 

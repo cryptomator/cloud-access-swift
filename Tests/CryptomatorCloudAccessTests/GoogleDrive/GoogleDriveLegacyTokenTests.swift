@@ -6,33 +6,35 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class GoogleDriveLegacyTokenTests: XCTestCase {
-	func testLoginsOfEveryGTMAppAuthVersionDecode() throws {
-		let cases = [
-			("1", GoogleDriveFixtures.gtmAppAuth1, GoogleDriveFixtures.gtmAppAuth1Expiry),
-			("5", GoogleDriveFixtures.gtmAppAuth5, GoogleDriveFixtures.gtmAppAuth5Expiry),
-			("6", GoogleDriveFixtures.gtmAppAuth6, GoogleDriveFixtures.gtmAppAuth6Expiry)
-		]
-		for (version, archive, expiry) in cases {
-			let token = try GoogleDriveLegacyToken.decode(archive)
+extension UnitTests {
+	struct GoogleDriveLegacyTokenTests {
+		@Test
+		func loginsOfEveryGTMAppAuthVersionDecode() throws {
+			let cases = [
+				("1", GoogleDriveFixtures.gtmAppAuth1, GoogleDriveFixtures.gtmAppAuth1Expiry),
+				("5", GoogleDriveFixtures.gtmAppAuth5, GoogleDriveFixtures.gtmAppAuth5Expiry),
+				("6", GoogleDriveFixtures.gtmAppAuth6, GoogleDriveFixtures.gtmAppAuth6Expiry)
+			]
+			for (version, archive, expiry) in cases {
+				let token = try GoogleDriveLegacyToken.decode(archive)
 
-			XCTAssertEqual(OAuthToken(accessToken: "ACCESS-\(version)", refreshToken: "REFRESH-\(version)", expiresAt: expiry, username: GoogleDriveFixtures.email), token, version)
+				#expect(OAuthToken(accessToken: "ACCESS-\(version)", refreshToken: "REFRESH-\(version)", expiresAt: expiry, username: GoogleDriveFixtures.email) == token, "\(version)")
+			}
 		}
-	}
 
-	func testLoginWithoutTokenResponseThrowsUnauthorized() {
-		XCTAssertThrowsError(try GoogleDriveLegacyToken.decode(GoogleDriveFixtures.gtmAppAuth6WithoutTokenResponse)) { error in
-			XCTAssertEqual(.unauthorized, error as? CloudProviderError)
+		@Test
+		func loginWithoutTokenResponseThrowsUnauthorized() {
+			#expect(throws: CloudProviderError.unauthorized) { try GoogleDriveLegacyToken.decode(GoogleDriveFixtures.gtmAppAuth6WithoutTokenResponse) }
 		}
-	}
 
-	func testOtherDataThrows() {
-		for data in [Data((0 ..< 64).map { _ in UInt8.random(in: 0 ... 255) }), Data("bplist00".utf8)] {
-			XCTAssertThrowsError(try GoogleDriveLegacyToken.decode(data)) { error in
-				XCTAssertEqual(.unexpectedContent, error as? GoogleDriveError)
+		@Test
+		func otherDataThrows() {
+			for data in [Data((0 ..< 64).map { _ in UInt8.random(in: 0 ... 255) }), Data("bplist00".utf8)] {
+				#expect(throws: GoogleDriveError.unexpectedContent) { try GoogleDriveLegacyToken.decode(data) }
 			}
 		}
 	}

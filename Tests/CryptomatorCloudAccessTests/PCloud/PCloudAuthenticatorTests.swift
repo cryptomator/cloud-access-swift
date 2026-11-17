@@ -7,58 +7,63 @@
 //
 
 import AuthenticationServices
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCloudAccessCore
 
-class PCloudAuthenticatorTests: XCTestCase {
-	private let appKey = "AppKey"
-	private let state = "STATE"
+extension UnitTests {
+	struct PCloudAuthenticatorTests {
+		private let appKey = "AppKey"
+		private let state = "STATE"
 
-	func testCallbackFromCallbackURL() throws {
-		let callback = try callback(fromCallbackURL: "pclsdk-w-appkey://oauth2redirect#access_token=TOKEN%2B1&token_type=bearer&uid=7&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE")
+		@Test
+		func callbackFromCallbackURL() throws {
+			let callback = try callback(fromCallbackURL: "pclsdk-w-appkey://oauth2redirect#access_token=TOKEN%2B1&token_type=bearer&uid=7&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE")
 
-		XCTAssertEqual(PCloudCallback(accessToken: "TOKEN+1", userID: "7", apiHostName: "eapi.pcloud.com"), callback)
-	}
+			#expect(PCloudCallback(accessToken: "TOKEN+1", userID: "7", apiHostName: "eapi.pcloud.com") == callback)
+		}
 
-	func testRejectsInvalidCallbackURLs() {
-		let validFragment = "access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE"
-		let callbackURLs = [
-			"other://oauth2redirect#\(validFragment)",
-			"pclsdk-w-appkey://other#\(validFragment)",
-			"pclsdk-w-appkey://oauth2redirect",
-			"pclsdk-w-appkey://oauth2redirect#error=invalid_request&state=STATE",
-			"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com&state=OTHER",
-			"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com",
-			"pclsdk-w-appkey://oauth2redirect#access_token=&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE",
-			"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&locationid=2&hostname=eapi.pcloud.com&state=STATE",
-			"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=seven&locationid=2&hostname=eapi.pcloud.com&state=STATE",
-			"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&state=STATE"
-		]
-		for callbackURL in callbackURLs {
-			XCTAssertThrowsError(try callback(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.authenticationFailed, error as? PCloudAuthenticatorError, callbackURL)
+		@Test
+		func rejectsInvalidCallbackURLs() {
+			let validFragment = "access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE"
+			let callbackURLs = [
+				"other://oauth2redirect#\(validFragment)",
+				"pclsdk-w-appkey://other#\(validFragment)",
+				"pclsdk-w-appkey://oauth2redirect",
+				"pclsdk-w-appkey://oauth2redirect#error=invalid_request&state=STATE",
+				"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com&state=OTHER",
+				"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&hostname=eapi.pcloud.com",
+				"pclsdk-w-appkey://oauth2redirect#access_token=&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE",
+				"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&locationid=2&hostname=eapi.pcloud.com&state=STATE",
+				"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=seven&locationid=2&hostname=eapi.pcloud.com&state=STATE",
+				"pclsdk-w-appkey://oauth2redirect#access_token=TOKEN&userid=7&locationid=2&state=STATE"
+			]
+			for callbackURL in callbackURLs {
+				#expect(throws: PCloudAuthenticatorError.authenticationFailed, "\(callbackURL)") { try callback(fromCallbackURL: callbackURL) }
 			}
 		}
-	}
 
-	func testDeniedAccessIsUserCancellation() {
-		for callbackURL in ["pclsdk-w-appkey://oauth2redirect#error=access_denied&state=STATE", "pclsdk-w-appkey://oauth2redirect#error=access_denied"] {
-			XCTAssertThrowsError(try callback(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.userCancelled, (error as? CocoaError)?.code, callbackURL)
+		@Test
+		func deniedAccessIsUserCancellation() throws {
+			for callbackURL in ["pclsdk-w-appkey://oauth2redirect#error=access_denied&state=STATE", "pclsdk-w-appkey://oauth2redirect#error=access_denied"] {
+				let error = try #require(throws: (any Error).self, "\(callbackURL)") { try callback(fromCallbackURL: callbackURL) }
+				#expect((error as? CocoaError)?.code == .userCancelled, "\(callbackURL)")
 			}
 		}
-	}
 
-	func testConvertLoginFlowErrorWithCanceledLogin() {
-		XCTAssertEqual(.userCancelled, (PCloudAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code)
-	}
+		@Test
+		func convertLoginFlowErrorWithCanceledLogin() {
+			#expect((PCloudAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code == .userCancelled)
+		}
 
-	func testConvertLoginFlowErrorWithFailedSession() {
-		XCTAssertEqual(.authenticationFailed, PCloudAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? PCloudAuthenticatorError)
-	}
+		@Test
+		func convertLoginFlowErrorWithFailedSession() {
+			#expect((PCloudAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? PCloudAuthenticatorError) == .authenticationFailed)
+		}
 
-	private func callback(fromCallbackURL callbackURL: String) throws -> PCloudCallback {
-		return try PCloudAuthenticator.callback(fromCallbackURL: XCTUnwrap(URL(string: callbackURL)), appKey: appKey, expectedState: state)
+		private func callback(fromCallbackURL callbackURL: String) throws -> PCloudCallback {
+			return try PCloudAuthenticator.callback(fromCallbackURL: #require(URL(string: callbackURL)), appKey: appKey, expectedState: state)
+		}
 	}
 }

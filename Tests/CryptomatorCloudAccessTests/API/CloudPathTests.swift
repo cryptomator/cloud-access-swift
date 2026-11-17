@@ -7,239 +7,253 @@
 //
 
 import Foundation
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class CloudPathTests: XCTestCase {
-	func testURLInitWithCloudPathRelativeToBase() throws {
-		XCTAssertEqual("/foo/bar", try URL(cloudPath: CloudPath("/bar/"), relativeTo: XCTUnwrap(URL(string: "/foo/")))?.absoluteString)
-		XCTAssertEqual("/foo/bar", try URL(cloudPath: CloudPath("/bar"), relativeTo: XCTUnwrap(URL(string: "/foo/")))?.absoluteString)
-		XCTAssertEqual("/foo/bar", try URL(cloudPath: CloudPath("bar/"), relativeTo: XCTUnwrap(URL(string: "/foo/")))?.absoluteString)
-		XCTAssertEqual("/foo/bar", try URL(cloudPath: CloudPath("bar"), relativeTo: XCTUnwrap(URL(string: "/foo/")))?.absoluteString)
+extension UnitTests {
+	struct CloudPathTests {
+		@Test
+		func urlInitWithCloudPathRelativeToBase() throws {
+			#expect(try URL(cloudPath: CloudPath("/bar/"), relativeTo: #require(URL(string: "/foo/")))?.absoluteString == "/foo/bar")
+			#expect(try URL(cloudPath: CloudPath("/bar"), relativeTo: #require(URL(string: "/foo/")))?.absoluteString == "/foo/bar")
+			#expect(try URL(cloudPath: CloudPath("bar/"), relativeTo: #require(URL(string: "/foo/")))?.absoluteString == "/foo/bar")
+			#expect(try URL(cloudPath: CloudPath("bar"), relativeTo: #require(URL(string: "/foo/")))?.absoluteString == "/foo/bar")
 
-		XCTAssertEqual("/bar", try URL(cloudPath: CloudPath("/bar/"), relativeTo: XCTUnwrap(URL(string: "/foo")))?.absoluteString)
-		XCTAssertEqual("/bar", try URL(cloudPath: CloudPath("/bar"), relativeTo: XCTUnwrap(URL(string: "/foo")))?.absoluteString)
-		XCTAssertEqual("/bar", try URL(cloudPath: CloudPath("bar/"), relativeTo: XCTUnwrap(URL(string: "/foo")))?.absoluteString)
-		XCTAssertEqual("/bar", try URL(cloudPath: CloudPath("bar"), relativeTo: XCTUnwrap(URL(string: "/foo")))?.absoluteString)
+			#expect(try URL(cloudPath: CloudPath("/bar/"), relativeTo: #require(URL(string: "/foo")))?.absoluteString == "/bar")
+			#expect(try URL(cloudPath: CloudPath("/bar"), relativeTo: #require(URL(string: "/foo")))?.absoluteString == "/bar")
+			#expect(try URL(cloudPath: CloudPath("bar/"), relativeTo: #require(URL(string: "/foo")))?.absoluteString == "/bar")
+			#expect(try URL(cloudPath: CloudPath("bar"), relativeTo: #require(URL(string: "/foo")))?.absoluteString == "/bar")
 
-		XCTAssertEqual("foo/bar", try URL(cloudPath: CloudPath("/bar/"), relativeTo: XCTUnwrap(URL(string: "foo/")))?.absoluteString)
-		XCTAssertEqual("foo/bar", try URL(cloudPath: CloudPath("/bar"), relativeTo: XCTUnwrap(URL(string: "foo/")))?.absoluteString)
-		XCTAssertEqual("foo/bar", try URL(cloudPath: CloudPath("bar/"), relativeTo: XCTUnwrap(URL(string: "foo/")))?.absoluteString)
-		XCTAssertEqual("foo/bar", try URL(cloudPath: CloudPath("bar"), relativeTo: XCTUnwrap(URL(string: "foo/")))?.absoluteString)
+			#expect(try URL(cloudPath: CloudPath("/bar/"), relativeTo: #require(URL(string: "foo/")))?.absoluteString == "foo/bar")
+			#expect(try URL(cloudPath: CloudPath("/bar"), relativeTo: #require(URL(string: "foo/")))?.absoluteString == "foo/bar")
+			#expect(try URL(cloudPath: CloudPath("bar/"), relativeTo: #require(URL(string: "foo/")))?.absoluteString == "foo/bar")
+			#expect(try URL(cloudPath: CloudPath("bar"), relativeTo: #require(URL(string: "foo/")))?.absoluteString == "foo/bar")
 
-		XCTAssertEqual("bar", try URL(cloudPath: CloudPath("/bar/"), relativeTo: XCTUnwrap(URL(string: "foo")))?.absoluteString)
-		XCTAssertEqual("bar", try URL(cloudPath: CloudPath("/bar"), relativeTo: XCTUnwrap(URL(string: "foo")))?.absoluteString)
-		XCTAssertEqual("bar", try URL(cloudPath: CloudPath("bar/"), relativeTo: XCTUnwrap(URL(string: "foo")))?.absoluteString)
-		XCTAssertEqual("bar", try URL(cloudPath: CloudPath("bar"), relativeTo: XCTUnwrap(URL(string: "foo")))?.absoluteString)
+			#expect(try URL(cloudPath: CloudPath("/bar/"), relativeTo: #require(URL(string: "foo")))?.absoluteString == "bar")
+			#expect(try URL(cloudPath: CloudPath("/bar"), relativeTo: #require(URL(string: "foo")))?.absoluteString == "bar")
+			#expect(try URL(cloudPath: CloudPath("bar/"), relativeTo: #require(URL(string: "foo")))?.absoluteString == "bar")
+			#expect(try URL(cloudPath: CloudPath("bar"), relativeTo: #require(URL(string: "foo")))?.absoluteString == "bar")
 
-		XCTAssertEqual("/foo/", try URL(cloudPath: CloudPath("/"), relativeTo: XCTUnwrap(URL(string: "/foo/")))?.absoluteString)
-		XCTAssertEqual("/", try URL(cloudPath: CloudPath("/"), relativeTo: XCTUnwrap(URL(string: "/foo")))?.absoluteString)
-		XCTAssertEqual("foo/", try URL(cloudPath: CloudPath("/"), relativeTo: XCTUnwrap(URL(string: "foo/")))?.absoluteString)
-		XCTAssertEqual("", try URL(cloudPath: CloudPath("/"), relativeTo: XCTUnwrap(URL(string: "foo")))?.absoluteString)
+			#expect(try URL(cloudPath: CloudPath("/"), relativeTo: #require(URL(string: "/foo/")))?.absoluteString == "/foo/")
+			#expect(try URL(cloudPath: CloudPath("/"), relativeTo: #require(URL(string: "/foo")))?.absoluteString == "/")
+			#expect(try URL(cloudPath: CloudPath("/"), relativeTo: #require(URL(string: "foo/")))?.absoluteString == "foo/")
+			#expect(try URL(cloudPath: CloudPath("/"), relativeTo: #require(URL(string: "foo")))?.absoluteString == "")
 
-		XCTAssertEqual("/foo", try URL(cloudPath: CloudPath("/foo/"), relativeTo: XCTUnwrap(URL(string: "/")))?.absoluteString)
-		XCTAssertEqual("/foo", try URL(cloudPath: CloudPath("/foo"), relativeTo: XCTUnwrap(URL(string: "/")))?.absoluteString)
-		XCTAssertEqual("/foo", try URL(cloudPath: CloudPath("foo/"), relativeTo: XCTUnwrap(URL(string: "/")))?.absoluteString)
-		XCTAssertEqual("/foo", try URL(cloudPath: CloudPath("foo"), relativeTo: XCTUnwrap(URL(string: "/")))?.absoluteString)
-	}
+			#expect(try URL(cloudPath: CloudPath("/foo/"), relativeTo: #require(URL(string: "/")))?.absoluteString == "/foo")
+			#expect(try URL(cloudPath: CloudPath("/foo"), relativeTo: #require(URL(string: "/")))?.absoluteString == "/foo")
+			#expect(try URL(cloudPath: CloudPath("foo/"), relativeTo: #require(URL(string: "/")))?.absoluteString == "/foo")
+			#expect(try URL(cloudPath: CloudPath("foo"), relativeTo: #require(URL(string: "/")))?.absoluteString == "/foo")
+		}
 
-	func testTrimmingLeadingCharacters() {
-		XCTAssertEqual("foo", "///foo".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
-		XCTAssertEqual("foo///bar", "/foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
-		XCTAssertEqual("foo///bar", "foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
-	}
+		@Test
+		func testTrimmingLeadingCharacters() {
+			#expect("foo" == "///foo".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
+			#expect("foo///bar" == "/foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
+			#expect("foo///bar" == "foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
+		}
 
-	func testStandardizedPath() {
-		XCTAssertEqual("/../../foo/baz", "/../../foo/bar/.///../baz".standardizedPath())
-	}
+		@Test
+		func testStandardizedPath() {
+			#expect("/../../foo/baz" == "/../../foo/bar/.///../baz".standardizedPath())
+		}
 
-	func testIsSinglePathComponent() {
-		XCTAssertFalse("a/b".isSinglePathComponent)
-		XCTAssertFalse("".isSinglePathComponent)
-		XCTAssertFalse(".".isSinglePathComponent)
-		XCTAssertFalse("..".isSinglePathComponent)
-		XCTAssertFalse("/x".isSinglePathComponent)
-		XCTAssertFalse("x/".isSinglePathComponent)
-		XCTAssertFalse("a/\u{301}b".isSinglePathComponent)
+		@Test
+		func testIsSinglePathComponent() {
+			#expect(!"a/b".isSinglePathComponent)
+			#expect(!"".isSinglePathComponent)
+			#expect(!".".isSinglePathComponent)
+			#expect(!"..".isSinglePathComponent)
+			#expect(!"/x".isSinglePathComponent)
+			#expect(!"x/".isSinglePathComponent)
+			#expect(!"a/\u{301}b".isSinglePathComponent)
 
-		XCTAssertTrue("ok".isSinglePathComponent)
-		XCTAssertTrue(".hidden".isSinglePathComponent)
-		XCTAssertTrue(#"a\b"#.isSinglePathComponent)
-		XCTAssertTrue("..a".isSinglePathComponent)
-		XCTAssertTrue("a b".isSinglePathComponent)
-		XCTAssertTrue("\u{301}a".isSinglePathComponent)
-		XCTAssertTrue("Gelöschte Dateien 🗑".isSinglePathComponent)
-	}
+			#expect("ok".isSinglePathComponent)
+			#expect(".hidden".isSinglePathComponent)
+			#expect(#"a\b"#.isSinglePathComponent)
+			#expect("..a".isSinglePathComponent)
+			#expect("a b".isSinglePathComponent)
+			#expect("\u{301}a".isSinglePathComponent)
+			#expect("Gelöschte Dateien 🗑".isSinglePathComponent)
+		}
 
-	/// A slash and a combining mark that follows it are one `Character`, but the slash still separates.
-	func testSeparatorBeforeCombiningMark() {
-		let name = "\u{301}report.txt"
-		let cloudPath = CloudPath("/foo").appendingPathComponent(name)
-		XCTAssertEqual("/foo/\u{301}report.txt", cloudPath.path)
-		XCTAssertEqual(["/", "foo", name], cloudPath.pathComponents)
-		XCTAssertEqual(name, cloudPath.lastPathComponent)
-		XCTAssertEqual("/foo", cloudPath.deletingLastPathComponent().path)
-		XCTAssertEqual("/foo/\u{301}report", cloudPath.deletingPathExtension().path)
-		XCTAssertEqual("/a.b/\u{301}c", CloudPath("/a.b/\u{301}c").deletingPathExtension().path)
-		XCTAssertEqual("/foo/\u{301}report.txt.bak", cloudPath.appendingPathExtension("bak").path)
-		XCTAssertEqual("/foo/\u{301}report.txt", CloudPath("/foo//\u{301}report.txt").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("a/\u{301}b").path)
+		/// A slash and a combining mark that follows it are one `Character`, but the slash still separates.
+		@Test
+		func separatorBeforeCombiningMark() {
+			let name = "\u{301}report.txt"
+			let cloudPath = CloudPath("/foo").appendingPathComponent(name)
+			#expect(cloudPath.path == "/foo/\u{301}report.txt")
+			#expect(["/", "foo", name] == cloudPath.pathComponents)
+			#expect(name == cloudPath.lastPathComponent)
+			#expect(cloudPath.deletingLastPathComponent().path == "/foo")
+			#expect(cloudPath.deletingPathExtension().path == "/foo/\u{301}report")
+			#expect(CloudPath("/a.b/\u{301}c").deletingPathExtension().path == "/a.b/\u{301}c")
+			#expect(cloudPath.appendingPathExtension("bak").path == "/foo/\u{301}report.txt.bak")
+			#expect(CloudPath("/foo//\u{301}report.txt").path == "/foo/\u{301}report.txt")
+			#expect(CloudPath("/foo").appendingPathExtension("a/\u{301}b").path == "/foo")
 
-		let rootChild = CloudPath("/").appendingPathComponent(name)
-		XCTAssertTrue(rootChild.isAbsolute)
-		XCTAssertEqual(["/", name], rootChild.pathComponents)
-		XCTAssertEqual("/", rootChild.deletingLastPathComponent().path)
-	}
+			let rootChild = CloudPath("/").appendingPathComponent(name)
+			#expect(rootChild.isAbsolute)
+			#expect(["/", name] == rootChild.pathComponents)
+			#expect(rootChild.deletingLastPathComponent().path == "/")
+		}
 
-	func testPathComponents() {
-		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar/").pathComponents)
-		XCTAssertEqual(["/", "foo", "bar"], CloudPath("/foo/bar").pathComponents)
-		XCTAssertEqual(["/", "foo"], CloudPath("/foo/").pathComponents)
-		XCTAssertEqual(["/", "foo"], CloudPath("/foo").pathComponents)
-		XCTAssertEqual(["foo"], CloudPath("foo/").pathComponents)
-		XCTAssertEqual(["foo"], CloudPath("foo").pathComponents)
+		@Test
+		func testPathComponents() {
+			#expect(CloudPath("/foo/bar/").pathComponents == ["/", "foo", "bar"])
+			#expect(CloudPath("/foo/bar").pathComponents == ["/", "foo", "bar"])
+			#expect(CloudPath("/foo/").pathComponents == ["/", "foo"])
+			#expect(CloudPath("/foo").pathComponents == ["/", "foo"])
+			#expect(CloudPath("foo/").pathComponents == ["foo"])
+			#expect(CloudPath("foo").pathComponents == ["foo"])
 
-		XCTAssertEqual(["/", "foo"], CloudPath("///foo///").pathComponents)
-		XCTAssertEqual(["foo"], CloudPath("foo///").pathComponents)
-		XCTAssertEqual(["/", "foo"], CloudPath("///foo").pathComponents)
-		XCTAssertEqual(["foo", "bar"], CloudPath("foo///bar").pathComponents)
+			#expect(CloudPath("///foo///").pathComponents == ["/", "foo"])
+			#expect(CloudPath("foo///").pathComponents == ["foo"])
+			#expect(CloudPath("///foo").pathComponents == ["/", "foo"])
+			#expect(CloudPath("foo///bar").pathComponents == ["foo", "bar"])
 
-		XCTAssertEqual(["/", ".."], CloudPath("/../").pathComponents)
-		XCTAssertEqual(["/", ".."], CloudPath("/..").pathComponents)
-		XCTAssertEqual([".."], CloudPath("../").pathComponents)
-		XCTAssertEqual([".."], CloudPath("..").pathComponents)
-		XCTAssertEqual(["/"], CloudPath("/./").pathComponents)
-		XCTAssertEqual(["/"], CloudPath("/.").pathComponents)
-		XCTAssertEqual(["."], CloudPath("./").pathComponents)
-		XCTAssertEqual(["."], CloudPath(".").pathComponents)
+			#expect(CloudPath("/../").pathComponents == ["/", ".."])
+			#expect(CloudPath("/..").pathComponents == ["/", ".."])
+			#expect(CloudPath("../").pathComponents == [".."])
+			#expect(CloudPath("..").pathComponents == [".."])
+			#expect(CloudPath("/./").pathComponents == ["/"])
+			#expect(CloudPath("/.").pathComponents == ["/"])
+			#expect(CloudPath("./").pathComponents == ["."])
+			#expect(CloudPath(".").pathComponents == ["."])
 
-		XCTAssertEqual(["/"], CloudPath("/").pathComponents)
-		XCTAssertEqual(["."], CloudPath("").pathComponents)
-	}
+			#expect(CloudPath("/").pathComponents == ["/"])
+			#expect(CloudPath("").pathComponents == ["."])
+		}
 
-	func testLastPathComponent() {
-		XCTAssertEqual("bar", CloudPath("/foo/bar/").lastPathComponent)
-		XCTAssertEqual("bar", CloudPath("/foo/bar").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("/foo/").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("/foo").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("foo/").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("foo").lastPathComponent)
+		@Test
+		func testLastPathComponent() {
+			#expect(CloudPath("/foo/bar/").lastPathComponent == "bar")
+			#expect(CloudPath("/foo/bar").lastPathComponent == "bar")
+			#expect(CloudPath("/foo/").lastPathComponent == "foo")
+			#expect(CloudPath("/foo").lastPathComponent == "foo")
+			#expect(CloudPath("foo/").lastPathComponent == "foo")
+			#expect(CloudPath("foo").lastPathComponent == "foo")
 
-		XCTAssertEqual("foo", CloudPath("///foo///").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("foo///").lastPathComponent)
-		XCTAssertEqual("foo", CloudPath("///foo").lastPathComponent)
-		XCTAssertEqual("bar", CloudPath("foo///bar").lastPathComponent)
+			#expect(CloudPath("///foo///").lastPathComponent == "foo")
+			#expect(CloudPath("foo///").lastPathComponent == "foo")
+			#expect(CloudPath("///foo").lastPathComponent == "foo")
+			#expect(CloudPath("foo///bar").lastPathComponent == "bar")
 
-		XCTAssertEqual("..", CloudPath("/../").lastPathComponent)
-		XCTAssertEqual("..", CloudPath("/..").lastPathComponent)
-		XCTAssertEqual("..", CloudPath("../").lastPathComponent)
-		XCTAssertEqual("..", CloudPath("..").lastPathComponent)
-		XCTAssertEqual("/", CloudPath("/./").lastPathComponent)
-		XCTAssertEqual("/", CloudPath("/.").lastPathComponent)
-		XCTAssertEqual(".", CloudPath("./").lastPathComponent)
-		XCTAssertEqual(".", CloudPath(".").lastPathComponent)
+			#expect(CloudPath("/../").lastPathComponent == "..")
+			#expect(CloudPath("/..").lastPathComponent == "..")
+			#expect(CloudPath("../").lastPathComponent == "..")
+			#expect(CloudPath("..").lastPathComponent == "..")
+			#expect(CloudPath("/./").lastPathComponent == "/")
+			#expect(CloudPath("/.").lastPathComponent == "/")
+			#expect(CloudPath("./").lastPathComponent == ".")
+			#expect(CloudPath(".").lastPathComponent == ".")
 
-		XCTAssertEqual("/", CloudPath("/").lastPathComponent)
-		XCTAssertEqual(".", CloudPath("").lastPathComponent)
-	}
+			#expect(CloudPath("/").lastPathComponent == "/")
+			#expect(CloudPath("").lastPathComponent == ".")
+		}
 
-	func testPathExtension() {
-		XCTAssertEqual("qux", CloudPath("/foo.bar/baz.qux").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo.bar/baz").pathExtension)
-		XCTAssertEqual("baz", CloudPath("/foo.bar.baz").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo.bar baz").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo.bar.").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo.bar. ").pathExtension)
-		XCTAssertEqual("bar", CloudPath("/foo..bar").pathExtension)
-		XCTAssertEqual("bar", CloudPath("/foo.bar").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo. bar").pathExtension)
-		XCTAssertEqual("", CloudPath("/foo").pathExtension)
-		XCTAssertEqual("", CloudPath("..").pathExtension)
-		XCTAssertEqual("", CloudPath(".").pathExtension)
-		XCTAssertEqual("", CloudPath("/").pathExtension)
-		XCTAssertEqual("", CloudPath("").pathExtension)
-	}
+		@Test
+		func testPathExtension() {
+			#expect(CloudPath("/foo.bar/baz.qux").pathExtension == "qux")
+			#expect(CloudPath("/foo.bar/baz").pathExtension == "")
+			#expect(CloudPath("/foo.bar.baz").pathExtension == "baz")
+			#expect(CloudPath("/foo.bar baz").pathExtension == "")
+			#expect(CloudPath("/foo.bar.").pathExtension == "")
+			#expect(CloudPath("/foo.bar. ").pathExtension == "")
+			#expect(CloudPath("/foo..bar").pathExtension == "bar")
+			#expect(CloudPath("/foo.bar").pathExtension == "bar")
+			#expect(CloudPath("/foo. bar").pathExtension == "")
+			#expect(CloudPath("/foo").pathExtension == "")
+			#expect(CloudPath("..").pathExtension == "")
+			#expect(CloudPath(".").pathExtension == "")
+			#expect(CloudPath("/").pathExtension == "")
+			#expect(CloudPath("").pathExtension == "")
+		}
 
-	func testAppendingPathComponent() {
-		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("/bar").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("bar/").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo/").appendingPathComponent("bar").path)
+		@Test
+		func testAppendingPathComponent() {
+			#expect(CloudPath("/foo/").appendingPathComponent("/bar/").path == "/foo/bar")
+			#expect(CloudPath("/foo/").appendingPathComponent("/bar").path == "/foo/bar")
+			#expect(CloudPath("/foo/").appendingPathComponent("bar/").path == "/foo/bar")
+			#expect(CloudPath("/foo/").appendingPathComponent("bar").path == "/foo/bar")
 
-		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("/bar").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("bar/").path)
-		XCTAssertEqual("/foo/bar", CloudPath("/foo").appendingPathComponent("bar").path)
+			#expect(CloudPath("/foo").appendingPathComponent("/bar/").path == "/foo/bar")
+			#expect(CloudPath("/foo").appendingPathComponent("/bar").path == "/foo/bar")
+			#expect(CloudPath("/foo").appendingPathComponent("bar/").path == "/foo/bar")
+			#expect(CloudPath("/foo").appendingPathComponent("bar").path == "/foo/bar")
 
-		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("/bar").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("bar/").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo/").appendingPathComponent("bar").path)
+			#expect(CloudPath("foo/").appendingPathComponent("/bar/").path == "foo/bar")
+			#expect(CloudPath("foo/").appendingPathComponent("/bar").path == "foo/bar")
+			#expect(CloudPath("foo/").appendingPathComponent("bar/").path == "foo/bar")
+			#expect(CloudPath("foo/").appendingPathComponent("bar").path == "foo/bar")
 
-		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("/bar/").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("/bar").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("bar/").path)
-		XCTAssertEqual("foo/bar", CloudPath("foo").appendingPathComponent("bar").path)
+			#expect(CloudPath("foo").appendingPathComponent("/bar/").path == "foo/bar")
+			#expect(CloudPath("foo").appendingPathComponent("/bar").path == "foo/bar")
+			#expect(CloudPath("foo").appendingPathComponent("bar/").path == "foo/bar")
+			#expect(CloudPath("foo").appendingPathComponent("bar").path == "foo/bar")
 
-		XCTAssertEqual("/foo/bar", CloudPath("///foo///").appendingPathComponent("///bar///").path)
-		XCTAssertEqual("/foo", CloudPath("/").appendingPathComponent("foo").path)
-		XCTAssertEqual("foo", CloudPath("").appendingPathComponent("foo").path)
-	}
+			#expect(CloudPath("///foo///").appendingPathComponent("///bar///").path == "/foo/bar")
+			#expect(CloudPath("/").appendingPathComponent("foo").path == "/foo")
+			#expect(CloudPath("").appendingPathComponent("foo").path == "foo")
+		}
 
-	func testDeletingLastPathComponent() {
-		XCTAssertEqual("/foo", CloudPath("/foo/bar/").deletingLastPathComponent().path)
-		XCTAssertEqual("/foo", CloudPath("/foo/bar").deletingLastPathComponent().path)
-		XCTAssertEqual("/", CloudPath("/foo/").deletingLastPathComponent().path)
-		XCTAssertEqual("/", CloudPath("/foo").deletingLastPathComponent().path)
-		XCTAssertEqual(".", CloudPath("foo/").deletingLastPathComponent().path)
-		XCTAssertEqual(".", CloudPath("foo").deletingLastPathComponent().path)
+		@Test
+		func testDeletingLastPathComponent() {
+			#expect(CloudPath("/foo/bar/").deletingLastPathComponent().path == "/foo")
+			#expect(CloudPath("/foo/bar").deletingLastPathComponent().path == "/foo")
+			#expect(CloudPath("/foo/").deletingLastPathComponent().path == "/")
+			#expect(CloudPath("/foo").deletingLastPathComponent().path == "/")
+			#expect(CloudPath("foo/").deletingLastPathComponent().path == ".")
+			#expect(CloudPath("foo").deletingLastPathComponent().path == ".")
 
-		XCTAssertEqual("/", CloudPath("///foo///").deletingLastPathComponent().path)
-		XCTAssertEqual(".", CloudPath("foo///").deletingLastPathComponent().path)
-		XCTAssertEqual("/", CloudPath("///foo").deletingLastPathComponent().path)
-		XCTAssertEqual("foo", CloudPath("foo///bar").deletingLastPathComponent().path)
+			#expect(CloudPath("///foo///").deletingLastPathComponent().path == "/")
+			#expect(CloudPath("foo///").deletingLastPathComponent().path == ".")
+			#expect(CloudPath("///foo").deletingLastPathComponent().path == "/")
+			#expect(CloudPath("foo///bar").deletingLastPathComponent().path == "foo")
 
-		XCTAssertEqual("/../..", CloudPath("/../").deletingLastPathComponent().path)
-		XCTAssertEqual("/../..", CloudPath("/..").deletingLastPathComponent().path)
-		XCTAssertEqual("../..", CloudPath("../").deletingLastPathComponent().path)
-		XCTAssertEqual("../..", CloudPath("..").deletingLastPathComponent().path)
-		XCTAssertEqual("/..", CloudPath("/./").deletingLastPathComponent().path)
-		XCTAssertEqual("/..", CloudPath("/.").deletingLastPathComponent().path)
-		XCTAssertEqual("..", CloudPath("./").deletingLastPathComponent().path)
-		XCTAssertEqual("..", CloudPath(".").deletingLastPathComponent().path)
+			#expect(CloudPath("/../").deletingLastPathComponent().path == "/../..")
+			#expect(CloudPath("/..").deletingLastPathComponent().path == "/../..")
+			#expect(CloudPath("../").deletingLastPathComponent().path == "../..")
+			#expect(CloudPath("..").deletingLastPathComponent().path == "../..")
+			#expect(CloudPath("/./").deletingLastPathComponent().path == "/..")
+			#expect(CloudPath("/.").deletingLastPathComponent().path == "/..")
+			#expect(CloudPath("./").deletingLastPathComponent().path == "..")
+			#expect(CloudPath(".").deletingLastPathComponent().path == "..")
 
-		XCTAssertEqual("/..", CloudPath("/").deletingLastPathComponent().path)
-		XCTAssertEqual("..", CloudPath("").deletingLastPathComponent().path)
-	}
+			#expect(CloudPath("/").deletingLastPathComponent().path == "/..")
+			#expect(CloudPath("").deletingLastPathComponent().path == "..")
+		}
 
-	func testAppendingPathExtension() {
-		XCTAssertEqual("/foo.bar.baz", CloudPath("/foo").appendingPathExtension("bar.baz").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("bar baz").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("bar.").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("bar. ").path)
-		XCTAssertEqual("/foo..bar", CloudPath("/foo").appendingPathExtension(".bar").path)
-		XCTAssertEqual("/foo.bar", CloudPath("/foo").appendingPathExtension("bar").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension(" bar").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("/bar").path)
-		XCTAssertEqual("/foo", CloudPath("/foo").appendingPathExtension("").path)
-		XCTAssertEqual("/.foo", CloudPath("/").appendingPathExtension("foo").path)
-		XCTAssertEqual("...foo", CloudPath("..").appendingPathExtension("foo").path)
-		XCTAssertEqual("..foo", CloudPath(".").appendingPathExtension("foo").path)
-		XCTAssertEqual("..foo", CloudPath("").appendingPathExtension("foo").path)
-	}
+		@Test
+		func testAppendingPathExtension() {
+			#expect(CloudPath("/foo").appendingPathExtension("bar.baz").path == "/foo.bar.baz")
+			#expect(CloudPath("/foo").appendingPathExtension("bar baz").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension("bar.").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension("bar. ").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension(".bar").path == "/foo..bar")
+			#expect(CloudPath("/foo").appendingPathExtension("bar").path == "/foo.bar")
+			#expect(CloudPath("/foo").appendingPathExtension(" bar").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension("/bar").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension("").path == "/foo")
+			#expect(CloudPath("/").appendingPathExtension("foo").path == "/.foo")
+			#expect(CloudPath("..").appendingPathExtension("foo").path == "...foo")
+			#expect(CloudPath(".").appendingPathExtension("foo").path == "..foo")
+			#expect(CloudPath("").appendingPathExtension("foo").path == "..foo")
+		}
 
-	func testDeletingPathExtension() {
-		XCTAssertEqual("/foo.bar", CloudPath("/foo.bar.baz").deletingPathExtension().path)
-		XCTAssertEqual("/foo", CloudPath("/foo.bar baz").deletingPathExtension().path)
-		XCTAssertEqual("/foo.bar.", CloudPath("/foo.bar.").deletingPathExtension().path)
-		XCTAssertEqual("/foo.bar", CloudPath("/foo.bar. ").deletingPathExtension().path)
-		XCTAssertEqual("/foo.", CloudPath("/foo..bar").deletingPathExtension().path)
-		XCTAssertEqual("/foo", CloudPath("/foo.bar").deletingPathExtension().path)
-		XCTAssertEqual("/foo", CloudPath("/foo. bar").deletingPathExtension().path)
-		XCTAssertEqual("/foo", CloudPath("/foo").deletingPathExtension().path)
-		XCTAssertEqual("..", CloudPath("..").deletingPathExtension().path)
-		XCTAssertEqual(".", CloudPath(".").deletingPathExtension().path)
-		XCTAssertEqual("/", CloudPath("/").deletingPathExtension().path)
-		XCTAssertEqual(".", CloudPath("").deletingPathExtension().path)
+		@Test
+		func testDeletingPathExtension() {
+			#expect(CloudPath("/foo.bar.baz").deletingPathExtension().path == "/foo.bar")
+			#expect(CloudPath("/foo.bar baz").deletingPathExtension().path == "/foo")
+			#expect(CloudPath("/foo.bar.").deletingPathExtension().path == "/foo.bar.")
+			#expect(CloudPath("/foo.bar. ").deletingPathExtension().path == "/foo.bar")
+			#expect(CloudPath("/foo..bar").deletingPathExtension().path == "/foo.")
+			#expect(CloudPath("/foo.bar").deletingPathExtension().path == "/foo")
+			#expect(CloudPath("/foo. bar").deletingPathExtension().path == "/foo")
+			#expect(CloudPath("/foo").deletingPathExtension().path == "/foo")
+			#expect(CloudPath("..").deletingPathExtension().path == "..")
+			#expect(CloudPath(".").deletingPathExtension().path == ".")
+			#expect(CloudPath("/").deletingPathExtension().path == "/")
+			#expect(CloudPath("").deletingPathExtension().path == ".")
+		}
 	}
 }

@@ -6,128 +6,134 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class VaultFormat8ProviderDecoratorTests: XCTestCase {
-	let vaultPath = CloudPath("pathToVault")
-	let cryptor = VaultFormat8CryptorMock()
-	var tmpDirURL: URL!
-	var provider: CloudProviderMock!
-	var decorator: VaultFormat8ProviderDecorator!
+extension UnitTests {
+	final class VaultFormat8ProviderDecoratorTests {
+		let vaultPath: CloudPath
+		let cryptor: VaultFormat8CryptorMock
+		let tmpDirURL: URL
+		let provider: CloudProviderMock
+		let decorator: VaultFormat8ProviderDecorator
 
-	override func setUpWithError() throws {
-		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		provider = CloudProviderMock(folders: Set(), files: [:])
-		decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-	}
+		init() throws {
+			let vaultPath = CloudPath("pathToVault")
+			let cryptor = VaultFormat8CryptorMock()
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let provider = CloudProviderMock(folders: Set(), files: [:])
+			self.decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			self.vaultPath = vaultPath
+			self.cryptor = cryptor
+			self.tmpDirURL = tmpDirURL
+			self.provider = provider
+		}
 
-	override func tearDownWithError() throws {
-		decorator = nil
-		provider = nil
-		try FileManager.default.removeItem(at: tmpDirURL)
-	}
+		deinit {
+			removeItemRecordingFailure(at: tmpDirURL)
+		}
 
-	func testCreateFolder() async throws {
-		try await decorator.createFolder(at: CloudPath("/Directory 1"))
-		XCTAssertEqual(3, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
-		XCTAssertEqual(2, provider.createdFiles.count)
-		XCTAssertNotNil(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
-		XCTAssertNotNil(provider.createdFiles["pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"])
-	}
-
-	func testCreateFolderWithCancellationAfterFirstRemoteChange() async throws {
-		let decorator: VaultFormat8ProviderDecorator = decorator
-		try await valueCancelledAfterFirstRemoteChange(of: provider) {
+		@Test
+		func testCreateFolder() async throws {
 			try await decorator.createFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.createdFolders.count == 3)
+			#expect(provider.createdFolders.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+			#expect(provider.createdFolders.contains("pathToVault/d/99"))
+			#expect(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
+			#expect(provider.createdFiles.count == 2)
+			#expect(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"] != nil)
+			#expect(provider.createdFiles["pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"] != nil)
 		}
-		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/99", "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"], provider.createdFolders.sorted())
-		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r", "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"], provider.createdFiles.keys.sorted())
-		XCTAssertNotNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
-	}
 
-	func testCreateFolderWithCancellationBeforeFirstRemoteChange() async throws {
-		let decorator: VaultFormat8ProviderDecorator = decorator
-		cryptor.encryptContentHook = { _, _ in
-			withUnsafeCurrentTask { $0?.cancel() }
-		}
-		let creation = Task {
-			try await decorator.createFolder(at: CloudPath("/Directory 1"))
-		}
-		await XCTAssertThrowsErrorAsync(try await value(of: creation)) { error in
-			XCTAssertTrue(error is CancellationError)
-		}
-		XCTAssertTrue(creation.isCancelled)
-		XCTAssertTrue(provider.createdFolders.isEmpty)
-		XCTAssertTrue(provider.createdFiles.isEmpty)
-	}
-
-	func testCreateFolderWithFailingEncryption() async throws {
-		cryptor.encryptContentHook = { _, _ in
-			throw CryptorMockError.notMocked
-		}
-		await XCTAssertThrowsErrorAsync(try await decorator.createFolder(at: CloudPath("/Directory 1"))) { error in
-			XCTAssertEqual(CryptorMockError.notMocked, error as? CryptorMockError)
-		}
-		XCTAssertTrue(provider.createdFolders.isEmpty)
-		XCTAssertTrue(provider.createdFiles.isEmpty)
-		XCTAssertEqual([], try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path))
-	}
-
-	func testCreateFolderWithCancelledEncryption() async throws {
-		cryptor.encryptContentHook = { _, _ in
-			throw CancellationError()
-		}
-		await XCTAssertThrowsErrorAsync(try await decorator.createFolder(at: CloudPath("/Directory 1"))) { error in
-			XCTAssertTrue(error is CancellationError)
-		}
-		XCTAssertTrue(provider.createdFolders.isEmpty)
-		XCTAssertTrue(provider.createdFiles.isEmpty)
-		XCTAssertEqual([], try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path))
-	}
-
-	func testCreateFolderWithFailingDirIdFileUpload() async throws {
-		provider.transferHook = { cloudPath, _ in
-			if cloudPath.lastPathComponent == "dirid.c9r" {
-				throw CloudProviderError.noInternetConnection
+		@Test
+		func createFolderWithCancellationAfterFirstRemoteChange() async throws {
+			let decorator: VaultFormat8ProviderDecorator = decorator
+			try await valueCancelledAfterFirstRemoteChange(of: provider) {
+				try await decorator.createFolder(at: CloudPath("/Directory 1"))
 			}
+			#expect(provider.createdFolders.sorted() == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/99", "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"])
+			#expect(provider.createdFiles.keys.sorted() == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r", "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"])
+			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) != nil)
 		}
-		try await decorator.createFolder(at: CloudPath("/Directory 1"))
-		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertNotNil(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
-		XCTAssertEqual([], try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path))
-	}
 
-	func testCreateFolderWithCancelledDirIdFileUpload() async throws {
-		provider.transferHook = { cloudPath, _ in
-			if cloudPath.lastPathComponent == "dirid.c9r" {
+		@Test
+		func createFolderWithCancellationBeforeFirstRemoteChange() async throws {
+			let decorator: VaultFormat8ProviderDecorator = decorator
+			cryptor.encryptContentHook = { _, _ in
+				withUnsafeCurrentTask { $0?.cancel() }
+			}
+			let creation = Task {
+				try await decorator.createFolder(at: CloudPath("/Directory 1"))
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: creation) }
+			#expect(creation.isCancelled)
+			#expect(provider.createdFolders.isEmpty)
+			#expect(provider.createdFiles.isEmpty)
+		}
+
+		@Test
+		func createFolderWithFailingEncryption() async throws {
+			cryptor.encryptContentHook = { _, _ in
+				throw CryptorMockError.notMocked
+			}
+			await #expect(throws: CryptorMockError.notMocked) { try await decorator.createFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.createdFolders.isEmpty)
+			#expect(provider.createdFiles.isEmpty)
+			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
+		}
+
+		@Test
+		func createFolderWithCancelledEncryption() async throws {
+			cryptor.encryptContentHook = { _, _ in
 				throw CancellationError()
 			}
+			await #expect(throws: CancellationError.self) { try await decorator.createFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.createdFolders.isEmpty)
+			#expect(provider.createdFiles.isEmpty)
+			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
 		}
-		await XCTAssertThrowsErrorAsync(try await decorator.createFolder(at: CloudPath("/Directory 1"))) { error in
-			XCTAssertTrue(error is CancellationError)
-		}
-		XCTAssertEqual([], try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path))
-	}
 
-	func testMoveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
-		let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["dir1": "Directory 1", "dir2": "Directory 2"], contents: [:])
-		let decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-		try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
-		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
-		await XCTAssertThrowsErrorAsync(try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2"))) { error in
-			XCTAssertEqual(CloudProviderError.moveCompletedWithSourceRemaining, error as? CloudProviderError)
+		@Test
+		func createFolderWithFailingDirIdFileUpload() async throws {
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.lastPathComponent == "dirid.c9r" {
+					throw CloudProviderError.noInternetConnection
+				}
+			}
+			try await decorator.createFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.createdFiles.count == 1)
+			#expect(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"] != nil)
+			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
 		}
-		XCTAssertEqual(Data("dir1-id".utf8), try decorator.dirIdCache.get(CloudPath("/Directory 2")))
-		XCTAssertNil(try decorator.dirIdCache.get(CloudPath("/Directory 1")))
-	}
 
-	func testThrowsCancellationErrorInCancelledTask() async {
-		await assertThrowsCancellationErrorInCancelledTask(decorator)
-		XCTAssertEqual([], provider.calls)
+		@Test
+		func createFolderWithCancelledDirIdFileUpload() async throws {
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.lastPathComponent == "dirid.c9r" {
+					throw CancellationError()
+				}
+			}
+			await #expect(throws: CancellationError.self) { try await decorator.createFolder(at: CloudPath("/Directory 1")) }
+			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
+		}
+
+		@Test
+		func moveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
+			let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["dir1": "Directory 1", "dir2": "Directory 2"], contents: [:])
+			let decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
+			provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }
+			#expect(try Data("dir1-id".utf8) == decorator.dirIdCache.get(CloudPath("/Directory 2")))
+			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) == nil)
+		}
+
+		@Test
+		func throwsCancellationErrorInCancelledTask() async {
+			await assertThrowsCancellationErrorInCancelledTask(decorator)
+			#expect(provider.calls == [])
+		}
 	}
 }

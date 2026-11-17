@@ -6,78 +6,81 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class PCloudJSONTests: XCTestCase {
-	func testFileMetadata() throws {
-		let metadata = try PCloudJSON.metadata(in: Data(#"{"result":0,"metadata":{"isfolder":false,"name":"a.txt","fileid":42,"parentfolderid":0,"modified":1792056600,"size":7}}"#.utf8))
+extension UnitTests {
+	struct PCloudJSONTests {
+		@Test
+		func fileMetadata() throws {
+			let metadata = try PCloudJSON.metadata(in: Data(#"{"result":0,"metadata":{"isfolder":false,"name":"a.txt","fileid":42,"parentfolderid":0,"modified":1792056600,"size":7}}"#.utf8))
 
-		XCTAssertFalse(metadata.isFolder)
-		XCTAssertEqual("a.txt", metadata.name)
-		XCTAssertEqual(42, metadata.identifier)
-		XCTAssertEqual(1_792_056_600, metadata.modified)
-		XCTAssertEqual(7, metadata.size)
-	}
-
-	func testUploadedMetadataReadsFirstElement() throws {
-		let metadata = try PCloudJSON.uploadedMetadata(in: Data(#"{"result":0,"fileids":[42],"metadata":[{"isfolder":false,"name":"a.txt","fileid":42,"modified":1792056600,"size":7}]}"#.utf8))
-
-		XCTAssertEqual(42, metadata.identifier)
-	}
-
-	func testUploadedMetadataWithoutElementIsUnexpectedContent() {
-		XCTAssertThrowsError(try PCloudJSON.uploadedMetadata(in: Data(#"{"result":0,"metadata":[]}"#.utf8))) { error in
-			XCTAssertEqual(.unexpectedContent, error as? PCloudError)
+			#expect(!metadata.isFolder)
+			#expect(metadata.name == "a.txt")
+			#expect(metadata.identifier == 42)
+			#expect(metadata.modified == 1_792_056_600)
+			#expect(metadata.size == 7)
 		}
-	}
 
-	func testAuthenticationCodesAreUnauthorized() {
-		for code in [1000, 2000, 2094] {
-			XCTAssertThrowsError(try PCloudJSON.result(of: Data(#"{"result":\#(code),"error":"Log in failed."}"#.utf8))) { error in
-				XCTAssertEqual(.unauthorized, error as? CloudProviderError, "\(code)")
+		@Test
+		func uploadedMetadataReadsFirstElement() throws {
+			let metadata = try PCloudJSON.uploadedMetadata(in: Data(#"{"result":0,"fileids":[42],"metadata":[{"isfolder":false,"name":"a.txt","fileid":42,"modified":1792056600,"size":7}]}"#.utf8))
+
+			#expect(metadata.identifier == 42)
+		}
+
+		@Test
+		func uploadedMetadataWithoutElementIsUnexpectedContent() {
+			#expect(throws: PCloudError.unexpectedContent) { try PCloudJSON.uploadedMetadata(in: Data(#"{"result":0,"metadata":[]}"#.utf8)) }
+		}
+
+		@Test
+		func authenticationCodesAreUnauthorized() {
+			for code in [1000, 2000, 2094] {
+				#expect(throws: CloudProviderError.unauthorized, "\(code)") { try PCloudJSON.result(of: Data(#"{"result":\#(code),"error":"Log in failed."}"#.utf8)) }
 			}
 		}
-	}
 
-	func testOtherCodeIsAPIError() {
-		XCTAssertThrowsError(try PCloudJSON.result(of: Data(#"{"result":2041,"error":"Connection broken."}"#.utf8))) { error in
-			XCTAssertEqual(.apiError(code: 2041, message: "Connection broken."), error as? PCloudError)
+		@Test
+		func otherCodeIsAPIError() {
+			#expect(throws: PCloudError.apiError(code: 2041, message: "Connection broken.")) { try PCloudJSON.result(of: Data(#"{"result":2041,"error":"Connection broken."}"#.utf8)) }
 		}
-	}
 
-	func testSuccessfulResultReturnsBody() throws {
-		let body = Data(#"{"result":0,"email":"user@example.com"}"#.utf8)
+		@Test
+		func successfulResultReturnsBody() throws {
+			let body = Data(#"{"result":0,"email":"user@example.com"}"#.utf8)
 
-		XCTAssertEqual(body, try PCloudJSON.result(of: body))
-		XCTAssertEqual("user@example.com", try PCloudJSON.email(in: body))
-	}
+			#expect(try body == PCloudJSON.result(of: body))
+			#expect(try PCloudJSON.email(in: body) == "user@example.com")
+		}
 
-	func testUnreadableBodyIsUnexpectedContent() {
-		for body in [#"<html>Login</html>"#, #"{"error":"no result"}"#, #"{"result":"0"}"#, #"{"result":0,"metadata":{"isfolder":"no","name":"a.txt","fileid":42,"modified":1}}"#] {
-			XCTAssertThrowsError(try PCloudJSON.metadata(in: PCloudJSON.result(of: Data(body.utf8))), body) { error in
-				XCTAssertEqual(.unexpectedContent, error as? PCloudError, body)
+		@Test
+		func unreadableBodyIsUnexpectedContent() {
+			for body in [#"<html>Login</html>"#, #"{"error":"no result"}"#, #"{"result":"0"}"#, #"{"result":0,"metadata":{"isfolder":"no","name":"a.txt","fileid":42,"modified":1}}"#] {
+				#expect(throws: PCloudError.unexpectedContent, "\(body)") { try PCloudJSON.metadata(in: PCloudJSON.result(of: Data(body.utf8))) }
 			}
 		}
-	}
 
-	// MARK: - Legacy Token
+		// MARK: - Legacy Token
 
-	func testLegacyTokenDecodesUserOfSDK() throws {
-		let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"eapi.pcloud.com"}"#.utf8))
+		@Test
+		func legacyTokenDecodesUserOfSDK() throws {
+			let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"eapi.pcloud.com"}"#.utf8))
 
-		XCTAssertEqual(OAuthToken(accessToken: "LEGACY", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com"), token)
-	}
+			#expect(OAuthToken(accessToken: "LEGACY", refreshToken: nil, expiresAt: nil, apiHost: "eapi.pcloud.com") == token)
+		}
 
-	func testLegacyTokenLowercasesHost() throws {
-		let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"EAPI.PCLOUD.COM"}"#.utf8))
+		@Test
+		func legacyTokenLowercasesHost() throws {
+			let token = try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"EAPI.PCLOUD.COM"}"#.utf8))
 
-		XCTAssertEqual("eapi.pcloud.com", token.apiHost)
-	}
+			#expect(token.apiHost == "eapi.pcloud.com")
+		}
 
-	func testLegacyTokenWithHostOutsidePCloudThrows() {
-		XCTAssertThrowsError(try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"evil.example"}"#.utf8))) { error in
-			XCTAssertEqual(.unexpectedContent, error as? PCloudError)
+		@Test
+		func legacyTokenWithHostOutsidePCloudThrows() {
+			#expect(throws: PCloudError.unexpectedContent) { try PCloudLegacyToken.decode(Data(#"{"id":7,"token":"LEGACY","serverRegionId":2,"httpAPIHostName":"evil.example"}"#.utf8)) }
 		}
 	}
 }

@@ -6,93 +6,99 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import Foundation
 import os
-import XCTest
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class DownloadOperationTests: XCTestCase {
-	let itemMetadata = CloudItemMetadata(name: "file", cloudPath: CloudPath("/file"), itemType: .unknown, lastModifiedDate: Date(timeIntervalSince1970: 0), size: nil)
-	var tmpDirURL: URL!
-	var destinationURL: URL!
+extension UnitTests {
+	final class DownloadOperationTests {
+		let itemMetadata = CloudItemMetadata(name: "file", cloudPath: CloudPath("/file"), itemType: .unknown, lastModifiedDate: Date(timeIntervalSince1970: 0), size: nil)
+		let tmpDirURL: URL
+		let destinationURL: URL
 
-	override func setUpWithError() throws {
-		tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
-		destinationURL = tmpDirURL.appendingPathComponent("destination", isDirectory: false)
-	}
-
-	override func tearDownWithError() throws {
-		try FileManager.default.removeItem(at: tmpDirURL)
-	}
-
-	func testDownload() async throws {
-		let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
-		let downloadedMetadata = try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
-			XCTAssertFalse(FileManager.default.fileExists(atPath: stagedURL.path))
-			XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, stagedURL.deletingLastPathComponent().path)
-			try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
-			stagedFile.withLock { $0 = stagedURL }
-			return self.itemMetadata
-		})
-		XCTAssertEqual("file", downloadedMetadata.name)
-		XCTAssertEqual(CloudPath("/file"), downloadedMetadata.cloudPath)
-		XCTAssertEqual(.file, downloadedMetadata.itemType)
-		XCTAssertEqual(Date(timeIntervalSince1970: 0), downloadedMetadata.lastModifiedDate)
-		XCTAssertEqual(11, downloadedMetadata.size)
-		XCTAssertEqual("hello world", try String(contentsOf: destinationURL, encoding: .utf8))
-		try assertDeleted(stagedFile.withLock { $0 })
-	}
-
-	func testDownloadWithTransferFailingAfterWriting() async throws {
-		let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
-		await XCTAssertThrowsErrorAsync(try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
-			try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
-			stagedFile.withLock { $0 = stagedURL }
-			throw CloudProviderError.itemNotFound
-		})) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		init() throws {
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = tmpDirURL
+			self.destinationURL = tmpDirURL.appendingPathComponent("destination", isDirectory: false)
 		}
-		XCTAssertFalse(FileManager.default.fileExists(atPath: destinationURL.path))
-		try assertDeleted(stagedFile.withLock { $0 })
-	}
 
-	func testDownloadWithCancellationBeforePublication() async throws {
-		let destinationURL: URL = destinationURL
-		let itemMetadata = itemMetadata
-		let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
-		let download = Task {
-			try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
+		deinit {
+			removeItemRecordingFailure(at: tmpDirURL)
+		}
+
+		@Test
+		func testDownload() async throws {
+			let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
+			let downloadedMetadata = try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
+				#expect(!FileManager.default.fileExists(atPath: stagedURL.path))
+				#expect(try ProcessTemporaryDirectory.shared.directoryURL().path == stagedURL.deletingLastPathComponent().path)
 				try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
 				stagedFile.withLock { $0 = stagedURL }
-				withUnsafeCurrentTask { $0?.cancel() }
-				return itemMetadata
+				return self.itemMetadata
 			})
+			#expect(downloadedMetadata.name == "file")
+			#expect(CloudPath("/file") == downloadedMetadata.cloudPath)
+			#expect(downloadedMetadata.itemType == .file)
+			#expect(Date(timeIntervalSince1970: 0) == downloadedMetadata.lastModifiedDate)
+			#expect(downloadedMetadata.size == 11)
+			#expect(try String(contentsOf: destinationURL, encoding: .utf8) == "hello world")
+			try assertDeleted(stagedFile.withLock { $0 })
 		}
-		await XCTAssertThrowsErrorAsync(try await value(of: download)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		@Test
+		func downloadWithTransferFailingAfterWriting() async throws {
+			let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
+					try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
+					stagedFile.withLock { $0 = stagedURL }
+					throw CloudProviderError.itemNotFound
+				})
+			}
+			#expect(!FileManager.default.fileExists(atPath: destinationURL.path))
+			try assertDeleted(stagedFile.withLock { $0 })
 		}
-		XCTAssertFalse(FileManager.default.fileExists(atPath: destinationURL.path))
-		try assertDeleted(stagedFile.withLock { $0 })
-	}
 
-	func testDownloadWithDestinationCreatedDuringTransfer() async throws {
-		let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
-		await XCTAssertThrowsErrorAsync(try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
-			try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
-			stagedFile.withLock { $0 = stagedURL }
-			try "other".write(to: self.destinationURL, atomically: true, encoding: .utf8)
-			return self.itemMetadata
-		})) { error in
-			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		@Test
+		func downloadWithCancellationBeforePublication() async throws {
+			let destinationURL: URL = destinationURL
+			let itemMetadata = itemMetadata
+			let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
+			let download = Task {
+				try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
+					try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
+					stagedFile.withLock { $0 = stagedURL }
+					withUnsafeCurrentTask { $0?.cancel() }
+					return itemMetadata
+				})
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
+			#expect(!FileManager.default.fileExists(atPath: destinationURL.path))
+			try assertDeleted(stagedFile.withLock { $0 })
 		}
-		XCTAssertEqual("other", try String(contentsOf: destinationURL, encoding: .utf8))
-		try assertDeleted(stagedFile.withLock { $0 })
-	}
 
-	// MARK: - Internal
+		@Test
+		func downloadWithDestinationCreatedDuringTransfer() async throws {
+			let stagedFile = OSAllocatedUnfairLock<URL?>(initialState: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) {
+				try await DownloadOperation.download(to: destinationURL, transfer: { stagedURL in
+					try "hello world".write(to: stagedURL, atomically: true, encoding: .utf8)
+					stagedFile.withLock { $0 = stagedURL }
+					try "other".write(to: self.destinationURL, atomically: true, encoding: .utf8)
+					return self.itemMetadata
+				})
+			}
+			#expect(try String(contentsOf: destinationURL, encoding: .utf8) == "other")
+			try assertDeleted(stagedFile.withLock { $0 })
+		}
 
-	private func assertDeleted(_ stagedFile: URL?, file: StaticString = #filePath, line: UInt = #line) throws {
-		let stagedFile = try XCTUnwrap(stagedFile, file: file, line: line)
-		XCTAssertFalse(FileManager.default.fileExists(atPath: stagedFile.path), file: file, line: line)
+		// MARK: - Internal
+
+		private func assertDeleted(_ stagedFile: URL?, sourceLocation: SourceLocation = #_sourceLocation) throws {
+			let stagedFile = try #require(stagedFile, sourceLocation: sourceLocation)
+			#expect(!FileManager.default.fileExists(atPath: stagedFile.path), sourceLocation: sourceLocation)
+		}
 	}
 }

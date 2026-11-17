@@ -7,56 +7,62 @@
 //
 
 import AuthenticationServices
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccess
 @testable import CryptomatorCloudAccessCore
 
-class BoxAuthenticatorTests: XCTestCase {
-	private let clientID = "clientid"
-	private let state = "STATE"
+extension UnitTests {
+	struct BoxAuthenticatorTests {
+		private let clientID = "clientid"
+		private let state = "STATE"
 
-	func testAuthorizationCodeFromCallbackURL() throws {
-		XCTAssertEqual("CODE+1", try authorizationCode(fromCallbackURL: "boxsdk-clientid://boxsdkoauth2redirect?state=STATE&code=CODE%2B1"))
-	}
+		@Test
+		func authorizationCodeFromCallbackURL() throws {
+			#expect(try authorizationCode(fromCallbackURL: "boxsdk-clientid://boxsdkoauth2redirect?state=STATE&code=CODE%2B1") == "CODE+1")
+		}
 
-	func testRejectsInvalidCallbackURLs() {
-		let callbackURLs = [
-			"other://boxsdkoauth2redirect?state=STATE&code=CODE",
-			"boxsdk-clientid://other?state=STATE&code=CODE",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=OTHER&code=CODE",
-			"boxsdk-clientid://boxsdkoauth2redirect?code=CODE",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=server_error",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE",
-			"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&code="
-		]
-		for callbackURL in callbackURLs {
-			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.authenticationFailed, error as? BoxAuthenticatorError, callbackURL)
+		@Test
+		func rejectsInvalidCallbackURLs() {
+			let callbackURLs = [
+				"other://boxsdkoauth2redirect?state=STATE&code=CODE",
+				"boxsdk-clientid://other?state=STATE&code=CODE",
+				"boxsdk-clientid://boxsdkoauth2redirect?state=OTHER&code=CODE",
+				"boxsdk-clientid://boxsdkoauth2redirect?code=CODE",
+				"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=server_error",
+				"boxsdk-clientid://boxsdkoauth2redirect?state=STATE",
+				"boxsdk-clientid://boxsdkoauth2redirect?state=STATE&code="
+			]
+			for callbackURL in callbackURLs {
+				#expect(throws: BoxAuthenticatorError.authenticationFailed, "\(callbackURL)") { try authorizationCode(fromCallbackURL: callbackURL) }
 			}
 		}
-	}
 
-	func testDeniedAccessIsUserCancellation() {
-		for callbackURL in ["boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=access_denied", "boxsdk-clientid://boxsdkoauth2redirect?error=access_denied&error_description=The+user+denied+access"] {
-			XCTAssertThrowsError(try authorizationCode(fromCallbackURL: callbackURL), callbackURL) { error in
-				XCTAssertEqual(.userCancelled, (error as? CocoaError)?.code, callbackURL)
+		@Test
+		func deniedAccessIsUserCancellation() throws {
+			for callbackURL in ["boxsdk-clientid://boxsdkoauth2redirect?state=STATE&error=access_denied", "boxsdk-clientid://boxsdkoauth2redirect?error=access_denied&error_description=The+user+denied+access"] {
+				let error = try #require(throws: (any Error).self, "\(callbackURL)") { try authorizationCode(fromCallbackURL: callbackURL) }
+				#expect((error as? CocoaError)?.code == .userCancelled, "\(callbackURL)")
 			}
 		}
-	}
 
-	func testConvertLoginFlowErrorWithCanceledLogin() {
-		XCTAssertEqual(.userCancelled, (BoxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code)
-	}
+		@Test
+		func convertLoginFlowErrorWithCanceledLogin() {
+			#expect((BoxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code == .userCancelled)
+		}
 
-	func testConvertLoginFlowErrorWithFailedSession() {
-		XCTAssertEqual(.authenticationFailed, BoxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? BoxAuthenticatorError)
-	}
+		@Test
+		func convertLoginFlowErrorWithFailedSession() {
+			#expect((BoxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? BoxAuthenticatorError) == .authenticationFailed)
+		}
 
-	func testConvertLoginFlowErrorWithOtherError() {
-		XCTAssertEqual(.timedOut, (BoxAuthenticator.convertLoginFlowError(URLError(.timedOut)) as? URLError)?.code)
-	}
+		@Test
+		func convertLoginFlowErrorWithOtherError() {
+			#expect((BoxAuthenticator.convertLoginFlowError(URLError(.timedOut)) as? URLError)?.code == .timedOut)
+		}
 
-	private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
-		return try BoxAuthenticator.authorizationCode(fromCallbackURL: XCTUnwrap(URL(string: callbackURL)), clientID: clientID, expectedState: state)
+		private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
+			return try BoxAuthenticator.authorizationCode(fromCallbackURL: #require(URL(string: callbackURL)), clientID: clientID, expectedState: state)
+		}
 	}
 }

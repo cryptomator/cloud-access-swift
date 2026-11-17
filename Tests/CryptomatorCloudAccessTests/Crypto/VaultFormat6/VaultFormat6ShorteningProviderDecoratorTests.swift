@@ -6,344 +6,359 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
-class VaultFormat6ShorteningProviderDecoratorTests: VaultFormat6ProviderDecoratorTests {
-	var shorteningDecorator: VaultFormat6ShorteningProviderDecorator!
+extension UnitTests {
+	final class VaultFormat6ShorteningProviderDecoratorTests {
+		let vaultPath: CloudPath
+		let cryptor: VaultFormat6CryptorMock
+		let tmpDirURL: URL
+		let provider: VaultFormat6CloudProviderMock
+		let shorteningDecorator: VaultFormat6ShorteningProviderDecorator
+		let decorator: VaultFormat6ProviderDecorator
 
-	override func setUpWithError() throws {
-		try super.setUpWithError()
-		shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		decorator = try VaultFormat6ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
-	}
+		init() throws {
+			let vaultPath = CloudPath("pathToVault")
+			let cryptor = VaultFormat6CryptorMock()
+			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let fixture = try VaultFormat6Fixture(stacking: .shortening, vaultPath: vaultPath, cryptor: cryptor)
+			self.vaultPath = vaultPath
+			self.cryptor = cryptor
+			self.tmpDirURL = tmpDirURL
+			self.provider = fixture.provider
+			self.shorteningDecorator = try #require(fixture.shorteningDecorator)
+			self.decorator = fixture.decorator
+		}
 
-	override func tearDownWithError() throws {
-		shorteningDecorator = nil
-		try super.tearDownWithError()
-	}
+		deinit {
+			removeItemRecordingFailure(at: tmpDirURL)
+		}
 
-	override func testTemporaryDirectoryLiesInProcessFolder() throws {
-		try super.testTemporaryDirectoryLiesInProcessFolder()
-		XCTAssertEqual(try ProcessTemporaryDirectory.shared.directoryURL().path, shorteningDecorator.tmpDirURL.deletingLastPathComponent().path)
-	}
+		private let legacyDirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		/// A name of 129 characters, which old Cryptomator versions shortened and current ones keep.
+		private let legacyOriginalName = "0" + String(repeating: "A", count: 128)
+		private let legacyShortenedName = "TZWGC22CUSVOSQATCBD3274ZQV7ZI53A.lng"
 
-	private let legacyDirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	/// A name of 129 characters, which old Cryptomator versions shortened and current ones keep.
-	private let legacyOriginalName = "0" + String(repeating: "A", count: 128)
-	private let legacyShortenedName = "TZWGC22CUSVOSQATCBD3274ZQV7ZI53A.lng"
+		private func makeProviderWithLegacyShortenedName(files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
+			let legacyFiles = [
+				"\(legacyDirPath)/\(legacyShortenedName)": Data(),
+				"pathToVault/m/TZ/WG/\(legacyShortenedName)": Data(legacyOriginalName.utf8)
+			]
+			return CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", legacyDirPath], files: legacyFiles.merging(files) { $1 }, maxPageSize: maxPageSize)
+		}
 
-	private func makeProviderWithLegacyShortenedName(files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
-		let legacyFiles = [
-			"\(legacyDirPath)/\(legacyShortenedName)": Data(),
-			"pathToVault/m/TZ/WG/\(legacyShortenedName)": Data(legacyOriginalName.utf8)
-		]
-		return CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", legacyDirPath], files: legacyFiles.merging(files) { $1 }, maxPageSize: maxPageSize)
-	}
+		@Test
+		func fetchItemMetadataWithLongName() async throws {
+			let metadata = try await decorator.fetchItemMetadata(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
+			#expect(metadata.name == "File 6 (Long)")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.cloudPath.path == "/Directory 3 (Long)/File 6 (Long)")
+		}
 
-	override func testFetchItemListForRootDir() async throws {
-		let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-		XCTAssertEqual(6, itemList.items.count)
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Directory 1" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Directory 3 (Long)" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 1" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 2" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 4 (Long)" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 5 (Long)" }))
-	}
+		@Test
+		func fetchItemListForSubDirWithLongName() async throws {
+			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/Directory 3 (Long)"), withPageToken: nil)
+			#expect(itemList.items.count == 2)
+			#expect(itemList.items.contains(where: { $0.name == "File 6 (Long)" }))
+			#expect(itemList.items.contains(where: { $0.name == "Directory 4 (Long)" }))
+		}
 
-	func testFetchItemMetadataWithLongName() async throws {
-		let metadata = try await decorator.fetchItemMetadata(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
-		XCTAssertEqual("File 6 (Long)", metadata.name)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual("/Directory 3 (Long)/File 6 (Long)", metadata.cloudPath.path)
-	}
-
-	func testFetchItemListForSubDirWithLongName() async throws {
-		let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/Directory 3 (Long)"), withPageToken: nil)
-		XCTAssertEqual(2, itemList.items.count)
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "File 6 (Long)" }))
-		XCTAssertTrue(itemList.items.contains(where: { $0.name == "Directory 4 (Long)" }))
-	}
-
-	func testFetchItemListWithCancelledNameLookup() async throws {
-		provider.transferHook = { cloudPath, _ in
-			if cloudPath.path == "pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng" {
-				throw CancellationError()
+		@Test
+		func fetchItemListWithCancelledNameLookup() async throws {
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng" {
+					throw CancellationError()
+				}
 			}
+			await #expect(throws: CancellationError.self) { try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
 		}
-		await XCTAssertThrowsErrorAsync(try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)) { error in
-			XCTAssertTrue(error is CancellationError)
+
+		/// The name files of these names would lie in other directories than `m/<2 characters>/<2 characters>`, where the mock holds them.
+		@Test
+		func fetchItemListSkipsNamesThatAreNoDeflatedNames() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/..AB.lng": Data(),
+				"\(dirPath)/....lng": Data(),
+				"\(dirPath)/AB...lng": Data(),
+				"\(dirPath)/file1": Data(),
+				"pathToVault/AB/..AB.lng": Data("outsideM".utf8),
+				"....lng": Data("outsideVault".utf8),
+				"pathToVault/m/AB...lng": Data("wrongLevel".utf8)
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/file1"])
+			#expect(!provider.calls.contains("downloadFile"))
+			#expect(provider.moved.isEmpty)
 		}
-	}
 
-	/// The name files of these names would lie in other directories than `m/<2 characters>/<2 characters>`, where the mock holds them.
-	func testFetchItemListSkipsNamesThatAreNoDeflatedNames() async throws {
-		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
-			"\(dirPath)/..AB.lng": Data(),
-			"\(dirPath)/....lng": Data(),
-			"\(dirPath)/AB...lng": Data(),
-			"\(dirPath)/file1": Data(),
-			"pathToVault/AB/..AB.lng": Data("outsideM".utf8),
-			"....lng": Data("outsideVault".utf8),
-			"pathToVault/m/AB...lng": Data("wrongLevel".utf8)
-		])
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
-		XCTAssertEqual(["\(dirPath)/file1"], itemList.items.map(\.cloudPath.path))
-		XCTAssertFalse(provider.calls.contains("downloadFile"))
-		XCTAssertTrue(provider.moved.isEmpty)
-	}
+		@Test
+		func fetchItemListWithOnlyInvalidNamesIsEmpty() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/..AB.lng": Data(),
+				"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
+				"pathToVault/m/4H/GU/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data("..".utf8)
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.isEmpty)
+		}
 
-	func testFetchItemListWithOnlyInvalidNamesIsEmpty() async throws {
-		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
-			"\(dirPath)/..AB.lng": Data(),
-			"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
-			"pathToVault/m/4H/GU/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data("..".utf8)
-		])
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
-		XCTAssertTrue(itemList.items.isEmpty)
-	}
+		/// The swapped name files hold valid names, so only the comparison with the listed name leaves their items out.
+		@Test
+		func fetchItemListSkipsNamesWhoseNameFileBelongsToAnotherName() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let longName = String(repeating: "a", count: 130)
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
+				"\(dirPath)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": Data(),
+				"\(dirPath)/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": Data(),
+				"pathToVault/m/4H/GU/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(longName.utf8),
+				"pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": Data(String(repeating: "file5", count: 26).utf8),
+				"pathToVault/m/CI/VV/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": Data(String(repeating: "file4", count: 26).utf8)
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/\(longName)"])
+			#expect(provider.moved.isEmpty)
+		}
 
-	/// The swapped name files hold valid names, so only the comparison with the listed name leaves their items out.
-	func testFetchItemListSkipsNamesWhoseNameFileBelongsToAnotherName() async throws {
-		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		let longName = String(repeating: "a", count: 130)
-		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
-			"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
-			"\(dirPath)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": Data(),
-			"\(dirPath)/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": Data(),
-			"pathToVault/m/4H/GU/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(longName.utf8),
-			"pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": Data(String(repeating: "file5", count: 26).utf8),
-			"pathToVault/m/CI/VV/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": Data(String(repeating: "file4", count: 26).utf8)
-		])
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
-		XCTAssertEqual(["\(dirPath)/\(longName)"], itemList.items.map(\.cloudPath.path))
-		XCTAssertTrue(provider.moved.isEmpty)
-	}
-
-	func testFetchItemListMovesLegacyShortenedNameToOriginalName() async throws {
-		let provider = makeProviderWithLegacyShortenedName()
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
-		XCTAssertEqual(["\(legacyDirPath)/\(legacyShortenedName)": "\(legacyDirPath)/\(legacyOriginalName)"], provider.moved)
-		XCTAssertEqual([legacyOriginalName], itemList.items.map(\.name))
-		XCTAssertEqual(["\(legacyDirPath)/\(legacyOriginalName)"], itemList.items.map(\.cloudPath.path))
-		XCTAssertEqual([.file], itemList.items.map(\.itemType))
-	}
-
-	/// The legacy name is the only item, so the listing would throw if a failed move counted as a failed item.
-	func testFetchItemListLeavesOutLegacyShortenedNameThatCannotBeMoved() async throws {
-		for error in [CloudProviderError.itemAlreadyExists, .unauthorized, .itemNotFound] {
+		@Test
+		func fetchItemListMovesLegacyShortenedNameToOriginalName() async throws {
 			let provider = makeProviderWithLegacyShortenedName()
-			provider.moveHook = { throw error }
 			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
-			XCTAssertTrue(itemList.items.isEmpty, "\(error)")
+			#expect(provider.moved == ["\(legacyDirPath)/\(legacyShortenedName)": "\(legacyDirPath)/\(legacyOriginalName)"])
+			#expect([legacyOriginalName] == itemList.items.map(\.name))
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(legacyDirPath)/\(legacyOriginalName)"])
+			#expect(itemList.items.map(\.itemType) == [.file])
 		}
-	}
 
-	func testFetchItemListReturnsLegacyShortenedNameWhoseMoveLeftLeftovers() async throws {
-		let provider = makeProviderWithLegacyShortenedName()
-		provider.afterMutationHook = CloudProviderMock.failing("moveFile", with: CloudProviderError.moveCompletedWithSourceRemaining)
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
-		XCTAssertEqual(["\(legacyDirPath)/\(legacyOriginalName)"], itemList.items.map(\.cloudPath.path))
-	}
-
-	/// A missing internet connection says nothing about whether the item can be moved, so it counts like a name file that couldn't be downloaded.
-	func testFetchItemListWithLegacyShortenedNameThrowsIfMoveFailsWithoutInternetConnection() async throws {
-		let provider = makeProviderWithLegacyShortenedName()
-		provider.moveHook = { throw CloudProviderError.noInternetConnection }
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)) { error in
-			XCTAssertEqual(CloudProviderError.noInternetConnection, error as? CloudProviderError)
-		}
-	}
-
-	/// The legacy name is listed last, so the listing throws the lookup's error only if the failed move is skipped.
-	func testFetchItemListWithUnmovedLegacyShortenedNameAndFailedNameLookupThrows() async throws {
-		let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data()])
-		provider.moveHook = { throw CloudProviderError.unauthorized }
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
-		}
-	}
-
-	/**
-	 A provider that checks the source first reports the moved item as `itemNotFound`, one that checks the target first as `itemAlreadyExists`.
-
-	 The test seeds the name that the item was moved to, and the mock's files don't change. With a page size of 2 the page therefore holds both names, like a page listed during a move that copies and then deletes, and the listing returns the item once. The original name sorts before the shortened one, and the mock's page token is the start index, so with a page size of 1 the page at token `1` holds only the shortened name, like a page listed before the move.
-
-	 The metadata hook reports the shortened name as gone, because the mock's files don't show the move.
-	 */
-	func testFetchItemListReturnsLegacyShortenedNameThatAnotherListingMoved() async throws {
-		let shortenedPath = CloudPath("\(legacyDirPath)/\(legacyShortenedName)")
-		let reportShortenedNameAsGone: @Sendable (CloudPath) throws -> Void = { cloudPath in
-			if cloudPath == shortenedPath {
-				throw CloudProviderError.itemNotFound
-			}
-		}
-		let pages: [(pageToken: String?, listedNames: [String])] = [(nil, [legacyOriginalName, legacyShortenedName]), ("1", [legacyShortenedName])]
-		for error in [CloudProviderError.itemNotFound, .itemAlreadyExists] {
-			for page in pages {
-				let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data()], maxPageSize: page.listedNames.count)
+		/// The legacy name is the only item, so the listing would throw if a failed move counted as a failed item.
+		@Test
+		func fetchItemListLeavesOutLegacyShortenedNameThatCannotBeMoved() async throws {
+			for error in [CloudProviderError.itemAlreadyExists, .unauthorized, .itemNotFound] {
+				let provider = makeProviderWithLegacyShortenedName()
 				provider.moveHook = { throw error }
-				provider.metadataHook = reportShortenedNameAsGone
-				let listedItems = try await provider.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken).items
-				XCTAssertEqual(page.listedNames, listedItems.map(\.name))
 				let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-				let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken)
-				XCTAssertEqual(["\(legacyDirPath)/\(legacyOriginalName)"], itemList.items.map(\.cloudPath.path), "\(error), page size \(page.listedNames.count)")
+				let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
+				#expect(itemList.items.isEmpty, "\(error)")
 			}
 		}
-	}
 
-	func testFetchItemListWithCancelledMoveOfLegacyShortenedName() async throws {
-		try await assertFetchItemListOfLegacyShortenedNameThrowsCancellationError { $0.moveHook = { throw CancellationError() } }
-	}
-
-	func testFetchItemListWithCancelledLookupOfMovedLegacyShortenedName() async throws {
-		try await assertFetchItemListOfLegacyShortenedNameThrowsCancellationError { provider in
-			provider.moveHook = { throw CloudProviderError.itemNotFound }
-			provider.metadataHook = { _ in throw CancellationError() }
+		@Test
+		func fetchItemListReturnsLegacyShortenedNameWhoseMoveLeftLeftovers() async throws {
+			let provider = makeProviderWithLegacyShortenedName()
+			provider.afterMutationHook = CloudProviderMock.failing("moveFile", with: CloudProviderError.moveCompletedWithSourceRemaining)
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(legacyDirPath)/\(legacyOriginalName)"])
 		}
-	}
 
-	private func assertFetchItemListOfLegacyShortenedNameThrowsCancellationError(_ configure: (CloudProviderMock) -> Void) async throws {
-		let provider = makeProviderWithLegacyShortenedName()
-		configure(provider)
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)) { error in
-			XCTAssertTrue(error is CancellationError)
+		/// A missing internet connection says nothing about whether the item can be moved, so it counts like a name file that couldn't be downloaded.
+		@Test
+		func fetchItemListWithLegacyShortenedNameThrowsIfMoveFailsWithoutInternetConnection() async throws {
+			let provider = makeProviderWithLegacyShortenedName()
+			provider.moveHook = { throw CloudProviderError.noInternetConnection }
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil) }
 		}
-	}
 
-	/// The invalid name is listed last, so the listing throws the lookup's error only if `invalidNameFile` is skipped.
-	func testFetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
-		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
-			"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
-			"\(dirPath)/AB...lng": Data()
-		])
-		let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)) { error in
-			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		/// The legacy name is listed last, so the listing throws the lookup's error only if the failed move is skipped.
+		@Test
+		func fetchItemListWithUnmovedLegacyShortenedNameAndFailedNameLookupThrows() async throws {
+			let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data()])
+			provider.moveHook = { throw CloudProviderError.unauthorized }
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil) }
 		}
-	}
 
-	func testDownloadFileWithLongName() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let metadata = try await decorator.downloadFile(from: CloudPath("/File 4 (Long)"), to: localURL)
-		let cleartext = try String(contentsOf: localURL, encoding: .utf8)
-		XCTAssertEqual("cleartext4", cleartext)
-		XCTAssertEqual("File 4 (Long)", metadata.name)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual("/File 4 (Long)", metadata.cloudPath.path)
-		XCTAssertEqual(provider.lastModifiedDate, metadata.lastModifiedDate)
-		XCTAssertEqual(10, metadata.size)
-	}
+		/**
+		 A provider that checks the source first reports the moved item as `itemNotFound`, one that checks the target first as `itemAlreadyExists`.
 
-	func testUploadFileWithLongName() async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
-		let metadata = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false)
-		XCTAssertEqual(3, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q/OD"))
-		XCTAssertEqual(2, provider.createdFiles.count)
-		XCTAssertEqual(Data("ciphertext4".utf8), provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
-		XCTAssertEqual(String(repeating: "file4", count: 26).data(using: .utf8), provider.createdFiles["pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
-		XCTAssertEqual("File 4 (Long)", metadata.name)
-		XCTAssertEqual(.file, metadata.itemType)
-		XCTAssertEqual("/File 4 (Long)", metadata.cloudPath.path)
-		XCTAssertEqual(provider.lastModifiedDate, metadata.lastModifiedDate)
-		XCTAssertEqual(0, metadata.size) // CryptorMock calculates a cleartext size of 0
-	}
+		 The test seeds the name that the item was moved to, and the mock's files don't change. With a page size of 2 the page therefore holds both names, like a page listed during a move that copies and then deletes, and the listing returns the item once. The original name sorts before the shortened one, and the mock's page token is the start index, so with a page size of 1 the page at token `1` holds only the shortened name, like a page listed before the move.
 
-	func testCreateFolderWithLongName() async throws {
-		try await decorator.createFolder(at: CloudPath("/Directory 3 (Long)"))
-		XCTAssertEqual(5, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL/2X"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
-		XCTAssertEqual(2, provider.createdFiles.count)
-		XCTAssertNotNil(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
-		XCTAssertEqual(Data("0\(String(repeating: "dir3", count: 33))".utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
-	}
+		 The metadata hook reports the shortened name as gone, because the mock's files don't show the move.
+		 */
+		@Test
+		func fetchItemListReturnsLegacyShortenedNameThatAnotherListingMoved() async throws {
+			let shortenedPath = CloudPath("\(legacyDirPath)/\(legacyShortenedName)")
+			let reportShortenedNameAsGone: @Sendable (CloudPath) throws -> Void = { cloudPath in
+				if cloudPath == shortenedPath {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let pages: [(pageToken: String?, listedNames: [String])] = [(nil, [legacyOriginalName, legacyShortenedName]), ("1", [legacyShortenedName])]
+			for error in [CloudProviderError.itemNotFound, .itemAlreadyExists] {
+				for page in pages {
+					let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data()], maxPageSize: page.listedNames.count)
+					provider.moveHook = { throw error }
+					provider.metadataHook = reportShortenedNameAsGone
+					let listedItems = try await provider.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken).items
+					#expect(page.listedNames == listedItems.map(\.name))
+					let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+					let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken)
+					#expect(itemList.items.map(\.cloudPath.path) == ["\(legacyDirPath)/\(legacyOriginalName)"], "\(error), page size \(page.listedNames.count)")
+				}
+			}
+		}
 
-	func testDeleteFileWithLongName() async throws {
-		try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
-		XCTAssertEqual(1, provider.deleted.count)
-		XCTAssertTrue(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng"))
-	}
+		@Test
+		func fetchItemListWithCancelledMoveOfLegacyShortenedName() async throws {
+			try await assertFetchItemListOfLegacyShortenedNameThrowsCancellationError { $0.moveHook = { throw CancellationError() } }
+		}
 
-	func testDeleteFolderWithLongName() async throws {
-		try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)"))
-		XCTAssertEqual(3, provider.deleted.count)
-		XCTAssertTrue(provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"))
-		XCTAssertTrue(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"))
-		XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"))
-	}
+		@Test
+		func fetchItemListWithCancelledLookupOfMovedLegacyShortenedName() async throws {
+			try await assertFetchItemListOfLegacyShortenedNameThrowsCancellationError { provider in
+				provider.moveHook = { throw CloudProviderError.itemNotFound }
+				provider.metadataHook = { _ in throw CancellationError() }
+			}
+		}
 
-	func testMoveFileFromShortToLongName() async throws {
-		try await decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/File 4 (Long)"))
-		XCTAssertEqual(3, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/2Q/OD"))
-		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertEqual(String(repeating: "file4", count: 26).data(using: .utf8), provider.createdFiles["pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
-		XCTAssertEqual(1, provider.moved.count)
-		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"])
-	}
+		private func assertFetchItemListOfLegacyShortenedNameThrowsCancellationError(_ configure: (CloudProviderMock) -> Void) async throws {
+			let provider = makeProviderWithLegacyShortenedName()
+			configure(provider)
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			await #expect(throws: CancellationError.self) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil) }
+		}
 
-	func testMoveFileFromLongToShortName() async throws {
-		try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1"))
-		XCTAssertEqual(1, provider.moved.count)
-		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
-	}
+		/// The invalid name is listed last, so the listing throws the lookup's error only if `invalidNameFile` is skipped.
+		@Test
+		func fetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
+				"\(dirPath)/AB...lng": Data()
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil) }
+		}
 
-	func testMoveFileFromLongToLongName() async throws {
-		try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)"))
-		XCTAssertEqual(3, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/CI"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/CI/VV"))
-		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertEqual(String(repeating: "file5", count: 26).data(using: .utf8), provider.createdFiles["pathToVault/m/CI/VV/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng"])
-		XCTAssertEqual(1, provider.moved.count)
-		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
-	}
+		@Test
+		func downloadFileWithLongName() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let metadata = try await decorator.downloadFile(from: CloudPath("/File 4 (Long)"), to: localURL)
+			let cleartext = try String(contentsOf: localURL, encoding: .utf8)
+			#expect(cleartext == "cleartext4")
+			#expect(metadata.name == "File 4 (Long)")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.cloudPath.path == "/File 4 (Long)")
+			#expect(provider.lastModifiedDate == metadata.lastModifiedDate)
+			#expect(metadata.size == 10)
+		}
 
-	func testMoveFolderFromShortToLongName() async throws {
-		try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 3 (Long)"))
-		XCTAssertEqual(3, provider.createdFolders.count)
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL"))
-		XCTAssertTrue(provider.createdFolders.contains("pathToVault/m/DL/2X"))
-		XCTAssertEqual(1, provider.createdFiles.count)
-		XCTAssertEqual(Data("0\(String(repeating: "dir3", count: 33))".utf8), provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
-		XCTAssertEqual(1, provider.moved.count)
-		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
-	}
+		@Test
+		func uploadFileWithLongName() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let metadata = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false)
+			#expect(provider.createdFolders.count == 3)
+			#expect(provider.createdFolders.contains("pathToVault/m"))
+			#expect(provider.createdFolders.contains("pathToVault/m/2Q"))
+			#expect(provider.createdFolders.contains("pathToVault/m/2Q/OD"))
+			#expect(provider.createdFiles.count == 2)
+			#expect(Data("ciphertext4".utf8) == provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
+			#expect(String(repeating: "file4", count: 26).data(using: .utf8) == provider.createdFiles["pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
+			#expect(metadata.name == "File 4 (Long)")
+			#expect(metadata.itemType == .file)
+			#expect(metadata.cloudPath.path == "/File 4 (Long)")
+			#expect(provider.lastModifiedDate == metadata.lastModifiedDate)
+			#expect(metadata.size == 0) // CryptorMock calculates a cleartext size of 0
+		}
 
-	func testMoveFolderFromLongToShortName() async throws {
-		try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))
-		XCTAssertEqual(1, provider.moved.count)
-		XCTAssertEqual("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1", provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
-	}
+		@Test
+		func createFolderWithLongName() async throws {
+			try await decorator.createFolder(at: CloudPath("/Directory 3 (Long)"))
+			#expect(provider.createdFolders.count == 5)
+			#expect(provider.createdFolders.contains("pathToVault/m"))
+			#expect(provider.createdFolders.contains("pathToVault/m/DL"))
+			#expect(provider.createdFolders.contains("pathToVault/m/DL/2X"))
+			#expect(provider.createdFolders.contains("pathToVault/d/99"))
+			#expect(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
+			#expect(provider.createdFiles.count == 2)
+			#expect(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"] != nil)
+			#expect(Data("0\(String(repeating: "dir3", count: 33))".utf8) == provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
+		}
 
-	func testShorteningDecoratorThrowsCancellationErrorInCancelledTask() async {
-		await assertThrowsCancellationErrorInCancelledTask(shorteningDecorator)
-		XCTAssertEqual([], provider.calls)
+		@Test
+		func deleteFileWithLongName() async throws {
+			try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
+			#expect(provider.deleted.count == 1)
+			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng"))
+		}
+
+		@Test
+		func deleteFolderWithLongName() async throws {
+			try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)"))
+			#expect(provider.deleted.count == 3)
+			#expect(provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"))
+			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"))
+			#expect(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"))
+		}
+
+		@Test
+		func moveFileFromShortToLongName() async throws {
+			try await decorator.moveFile(from: CloudPath("/File 1"), to: CloudPath("/File 4 (Long)"))
+			#expect(provider.createdFolders.count == 3)
+			#expect(provider.createdFolders.contains("pathToVault/m"))
+			#expect(provider.createdFolders.contains("pathToVault/m/2Q"))
+			#expect(provider.createdFolders.contains("pathToVault/m/2Q/OD"))
+			#expect(provider.createdFiles.count == 1)
+			#expect(String(repeating: "file4", count: 26).data(using: .utf8) == provider.createdFiles["pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"])
+			#expect(provider.moved.count == 1)
+			#expect(provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng")
+		}
+
+		@Test
+		func moveFileFromLongToShortName() async throws {
+			try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 1"))
+			#expect(provider.moved.count == 1)
+			#expect(provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1")
+		}
+
+		@Test
+		func moveFileFromLongToLongName() async throws {
+			try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 5 (Long)"))
+			#expect(provider.createdFolders.count == 3)
+			#expect(provider.createdFolders.contains("pathToVault/m"))
+			#expect(provider.createdFolders.contains("pathToVault/m/CI"))
+			#expect(provider.createdFolders.contains("pathToVault/m/CI/VV"))
+			#expect(provider.createdFiles.count == 1)
+			#expect(String(repeating: "file5", count: 26).data(using: .utf8) == provider.createdFiles["pathToVault/m/CI/VV/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng"])
+			#expect(provider.moved.count == 1)
+			#expect(provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng")
+		}
+
+		@Test
+		func moveFolderFromShortToLongName() async throws {
+			try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 3 (Long)"))
+			#expect(provider.createdFolders.count == 3)
+			#expect(provider.createdFolders.contains("pathToVault/m"))
+			#expect(provider.createdFolders.contains("pathToVault/m/DL"))
+			#expect(provider.createdFolders.contains("pathToVault/m/DL/2X"))
+			#expect(provider.createdFiles.count == 1)
+			#expect(Data("0\(String(repeating: "dir3", count: 33))".utf8) == provider.createdFiles["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"])
+			#expect(provider.moved.count == 1)
+			#expect(provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng")
+		}
+
+		@Test
+		func moveFolderFromLongToShortName() async throws {
+			try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1"))
+			#expect(provider.moved.count == 1)
+			#expect(provider.moved["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"] == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1")
+		}
+
+		@Test
+		func shorteningDecoratorThrowsCancellationErrorInCancelledTask() async {
+			await assertThrowsCancellationErrorInCancelledTask(shorteningDecorator)
+			#expect(provider.calls == [])
+		}
 	}
 }

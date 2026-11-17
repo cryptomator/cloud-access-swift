@@ -13,5 +13,4 @@ enum MicrosoftGraphError: Error {
 	case inconsistentCache
 	case missingItemName
 	case unexpectedHTTPStatusCode(code: Int)
-	case missingFileSize
 }

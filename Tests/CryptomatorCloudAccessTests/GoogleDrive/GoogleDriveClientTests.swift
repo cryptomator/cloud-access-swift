@@ -229,7 +229,7 @@ extension UnitTests {
 			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), GoogleDriveMockResponse.session(), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))]
 
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }) }
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }) }
 			#expect(URLProtocolMock.requestHandler.count == 2)
 		}
 
@@ -262,7 +262,7 @@ extension UnitTests {
 			}), GoogleDriveMockResponse.session(), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))]
 
 			let task = canceller.start {
-				_ = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+				_ = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 			}
 
 			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
@@ -348,7 +348,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: record)
 			]
 
-			let file = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+			let file = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 
 			#expect(file.id == "F")
 			let (sessionRequest, put) = try (#require(requests.requests.first), #require(requests.requests.last))
@@ -370,7 +370,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = [GoogleDriveMockResponse.session(onRequest: requests.record), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))]
 
-			_ = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: "F", progress: nil, onTaskCreation: nil)
+			_ = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: "F", progress: nil, onTaskCreation: nil)
 
 			let sessionRequest = try #require(requests.requests.first)
 			#expect(sessionRequest.httpMethod == "PATCH")
@@ -390,7 +390,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: record)
 			]
 
-			let file = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: tasks.record)
+			let file = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: tasks.record)
 
 			#expect(file.id == "F")
 			let sent = requests.requests
@@ -411,7 +411,7 @@ extension UnitTests {
 				GoogleDriveMockResponse.session()
 			]
 
-			let file = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+			let file = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 
 			#expect(file.id == "F")
 			#expect(URLProtocolMock.requestHandler.count == 1)
@@ -427,7 +427,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))
 			]
 
-			_ = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: tasks.record)
+			_ = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: tasks.record)
 
 			#expect([GoogleDriveMockResponse.sessionURL] == tasks.urls)
 		}
@@ -437,12 +437,12 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = [GoogleDriveMockResponse.session()] + Array(repeating: URLProtocolMock.handler(statusCode: 503, body: GoogleDriveMockResponse.error(status: 503, reason: "backendError")), count: 5)
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: "Error")) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: "Error")) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 401), GoogleDriveMockResponse.session()]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(tokenSource.rejectedTokens == ["TOKEN"])
 		}
@@ -453,7 +453,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503, body: GoogleDriveMockResponse.error(status: 503, reason: "backendError")), count: 4) + [GoogleDriveMockResponse.session()]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: "Error")) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: "backendError", message: "Error")) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(sleeps.durations.count == 3)
 		}
@@ -463,7 +463,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = Array(repeating: { _ in throw URLError(.networkConnectionLost) }, count: 4) + [GoogleDriveMockResponse.session()]
 
-			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(sleeps.durations.count == 3)
 		}
@@ -473,7 +473,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 3) + [URLProtocolMock.handler(statusCode: 401), GoogleDriveMockResponse.session()]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(tokenSource.rejectedTokens.isEmpty)
 		}
@@ -483,7 +483,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 3) + [GoogleDriveMockResponse.session(), URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 308)]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(tokenSource.rejectedTokens.isEmpty)
 		}
@@ -500,7 +500,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))
 			]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: nil, message: nil)) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: nil, message: nil)) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(sleeps.durations.count == 2)
 		}
@@ -510,7 +510,7 @@ extension UnitTests {
 			let localURL = try makeLocalFile(content: "file content")
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 3) + [GoogleDriveMockResponse.session(), URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(statusCode: 308)]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: nil, message: nil)) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 503, reason: nil, message: nil)) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(sleeps.durations.count == 3)
 		}
@@ -526,7 +526,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: record)
 			]
 
-			let file = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+			let file = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 
 			#expect(file.id == "F")
 			#expect(requests.requests.map { $0.value(forHTTPHeaderField: "Authorization") } == ["Bearer TOKEN", "Bearer TOKEN", "Bearer REFRESHED", "Bearer REFRESHED"])
@@ -545,7 +545,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))
 			]
 
-			let file = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+			let file = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 
 			#expect(file.id == "F")
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -561,7 +561,7 @@ extension UnitTests {
 				GoogleDriveMockResponse.session()
 			]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 404, reason: "notFound", message: "Error")) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 404, reason: "notFound", message: "Error")) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
@@ -571,7 +571,7 @@ extension UnitTests {
 			for location in ["https://example.com/upload", "http://www.googleapis.com/upload", "https://evilgoogleapis.com/upload"] {
 				URLProtocolMock.requestHandler = [URLProtocolMock.handler(headerFields: ["Location": location]), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt"))]
 
-				await #expect(throws: GoogleDriveError.unexpectedContent, "\(location)") { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+				await #expect(throws: GoogleDriveError.unexpectedContent, "\(location)") { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 				#expect(URLProtocolMock.requestHandler.count == 1, "\(location)")
 			}
 		}
@@ -586,7 +586,7 @@ extension UnitTests {
 				GoogleDriveMockResponse.session()
 			]
 
-			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
@@ -602,7 +602,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), headerFields: ["X-GUploader-UploadID": "SECRET-HEADER-ID"])
 			]
 
-			_ = try await client.upload(from: localURL, name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
+			_ = try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil)
 
 			let log = logCapture.joinedMessages
 			#expect(log.contains("https://www.googleapis.com"), "\(log)")

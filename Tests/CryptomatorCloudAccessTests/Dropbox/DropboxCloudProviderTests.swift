@@ -332,6 +332,19 @@ extension UnitTests {
 			}
 		}
 
+		@Test
+		func uploadThroughSymbolicLinkSendsTarget() async throws {
+			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "content"))
+			let recorder = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", tagged: false), onRequest: recorder.record)]
+
+			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+
+			#expect(recorder.requests.map(\.httpBody) == [Data("content".utf8)])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Upload Sessions
 
 		@Test

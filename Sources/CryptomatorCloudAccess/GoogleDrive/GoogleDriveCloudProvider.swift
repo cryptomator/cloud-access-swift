@@ -72,17 +72,10 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		var isDirectory: ObjCBool = false
-		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
-		if !fileExists {
-			throw CloudProviderError.itemNotFound
-		}
-		if isDirectory.boolValue {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		let localFile = try LocalUploadFile(localURL)
 		let phases = Progress.phases(of: progress, 999)
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: parentItem, from: localFile, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -199,7 +192,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	// swiftlint:disable:next function_parameter_count
-	private func uploadFile(for parentItem: GoogleDriveItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+	private func uploadFile(for parentItem: GoogleDriveItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		let existingItem: GoogleDriveItem?
 		do {
 			let item = try await resolvePath(forItemAt: cloudPath)
@@ -211,8 +204,8 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 			existingItem = nil
 		}
 		try Task.checkCancellation()
-		return try await perform("uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path))") {
-			let file = try await client.upload(from: localURL, name: cloudPath.lastPathComponent, parentID: parentItem.resolvedIdentifier, existingFileID: existingItem?.resolvedIdentifier, progress: progress, onTaskCreation: onTaskCreation)
+		return try await perform("uploadFile(for: \(parentItem.identifier), from: \(localFile.url), to: \(cloudPath.path))") {
+			let file = try await client.upload(from: localFile, name: cloudPath.lastPathComponent, parentID: parentItem.resolvedIdentifier, existingFileID: existingItem?.resolvedIdentifier, progress: progress, onTaskCreation: onTaskCreation)
 			// The cache keeps a replaced shortcut at its path, so that deleting the path deletes the shortcut, not the target that received the content.
 			try identifierCache.addOrUpdate(existingItem ?? GoogleDriveItem(cloudPath: cloudPath, file: file))
 			return try convertToCloudItemMetadata(file, at: cloudPath)

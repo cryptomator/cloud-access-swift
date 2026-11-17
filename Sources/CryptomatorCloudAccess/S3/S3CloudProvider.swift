@@ -139,23 +139,15 @@ public final class S3CloudProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called")
-		var isDirectory: ObjCBool = false
-		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
-		if !fileExists {
-			throw CloudProviderError.itemNotFound
-		}
-		if isDirectory.boolValue {
-			throw CloudProviderError.itemTypeMismatch
-		}
-		// The attributes of a symbolic link describe the link, whose size isn't the file's.
-		let fileSize = try FileManager.default.attributesOfItem(atPath: localURL.resolvingSymlinksInPath().path)[.size] as? Int ?? 0
+		let localFile = try LocalUploadFile(localURL)
+		let fileSize = Int(localFile.size)
 		let partSize = try multipartUploadPartSize(forFileSize: fileSize)
 		let resourceKey: URLResourceKey = if #available(iOS 14.0, *) {
 			.contentTypeKey
 		} else {
 			.typeIdentifierKey
 		}
-		let resourceValues = try localURL.resourceValues(forKeys: [resourceKey])
+		let resourceValues = try localFile.url.resourceValues(forKeys: [resourceKey])
 		let maybeContentType = resourceValues.typeIdentifier
 		let contentType = maybeContentType ?? "application/octet-stream"
 		let key = getKey(for: cloudPath)
@@ -172,9 +164,9 @@ public final class S3CloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) precondition done, uploading file…")
 			if let partSize {
-				try await uploadLargeFile(from: localURL, key: key, contentType: contentType, fileSize: fileSize, partSize: partSize, progress: phases[0])
+				try await uploadLargeFile(from: localFile.url, key: key, contentType: contentType, fileSize: fileSize, partSize: partSize, progress: phases[0])
 			} else {
-				try await client.upload(key: key, fromFile: localURL, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
+				try await client.upload(key: key, fromFile: localFile.url, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, fetching metadata…")
 			// The upload committed with its PUT or its completion, so the metadata is fetched even if the task is cancelled meanwhile.

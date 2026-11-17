@@ -200,6 +200,19 @@ extension UnitTests {
 		}
 
 		@Test
+		func uploadFileThroughSymbolicLinkCopiesTarget() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let linkURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: localURL)
+			let metadata = try await provider.uploadFile(from: linkURL, to: CloudPath("/file"), replaceExisting: false)
+			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
+			#expect(try fileURL.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == false)
+			#expect(try String(contentsOf: fileURL, encoding: .utf8) == "hello world")
+			#expect(metadata.size == 11)
+		}
+
+		@Test
 		func uploadFileWithNotFoundError() async {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false) }

@@ -71,19 +71,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let attributes: [FileAttributeKey: Any]
-		do {
-			attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
-		} catch CocoaError.fileReadNoSuchFile {
-			throw CloudProviderError.itemNotFound
-		}
-		let localItemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
-		guard localItemType == .file else {
-			throw CloudProviderError.itemTypeMismatch
-		}
-		guard let fileSize = attributes[FileAttributeKey.size] as? Int else {
-			throw MicrosoftGraphError.missingFileSize
-		}
+		let localFile = try LocalUploadFile(localURL)
 		let phases = Progress.phases(of: progress, 999)
 		do {
 			let metadata = try await fetchItemMetadata(at: cloudPath)
@@ -94,7 +82,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			// no-op
 		}
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: parentItem, from: localFile, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -237,11 +225,10 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 	}
 
-	// swiftlint:disable:next function_parameter_count
-	private func uploadFile(for parentItem: MicrosoftGraphItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+	private func uploadFile(for parentItem: MicrosoftGraphItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
 		let uploadURL = try await createUploadSession(for: parentItem, with: cloudPath.lastPathComponent)
-		let driveItem = try await uploadFileChunks(from: localURL, to: uploadURL, totalFileSize: fileSize, progress: progress, onTaskCreation: onTaskCreation)
+		let driveItem = try await uploadFileChunks(from: localFile.url, to: uploadURL, totalFileSize: Int(localFile.size), progress: progress, onTaskCreation: onTaskCreation)
 		let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
 		try identifierCache.addOrUpdate(item)
 		return try convertToCloudItemMetadata(driveItem, at: cloudPath)
@@ -482,20 +469,6 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let lastModifiedDate = driveItem.fileSystemInfo?.lastModifiedDate
 		let size = Int(driveItem.size ?? 0)
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
-	}
-
-	private func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {
-		guard let type = fileAttributeType else {
-			return CloudItemType.unknown
-		}
-		switch type {
-		case .typeDirectory:
-			return CloudItemType.folder
-		case .typeRegular:
-			return CloudItemType.file
-		default:
-			return CloudItemType.unknown
-		}
 	}
 
 	func convertStandardError(_ error: Error) -> Error {

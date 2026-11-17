@@ -97,14 +97,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		var isDirectory: ObjCBool = false
-		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
-		if !fileExists {
-			throw CloudProviderError.itemNotFound
-		}
-		if isDirectory.boolValue {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		let localFile = try LocalUploadFile(localURL)
 		let phases = Progress.phases(of: progress, 999)
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
 		try Task.checkCancellation()
@@ -118,7 +111,7 @@ public final class PCloudCloudProvider: CloudProvider {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}
 		try Task.checkCancellation()
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: parentItem, from: localFile.url, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}

@@ -485,9 +485,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func validateAndCopyFile(from sourceURL: URL, to targetURL: URL, replaceExisting: Bool) throws {
-		guard try validateItemType(at: sourceURL, with: .file) else {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		let sourceFile = try LocalUploadFile(sourceURL)
 		if replaceExisting {
 			do {
 				guard try validateItemType(at: targetURL, with: .file) else {
@@ -496,9 +494,9 @@ public final class LocalFileSystemProvider: CloudProvider {
 			} catch CocoaError.fileReadNoSuchFile {
 				// no-op
 			}
-			try FileManager.default.copyItemWithOverwrite(at: sourceURL, to: targetURL)
+			try FileManager.default.copyItemWithOverwrite(at: sourceFile.url, to: targetURL)
 		} else {
-			try FileManager.default.copyItem(at: sourceURL, to: targetURL)
+			try FileManager.default.copyItem(at: sourceFile.url, to: targetURL)
 		}
 	}
 }

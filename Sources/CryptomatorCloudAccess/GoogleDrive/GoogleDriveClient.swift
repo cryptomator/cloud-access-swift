@@ -127,9 +127,8 @@ final class GoogleDriveClient: Sendable {
 	 - Parameter onTaskCreation: Gets the task of the first `PUT`.
 	 */
 	// swiftlint:disable:next function_parameter_count
-	func upload(from fileURL: URL, name: String, parentID: String, existingFileID: String?, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> GoogleDriveFile {
-		let fileSize = try FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64 ?? 0
-		var upload = try ResumableUpload(sessionRequest: GoogleDriveClient.uploadSessionRequest(name: name, parentID: parentID, existingFileID: existingFileID, fileSize: fileSize))
+	func upload(from localFile: LocalUploadFile, name: String, parentID: String, existingFileID: String?, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> GoogleDriveFile {
+		var upload = try ResumableUpload(sessionRequest: GoogleDriveClient.uploadSessionRequest(name: name, parentID: parentID, existingFileID: existingFileID, fileSize: localFile.size))
 		try Task.checkCancellation()
 		upload.accessToken = try await tokenSource.accessToken()
 		while true {
@@ -138,11 +137,11 @@ final class GoogleDriveClient: Sendable {
 			case .createSession:
 				try await createSession(&upload)
 			case let .put(sessionURL):
-				if let file = try await put(fileURL, to: sessionURL, progress: progress, onTaskCreation: onTaskCreation, &upload) {
+				if let file = try await put(localFile.url, to: sessionURL, progress: progress, onTaskCreation: onTaskCreation, &upload) {
 					return file
 				}
 			case let .queryStatus(sessionURL):
-				if let file = try await queryStatus(of: sessionURL, fileSize: fileSize, &upload) {
+				if let file = try await queryStatus(of: sessionURL, fileSize: localFile.size, &upload) {
 					return file
 				}
 			}

@@ -68,17 +68,10 @@ public final class BoxCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		var isDirectory: ObjCBool = false
-		let fileExists = FileManager.default.fileExists(atPath: localURL.path, isDirectory: &isDirectory)
-		if !fileExists {
-			throw CloudProviderError.itemNotFound
-		}
-		if isDirectory.boolValue {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		let localFile = try LocalUploadFile(localURL)
 		let phases = Progress.phases(of: progress, 999)
 		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localURL, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: parentItem, from: localFile, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -190,32 +183,25 @@ public final class BoxCloudProvider: CloudProvider {
 	}
 
 	// swiftlint:disable:next function_parameter_count
-	private func uploadFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath), replaceExisting: \(replaceExisting)) called")
-		let attributes: [FileAttributeKey: Any]
-		do {
-			attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
-		} catch CocoaError.fileReadNoSuchFile {
-			throw CloudProviderError.itemNotFound
-		}
-		let fileSize = attributes[FileAttributeKey.size] as? Int ?? chunkedUploadThreshold
+	private func uploadFile(for parentItem: BoxItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localFile.url), to: \(cloudPath), replaceExisting: \(replaceExisting)) called")
 		do {
 			let item = try await resolvePath(forItemAt: cloudPath)
 			if !replaceExisting || (replaceExisting && item.itemType == .folder) {
 				throw CloudProviderError.itemAlreadyExists
 			}
 			try Task.checkCancellation()
-			if fileSize >= chunkedUploadThreshold {
-				return try await uploadLargeExistingFile(for: item, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
+			if localFile.size >= chunkedUploadThreshold {
+				return try await uploadLargeExistingFile(for: item, from: localFile, to: cloudPath, progress: progress)
 			} else {
-				return try await uploadSmallExistingFile(for: item, from: localURL, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
+				return try await uploadSmallExistingFile(for: item, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 			}
 		} catch CloudProviderError.itemNotFound {
 			try Task.checkCancellation()
-			if fileSize >= chunkedUploadThreshold {
-				return try await uploadLargeNewFile(for: parentItem, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
+			if localFile.size >= chunkedUploadThreshold {
+				return try await uploadLargeNewFile(for: parentItem, from: localFile, to: cloudPath, progress: progress)
 			} else {
-				return try await uploadSmallNewFile(for: parentItem, from: localURL, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
+				return try await uploadSmallNewFile(for: parentItem, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 			}
 		}
 	}
@@ -234,30 +220,30 @@ public final class BoxCloudProvider: CloudProvider {
 		}
 	}
 
-	private func uploadLargeNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
-		return try await perform("uploadLargeNewFile(for: \(parentItem.identifier), to: \(cloudPath), fileSize: \(fileSize))") {
-			let uploadSession = try await client.createUploadSession(parentID: parentItem.identifier, name: cloudPath.lastPathComponent, fileSize: Int64(fileSize))
-			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
+	private func uploadLargeNewFile(for parentItem: BoxItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?) async throws -> CloudItemMetadata {
+		return try await perform("uploadLargeNewFile(for: \(parentItem.identifier), to: \(cloudPath), fileSize: \(localFile.size))") {
+			let uploadSession = try await client.createUploadSession(parentID: parentItem.identifier, name: cloudPath.lastPathComponent, fileSize: localFile.size)
+			return try await uploadLargeFile(for: uploadSession, from: localFile, to: cloudPath, progress: progress)
 		}
 	}
 
-	private func uploadLargeExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
-		return try await perform("uploadLargeExistingFile(for: \(existingItem.identifier), to: \(cloudPath), fileSize: \(fileSize))") {
-			let uploadSession = try await client.createUploadSession(fileID: existingItem.identifier, fileSize: Int64(fileSize))
-			return try await uploadLargeFile(for: uploadSession, from: localURL, to: cloudPath, fileSize: fileSize, progress: progress)
+	private func uploadLargeExistingFile(for existingItem: BoxItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?) async throws -> CloudItemMetadata {
+		return try await perform("uploadLargeExistingFile(for: \(existingItem.identifier), to: \(cloudPath), fileSize: \(localFile.size))") {
+			let uploadSession = try await client.createUploadSession(fileID: existingItem.identifier, fileSize: localFile.size)
+			return try await uploadLargeFile(for: uploadSession, from: localFile, to: cloudPath, progress: progress)
 		}
 	}
 
 	/// Uploads the parts one by one, each from a temporary file, so that no part is held in memory. The progress counts bytes, and each part gets a share of its length.
-	private func uploadLargeFile(for uploadSession: BoxUploadSession, from localURL: URL, to cloudPath: CloudPath, fileSize: Int, progress: Progress?) async throws -> CloudItemMetadata {
+	private func uploadLargeFile(for uploadSession: BoxUploadSession, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?) async throws -> CloudItemMetadata {
 		guard let uploadPartURL = uploadSession.sessionEndpoints?.uploadPart, let commitURL = uploadSession.sessionEndpoints?.commit, let partSize = uploadSession.partSize, partSize > 0 else {
 			throw BoxError.unexpectedContent
 		}
-		progress?.totalUnitCount = Int64(fileSize)
+		progress?.totalUnitCount = localFile.size
 		var fileHash = Insecure.SHA1()
 		var parts = [BoxPart]()
 		var offset: Int64 = 0
-		let fileHandle = try FileHandle(forReadingFrom: localURL)
+		let fileHandle = try FileHandle(forReadingFrom: localFile.url)
 		defer {
 			try? fileHandle.close()
 		}
@@ -281,7 +267,7 @@ public final class BoxCloudProvider: CloudProvider {
 			}
 			let digest = "sha=\(Data(partHash.finalize()).base64EncodedString())"
 			let partProgress = progress?.makeExplicitChild(pendingUnitCount: partLength)
-			let part = try await client.uploadPart(url: uploadPartURL, from: partFileURL, range: offset ... offset + partLength - 1, fileSize: Int64(fileSize), digest: digest, progress: partProgress)
+			let part = try await client.uploadPart(url: uploadPartURL, from: partFileURL, range: offset ... offset + partLength - 1, fileSize: localFile.size, digest: digest, progress: partProgress)
 			parts.append(part)
 			offset += partLength
 		}

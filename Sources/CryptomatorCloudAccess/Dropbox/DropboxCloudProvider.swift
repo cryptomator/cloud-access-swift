@@ -97,26 +97,16 @@ public final class DropboxCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let attributes: [FileAttributeKey: Any]
-		do {
-			attributes = try FileManager.default.attributesOfItem(atPath: localURL.path)
-		} catch CocoaError.fileReadNoSuchFile {
-			throw CloudProviderError.itemNotFound
-		}
-		let localItemType = getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
-		guard localItemType == .file else {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		let localFile = try LocalUploadFile(localURL)
 		let phases = Progress.phases(of: progress, 999)
 		let mode: DropboxClient.WriteMode = replaceExisting ? .overwrite : .add
-		let fileSize = attributes[FileAttributeKey.size] as? Int ?? uploadSessionThreshold
-		let metadata = try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode), fileSize: \(fileSize))") {
+		let metadata = try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode), fileSize: \(localFile.size))") {
 			try await ensureParentFolderExists(for: cloudPath)
 			try Task.checkCancellation()
-			let file = if fileSize >= uploadSessionThreshold {
-				try await uploadLargeFile(from: localURL, to: cloudPath, mode: mode, fileSize: Int64(fileSize), progress: phases[0])
+			let file = if localFile.size >= uploadSessionThreshold {
+				try await uploadLargeFile(from: localFile.url, to: cloudPath, mode: mode, fileSize: localFile.size, progress: phases[0])
 			} else {
-				try await client.upload(from: localURL, path: cloudPath.path, mode: mode, progress: phases[0], onTaskCreation: onTaskCreation)
+				try await client.upload(from: localFile.url, path: cloudPath.path, mode: mode, progress: phases[0], onTaskCreation: onTaskCreation)
 			}
 			return try convertToCloudItemMetadata(file, at: cloudPath, untaggedAs: .file)
 		}
@@ -292,20 +282,6 @@ public final class DropboxCloudProvider: CloudProvider {
 			throw DropboxError.unexpectedContent
 		}
 		return try CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.lastModifiedDate, size: Int(size))
-	}
-
-	func getItemType(from fileAttributeType: FileAttributeType?) -> CloudItemType {
-		guard let type = fileAttributeType else {
-			return CloudItemType.unknown
-		}
-		switch type {
-		case .typeDirectory:
-			return CloudItemType.folder
-		case .typeRegular:
-			return CloudItemType.file
-		default:
-			return CloudItemType.unknown
-		}
 	}
 
 	/// Maps an unauthorized request and the route errors of a 409, whose `error_summary` starts with the tags of the route's argument, e.g., `path_lookup/not_found/..` for a missing item to delete.

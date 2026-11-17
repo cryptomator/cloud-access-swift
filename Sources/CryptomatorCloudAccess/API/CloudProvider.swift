@@ -87,7 +87,7 @@ public protocol CloudProvider: Sendable {
 	/**
 	 Uploads a file.
 
-	 - Parameter localURL: The local URL of the file to upload.
+	 - Parameter localURL: The local URL of the file to upload. A symbolic link is followed, so its target is uploaded.
 	 - Parameter cloudPath: The cloud path of the desired upload location.
 	 - Parameter replaceExisting: If true, overwrite the existing file at `cloudPath`.
 	 - Parameter progress: (Optional) A fresh `Progress` that the caller owns in order to observe the upload. The provider is its exclusive writer and sets its unit counts. It completes only when this method returns, not already when all bytes are transferred. If this method throws, it stays incomplete.
@@ -97,9 +97,9 @@ public protocol CloudProvider: Sendable {
 	 - Postcondition: The `size` property of the returned metadata is set to the size of the uploaded file in the cloud and must not be `nil`.
 	 - Returns: The metadata of the uploaded file.
 	 - Throws:
-	   - `CloudProviderError.itemNotFound` if the file does not exist at the `localURL`.
+	   - `CloudProviderError.itemNotFound` if no file exists at `localURL`, or if a symbolic link there points to a missing target.
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `cloudPath` with `!replaceExisting` or the cloud provider finds a folder instead of a file at `cloudPath` with `replaceExisting`.
-	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL`.
+	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or as the target of a symbolic link there.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `cloudPath` does not exist.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.

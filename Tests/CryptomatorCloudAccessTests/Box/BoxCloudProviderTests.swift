@@ -406,6 +406,30 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// A symbolic link's own size is the length of its destination, 9 bytes for `local.txt`, so only the target's 10 bytes reach the threshold.
+		@Test
+		func chunkedUploadThroughSymbolicLinkUsesSizeOfTarget() async throws {
+			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
+			let localURL = try makeLocalFile(content: "0123456789")
+			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
+			try FileManager.default.createSymbolicLink(atPath: linkURL.path, withDestinationPath: localURL.lastPathComponent)
+			let sessionBody = OSAllocatedUnfairLock<Data?>(initialState: nil)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
+				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: { request in
+					sessionBody.withLock { $0 = URLProtocolMock.body(of: request) }
+				})
+			] + (0 ..< 3).map { index in
+				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
+			} + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
+
+			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+
+			let body = try #require(sessionBody.withLock { $0 })
+			#expect(try (JSONSerialization.jsonObject(with: body) as? [String: Any])?["file_size"] as? Int == 10)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		@Test
 		func chunkedUploadReportsBytesOfParts() async throws {
 			let progress = Progress(totalUnitCount: 1)

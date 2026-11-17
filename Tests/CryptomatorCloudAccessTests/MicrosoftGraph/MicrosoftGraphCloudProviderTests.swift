@@ -217,6 +217,23 @@ extension UnitTests {
 		}
 
 		@Test
+		func uploadThroughSymbolicLinkSendsTarget() async throws {
+			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "content"))
+			let chunk = OSAllocatedUnfairLock<(range: String?, body: Data)?>(initialState: nil)
+			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: { request in
+				chunk.withLock { $0 = (request.value(forHTTPHeaderField: "Content-Range"), URLProtocolMock.body(of: request)) }
+			})]
+
+			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+
+			let sentChunk = try #require(chunk.withLock { $0 })
+			#expect(sentChunk.range == "bytes 0-6/7")
+			#expect(sentChunk.body == Data("content".utf8))
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
 		func downloadWithCancellationDuringOnTaskCreation() async throws {
 			let provider = provider
 			let localURL = tmpDirURL.appendingPathComponent("file.txt")

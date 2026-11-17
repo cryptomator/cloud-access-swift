@@ -8,7 +8,7 @@
 
 import Foundation
 
-/// Thrown for a `.c9s` directory that holds no `contents.c9r`, `dir.c9r` or `symlink.c9r`, e.g., after a failed upload or a partial delete. The listing skips it like `invalidNameFile`, so such a `.c9s` never fails the listing.
+/// Thrown for a `.c9s` directory that holds no `contents.c9r`, `dir.c9r` or `symlink.c9r`, e.g., after a failed upload or a partial delete, and for a file at a `.c9s` name. The listing skips it like `invalidNameFile`, so such a `.c9s` never fails the listing.
 private struct C9SItemFileMissing: Error {}
 
 private func isLeftOutOfListing(_ error: Error) -> Bool {
@@ -281,7 +281,12 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		var pageToken: String?
 		repeat {
 			try Task.checkCancellation()
-			let c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDirPath, withPageToken: pageToken)
+			let c9sItemList: CloudItemList
+			do {
+				c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDirPath, withPageToken: pageToken)
+			} catch CloudProviderError.itemTypeMismatch {
+				throw C9SItemFileMissing()
+			}
 			if let c9sItemMetadata = c9sItemList.items.first(where: { guessItemTypeByC9SItemName($0.name) != .unknown }) {
 				return c9sItemMetadata
 			}
@@ -308,11 +313,16 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 
 	 A `.c9s` that holds only a name file can also be another client's folder creation, between its name file and its `dir.c9r`. If this upload runs in between, both succeed, and the `.c9s` holds both `contents.c9r` and `dir.c9r`. That needs two clients to pick the same long name for a folder and a file at nearly the same time, so it isn't guarded against.
 
-	 - Throws: `CloudProviderError.itemAlreadyExists` if the `.c9s` holds a folder or a symlink, or if it holds a file and `replaceExisting` is `false`.
+	 - Throws: `CloudProviderError.itemAlreadyExists` if the `.c9s` is a file, if it holds a folder or a symlink, or if it holds `contents.c9r` and `replaceExisting` is `false`.
 	 */
 	private func uploadContentsFile(from localURL: URL, toExisting c9sDir: C9SDir, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
-		let c9sItemNames = try await delegate.fetchItemListExhaustively(forFolderAt: c9sDir.cloudPath).items.map(\.name)
+		let c9sItemNames: [String]
+		do {
+			c9sItemNames = try await delegate.fetchItemListExhaustively(forFolderAt: c9sDir.cloudPath).items.map(\.name)
+		} catch CloudProviderError.itemTypeMismatch {
+			throw CloudProviderError.itemAlreadyExists
+		}
 		let c9sItemTypes = c9sItemNames.map { guessItemTypeByC9SItemName($0) }
 		if c9sItemTypes.contains(.folder) || c9sItemTypes.contains(.symlink) {
 			throw CloudProviderError.itemAlreadyExists

@@ -147,6 +147,23 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		XCTAssertTrue(itemList.items.isEmpty)
 	}
 
+	func testFetchItemListWithOnlyFileAtC9SNameIsEmpty() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+		XCTAssertTrue(itemList.items.isEmpty)
+	}
+
+	func testFetchItemMetadataOfFileAtC9SNameThrowsItemNotFound() async throws {
+		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+		let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+		await XCTAssertThrowsErrorAsync(try await shorteningDecorator.fetchItemMetadata(at: CloudPath("\(dirPath)/\(String(repeating: "a", count: 217)).c9r"))) { error in
+			XCTAssertEqual(CloudProviderError.itemNotFound, error as? CloudProviderError)
+		}
+	}
+
 	func testFetchItemMetadataOfC9SWithoutItemFileThrowsItemNotFound() async throws {
 		let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 		let longName = "\(String(repeating: "a", count: 217)).c9r"
@@ -250,6 +267,17 @@ class VaultFormat7ShorteningProviderDecoratorTests: VaultFormat7ProviderDecorato
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
 		await XCTAssertThrowsErrorAsync(try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true)) { error in
+			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
+		}
+		XCTAssertEqual([:], provider.createdFiles)
+	}
+
+	/// A file sits at the name of the root's `.c9s` of `File 6 (Long)`, so `createFolder` and the listing of that name both fail.
+	func testUploadFileWithLongNameOverFileAtC9SNameThrowsItemAlreadyExists() async throws {
+		try useProviderRejectingExistingItems(changingFiles: [rootFile6C9SDirPath: Data()])
+		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		try "cleartext6".write(to: localURL, atomically: true, encoding: .utf8)
+		await XCTAssertThrowsErrorAsync(try await decorator.uploadFile(from: localURL, to: CloudPath("/File 6 (Long)"), replaceExisting: true)) { error in
 			XCTAssertEqual(CloudProviderError.itemAlreadyExists, error as? CloudProviderError)
 		}
 		XCTAssertEqual([:], provider.createdFiles)

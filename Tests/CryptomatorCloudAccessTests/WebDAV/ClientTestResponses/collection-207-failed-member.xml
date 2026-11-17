@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<multistatus xmlns="DAV:">
+    <response>
+        <href>/cloud/remote.php/webdav/Documents/Locked.txt</href>
+        <status>HTTP/1.1 423 Locked</status>
+    </response>
+</multistatus>

@@ -1073,6 +1073,35 @@ class WebDAVCloudProviderTests: XCTestCase {
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}
 
+	/// A server answers with 207 when a collection's DELETE failed for some members (RFC 4918, section 9.6.1). The fixture declares `DAV:` as the default namespace, which the parser has to resolve.
+	func testDeleteFolderWithFailedMember() async throws {
+		let data = try getTestData(forResource: "collection-207-failed-member", withExtension: "xml")
+		try enqueueResponse(statusCode: 207, data: data, for: XCTUnwrap(URL(string: "Documents", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/Documents"))) { error in
+			XCTAssertEqual(CloudProviderError.deletionIncomplete, error as? CloudProviderError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A 207 whose members all have a 2xx status means that the whole folder was deleted.
+	func testDeleteFolderWithSucceededMembers() async throws {
+		let data = try getTestData(forResource: "collection-207-succeeded-members", withExtension: "xml")
+		try enqueueResponse(statusCode: 207, data: data, for: XCTUnwrap(URL(string: "Documents", relativeTo: baseURL)))
+
+		try await provider.deleteFolder(at: CloudPath("/Documents"))
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	func testDeleteFolderWithMalformedMultistatus() async throws {
+		try enqueueResponse(statusCode: 207, data: Data("<d:multistatus xmlns:d=\"DAV:\"><d:response>".utf8), for: XCTUnwrap(URL(string: "Documents", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.deleteFolder(at: CloudPath("/Documents"))) { error in
+			XCTAssertEqual(WebDAVError.unexpectedResponse, error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
 	func testMoveFile() async throws {
 		let responseURL = try XCTUnwrap(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
@@ -1176,6 +1205,17 @@ class WebDAVCloudProviderTests: XCTestCase {
 
 		await XCTAssertThrowsErrorAsync(try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))) { error in
 			XCTAssertEqual(WebDAVError.httpError(statusCode: 403), error as? WebDAVError)
+		}
+		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
+	}
+
+	/// A server answers with 207 when a collection's MOVE failed for some members (RFC 4918, section 9.9.4). The move throws the status of the failed member.
+	func testMoveFolderWithFailedMember() async throws {
+		let data = try getTestData(forResource: "collection-207-failed-member", withExtension: "xml")
+		try enqueueResponse(statusCode: 207, data: data, for: XCTUnwrap(URL(string: "Documents", relativeTo: baseURL)))
+
+		await XCTAssertThrowsErrorAsync(try await provider.moveFolder(from: CloudPath("/Documents"), to: CloudPath("/Archive"))) { error in
+			XCTAssertEqual(WebDAVError.httpError(statusCode: 423), error as? WebDAVError)
 		}
 		XCTAssertTrue(URLProtocolMock.requestHandler.isEmpty)
 	}

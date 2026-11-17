@@ -48,7 +48,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 	private var collection = false
 	private var lastModified: Date?
 	private var contentLength: Int?
-	private var statusCode: String?
+	private var statusCode: Int?
 
 	init(parentDelegate: PropfindResponseElementParserDelegate) {
 		self.parentDelegate = parentDelegate
@@ -83,7 +83,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 		autoreleasepool {
 			switch elementName {
 			case "propstat":
-				if let statusCode, statusCode == "200" {
+				if statusCode == 200 {
 					parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
 				}
 				parser.delegate = parentDelegate
@@ -94,21 +94,11 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 			case "resourcetype":
 				insideOfResourceType = false
 			case "status":
-				statusCode = getStatusCode(xmlCharacterBuffer)
+				statusCode = httpStatusCode(ofStatusLine: xmlCharacterBuffer)
 			default:
 				break
 			}
 		}
-	}
-
-	// MARK: - Internal
-
-	private func getStatusCode(_ status: String?) -> String? {
-		guard let status else {
-			return nil
-		}
-		let statusSubsequences = status.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ")
-		return statusSubsequences.count > 1 ? String(statusSubsequences[1]) : nil
 	}
 }
 

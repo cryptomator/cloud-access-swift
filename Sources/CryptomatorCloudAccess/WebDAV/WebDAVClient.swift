@@ -86,10 +86,11 @@ class WebDAVClient: @unchecked Sendable {
 		return try await webDAVSession.performDataTask(with: request)
 	}
 
+	/// - Throws: `WebDAVMemberFailure` if the server answered with a 207 Multi-Status that reports a member it couldn't delete.
 	func DELETE(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "DELETE"
-		return try await webDAVSession.performDataTask(with: request)
+		return try await WebDAVClient.checkingMembers(of: webDAVSession.performDataTask(with: request))
 	}
 
 	func MOVE(sourceURL: URL, destinationURL: URL) async throws -> (HTTPURLResponse, Data?) {
@@ -97,10 +98,22 @@ class WebDAVClient: @unchecked Sendable {
 		request.httpMethod = "MOVE"
 		request.setValue(destinationURL.absoluteString, forHTTPHeaderField: "Destination")
 		request.setValue("F", forHTTPHeaderField: "Overwrite")
-		return try await webDAVSession.performDataTask(with: request)
+		return try await WebDAVClient.checkingMembers(of: webDAVSession.performDataTask(with: request))
 	}
 
 	// MARK: - Internal
+
+	/// Throws `WebDAVMemberFailure` for a 207 Multi-Status answer that reports a member status outside 2xx. Only the body tells such an answer from a success (RFC 4918, section 13).
+	private static func checkingMembers(of result: (HTTPURLResponse, Data?)) throws -> (HTTPURLResponse, Data?) {
+		let (response, data) = result
+		guard response.statusCode == 207 else {
+			return result
+		}
+		if let failedStatusCode = try MultistatusResponseParser.statusCodes(in: data ?? Data()).first(where: { !(200 ... 299).contains($0) }) {
+			throw WebDAVMemberFailure(statusCode: failedStatusCode)
+		}
+		return result
+	}
 
 	private func propfindPropElementsAsXML(with propertyNames: [String]?) -> String {
 		if let propertyNames {

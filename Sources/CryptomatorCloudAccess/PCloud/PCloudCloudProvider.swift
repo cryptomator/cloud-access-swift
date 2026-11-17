@@ -12,10 +12,12 @@ public final class PCloudCloudProvider: CloudProvider {
 	/// The API error codes that the provider maps to a `CloudProviderError`.
 	private enum APIErrorCode {
 		static let componentOfParentDirectoryDoesNotExist = 2002
+		static let accessDenied = 2003
 		static let folderAlreadyExists = 2004
 		static let folderDoesNotExist = 2005
 		static let userIsOverQuota = 2008
 		static let fileDoesNotExist = 2009
+		static let folderHasActiveShares = 2028
 	}
 
 	private let client: PCloudClient
@@ -338,9 +340,12 @@ public final class PCloudCloudProvider: CloudProvider {
 			try identifierCache.invalidate(item)
 		} catch {
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _) = error {
+			switch error {
+			case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _):
 				throw CloudProviderError.itemNotFound
-			} else {
+			case PCloudError.apiError(APIErrorCode.accessDenied, _):
+				throw CloudProviderError.deletionIncomplete
+			default:
 				throw error
 			}
 		}
@@ -354,9 +359,13 @@ public final class PCloudCloudProvider: CloudProvider {
 			try identifierCache.invalidate(item)
 		} catch {
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) = error {
+			switch error {
+			case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _):
 				throw CloudProviderError.itemNotFound
-			} else {
+			case PCloudError.apiError(APIErrorCode.accessDenied, _), PCloudError.apiError(APIErrorCode.folderHasActiveShares, _):
+				// pCloud doesn't document whether a refused recursive delete removed part of the folder.
+				throw CloudProviderError.deletionIncomplete
+			default:
 				throw error
 			}
 		}
@@ -365,6 +374,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	private func moveFile(from sourceItem: PCloudItem, toParent targetParentItem: PCloudItem, targetCloudPath: CloudPath) async throws {
 		CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
 		do {
+			// `renamefile` replaces a file at the target and has no parameter to refuse, whereas `renamefolder` refuses with 2004. A file that another client creates at the target after `checkForNameCollision` is therefore replaced.
 			let metadata = try await client.renameFile(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
 			CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
 			try identifierCache.invalidate(sourceItem)

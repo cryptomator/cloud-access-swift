@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+    <d:response>
+        <d:href>/cloud/remote.php/webdav/Documents/About.txt</d:href>
+        <d:status>HTTP/1.1 204 No Content</d:status>
+    </d:response>
+</d:multistatus>

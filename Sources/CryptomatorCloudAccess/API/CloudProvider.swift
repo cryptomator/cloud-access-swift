@@ -130,7 +130,7 @@ public protocol CloudProvider: Sendable {
 	 - Parameter cloudPath: The cloud path of the file to delete.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at `cloudPath`.
-	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the file, wholly or in part. A file in a vault can consist of several cloud items. The S3 provider throws it.
+	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the file, wholly or in part. A file in a vault can consist of several cloud items. The S3, WebDAV and pCloud providers throw it.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	   - `CancellationError` if the task was cancelled, or if the underlying SDK or the system cancelled a request.
@@ -144,7 +144,7 @@ public protocol CloudProvider: Sendable {
 	 - Parameter cloudPath: The cloud path of the folder to delete.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`. A vault provider also throws it if the folder or a folder inside it exists but can't be listed, e.g., because a name file is missing. The folder then still exists.
-	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the folder, wholly or in part. The S3 provider throws it.
+	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the folder, wholly or in part. The S3, WebDAV and pCloud providers throw it.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	   - `CancellationError` if the task was cancelled, or if the underlying SDK or the system cancelled a request.
@@ -160,7 +160,7 @@ public protocol CloudProvider: Sendable {
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at `sourceCloudPath`.
 	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the file is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it.
-	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`.
+	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`. If the source doesn't exist either, a provider may throw this or `itemNotFound`, so this doesn't imply that the source exists. To tell a taken name from an earlier move that already completed, a caller checks the source and the target itself.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
@@ -178,7 +178,7 @@ public protocol CloudProvider: Sendable {
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `sourceCloudPath`.
 	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the folder is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it.
-	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`.
+	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`. If the source doesn't exist either, a provider may throw this or `itemNotFound`, so this doesn't imply that the source exists. To tell a taken name from an earlier move that already completed, a caller checks the source and the target itself.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.

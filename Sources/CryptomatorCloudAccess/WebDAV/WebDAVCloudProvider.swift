@@ -238,6 +238,8 @@ public final class WebDAVCloudProvider: CloudProvider {
 		}
 		do {
 			_ = try await client.DELETE(url: url)
+		} catch is WebDAVMemberFailure {
+			throw CloudProviderError.deletionIncomplete
 		} catch {
 			throw convertStandardError(error)
 		}
@@ -263,6 +265,9 @@ public final class WebDAVCloudProvider: CloudProvider {
 			_ = try await client.MOVE(sourceURL: sourceURL, destinationURL: targetURL)
 		} catch {
 			switch error {
+			case let memberFailure as WebDAVMemberFailure:
+				// The target isn't known to be complete, so this isn't `moveCompletedWithSourceRemaining`.
+				throw WebDAVError.httpError(statusCode: memberFailure.statusCode)
 			case WebDAVError.httpError(statusCode: 409):
 				throw CloudProviderError.parentFolderDoesNotExist
 			case WebDAVError.httpError(statusCode: 412):

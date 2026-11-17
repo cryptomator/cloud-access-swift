@@ -143,6 +143,22 @@ class VaultFormat7ShortenedNameCacheTests: XCTestCase {
 		XCTAssertEqual("/foo/bar/d/2/30/\(longName)", original.path)
 	}
 
+	/// A name that isn't longer than the threshold isn't shortened, so the inflated path would address another item than the listed `.c9s`. The name file is rejected even though its name hashes to the `.c9s` name.
+	func testGetOriginalPathWithNameNotLongerThanThreshold() async {
+		let names = [
+			"aB0uiw4R5k6IpZuizrdgRcaPckg=.c9s": "short.c9r",
+			"795gAWf-P9tGGBt9EkGz9mKSGq0=.c9s": "\(String(repeating: "a", count: 216)).c9r" // exactly the threshold
+		]
+
+		for (shortenedName, name) in names {
+			await XCTAssertThrowsErrorAsync(try await cache.getOriginalPath(CloudPath("/foo/bar/d/2/30/\(shortenedName)")) { _ in
+				return Data(name.utf8)
+			}, shortenedName) { error in
+				XCTAssertEqual(.invalidNameFile, error as? VaultFormatError, shortenedName)
+			}
+		}
+	}
+
 	/// The listed name is compared byte by byte, so a name that differs from the hash only in case or padding, or that is merely canonically equivalent to it (U+212A KELVIN SIGN for `K`), is rejected.
 	func testGetOriginalPathWithListedNameInAnotherSpelling() async {
 		let longName = "\(String(repeating: "a", count: 217)).c9r"

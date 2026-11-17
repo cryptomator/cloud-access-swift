@@ -8,8 +8,11 @@
 
 import Foundation
 
-enum VaultFormat7ShorteningError: Error {
-	case c9sItemNotFound
+/// Thrown for a `.c9s` directory that holds no `contents.c9r`, `dir.c9r` or `symlink.c9r`, e.g., after a failed upload or a partial delete, and for a file at a `.c9s` name. The listing skips it like `invalidNameFile`, so such a `.c9s` never fails the listing.
+private struct C9SItemFileMissing: Error {}
+
+private func isLeftOutOfListing(_ error: Error) -> Bool {
+	return isInvalidNameFile(error) || error is C9SItemFileMissing
 }
 
 private extension CloudPath {
@@ -59,7 +62,11 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToC9S {
 			let shortenedMetadata = try await delegate.fetchItemMetadata(at: shortened.cloudPath)
-			return try await getOriginalMetadata(shortenedMetadata)
+			do {
+				return try await getOriginalMetadata(shortenedMetadata)
+			} catch is C9SItemFileMissing {
+				throw CloudProviderError.itemNotFound
+			}
 		} else {
 			return try await delegate.fetchItemMetadata(at: shortened.cloudPath)
 		}
@@ -70,7 +77,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		let itemList = try await delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken)
-		let originalItems = try await allSettled(itemList.items, skipping: isInvalidNameFile) { try await self.getOriginalMetadata($0) }
+		let originalItems = try await allSettled(itemList.items, limit: vaultItemConcurrencyLimit, skipping: isLeftOutOfListing) { try await self.getOriginalMetadata($0) }
 		return CloudItemList(items: originalItems, nextPageToken: itemList.nextPageToken)
 	}
 
@@ -95,10 +102,19 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
 			let contentsFilePath = shortened.cloudPath.appendingContentsFileComponent()
-			let contentsFileMetadata = try await withoutCancellation {
-				try await self.createC9SFolderAndUploadNameFile(c9sDir)
+			let newC9SContentsFileMetadata = try await withoutCancellation { () -> CloudItemMetadata? in
+				do {
+					try await self.delegate.createFolder(at: c9sDir.cloudPath)
+				} catch CloudProviderError.itemAlreadyExists {
+					return nil
+				}
+				try await self.uploadNameFile(c9sDir)
 				return try await self.delegate.uploadFile(from: localURL, to: contentsFilePath, replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
 			}
+			if let newC9SContentsFileMetadata {
+				return getOriginalFileMetadata(newC9SContentsFileMetadata, originalPath: cloudPath)
+			}
+			let contentsFileMetadata = try await uploadContentsFile(from: localURL, toExisting: c9sDir, replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
 			return getOriginalFileMetadata(contentsFileMetadata, originalPath: cloudPath)
 		} else {
 			return try await delegate.uploadFile(from: localURL, to: shortened.cloudPath, replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
@@ -228,18 +244,22 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		}
 	}
 
+	/// Lists a `.c9s` directory before loading its name, so that a `.c9s` without an item file throws `C9SItemFileMissing` whether or not it holds a name file.
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
-		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, nameC9SLoader: { try await self.downloadNameFile($0) })
-		let shortened = shortenedNameCache.getShortenedPath(originalPath)
-		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
-			let c9sItemMetadata = try await fetchC9SItemMetadata(c9sDir)
-			let originalItemType = guessItemTypeByC9SItemName(c9sItemMetadata.name)
-			let originalLastModifiedDate = originalItemType == .folder ? shortenedMetadata.lastModifiedDate : c9sItemMetadata.lastModifiedDate
-			let originalSize = originalItemType == .folder ? shortenedMetadata.size : c9sItemMetadata.size
-			return CloudItemMetadata(name: c9sDir.originalName, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: originalLastModifiedDate, size: originalSize)
-		} else {
+		guard shortenedNameCache.isC9SDirectory(shortenedMetadata.cloudPath) else {
+			let originalPath = try await getOriginalPath(shortenedMetadata.cloudPath)
 			return CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
 		}
+		let c9sItemMetadata = try await fetchC9SItemMetadata(shortenedMetadata.cloudPath)
+		let originalPath = try await getOriginalPath(shortenedMetadata.cloudPath)
+		let originalItemType = guessItemTypeByC9SItemName(c9sItemMetadata.name)
+		let originalLastModifiedDate = originalItemType == .folder ? shortenedMetadata.lastModifiedDate : c9sItemMetadata.lastModifiedDate
+		let originalSize = originalItemType == .folder ? shortenedMetadata.size : c9sItemMetadata.size
+		return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: originalLastModifiedDate, size: originalSize)
+	}
+
+	private func getOriginalPath(_ shortenedPath: CloudPath) async throws -> CloudPath {
+		return try await shortenedNameCache.getOriginalPath(shortenedPath, nameC9SLoader: { try await self.downloadNameFile($0) })
 	}
 
 	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.
@@ -257,17 +277,22 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		return try Data(contentsOf: localNameFileURL)
 	}
 
-	private func fetchC9SItemMetadata(_ c9sDir: C9SDir) async throws -> CloudItemMetadata {
+	private func fetchC9SItemMetadata(_ c9sDirPath: CloudPath) async throws -> CloudItemMetadata {
 		var pageToken: String?
 		repeat {
 			try Task.checkCancellation()
-			let c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDir.cloudPath, withPageToken: pageToken)
+			let c9sItemList: CloudItemList
+			do {
+				c9sItemList = try await delegate.fetchItemList(forFolderAt: c9sDirPath, withPageToken: pageToken)
+			} catch CloudProviderError.itemTypeMismatch {
+				throw C9SItemFileMissing()
+			}
 			if let c9sItemMetadata = c9sItemList.items.first(where: { guessItemTypeByC9SItemName($0.name) != .unknown }) {
 				return c9sItemMetadata
 			}
 			pageToken = c9sItemList.nextPageToken
 		} while pageToken != nil
-		throw VaultFormat7ShorteningError.c9sItemNotFound
+		throw C9SItemFileMissing()
 	}
 
 	private func guessItemTypeByC9SItemName(_ c9sItemName: String) -> CloudItemType {
@@ -281,6 +306,33 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		default:
 			return .unknown
 		}
+	}
+
+	/**
+	 Uploads the contents file of a file to its `.c9s` directory that already exists, e.g., to overwrite the file or after a failed upload left the `.c9s`. The only remote change before the contents upload is a missing name file, which just completes the existing `.c9s`. So every step up to the contents upload can be cancelled.
+
+	 A `.c9s` that holds only a name file can also be another client's folder creation, between its name file and its `dir.c9r`. If this upload runs in between, both succeed, and the `.c9s` holds both `contents.c9r` and `dir.c9r`. That needs two clients to pick the same long name for a folder and a file at nearly the same time, so it isn't guarded against.
+
+	 - Throws: `CloudProviderError.itemAlreadyExists` if the `.c9s` is a file, if it holds a folder or a symlink, or if it holds `contents.c9r` and `replaceExisting` is `false`.
+	 */
+	private func uploadContentsFile(from localURL: URL, toExisting c9sDir: C9SDir, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		let c9sItemNames: [String]
+		do {
+			c9sItemNames = try await delegate.fetchItemListExhaustively(forFolderAt: c9sDir.cloudPath).items.map(\.name)
+		} catch CloudProviderError.itemTypeMismatch {
+			throw CloudProviderError.itemAlreadyExists
+		}
+		let c9sItemTypes = c9sItemNames.map { guessItemTypeByC9SItemName($0) }
+		if c9sItemTypes.contains(.folder) || c9sItemTypes.contains(.symlink) {
+			throw CloudProviderError.itemAlreadyExists
+		}
+		try Task.checkCancellation()
+		if !c9sItemNames.contains("name.c9s") {
+			try await uploadNameFile(c9sDir)
+			try Task.checkCancellation()
+		}
+		return try await delegate.uploadFile(from: localURL, to: c9sDir.cloudPath.appendingContentsFileComponent(), replaceExisting: replaceExisting, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	private func createC9SFolderAndUploadNameFile(_ c9sDir: C9SDir) async throws {

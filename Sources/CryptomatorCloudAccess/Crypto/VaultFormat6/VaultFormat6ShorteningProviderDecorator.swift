@@ -59,7 +59,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
 		let itemList = try await delegate.fetchItemList(forFolderAt: shortened.cloudPath, withPageToken: pageToken)
-		let originalItems = try await allSettled(itemList.items, skipping: isLeftOutOfListing) { try await self.getOriginalMetadataOfListedItem($0) }
+		let originalItems = try await allSettled(itemList.items, limit: vaultItemConcurrencyLimit, skipping: isLeftOutOfListing) { try await self.getOriginalMetadataOfListedItem($0) }
 		// A page can hold a legacy name and its original name, which restore to the same path, e.g., if it was listed while another listing moved the item on a provider that copies and then deletes.
 		var returnedPaths = Set<String>()
 		let uniqueItems = originalItems.filter { returnedPaths.insert($0.cloudPath.path).inserted }

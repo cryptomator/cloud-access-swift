@@ -284,20 +284,9 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
 		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { itemList in
 			let subDirs = itemList.items.filter { $0.itemType == .folder }
-			let subDirItemLists = try await withThrowingTaskGroup(of: CloudItemList.self) { group in
-				for subDir in subDirs {
-					group.addTask {
-						try await self.delegate.fetchItemListExhaustively(forFolderAt: subDir.cloudPath)
-					}
-				}
-				var subDirItemLists = [CloudItemList]()
-				for try await subDirItemList in group {
-					subDirItemLists.append(subDirItemList)
-				}
-				return subDirItemLists
-			}
+			let subDirItemLists = try await mapConcurrently(subDirs, limit: vaultItemConcurrencyLimit) { try await self.delegate.fetchItemListExhaustively(forFolderAt: $0.cloudPath) }
 			let allDirFiles = subDirItemLists.flatMap(\.items).filter { $0.name == "dir.c9r" }
-			return try await allSettled(allDirFiles) { try await self.downloadFile(at: $0.cloudPath) }
+			return try await allSettled(allDirFiles, limit: vaultItemConcurrencyLimit) { try await self.downloadFile(at: $0.cloudPath) }
 		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
 	}
 }

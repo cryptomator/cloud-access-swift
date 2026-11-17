@@ -11,7 +11,7 @@ import os
 import XCTest
 @testable import CryptomatorCloudAccessCore
 
-/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
+/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
 public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	private struct State {
 		var calls: [String] = []
@@ -30,6 +30,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	let folders: Set<String>
 	let files: [String: Data]
 	let maxPageSize: Int
+	/// Whether creating a folder at a fixture folder or file, or uploading to a fixture file without `replaceExisting`, throws `itemAlreadyExists`, as with a real provider. Created, deleted and moved items don't count.
+	let rejectsExistingItems: Bool
 	let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 	private let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -98,10 +100,11 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		}
 	}
 
-	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max) {
+	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false) {
 		self.folders = folders
 		self.files = files
 		self.maxPageSize = maxPageSize
+		self.rejectsExistingItems = rejectsExistingItems
 	}
 
 	@concurrent
@@ -117,6 +120,9 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		try Task.checkCancellation()
 		record("fetchItemList")
 		try listingHook?(cloudPath, pageToken)
+		if files[cloudPath.path] != nil {
+			throw CloudProviderError.itemTypeMismatch
+		}
 		let parentPath = cloudPath.path
 		let parentPathLvl = parentPath.components(separatedBy: "/").count
 		let childDirs = folders.filter { $0.hasPrefix(parentPath) && $0.components(separatedBy: "/").count == parentPathLvl + 1 }
@@ -148,6 +154,9 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		record("uploadFile")
+		if rejectsExistingItems, !replaceExisting, files[cloudPath.path] != nil {
+			throw CloudProviderError.itemAlreadyExists
+		}
 		let data = try Data(contentsOf: localURL)
 		let phases = Progress.phases(of: progress, 999)
 		try await transferHook?(cloudPath, phases[0])
@@ -161,6 +170,9 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		record("createFolder")
+		if rejectsExistingItems, folders.contains(cloudPath.path) || files[cloudPath.path] != nil {
+			throw CloudProviderError.itemAlreadyExists
+		}
 		state.withLock { $0.createdFolders.append(cloudPath.path) }
 		mutationHook?()
 	}

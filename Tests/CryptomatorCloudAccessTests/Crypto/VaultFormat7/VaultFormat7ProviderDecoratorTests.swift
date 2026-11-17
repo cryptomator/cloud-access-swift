@@ -511,6 +511,47 @@ class VaultFormat7ProviderDecoratorTests: XCTestCase {
 		XCTAssertEqual(["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"], provider.deleted.sorted())
 	}
 
+	/// Every subfolder references the same directory, whose repeated deletes count as done.
+	func testDeleteFolderDownloadsAtMostLimitDirFilesAtOnce() async throws {
+		let subfolderPathPrefix = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/subfolder"
+		let provider = makeNestedProvider(subdirectories: Dictionary(uniqueKeysWithValues: (1 ... vaultItemConcurrencyLimit + 2).map { ("11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/subfolder\($0).c9r", "dir2-id") }))
+		let runningCount = OSAllocatedUnfairLock(initialState: 0)
+		let gate = Gate()
+		let limitStarted = expectation(description: "limit of downloads started")
+		limitStarted.expectedFulfillmentCount = vaultItemConcurrencyLimit
+		limitStarted.assertForOverFulfill = false
+		let limitExceeded = expectation(description: "more downloads than the limit ran at once")
+		limitExceeded.isInverted = true
+		limitExceeded.assertForOverFulfill = false
+		provider.transferHook = { cloudPath, _ in
+			guard cloudPath.path.hasPrefix(subfolderPathPrefix) else {
+				return
+			}
+			let running = runningCount.withLock { count in
+				count += 1
+				return count
+			}
+			if running > vaultItemConcurrencyLimit {
+				limitExceeded.fulfill()
+			} else {
+				limitStarted.fulfill()
+			}
+			await gate.wait()
+			runningCount.withLock { $0 -= 1 }
+		}
+		let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+		let deletion = Task {
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+		}
+
+		await fulfillment(of: [limitStarted], timeout: testWaitTimeout)
+		await fulfillment(of: [limitExceeded], timeout: 0.2)
+		gate.open()
+
+		try await value(of: deletion)
+		XCTAssertTrue(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
+	}
+
 	func testMoveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
 		try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
 		provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)

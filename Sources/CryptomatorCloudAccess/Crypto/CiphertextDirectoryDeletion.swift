@@ -15,6 +15,8 @@ import Foundation
 
  If the cloud refused to delete a subdirectory, this directory and the reference to it stay, so that a later delete can finish. They also stay if a subdirectory exists but can't be listed. Any later failure but cancellation then throws `deletionIncomplete` if a subdirectory was refused, and `itemNotFound` otherwise. Otherwise an ancestor could skip the failure, because a sibling was deleted, and delete the reference to this directory.
 
+ A subfolder that the listing leaves out isn't deleted, e.g., one whose name file is invalid, or is missing while another item of its page is restored. Its directory stays without a reference, as with the directory delete of Cryptomator Desktop. Desktop's health check reports such a directory as an orphan and recovers its contents.
+
  - Parameter subdirectoryIds: Returns the dir IDs of the subdirectories that a page of the directory lists.
  - Parameter deleteSubdirectory: Deletes the ciphertext directory of a dir ID, throwing `CloudProviderError.deletionIncomplete` if the cloud refused part of it and `CloudProviderError.itemNotFound` if it or a directory below it exists but can't be listed.
  - Throws: `CloudProviderError.deletionIncomplete` if the cloud refused to delete a subdirectory or the directory itself. Otherwise `CloudProviderError.itemNotFound` if the directory or a subdirectory exists but can't be listed, e.g., because a name file is missing. Otherwise the error of the last failed subdirectory of a page of which none was deleted, as `allSettled` does.
@@ -34,7 +36,7 @@ func deleteCiphertextDirectory(at dirPath: CloudPath, of provider: CloudProvider
 				}
 				return
 			}
-			let failures = try await allSettled(subdirectoryIds(itemList)) { dirId -> CloudProviderError? in
+			let failures = try await allSettled(subdirectoryIds(itemList), limit: vaultItemConcurrencyLimit) { dirId -> CloudProviderError? in
 				do {
 					try await deleteSubdirectory(dirId)
 					return nil

@@ -147,7 +147,7 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 	 - Parameter nameC9SLoader: A closure loading the contents of a `name.c9s` file for the corresponding `c9sDirPath`.
 	 - Parameter c9sDirPath: The path of a `.c9s` directory, whose original name should be loaded.
 	 - Returns: Either `shortenedPath` if no shortening was applied or the original ("inflated") path.
-	 - Throws: `VaultFormatError.invalidNameFile` if the `name.c9s` file holds no single path component or a name whose hash isn't the `.c9s` name.
+	 - Throws: `VaultFormatError.invalidNameFile` if the `name.c9s` file holds no single path component, a name that isn't longer than the threshold, or a name whose hash isn't the `.c9s` name.
 	 */
 	func getOriginalPath(_ shortenedPath: CloudPath, nameC9SLoader loadNameC9S: @Sendable (_ c9sDirPath: CloudPath) async throws -> Data) async throws -> CloudPath {
 		if shortenedPath.pathComponents.count <= ciphertextNameCompIdx {
@@ -162,6 +162,12 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 		} else {
 			return shortenedPath
 		}
+	}
+
+	/// Whether the path is a `.c9s` directory itself, as opposed to an item in one or an unshortened item.
+	func isC9SDirectory(_ cloudPath: CloudPath) -> Bool {
+		let pathComponents = cloudPath.pathComponents
+		return pathComponents.count == ciphertextNameCompIdx + 1 && pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix)
 	}
 
 	// MARK: - Internal
@@ -185,8 +191,8 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
 				throw VaultFormatError.invalidNameFile
 			}
-			// A name with another hash can't be addressed through the inflated path, which `getShortenedPath` shortens to that hash.
-			guard (deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix).utf8.elementsEqual(shortenedName.utf8) else {
+			// `getShortenedPath` maps the inflated path back to this `.c9s` only if the name is longer than the threshold and hashes to the `.c9s` name.
+			guard originalName.count > threshold, (deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix).utf8.elementsEqual(shortenedName.utf8) else {
 				throw VaultFormatError.invalidNameFile
 			}
 			try? addToCache(shortenedName, originalName: originalName)

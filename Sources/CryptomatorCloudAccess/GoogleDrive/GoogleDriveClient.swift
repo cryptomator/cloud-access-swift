@@ -13,7 +13,7 @@ import Foundation
 
  Requests are sent by a `BearerRequestSender`. The requests of an upload follow the sender's rules in a loop of their own. A 408, 429, 500, 502, 503, 504 and a 403 for exceeded rate limits are retried. Transport errors are retried only for a `GET` and for the requests of an upload that create nothing, because a repeated `POST` could create an item twice.
 
- Downloads log their URLs only as origins, and an upload logs its session URL, which is a credential, only as origin or with its query redacted. Thrown errors never contain a request URL.
+ An upload logs its session URL, which is a credential, only as origin or with its query redacted. Thrown errors never contain a request URL.
  */
 final class GoogleDriveClient: Sendable {
 	private static let logLabel = "GoogleDriveClient"
@@ -109,10 +109,10 @@ final class GoogleDriveClient: Sendable {
 	func download(fileID: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let request = try HTTPClientSupport.request("GET", GoogleDriveClient.url(path: "/download/drive/v3/files/\(HTTPClientSupport.pathComponent(fileID))", parameters: [("alt", "media"), ("supportsAllDrives", "true")]))
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
-		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
+			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
+		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
 		guard case .file = outcome.body else {
 			throw GoogleDriveError.unexpectedContent
 		}
@@ -257,15 +257,15 @@ final class GoogleDriveClient: Sendable {
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
 	private func data(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, outcome) = try await send(request, urlLogging: .redacted) { request, _ in
+		let (response, outcome) = try await send(request) { request, _ in
 			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: bodyLogging)
 		}
-		return try GoogleDriveClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)
+		return try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
 	}
 
-	private func send(_ request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
+	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
 		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome) })
-		return try await sender.send(request, urlLogging: urlLogging, policy: policy, progress: progress, attempt: attempt)
+		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> Bool {
@@ -303,8 +303,8 @@ final class GoogleDriveClient: Sendable {
 
 	// MARK: - Outcomes
 
-	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging) throws -> Data {
-		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: urlLogging, label: logLabel) { response, outcome in
+	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) throws -> Data {
+		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: .redacted, label: logLabel) { response, outcome in
 			(200 ... 299).contains(response.statusCode) ? nil : apiError(of: response, outcome)
 		}
 	}

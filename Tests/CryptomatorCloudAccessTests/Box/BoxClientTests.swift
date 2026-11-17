@@ -251,7 +251,7 @@ class BoxClientTests: XCTestCase {
 		}
 	}
 
-	func testDownloadLogsOnlyOriginsOfURLs() async throws {
+	func testDownloadLogsAPIPathAndOnlyOriginOfRedirectTarget() async throws {
 		let logCapture = LogCapture.start()
 		defer {
 			logCapture.stop()
@@ -266,9 +266,9 @@ class BoxClientTests: XCTestCase {
 
 		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: stagingURL))
 		let log = logCapture.joinedMessages
-		XCTAssertTrue(log.contains("https://api.box.com"), log)
-		XCTAssertTrue(log.contains("https://dl.boxcloud.com"), log)
-		for secret in ["SECRET-PATH", "/files/5/content", "TOKEN"] {
+		XCTAssertTrue(logCapture.messages.contains("--> GET https://api.box.com/2.0/files/5/content"), log)
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://dl.boxcloud.com/<redacted>"), log)
+		for secret in ["SECRET-PATH", "TOKEN"] {
 			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")
 		}
 	}

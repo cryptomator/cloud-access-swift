@@ -15,7 +15,7 @@ enum HTTPDebugLogger {
 		case omitted
 	}
 
-	/// How the URLs of a request or response are logged, including those in its URL-valued headers. Callers pass `.originOnly` for a URL that is a credential as a whole, e.g., a pre-authenticated upload URL with a token in its path, so that only its scheme, host and port are logged.
+	/// How the URLs of a request or response are logged, including those in its URL-valued headers. Callers pass `.originOnly` for a URL that is a credential as a whole, e.g., a pre-authenticated upload URL with a token in its path, so that only its scheme, host and port are logged. The request and response logs show a URL on an origin other than the request's that way too, e.g., the pre-authenticated download URL that a request was redirected to.
 	enum URLLogging {
 		case redacted
 		case originOnly
@@ -43,7 +43,7 @@ enum HTTPDebugLogger {
 		if let headerFields = request.allHTTPHeaderFields {
 			headerFields.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
 				.filter { !isExcludedHeader($0.key) }
-				.forEach { CloudAccessDDLogDebug("\($0.key): \(redactedHeaderValue($0.value, forHeader: $0.key, urlLogging: urlLogging))") }
+				.forEach { CloudAccessDDLogDebug("\($0.key): \(redactedHeaderValue($0.value, forHeader: $0.key, relativeTo: request.url, requestURL: request.url, urlLogging: urlLogging))") }
 		}
 		let bodyType = logRequestBody(request, bodyLogging: bodyLogging)
 		switch bodyType {
@@ -91,15 +91,17 @@ enum HTTPDebugLogger {
 		case omitted
 	}
 
-	static func logResponse(_ response: URLResponse, with data: Data?, or localURL: URL?, bodyLogging: BodyLogging = .logged, urlLogging: URLLogging = .redacted) {
+	/// - Parameter requestURL: The URL that the request was first sent to, before any redirect. Without one, every URL of the response is logged with `.originOnly`.
+	static func logResponse(_ response: URLResponse, requestURL: URL?, with data: Data?, or localURL: URL?, bodyLogging: BodyLogging = .logged, urlLogging: URLLogging = .redacted) {
 		guard isCloudAccessLogEnabled(for: .debug) else {
 			return
 		}
+		let responseURLString = redactedURLString(response.url, requestURL: requestURL, urlLogging: urlLogging)
 		guard let httpResponse = response as? HTTPURLResponse else {
-			CloudAccessDDLogDebug("<-- \(redactedURLString(response.url, urlLogging: urlLogging))")
+			CloudAccessDDLogDebug("<-- \(responseURLString)")
 			return
 		}
-		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(redactedURLString(response.url, urlLogging: urlLogging))")
+		CloudAccessDDLogDebug("<-- \(httpResponse.statusCode) \(HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)) \(responseURLString)")
 		httpResponse.allHeaderFields
 			.reduce(into: [String: Any]()) { result, header in
 				if let key = header.key as? String {
@@ -108,7 +110,7 @@ enum HTTPDebugLogger {
 			}
 			.sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
 			.filter { !isExcludedHeader($0.key) }
-			.forEach { CloudAccessDDLogDebug("\($0.key): \(redactedHeaderValue("\($0.value)", forHeader: $0.key, urlLogging: urlLogging))") }
+			.forEach { CloudAccessDDLogDebug("\($0.key): \(redactedHeaderValue("\($0.value)", forHeader: $0.key, relativeTo: response.url, requestURL: requestURL, urlLogging: urlLogging))") }
 		let bodyType = logResponseBody(httpResponse, with: data, or: localURL, bodyLogging: bodyLogging)
 		switch bodyType {
 		case .none:
@@ -186,13 +188,20 @@ enum HTTPDebugLogger {
 		return urlString
 	}
 
-	private static func redactedHeaderValue(_ value: String, forHeader name: String, urlLogging: URLLogging) -> String {
+	private static func redactedHeaderValue(_ value: String, forHeader name: String, relativeTo baseURL: URL?, requestURL: URL?, urlLogging: URLLogging) -> String {
 		let urlHeaderNames = ["Location", "Content-Location", "Destination"]
 		guard urlHeaderNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
 			return value
 		}
-		guard let url = URL(string: value) else {
+		guard let url = URL(string: value, relativeTo: baseURL) else {
 			return "<unparsable URL>"
+		}
+		return redactedURLString(url, requestURL: requestURL, urlLogging: urlLogging)
+	}
+
+	private static func redactedURLString(_ url: URL?, requestURL: URL?, urlLogging: URLLogging) -> String {
+		guard let url, let requestURL, url.hasSameOrigin(as: requestURL) else {
+			return redactedURLString(url, urlLogging: .originOnly)
 		}
 		return redactedURLString(url, urlLogging: urlLogging)
 	}

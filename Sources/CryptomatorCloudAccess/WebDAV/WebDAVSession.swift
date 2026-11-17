@@ -116,7 +116,7 @@ final class WebDAVSession: Sendable {
 	 */
 	static func successfulResponse(of outcome: SplitURLSession.Outcome) throws -> HTTPURLResponse {
 		if case let SplitURLSessionError.responseBodyTooLarge(limit)? = outcome.recordedFailure {
-			CloudAccessDDLogDebug("WebDAVSession: discarded a response body over \(limit) bytes from \(HTTPDebugLogger.redactedURLString(outcome.response?.url))")
+			CloudAccessDDLogDebug("WebDAVSession: discarded a response body over \(limit) bytes")
 			throw WebDAVError.unexpectedResponse
 		} else if let recordedFailure = outcome.recordedFailure {
 			throw recordedFailure

@@ -122,6 +122,38 @@ class SplitURLSessionTests: XCTestCase {
 		XCTAssertTrue(redactedLog.contains("RESPONSEPATH"), redactedLog)
 	}
 
+	func testResponseRedirectedToAnotherOriginLogsOnlyItsOrigin() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://download.example.com/SECRET-PATH/file.txt"]),
+			URLProtocolMock.handler()
+		]
+
+		_ = try await session.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+
+		XCTAssertTrue(logCapture.messages.contains("--> GET https://api.example.com/files/1/content"), logCapture.joinedMessages)
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://download.example.com/<redacted>"), logCapture.joinedMessages)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+	}
+
+	func testResponseRedirectedWithinTheOriginLogsItsPath() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "/files/2/content"]),
+			URLProtocolMock.handler()
+		]
+
+		_ = try await session.download(URLRequest(url: url), route: .transfer, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://api.example.com/files/2/content"), logCapture.joinedMessages)
+	}
+
 	func testOverlappingRequestsGetTheirOwnOutcomes() async throws {
 		let firstSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
 		let secondSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())

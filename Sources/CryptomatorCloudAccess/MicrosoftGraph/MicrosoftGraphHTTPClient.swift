@@ -13,7 +13,7 @@ import Foundation
 
  Requests are sent by a `BearerRequestSender`. A 429, 503 and 504 are retried. A 500 and 502 are retried only for a `GET` and the `PUT` of an upload session, because Graph may have applied a mutation that it answered with one. An upload session discards a chunk that failed, so its `PUT` is safe to repeat. Transient transport errors are retried only for a `GET`, because a repeated mutation could be applied twice.
 
- The upload URL of an upload session is pre-authenticated, possibly by a token in its path, and often on another host. Its `PUT`s therefore carry no `Authorization` header, a 401 of theirs is final, and their URLs are logged only as origins. The same holds for downloads from an item's pre-authenticated download URL, on a content host whose path names the account. Downloads through Graph redirect to such a URL, so their URLs are logged only as origins too.
+ The upload URL of an upload session is pre-authenticated, possibly by a token in its path, and often on another host. Its `PUT`s therefore carry no `Authorization` header, a 401 of theirs is final, and their URLs are logged only as origins. The same holds for downloads from an item's pre-authenticated download URL, on a content host whose path names the account. Downloads through Graph redirect to such a URL, which the log shows only as its origin, because it is on another host than the request.
 
  The bodies of downloads aren't logged, because a content host's error body may echo the URL. Neither are those of metadata responses and uploads, because their items carry pre-authenticated download URLs and the accounts' emails. Thrown errors never contain a request URL.
  */
@@ -74,12 +74,13 @@ final class MicrosoftGraphHTTPClient: Sendable {
 	/**
 	 Moves the body of a 2xx response to `stagingURL`, at which no item may exist, and returns the response, whatever its status.
 
-	 - Parameter authorization: `.none` for the pre-authenticated download URL of an item.
+	 - Parameter authorization: `.none` for the pre-authenticated download URL of an item, which is a credential as a whole and therefore logged by its origin only.
 	 */
 	func download(_ request: URLRequest, authorization: BearerRequestSender.Authorization = .bearer, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
-		let (response, _) = try await send(request, authorization: authorization, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+		let urlLogging: HTTPDebugLogger.URLLogging = authorization == .none ? .originOnly : .redacted
+		let (response, _) = try await send(request, authorization: authorization, urlLogging: urlLogging, progress: progress) { request, isFirstAttempt in
+			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: urlLogging, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
 		return response
 	}

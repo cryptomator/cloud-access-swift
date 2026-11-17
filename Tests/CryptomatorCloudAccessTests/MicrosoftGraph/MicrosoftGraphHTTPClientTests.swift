@@ -216,7 +216,7 @@ class MicrosoftGraphHTTPClientTests: XCTestCase {
 		}
 	}
 
-	func testRetriedDownloadLogsOnlyOriginsOfURLs() async throws {
+	func testRetriedDownloadLogsAPIPathAndOnlyOriginOfRedirectTarget() async throws {
 		let logCapture = LogCapture.start()
 		defer {
 			logCapture.stop()
@@ -233,12 +233,27 @@ class MicrosoftGraphHTTPClientTests: XCTestCase {
 		XCTAssertEqual(200, response.statusCode)
 		XCTAssertEqual(Data("content".utf8), try Data(contentsOf: stagingURL))
 		let log = logCapture.joinedMessages
-		XCTAssertTrue(log.contains("https://graph.microsoft.com"), log)
-		XCTAssertTrue(log.contains("https://content.example.com"), log)
-		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("MicrosoftGraphHTTPClient: GET https://graph.microsoft.com/<redacted>") }, log)
-		for secret in ["SECRET-ACCOUNT", "/me/drive/root", "TEMPAUTH"] {
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("MicrosoftGraphHTTPClient: GET https://graph.microsoft.com/v1.0/me/drive/root/content") }, log)
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://content.example.com/<redacted>"), log)
+		for secret in ["SECRET-ACCOUNT", "TEMPAUTH"] {
 			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")
 		}
+	}
+
+	func testRetriedPreAuthenticatedDownloadLogsOnlyOriginOfURL() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(body: "content")]
+		let downloadURL = try XCTUnwrap(URL(string: "https://content.example.com/personal/SECRET-ACCOUNT/download.aspx"))
+
+		_ = try await client.download(URLRequest(url: downloadURL), authorization: .none, to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)
+
+		let log = logCapture.joinedMessages
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("MicrosoftGraphHTTPClient: GET https://content.example.com/<redacted>") }, log)
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://content.example.com/<redacted>"), log)
+		XCTAssertFalse(log.contains("SECRET"), log)
 	}
 
 	func testBodiesOfDownloadsAreNotLogged() async throws {

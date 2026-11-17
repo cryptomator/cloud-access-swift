@@ -13,7 +13,7 @@ import Foundation
 
  Requests are sent by a `BearerRequestSender`. A 429, a server error and a 202 with `Retry-After` are retried, mutations included. Such a 202 means that a download or an upload isn't processed yet. Transient transport errors are retried only for a `GET`, because a repeated mutation could be applied twice.
 
- The bodies of metadata responses and of single-request uploads aren't logged, because they name the account, e.g., by its login email. Downloads log their URLs only as origins, because Box redirects them to a pre-authenticated URL. Thrown errors never contain a request URL.
+ The bodies of metadata responses and of single-request uploads aren't logged, because they name the account, e.g., by its login email. Downloads redirect to a pre-authenticated URL on another host, which the log shows only as its origin. Thrown errors never contain a request URL.
  */
 final class BoxClient: Sendable {
 	private static let logLabel = "BoxClient"
@@ -100,10 +100,10 @@ final class BoxClient: Sendable {
 	func download(fileID: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let request = try HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"))
 		let handler = BoxClient.downloadHandler(movingTo: stagingURL)
-		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
+			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		_ = try BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
+		_ = try BoxClient.successfulBody(of: response, outcome, for: request)
 		guard case .file = outcome.body else {
 			throw BoxError.unexpectedContent
 		}
@@ -142,10 +142,10 @@ final class BoxClient: Sendable {
 		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
 		request.setValue(digest, forHTTPHeaderField: "digest")
 		request.setValue("bytes \(range.lowerBound)-\(range.upperBound)/\(fileSize)", forHTTPHeaderField: "content-range")
-		let (response, outcome) = try await send(request, urlLogging: .redacted, progress: progress) { request, _ in
+		let (response, outcome) = try await send(request, progress: progress) { request, _ in
 			try await self.session.upload(request, fromFile: partFileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: nil)
 		}
-		guard let part = try BoxJSON.decode(BoxUploadedPart.self, from: BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)).part else {
+		guard let part = try BoxJSON.decode(BoxUploadedPart.self, from: BoxClient.successfulBody(of: response, outcome, for: request)).part else {
 			throw BoxError.unexpectedContent
 		}
 		return part
@@ -168,15 +168,15 @@ final class BoxClient: Sendable {
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
 	private func data(_ request: URLRequest) async throws -> Data {
-		let (response, outcome) = try await send(request, urlLogging: .redacted) { request, _ in
+		let (response, outcome) = try await send(request) { request, _ in
 			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
 		}
-		return try BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted)
+		return try BoxClient.successfulBody(of: response, outcome, for: request)
 	}
 
-	private func send(_ request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
+	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
 		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: { response, _ in BoxClient.isRetryable(response) }, failure: BoxClient.apiError(of:_:))
-		return try await sender.send(request, urlLogging: urlLogging, policy: policy, progress: progress, attempt: attempt)
+		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse) -> Bool {
@@ -223,10 +223,10 @@ final class BoxClient: Sendable {
 		var request = HTTPClientSupport.request("POST", url)
 		request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 		request.setValue("application/json", forHTTPHeaderField: "Accept")
-		let (response, outcome) = try await send(request, urlLogging: .redacted, progress: progress) { request, isFirstAttempt in
+		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
 			try await self.session.upload(request, fromFile: bodyFileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
-		return try BoxJSON.decode(BoxFiles.self, from: BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .redacted))
+		return try BoxJSON.decode(BoxFiles.self, from: BoxClient.successfulBody(of: response, outcome, for: request))
 	}
 
 	// MARK: - Outcomes
@@ -247,8 +247,8 @@ final class BoxClient: Sendable {
 
 	 - Throws: `BoxError.fileNotReady` for a 202, which only a download or a commit that isn't processed yet returns, and `BoxError.apiError` for an unsuccessful status.
 	 */
-	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging) throws -> Data {
-		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: urlLogging, label: logLabel) { response, outcome in
+	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) throws -> Data {
+		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: .redacted, label: logLabel) { response, outcome in
 			switch response.statusCode {
 			case 202:
 				return BoxError.fileNotReady

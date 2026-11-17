@@ -17,6 +17,7 @@ private struct TaskRecord {
 	let resumer: Resumer<SplitURLSession.Outcome>
 	let challengeHandler: SplitURLSession.ChallengeHandler?
 	let hooks: SplitURLSession.Hooks
+	let requestURL: URL?
 	let bodyLimit: Int?
 	let bodyLogging: HTTPDebugLogger.BodyLogging
 	let urlLogging: HTTPDebugLogger.URLLogging
@@ -51,11 +52,11 @@ private struct TaskRecord {
 		if let response {
 			switch body {
 			case let .data(data):
-				HTTPDebugLogger.logResponse(response, with: data, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
+				HTTPDebugLogger.logResponse(response, requestURL: requestURL, with: data, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			case let .file(url):
-				HTTPDebugLogger.logResponse(response, with: nil, or: url, bodyLogging: bodyLogging, urlLogging: urlLogging)
+				HTTPDebugLogger.logResponse(response, requestURL: requestURL, with: nil, or: url, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			case .none:
-				HTTPDebugLogger.logResponse(response, with: nil, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
+				HTTPDebugLogger.logResponse(response, requestURL: requestURL, with: nil, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			}
 		}
 		resumer.resume(returning: SplitURLSession.Outcome(response: response, body: body, error: error, recordedFailure: recordedFailure))
@@ -110,8 +111,12 @@ final class SplitURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessio
 	/// Removes the `Authorization` header when a redirect changes the scheme, host or port, e.g., to a pre-signed download URL. Only foreground sessions call this. A background session follows redirects on its own.
 	func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
 		var request = request
-		let currentURL = task.currentRequest?.url
-		if request.url?.scheme != currentURL?.scheme || request.url?.host != currentURL?.host || request.url?.port != currentURL?.port {
+		let isSameOrigin = if let url = request.url, let currentURL = task.currentRequest?.url {
+			url.hasSameOrigin(as: currentURL)
+		} else {
+			false
+		}
+		if !isSameOrigin {
 			request.setValue(nil, forHTTPHeaderField: "Authorization")
 		}
 		completionHandler(request)
@@ -308,7 +313,7 @@ final class SplitURLSession: Sendable {
 		}
 		let delegate = SplitURLSessionDelegate.shared
 		return try await withSDKContinuation { resumer in
-			delegate.register(TaskRecord(resumer: resumer, challengeHandler: challengeHandler, hooks: hooks, bodyLimit: attempt.bodyLimit, bodyLogging: attempt.bodyLogging, urlLogging: attempt.urlLogging, downloadHandler: attempt.downloadHandler), for: task)
+			delegate.register(TaskRecord(resumer: resumer, challengeHandler: challengeHandler, hooks: hooks, requestURL: request.url, bodyLimit: attempt.bodyLimit, bodyLogging: attempt.bodyLogging, urlLogging: attempt.urlLogging, downloadHandler: attempt.downloadHandler), for: task)
 			if task.isTerminated {
 				delegate.completeTask(task, error: task.error ?? URLError(.cancelled))
 			} else {

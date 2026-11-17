@@ -297,6 +297,24 @@ class GoogleDriveClientTests: XCTestCase {
 		XCTAssertEqual(["alt": "media", "supportsAllDrives": "true"], GoogleDriveClientTests.queryParameters(of: request))
 	}
 
+	func testDownloadLogsAPIPathAndOnlyOriginOfRedirectTarget() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://drive.usercontent.google.com/SECRET-PATH/download"]),
+			URLProtocolMock.handler(body: "content")
+		]
+
+		try await client.download(fileID: "F", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)
+
+		let log = logCapture.joinedMessages
+		XCTAssertTrue(logCapture.messages.contains("--> GET https://www.googleapis.com/download/drive/v3/files/F?alt=<redacted>&supportsAllDrives=<redacted>"), log)
+		XCTAssertTrue(logCapture.messages.contains("<-- 200 no error https://drive.usercontent.google.com/<redacted>"), log)
+		XCTAssertFalse(log.contains("SECRET"), log)
+	}
+
 	func testBodiesOfDownloadsAreNotLogged() async throws {
 		let logCapture = LogCapture.start()
 		defer {

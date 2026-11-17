@@ -290,6 +290,16 @@ extension UnitTests {
 			#expect(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://dl.boxcloud.com") }, "\(logCapture.joinedMessages)")
 			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
 		}
+
+		@Test
+		func errorMessageFromAnotherOriginIsDropped() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/PATH/file.txt"]),
+				URLProtocolMock.handler(statusCode: 404, body: #"{"type":"error","status":404,"code":"not_found","message":"https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt"}"#)
+			]
+
+			await #expect(throws: BoxError.apiError(statusCode: 404, code: "not_found", message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil) }
+		}
 	}
 }
 

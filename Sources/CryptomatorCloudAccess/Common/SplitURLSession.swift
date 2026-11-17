@@ -111,12 +111,7 @@ final class SplitURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessio
 	/// Removes the `Authorization` header when a redirect changes the scheme, host or port, e.g., to a pre-signed download URL. Only foreground sessions call this. A background session follows redirects on its own.
 	func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
 		var request = request
-		let isSameOrigin = if let url = request.url, let currentURL = task.currentRequest?.url {
-			url.hasSameOrigin(as: currentURL)
-		} else {
-			false
-		}
-		if !isSameOrigin {
+		if request.url?.hasSameOrigin(as: task.currentRequest?.url) != true {
 			request.setValue(nil, forHTTPHeaderField: "Authorization")
 		}
 		completionHandler(request)

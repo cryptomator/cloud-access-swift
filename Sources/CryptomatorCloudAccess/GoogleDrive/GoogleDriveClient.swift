@@ -179,7 +179,7 @@ final class GoogleDriveClient: Sendable {
 		case 200, 201:
 			return try GoogleDriveJSON.decode(GoogleDriveFile.self, from: outcome.data ?? Data())
 		default:
-			throw GoogleDriveClient.apiError(of: response, outcome, for: request)
+			throw GoogleDriveClient.uploadError(of: response, outcome, for: request)
 		}
 	}
 
@@ -205,7 +205,7 @@ final class GoogleDriveClient: Sendable {
 			GoogleDriveClient.logFailure(of: request, with: "a partial upload")
 			throw GoogleDriveClient.converted(upload.lastFailure ?? GoogleDriveError.unexpectedContent)
 		default:
-			throw GoogleDriveClient.apiError(of: response, outcome, for: request)
+			throw GoogleDriveClient.uploadError(of: response, outcome, for: request)
 		}
 	}
 
@@ -230,13 +230,13 @@ final class GoogleDriveClient: Sendable {
 			return nil
 		}
 		if response.statusCode == 401, !upload.hasRefreshed {
-			upload.lastFailure = GoogleDriveClient.apiError(of: response, outcome, for: request)
+			upload.lastFailure = GoogleDriveClient.uploadError(of: response, outcome, for: request)
 			try upload.checkAttemptLeft(reserving: reservedAttemptCount)
 			try await refresh(&upload)
 			return nil
 		}
 		if GoogleDriveClient.isRetryable(response, outcome) {
-			upload.lastFailure = GoogleDriveClient.apiError(of: response, outcome, for: request)
+			upload.lastFailure = GoogleDriveClient.uploadError(of: response, outcome, for: request)
 			try upload.checkAttemptLeft(reserving: reservedAttemptCount)
 			try await sleep(HTTPClientSupport.retryDelay(for: response, attempt: upload.attemptCount, now: Date()))
 			return nil
@@ -244,7 +244,7 @@ final class GoogleDriveClient: Sendable {
 		if (200 ... 299).contains(response.statusCode) || response.statusCode == 308 {
 			return response
 		}
-		throw GoogleDriveClient.apiError(of: response, outcome, for: request)
+		throw GoogleDriveClient.uploadError(of: response, outcome, for: request)
 	}
 
 	private func refresh(_ upload: inout ResumableUpload) async throws {
@@ -264,7 +264,7 @@ final class GoogleDriveClient: Sendable {
 	}
 
 	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome) })
+		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome, for: request) })
 		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
 	}
 
@@ -305,17 +305,20 @@ final class GoogleDriveClient: Sendable {
 
 	private static func successfulBody(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) throws -> Data {
 		return try HTTPClientSupport.successfulBody(of: response, outcome, for: request, urlLogging: .redacted, label: logLabel) { response, outcome in
-			(200 ... 299).contains(response.statusCode) ? nil : apiError(of: response, outcome)
+			(200 ... 299).contains(response.statusCode) ? nil : apiError(of: response, outcome, for: request)
 		}
 	}
 
-	/// Returns the error of an unsuccessful response, and logs it if a request is given.
-	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest? = nil) -> GoogleDriveError {
+	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) -> GoogleDriveError {
 		let body = errorResponse(of: outcome)?.error
-		let error = GoogleDriveError.apiError(statusCode: response.statusCode, reason: body?.errors?.first?.reason, message: body?.message)
-		if let request {
-			logFailure(of: request, with: error)
-		}
+		let message = HTTPClientSupport.hasRequestOrigin(response, of: request) ? body?.message : nil
+		return .apiError(statusCode: response.statusCode, reason: body?.errors?.first?.reason, message: message)
+	}
+
+	/// Returns the error of an upload's unsuccessful response and logs it.
+	private static func uploadError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) -> GoogleDriveError {
+		let error = apiError(of: response, outcome, for: request)
+		logFailure(of: request, with: error)
 		return error
 	}
 

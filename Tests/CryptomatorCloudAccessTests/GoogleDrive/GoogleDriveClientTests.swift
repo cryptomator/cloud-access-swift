@@ -327,6 +327,16 @@ extension UnitTests {
 			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
 		}
 
+		@Test
+		func errorMessageFromAnotherOriginIsDropped() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://drive.usercontent.google.com/download?id=F&token=TOKEN"]),
+				URLProtocolMock.handler(statusCode: 404, body: #"{"error":{"code":404,"message":"https://drive.usercontent.google.com/download?id=F&token=SECRET-TOKEN","errors":[{"reason":"notFound"}]}}"#)
+			]
+
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 404, reason: "notFound", message: nil)) { try await client.download(fileID: "F", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil) }
+		}
+
 		// MARK: - Uploads
 
 		@Test

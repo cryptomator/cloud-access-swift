@@ -12,7 +12,7 @@ enum GoogleDriveError: Error, Equatable {
 	case identifierNotFound
 	case missingItemName
 	case inconsistentCache
-	/// Google answered with an unsuccessful status, the first `reason` of the error body and its `message`.
+	/// Google answered with an unsuccessful status, the first `reason` of the error body and its `message`. The `message` is `nil` unless the response came from the request's origin.
 	case apiError(statusCode: Int, reason: String?, message: String?)
 	/// A response didn't have the expected content.
 	case unexpectedContent

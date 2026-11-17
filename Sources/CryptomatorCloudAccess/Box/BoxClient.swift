@@ -175,7 +175,7 @@ final class BoxClient: Sendable {
 	}
 
 	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: { response, _ in BoxClient.isRetryable(response) }, failure: BoxClient.apiError(of:_:))
+		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: { response, _ in BoxClient.isRetryable(response) }, failure: { response, outcome in BoxClient.apiError(of: response, outcome, for: request) })
 		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
 	}
 
@@ -255,14 +255,15 @@ final class BoxClient: Sendable {
 			case 200 ... 299:
 				return nil
 			default:
-				return apiError(of: response, outcome)
+				return apiError(of: response, outcome, for: request)
 			}
 		}
 	}
 
-	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> BoxError {
+	private static func apiError(of response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome, for request: URLRequest) -> BoxError {
 		let errorResponse = outcome.data.flatMap { try? JSONDecoder().decode(BoxErrorResponse.self, from: $0) }
-		return .apiError(statusCode: response.statusCode, code: errorResponse?.code ?? challengeError(of: response), message: errorResponse?.message)
+		let message = HTTPClientSupport.hasRequestOrigin(response, of: request) ? errorResponse?.message : nil
+		return .apiError(statusCode: response.statusCode, code: errorResponse?.code ?? challengeError(of: response), message: message)
 	}
 
 	/// The `error` parameter of the response's `WWW-Authenticate` challenge. Box can answer a 403 `insufficient_scope` without a body and name the code only there (box-python-sdk issue #599).

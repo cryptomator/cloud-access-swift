@@ -199,6 +199,11 @@ enum HTTPClientSupport {
 		return outcome.data ?? Data()
 	}
 
+	/// Whether the response came from the request's origin. A redirect can take a response to another origin, e.g., a download's content host, whose error body may echo the URL. A client therefore keeps no free-text message of such a body.
+	static func hasRequestOrigin(_ response: HTTPURLResponse, of request: URLRequest) -> Bool {
+		return response.url?.hasSameOrigin(as: request.url) ?? false
+	}
+
 	static func logFailure(of request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, with failure: Any, label: String) {
 		CloudAccessDDLogDebug("\(label): \(request.httpMethod ?? "GET") \(HTTPDebugLogger.redactedURLString(request.url, urlLogging: urlLogging)) failed with \(failure)")
 	}

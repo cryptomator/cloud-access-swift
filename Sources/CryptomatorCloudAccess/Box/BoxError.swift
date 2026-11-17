@@ -9,7 +9,7 @@
 import Foundation
 
 enum BoxError: Error, Equatable {
-	/// The API answered with a status that the method doesn't map to a `CloudProviderError`. The `code` and `message` come from the error body, and the `code` falls back to the `error` of the `WWW-Authenticate` challenge if the body has none.
+	/// The API answered with a status that the method doesn't map to a `CloudProviderError`. The `code` and `message` come from the error body, and the `code` falls back to the `error` of the `WWW-Authenticate` challenge if the body has none. The `message` is `nil` unless the response came from the request's origin.
 	case apiError(statusCode: Int, code: String?, message: String?)
 	/// The file still wasn't ready to download, or the upload still wasn't processed, after the last attempt.
 	case fileNotReady

@@ -200,7 +200,7 @@ enum HTTPDebugLogger {
 	}
 
 	private static func redactedURLString(_ url: URL?, requestURL: URL?, urlLogging: URLLogging) -> String {
-		guard let url, let requestURL, url.hasSameOrigin(as: requestURL) else {
+		guard let url, url.hasSameOrigin(as: requestURL) else {
 			return redactedURLString(url, urlLogging: .originOnly)
 		}
 		return redactedURLString(url, urlLogging: urlLogging)

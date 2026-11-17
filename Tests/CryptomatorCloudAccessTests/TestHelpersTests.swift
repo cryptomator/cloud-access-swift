@@ -14,31 +14,22 @@ extension UnitTests {
 		@Test
 		func cancellingValueCancelsTaskAndWaitsForItWhenTimeoutRunsOut() async throws {
 			let sleep = ManualSleep()
-			let started = Gate()
-			let cancelled = Gate()
-			let finish = Gate()
-			let observedCancellation = OSAllocatedUnfairLock(initialState: false)
+			let gracePeriodRequested = TestSignal("cancellingValue requested the grace period")
+			let returned = TestSignal("cancellingValue returned")
+			// The task ignores cancellation. Its wait runs out if the call doesn't request the grace period, so that a call that waits for the task without one fails instead of hanging.
 			let task = Task { () throws -> Bool in
-				await withTaskCancellationHandler {
-					started.open()
-					await cancelled.wait()
-				} onCancel: {
-					observedCancellation.withLock { $0 = true }
-					cancelled.open()
-				}
-				await finish.wait()
+				await gracePeriodRequested.wait()
 				return Task.isCancelled
 			}
 			let driver = Task {
-				await started.wait()
 				_ = await sleep.requests(count: 1)
 				sleep.elapse()
 				let requests = await sleep.requests(count: 2)
 				#expect(requests == [.seconds(1), .seconds(5)])
-				#expect(observedCancellation.withLock { $0 }, "The timeout didn't cancel the task")
-				// Ends the task without letting the grace period run out, so the call returns only if it waits for the task.
-				cancelled.open()
-				finish.open()
+				// Ends the task without letting the grace period run out, so the call returns only if it waits for the task. If it doesn't, the wait for its return runs out and fails the test.
+				gracePeriodRequested.fulfill()
+				await returned.wait()
+				sleep.elapse()
 			}
 			var thrownError: Error?
 			await withKnownIssue {
@@ -50,10 +41,10 @@ extension UnitTests {
 			} matching: { issue in
 				issue.comments.contains { $0.rawValue == "Task did not finish within 1.0 seconds" }
 			}
+			returned.fulfill()
 			await sleep.finishDriver(driver)
 			#expect((thrownError as? UnfinishedTaskError)?.timeout == .seconds(1))
-			#expect(try await task.value)
-			sleep.elapse()
+			#expect(try await task.value, "The timeout didn't cancel the task")
 		}
 
 		@Test

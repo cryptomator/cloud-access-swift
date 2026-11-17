@@ -67,8 +67,9 @@ func cancellingValue<Value: Sendable>(of task: Task<Value, Error>, timeout: Dura
 	}
 	task.cancel()
 	_ = await result(of: task, timeout: .seconds(5), sleep: sleep)
-	Issue.record("Task did not finish within \(timeout)", sourceLocation: sourceLocation)
-	throw UnfinishedTaskError(timeout: timeout)
+	let error = UnfinishedTaskError(timeout: timeout)
+	Issue.record(Comment(rawValue: error.description), sourceLocation: sourceLocation)
+	throw error
 }
 
 /**
@@ -205,6 +206,36 @@ final class TestSignal: Sendable {
 		let fulfillmentCount = fulfillmentCount
 		if fulfillmentCount > 0 {
 			Issue.record("\"\(name)\" was fulfilled \(fulfillmentCount) times, but must not be fulfilled within \(window)", sourceLocation: sourceLocation)
+		}
+	}
+}
+
+/// A step that a task waits for until the test opens it. Its wait has no timeout. A task that the test keeps suspended while it checks that a call returns therefore waits on a `TestSignal`, so that a call that waits for the task fails instead of hanging the run.
+final class Gate: Sendable {
+	private let state = OSAllocatedUnfairLock(initialState: (isOpen: false, waiters: [CheckedContinuation<Void, Never>]()))
+
+	func wait() async {
+		await withCheckedContinuation { continuation in
+			let isOpen = state.withLock { state in
+				if !state.isOpen {
+					state.waiters.append(continuation)
+				}
+				return state.isOpen
+			}
+			if isOpen {
+				continuation.resume()
+			}
+		}
+	}
+
+	func open() {
+		let waiters = state.withLock { state in
+			state.isOpen = true
+			defer { state.waiters = [] }
+			return state.waiters
+		}
+		for waiter in waiters {
+			waiter.resume()
 		}
 	}
 }

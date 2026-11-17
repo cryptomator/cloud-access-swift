@@ -485,7 +485,7 @@ extension UnitTests {
 			#expect(try Data("dir1-id".utf8) == decorator.dirIdCache.get(CloudPath("/Directory 1")))
 		}
 
-		/// The sibling `0dir3` is deleted, which would let `allSettled` skip an ordinary failure of `0dir2`. The refusal of `0dir4` must still keep its ancestors.
+		/// The refusal of `0dir4` keeps its ancestors although its parent's sibling `0dir3` is deleted.
 		@Test
 		func deleteFolderWithRefusedNestedSubdirectoryKeepsAncestors() async throws {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir3": "dir3-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/0dir4": "dir4-id"])
@@ -507,6 +507,32 @@ extension UnitTests {
 			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
 			#expect(provider.deleted == [])
+		}
+
+		@Test
+		func deleteFolderWithFailedSubdirectoryAndDeletedSiblingKeepsParent() async throws {
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir3": "dir3-id"])
+			provider.listingHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" {
+					throw CloudProviderError.unauthorized
+				}
+			}
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.unauthorized) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
+		}
+
+		@Test
+		func deleteFolderWithFailedDirFileDownloadAndDeletedSiblingKeepsParent() async throws {
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir3": "dir3-id"])
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2" {
+					throw CloudProviderError.unauthorized
+				}
+			}
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.unauthorized) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
 		}
 
 		/// A refused delete leaves the dir file of a subdirectory whose directory is already gone, which a later delete counts as deleted.

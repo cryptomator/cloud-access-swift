@@ -488,7 +488,7 @@ extension UnitTests {
 			#expect(try Data("dir1-id".utf8) == decorator.dirIdCache.get(CloudPath("/Directory 1")))
 		}
 
-		/// The sibling `Directory 3` is deleted, which would let `allSettled` skip an ordinary failure of `Directory 2`. The refusal of `Directory 4` must still keep its ancestors.
+		/// The refusal of `Directory 4` keeps its ancestors although its parent's sibling `Directory 3` is deleted.
 		@Test
 		func deleteFolderWithRefusedNestedSubdirectoryKeepsAncestors() async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir4.c9r": "dir4-id"])
@@ -498,7 +498,7 @@ extension UnitTests {
 			#expect(provider.deleted.sorted() == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"])
 		}
 
-		/// A refusal settles as a value, so `allSettled` skips the other subdirectory's failure and the refusal decides the outcome.
+		/// A refusal takes precedence over another subdirectory's failure.
 		@Test
 		func deleteFolderWithRefusedAndFailedSubdirectoryOnSamePageThrowsDeletionIncomplete() async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir4.c9r": "dir4-id"])
@@ -546,7 +546,7 @@ extension UnitTests {
 			#expect(provider.deleted == [])
 		}
 
-		/// The sibling `Directory 3` is deleted, which would let `allSettled` skip the failure of `Directory 2`. The unlistable `Directory 4` must still keep its ancestors.
+		/// The unlistable `Directory 4` keeps its ancestors although its parent's sibling `Directory 3` is deleted.
 		@Test
 		func deleteFolderWithUnlistableNestedSubdirectoryKeepsAncestors() async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir4.c9r": "dir4-id"])
@@ -567,6 +567,65 @@ extension UnitTests {
 				switch (cloudPath.path, pageToken) {
 				case ("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", _): throw CloudProviderError.itemNotFound
 				case ("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", .some): throw CloudProviderError.unauthorized
+				default: break
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The `itemTypeMismatch` of the directory of `Directory 2` must not reach `deleteFolder`'s catch that deletes the `.c9r` of a broken folder.
+		@Test(arguments: zip([CloudProviderError.unauthorized, .itemTypeMismatch], [CloudProviderError.unauthorized, .itemNotFound]))
+		func deleteFolderWithFailedSubdirectoryAndDeletedSiblingKeepsParent(failure: CloudProviderError, thrown: CloudProviderError) async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"])
+			provider.listingHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" {
+					throw failure
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: thrown) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
+		}
+
+		@Test
+		func deleteFolderWithFailedDirFileDownloadAndDeletedSiblingKeepsParent() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"])
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r" {
+					throw CloudProviderError.unauthorized
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.unauthorized) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
+		}
+
+		/// The failure of `Directory 2` on the first page doesn't stop the delete, and the unlistable `Directory 3` on the second page takes precedence over it.
+		@Test
+		func deleteFolderWithFailedSubdirectoryThenUnlistableSubdirectoryOnLaterPageThrowsItemNotFound() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"], maxPageSize: 1)
+			provider.listingHook = { cloudPath, _ in
+				switch cloudPath.path {
+				case "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC": throw CloudProviderError.unauthorized
+				case "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD": throw CloudProviderError.itemNotFound
+				default: break
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The `itemNotFound` of the second page's listing takes precedence over the failure of `Directory 2` on the first page.
+		@Test
+		func deleteFolderWithFailedSubdirectoryThenLaterPageListingItemNotFoundThrowsItemNotFound() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data()], maxPageSize: 1)
+			provider.listingHook = { cloudPath, pageToken in
+				switch (cloudPath.path, pageToken) {
+				case ("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", _): throw CloudProviderError.unauthorized
+				case ("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", .some): throw CloudProviderError.itemNotFound
 				default: break
 				}
 			}

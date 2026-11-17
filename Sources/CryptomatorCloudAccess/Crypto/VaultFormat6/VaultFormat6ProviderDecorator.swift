@@ -327,9 +327,11 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 
 	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDir(_ dirId: Data) async throws {
-		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { itemList in
-			let subDirs = itemList.items.filter { $0.name.hasPrefix("0") }
-			return try await allSettled(subDirs, limit: vaultItemConcurrencyLimit) { try await self.downloadFile(at: $0.cloudPath) }
+		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { item in
+			guard item.name.hasPrefix("0") else {
+				return []
+			}
+			return try await [self.downloadFile(at: item.cloudPath)]
 		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
 	}
 }

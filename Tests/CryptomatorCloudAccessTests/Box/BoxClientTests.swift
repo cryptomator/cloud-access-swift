@@ -272,6 +272,24 @@ class BoxClientTests: XCTestCase {
 			XCTAssertFalse(log.contains(secret), "\(secret) in \(log)")
 		}
 	}
+
+	func testBodiesOfDownloadsAreNotLogged() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/PATH/file.txt"]),
+			URLProtocolMock.handler(statusCode: 404, body: "<Error>https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt</Error>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 404, code: nil, message: nil), error as? BoxError)
+		}
+
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://dl.boxcloud.com") }, logCapture.joinedMessages)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+	}
 }
 
 extension BoxClient {

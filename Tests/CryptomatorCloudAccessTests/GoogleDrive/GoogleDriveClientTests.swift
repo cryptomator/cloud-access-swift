@@ -297,6 +297,24 @@ class GoogleDriveClientTests: XCTestCase {
 		XCTAssertEqual(["alt": "media", "supportsAllDrives": "true"], GoogleDriveClientTests.queryParameters(of: request))
 	}
 
+	func testBodiesOfDownloadsAreNotLogged() async throws {
+		let logCapture = LogCapture.start()
+		defer {
+			logCapture.stop()
+		}
+		URLProtocolMock.requestHandler = [
+			URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://drive.usercontent.google.com/download?id=F&token=TOKEN"]),
+			URLProtocolMock.handler(statusCode: 404, body: "<html>https://drive.usercontent.google.com/download?id=F&token=SECRET-TOKEN</html>")
+		]
+
+		await XCTAssertThrowsErrorAsync(try await client.download(fileID: "F", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)) { error in
+			XCTAssertEqual(.apiError(statusCode: 404, reason: nil, message: nil), error as? GoogleDriveError)
+		}
+
+		XCTAssertTrue(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://drive.usercontent.google.com") }, logCapture.joinedMessages)
+		XCTAssertFalse(logCapture.joinedMessages.contains("SECRET"), logCapture.joinedMessages)
+	}
+
 	// MARK: - Uploads
 
 	func testUploadCreatesSessionAndPutsFile() async throws {

@@ -110,7 +110,7 @@ final class GoogleDriveClient: Sendable {
 		let request = try HTTPClientSupport.request("GET", GoogleDriveClient.url(path: "/download/drive/v3/files/\(HTTPClientSupport.pathComponent(fileID))", parameters: [("alt", "media"), ("supportsAllDrives", "true")]))
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
 		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
 		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
 		guard case .file = outcome.body else {

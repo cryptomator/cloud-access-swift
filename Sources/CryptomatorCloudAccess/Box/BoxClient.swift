@@ -101,7 +101,7 @@ final class BoxClient: Sendable {
 		let request = try HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"))
 		let handler = BoxClient.downloadHandler(movingTo: stagingURL)
 		let (response, outcome) = try await send(request, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
+			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
 		}
 		_ = try BoxClient.successfulBody(of: response, outcome, for: request, urlLogging: .originOnly)
 		guard case .file = outcome.body else {

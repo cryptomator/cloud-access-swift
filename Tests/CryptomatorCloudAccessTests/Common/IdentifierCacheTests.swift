@@ -203,7 +203,7 @@ extension UnitTests {
 		}
 
 		@Test
-		func updateWithOtherDriveIdentifierKeepsSubPaths() throws {
+		func updateWithDriveIdentifierInOtherCaseKeepsSubPaths() throws {
 			let cache = try IdentifierCache<MicrosoftGraphItem>()
 			let child = MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: "abc", itemType: .file, isRemoteItem: false)
 			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: false))
@@ -212,6 +212,17 @@ extension UnitTests {
 			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "ABC", itemType: .folder, isRemoteItem: false))
 
 			#expect(cache.get(child.cloudPath) == child)
+		}
+
+		@Test
+		func updateWithOtherDriveOfSameIdentifierRemovesSubPaths() throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: "abc", itemType: .file, isRemoteItem: false))
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "def", itemType: .folder, isRemoteItem: false))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
 		}
 
 		@Test

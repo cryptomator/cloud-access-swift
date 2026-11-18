@@ -49,9 +49,9 @@ extension MicrosoftGraphItem {
 		table.column(isRemoteItemKey, .boolean).notNull()
 	}
 
-	/// Leaves out the drive identifier, which only addresses the requests, because the identifier already names the item.
+	/// Compares the drive identifier ignoring case, because OneDrive may return a drive's identifier in different cases.
 	func isSameItem(as other: MicrosoftGraphItem) -> Bool {
-		return identifier == other.identifier && itemType == other.itemType && isRemoteItem == other.isRemoteItem
+		return identifier == other.identifier && driveIdentifier?.lowercased() == other.driveIdentifier?.lowercased() && itemType == other.itemType && isRemoteItem == other.isRemoteItem
 	}
 
 	func encode(to container: inout PersistenceContainer) throws {

@@ -90,6 +90,84 @@ extension UnitTests {
 			#expect(try cache.get(CloudPath("/foo/bar")) == nil)
 		}
 
+		@Test(arguments: [("/cafe\u{301}", "/caf\u{E9}"), ("/caf\u{E9}", "/cafe\u{301}")])
+		func keysCanonicallyEquivalentSpellingsAlike(writtenSpelling: String, readSpelling: String) throws {
+			let writtenPath = CloudPath(writtenSpelling)
+			let readPath = CloudPath(readSpelling)
+			let dirId = Data("foobar".utf8)
+
+			try cache.addOrUpdate(writtenPath, dirId: dirId)
+			try cache.addOrUpdate(writtenPath.appendingPathComponent("sub"), dirId: dirId)
+
+			#expect(try dirId == cache.get(readPath))
+			#expect(try dirId == cache.get(readPath.appendingPathComponent("sub")))
+			try cache.invalidate(readPath)
+			#expect(try cache.get(writtenPath) == nil)
+			#expect(try cache.get(writtenPath.appendingPathComponent("sub")) == nil)
+		}
+
+		@Test
+		func verifiedDirectoryReadsEachDirFileInItsParentsDirectory() async throws {
+			let reads = OSAllocatedUnfairLock(initialState: [String]())
+			let directory = try await cache.verifiedDirectory(CloudPath("/one/two/three"), readDirId: { cleartextPath, parentDirId in
+				reads.withLock { $0.append("\(cleartextPath.path) in \(String(bytes: parentDirId, encoding: .utf8)!)") }
+				return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+			}, treatingAsMissing: { _ in false })
+
+			#expect(reads.withLock { $0 } == ["/one in ", "/one/two in ONE", "/one/two/three in TWO"])
+			#expect(Data("TWO".utf8) == directory.parentDirId)
+			#expect(Data("THREE".utf8) == directory.dirId)
+			#expect(directory.containingDirIds == [Data(), Data("ONE".utf8), Data("TWO".utf8)])
+			#expect(try Data("TWO".utf8) == cache.get(CloudPath("/one/two")))
+		}
+
+		@Test
+		func verifiedDirectoryWithAncestorRepeatingDirIdReadsNoFurtherDirFile() async throws {
+			let reads = OSAllocatedUnfairLock(initialState: [String]())
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two/three"), readDirId: { cleartextPath, _ in
+					reads.withLock { $0.append(cleartextPath.path) }
+					return Data("ONE".utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			#expect(reads.withLock { $0 } == ["/one", "/one/two"])
+		}
+
+		@Test
+		func verifiedDirectoryWithMissingAncestorDirFileThrowsParentFolderDoesNotExist() async throws {
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { _, _ in
+					throw CloudProviderError.itemNotFound
+				}, treatingAsMissing: { _ in true })
+			}
+		}
+
+		@Test
+		func verifiedDirectoryWithMissingDirFileReturnsNoDirId() async throws {
+			let directory = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
+				guard cleartextPath.lastPathComponent == "one" else {
+					throw CloudProviderError.itemNotFound
+				}
+				return Data("ONE".utf8)
+			}, treatingAsMissing: { error in error as? CloudProviderError == .itemNotFound })
+
+			#expect(Data("ONE".utf8) == directory.parentDirId)
+			#expect(directory.dirId == nil)
+			#expect(directory.containingDirIds == [Data(), Data("ONE".utf8)])
+		}
+
+		@Test(arguments: ["/", "/..", "one/two"])
+		func verifiedDirectoryRejectsPathNamingNoFolderBelowRoot(path: String) async throws {
+			let reads = OSAllocatedUnfairLock(initialState: 0)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
+				_ = try await cache.verifiedDirectory(CloudPath(path), readDirId: { _, _ in
+					reads.withLock { $0 += 1 }
+					return Data("ID".utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			#expect(reads.withLock { $0 } == 0)
+		}
+
 		@Test
 		func recursiveGet() async throws {
 			let path = CloudPath("/one/two/three")

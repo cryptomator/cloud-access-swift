@@ -14,6 +14,11 @@ private extension CloudPath {
 	}
 }
 
+/// Whether a listed item of a `.c9r` or `.c9s` is the file that holds its dir ID. A folder of that name holds none.
+private func isDirFile(_ item: CloudItemMetadata) -> Bool {
+	return item.name == "dir.c9r" && item.itemType == .file
+}
+
 /**
  Cloud provider decorator for Cryptomator vaults in vault format 7 (without name shortening).
 
@@ -143,26 +148,31 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		try await delegate.deleteFile(at: ciphertextCloudPath)
 	}
 
+	/// Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path.
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let dirId: Data?
-		do {
-			dirId = try await getDirId(cleartextCloudPath)
-		} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
-			// `itemTypeMismatch`: the `.c9r` has no `dir.c9r`, e.g., it's a symlink, so delete it anyway
-			// `itemNotFound`: the steps below throw the precise error
-			dirId = nil
-		}
-		let ciphertextCloudPath = try await getC9RPath(cleartextCloudPath)
+		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1) }, treatingAsMissing: { error in
+			// `itemTypeMismatch`: the `.c9r` exists, but the download found no `dir.c9r`, e.g., it's a symlink.
+			// `itemNotFound`: the `.c9r` is gone, or it's a `.c9s` that the shortening decorator reports as missing because it holds no item file.
+			// Either way it's deleted without a walk unless it lists a `dir.c9r`.
+			switch error {
+			case CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch:
+				return true
+			default:
+				return false
+			}
+		})
+		let ciphertextCloudPath = try getC9RPath(cleartextCloudPath, parentDirId: directory.parentDirId)
+		let holdsUnreadableDirFile = directory.dirId == nil ? try await holdsDirFile(ciphertextCloudPath) : false
 		try Task.checkCancellation()
+		if holdsUnreadableDirFile {
+			// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing. Deleting the `.c9r` would orphan its directory. A later delete can read the new ID once the provider has cached it, which some providers' listings do.
+			throw CloudProviderError.itemNotFound
+		}
 		try await withoutCancellation {
-			if let dirId {
-				do {
-					try await self.deleteCiphertextDir(dirId)
-				} catch CloudProviderError.itemTypeMismatch {
-					// the directory is broken, so delete the `.c9r` anyway
-				}
+			if let dirId = directory.dirId {
+				try await self.deleteCiphertextDir(dirId, containingDirIds: directory.containingDirIds)
 			}
 			try await self.delegate.deleteFolder(at: ciphertextCloudPath)
 			try self.dirIdCache.invalidate(cleartextCloudPath)
@@ -197,21 +207,23 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	// MARK: - Encryption
 
 	private func getDirId(_ cleartextPath: CloudPath) async throws -> Data {
-		return try await dirIdCache.get(cleartextPath, onMiss: { cacheMissPath, parentDirId in
-			let c9rPath = try self.getC9RPath(cacheMissPath, parentDirId: parentDirId)
-			let dirFilePath = c9rPath.appendingDirFileComponent()
-			do {
-				return try await self.downloadFile(at: dirFilePath)
-			} catch CloudProviderError.itemNotFound {
-				try Task.checkCancellation()
-				if try await self.delegate.checkForItemExistence(at: c9rPath) {
-					// `*.c9r` exists but `*.c9r/dir.c9r` does not, so it's not a directory as expected
-					throw CloudProviderError.itemTypeMismatch
-				} else {
-					throw CloudProviderError.itemNotFound
-				}
+		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.readDirId($0, parentDirId: $1) })
+	}
+
+	private func readDirId(_ cleartextPath: CloudPath, parentDirId: Data) async throws -> Data {
+		let c9rPath = try getC9RPath(cleartextPath, parentDirId: parentDirId)
+		let dirFilePath = c9rPath.appendingDirFileComponent()
+		do {
+			return try await downloadFile(at: dirFilePath, of: delegate)
+		} catch CloudProviderError.itemNotFound {
+			try Task.checkCancellation()
+			if try await delegate.checkForItemExistence(at: c9rPath) {
+				// `*.c9r` exists but `*.c9r/dir.c9r` does not, so it's not a directory as expected
+				throw CloudProviderError.itemTypeMismatch
+			} else {
+				throw CloudProviderError.itemNotFound
 			}
-		})
+		}
 	}
 
 	private func getParentDirId(_ cleartextPath: CloudPath) async throws -> Data {
@@ -271,26 +283,59 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 
 	// MARK: - Convenience
 
-	private func downloadFile(at cloudPath: CloudPath) async throws -> Data {
+	private func downloadFile(at cloudPath: CloudPath, of provider: CloudProvider) async throws -> Data {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
 			try? FileManager.default.removeItem(at: localURL)
 		}
-		_ = try await delegate.downloadFile(from: cloudPath, to: localURL)
+		_ = try await provider.downloadFile(from: cloudPath, to: localURL)
 		return try Data(contentsOf: localURL)
 	}
 
-	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
-	private func deleteCiphertextDir(_ dirId: Data) async throws {
-		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { item in
-			guard item.itemType == .folder else {
+	/// The provider below the shortening decorator, which lists every item, also one whose shortened name can't be restored.
+	private var physicalDelegate: CloudProvider {
+		return (delegate as? VaultFormat7ShorteningProviderDecorator)?.delegate ?? delegate
+	}
+
+	/// Whether the folder of a `.c9r` or `.c9s` holds a `dir.c9r` file, as listed below the shortening decorator. A first page that throws `itemNotFound` or `itemTypeMismatch` means none. Any other failure is thrown, because the pages not listed yet may hold it.
+	private func holdsDirFile(_ c9rPath: CloudPath) async throws -> Bool {
+		let shorteningDecorator = delegate as? VaultFormat7ShorteningProviderDecorator
+		let provider = shorteningDecorator?.delegate ?? delegate
+		let containerPath = shorteningDecorator?.shortenedNameCache.getShortenedPath(c9rPath).cloudPath ?? c9rPath
+		var pageToken: String?
+		repeat {
+			try Task.checkCancellation()
+			let itemList: CloudItemList
+			do {
+				itemList = try await provider.fetchItemList(forFolderAt: containerPath, withPageToken: pageToken)
+			} catch let error as CloudProviderError where pageToken == nil && [.itemNotFound, .itemTypeMismatch].contains(error) {
+				return false
+			}
+			if itemList.items.contains(where: isDirFile) {
+				return true
+			}
+			pageToken = itemList.nextPageToken
+		} while pageToken != nil
+		return false
+	}
+
+	/**
+	 Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
+
+	 Lists below the shortening decorator and follows every `dir.c9r` file of a `.c9r` or `.c9s` folder without reading its name, so that a subfolder whose `name.c9s` is invalid or can't be read is deleted with its parent instead of keeping a directory without a reference.
+	 */
+	private func deleteCiphertextDir(_ dirId: Data, containingDirIds: Set<Data>) async throws {
+		let provider = physicalDelegate
+		let deletion = CiphertextDirectoryDeletion(provider: provider, directoryPath: { try self.getDirPath($0) }, subdirectoryIds: { item in
+			guard item.itemType == .folder, item.name.hasSuffix(".c9r") || item.name.hasSuffix(".c9s") else {
 				return []
 			}
 			var dirIds = [Data]()
-			for dirFile in try await self.delegate.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where dirFile.name == "dir.c9r" {
-				try await dirIds.append(self.downloadFile(at: dirFile.cloudPath))
+			for dirFile in try await provider.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where isDirFile(dirFile) {
+				try await dirIds.append(self.downloadFile(at: dirFile.cloudPath, of: provider))
 			}
 			return dirIds
-		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
+		})
+		try await deletion.deleteDirectory(of: dirId, containingDirIds: containingDirIds)
 	}
 }

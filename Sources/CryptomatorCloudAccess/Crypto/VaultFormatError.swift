@@ -11,6 +11,8 @@ import Foundation
 enum VaultFormatError: Error {
 	case encounteredUnrelatedFile
 	case invalidNameFile
+	/// A dir file names the vault root, or the directory of a folder that contains it, or a cleartext path names no folder below the root.
+	case invalidDirectoryReference
 }
 
 func isInvalidNameFile(_ error: Error) -> Bool {

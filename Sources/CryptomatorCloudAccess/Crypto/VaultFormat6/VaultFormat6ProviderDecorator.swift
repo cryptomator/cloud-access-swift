@@ -163,21 +163,18 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 		try await delegate.deleteFile(at: fileCiphertextPath)
 	}
 
+	/// Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path.
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let dirId: Data?
-		do {
-			dirId = try await getDirId(cleartextCloudPath)
-		} catch CloudProviderError.itemNotFound {
-			// the steps below throw the precise error
-			dirId = nil
-		}
-		let folderCiphertextPath = try await getFolderCiphertextPath(cleartextCloudPath)
-		try Task.checkCancellation()
+		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1) }, treatingAsMissing: { error in
+			// `deleteFile` then throws `itemNotFound` for the missing dir file itself.
+			error as? CloudProviderError == .itemNotFound
+		})
+		let folderCiphertextPath = try getFolderCiphertextPath(cleartextCloudPath, parentDirId: directory.parentDirId)
 		try await withoutCancellation {
-			if let dirId {
-				try await self.deleteCiphertextDir(dirId)
+			if let dirId = directory.dirId {
+				try await self.deleteCiphertextDir(dirId, containingDirIds: directory.containingDirIds)
 			}
 			try await self.delegate.deleteFile(at: folderCiphertextPath)
 			try self.dirIdCache.invalidate(cleartextCloudPath)
@@ -212,22 +209,24 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	// MARK: - Encryption
 
 	private func getDirId(_ cleartextPath: CloudPath) async throws -> Data {
-		return try await dirIdCache.get(cleartextPath, onMiss: { cleartextPath, parentDirId in
-			let folderCiphertextPath = try self.getFolderCiphertextPath(cleartextPath, parentDirId: parentDirId)
-			do {
-				return try await self.downloadFile(at: folderCiphertextPath)
-			} catch CloudProviderError.itemNotFound {
-				let fileCiphertextPath = try self.getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
-				try Task.checkCancellation()
-				if try await self.delegate.checkForItemExistence(at: fileCiphertextPath) {
-					// ciphertext file exists but ciphertext folder (with `0` prefix) does not
-					// symlink existence check has been omitted for simplicity
-					throw CloudProviderError.itemTypeMismatch
-				} else {
-					throw CloudProviderError.itemNotFound
-				}
+		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.readDirId($0, parentDirId: $1) })
+	}
+
+	private func readDirId(_ cleartextPath: CloudPath, parentDirId: Data) async throws -> Data {
+		let folderCiphertextPath = try getFolderCiphertextPath(cleartextPath, parentDirId: parentDirId)
+		do {
+			return try await downloadFile(at: folderCiphertextPath, of: delegate)
+		} catch CloudProviderError.itemNotFound {
+			let fileCiphertextPath = try getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
+			try Task.checkCancellation()
+			if try await delegate.checkForItemExistence(at: fileCiphertextPath) {
+				// ciphertext file exists but ciphertext folder (with `0` prefix) does not
+				// symlink existence check has been omitted for simplicity
+				throw CloudProviderError.itemTypeMismatch
+			} else {
+				throw CloudProviderError.itemNotFound
 			}
-		})
+		}
 	}
 
 	private func getParentDirId(_ cleartextPath: CloudPath) async throws -> Data {
@@ -316,22 +315,36 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 
 	// MARK: - Convenience
 
-	private func downloadFile(at cloudPath: CloudPath) async throws -> Data {
+	private func downloadFile(at cloudPath: CloudPath, of provider: CloudProvider) async throws -> Data {
 		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
 			try? FileManager.default.removeItem(at: localURL)
 		}
-		_ = try await delegate.downloadFile(from: cloudPath, to: localURL)
+		_ = try await provider.downloadFile(from: cloudPath, to: localURL)
 		return try Data(contentsOf: localURL)
 	}
 
-	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
-	private func deleteCiphertextDir(_ dirId: Data) async throws {
-		try await deleteCiphertextDirectory(at: getDirPath(dirId), of: delegate, subdirectoryIds: { item in
-			guard item.name.hasPrefix("0") else {
+	/**
+	 Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
+
+	 Lists below the shortening decorator and reads a `.lng` name file only to tell whether the item is a dir file, so that a dir file whose name file can't be read keeps its parent instead of being left out, which would orphan its directory. A legacy `.lng` dir file is followed where it lies, without moving it to its original name.
+	 */
+	private func deleteCiphertextDir(_ dirId: Data, containingDirIds: Set<Data>) async throws {
+		let shorteningDecorator = delegate as? VaultFormat6ShorteningProviderDecorator
+		let provider = shorteningDecorator?.delegate ?? delegate
+		let deletion = CiphertextDirectoryDeletion(provider: provider, directoryPath: { try self.getDirPath($0) }, subdirectoryIds: { item in
+			let originalName: String
+			do {
+				originalName = try await shorteningDecorator?.originalName(ofPhysicalItemAt: item.cloudPath) ?? item.name
+			} catch where isInvalidNameFile(error) {
+				// The library never addresses such an item. Its directory stays without a reference, as after Desktop's directory delete, whose health check reports it as an orphan.
 				return []
 			}
-			return try await [self.downloadFile(at: item.cloudPath)]
-		}, deleteSubdirectory: { try await self.deleteCiphertextDir($0) })
+			guard originalName.hasPrefix("0") else {
+				return []
+			}
+			return try await [self.downloadFile(at: item.cloudPath, of: provider)]
+		})
+		try await deletion.deleteDirectory(of: dirId, containingDirIds: containingDirIds)
 	}
 }

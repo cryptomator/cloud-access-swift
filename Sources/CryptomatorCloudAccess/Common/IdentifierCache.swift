@@ -46,8 +46,7 @@ enum CloudPathSubtree {
 		return "\(column) = ? OR substr(\(column), 1, length(?)) = ?"
 	}
 
-	static func arguments(for cloudPath: CloudPath) -> StatementArguments {
-		let path = cloudPath.path
+	static func arguments(for path: String) -> StatementArguments {
 		let prefix = path == "/" ? path : path + "/"
 		return [path, prefix, prefix]
 	}
@@ -109,7 +108,7 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	/// Removes the item and the items of its descendants.
 	func invalidate(_ item: Item) throws {
 		try dbQueue.write { db in
-			try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: item.cloudPath))
+			try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: item.cloudPath.path))
 		}
 	}
 

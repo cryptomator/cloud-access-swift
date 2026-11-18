@@ -51,7 +51,7 @@ extension UnitTests {
 		func mapsAPIErrorCodesPerMethod() async throws {
 			let localURL = try makeLocalFile()
 			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
-			let rootWithFolder = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "folder")])
+			let rootWithFolder = PCloudProviderTestResponse.rootWithFolder
 			let rootWithFile = PCloudProviderTestResponse.rootWithFile
 			let cases = [
 				ProviderCase(name: "stat", responses: [rootWithFile, PCloudMockResponse.result(2009)], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt")) }, expected: CloudProviderError.itemNotFound),
@@ -79,13 +79,7 @@ extension UnitTests {
 				ProviderCase(name: "renamefolder 2008", responses: [rootWithFolder, rootWithFolder, PCloudMockResponse.result(2008)], operation: { try await $0.moveFolder(from: CloudPath("/folder"), to: CloudPath("/renamed")) }, expected: CloudProviderError.quotaInsufficient)
 			]
 
-			for testCase in cases {
-				let provider = try PCloudCloudProvider(client: .mocked())
-				URLProtocolMock.requestHandler = testCase.responses.map { URLProtocolMock.handler(body: $0) }
-
-				await #expect(throws: testCase.expected, "\(testCase.name)") { try await testCase.operation(provider) }
-				#expect(URLProtocolMock.requestHandler.isEmpty, "\(testCase.name)")
-			}
+			try await expectErrorsConsumingAllResponses(cases)
 		}
 
 		@Test
@@ -166,16 +160,76 @@ extension UnitTests {
 		}
 
 		@Test
-		func looksUpChildByNameWithoutDecodingLaterChildren() async throws {
+		func looksUpFolderByNameWithoutDecodingLaterChildren() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 1, name: "a.txt"), PCloudMockResponse.fileEntry(id: 2, name: "b.txt"), #"{"isfolder":false,"name":"c.txt"}"#])),
-				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 2, name: "b.txt"), onRequest: requests.record)
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 1, name: "a.txt"), PCloudMockResponse.folderEntry(id: 2, name: "b"), #"{"isfolder":false,"name":"c.txt"}"#])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 2, name: "b"), onRequest: requests.record)
 			]
 
-			_ = try await provider.fetchItemMetadata(at: CloudPath("/b.txt"))
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/b"))
 
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["fileid"] == "2")
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "2")
+		}
+
+		@Test(arguments: [false, true])
+		func lookupPrefersFolderOfSameName(fileFirst: Bool) async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFileAndFolderNamedX(fileFirst: fileFirst)),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, name: "x"), onRequest: requests.record)
+			]
+
+			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/x"))
+
+			PCloudProviderTestResponse.assertMetadata(metadata, name: "x", cloudPath: CloudPath("/x"), itemType: .folder, size: nil)
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
+		}
+
+		@Test(arguments: [false, true])
+		func listingCachesFolderOfSameName(fileFirst: Bool) async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFileAndFolderNamedX(fileFirst: fileFirst)),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, name: "x"), onRequest: requests.record)
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
+
+			#expect(itemList.items.map(\.itemType) == (fileFirst ? [.file, .folder] : [.folder, .file]))
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
+		}
+
+		@Test
+		func listingReplacesCachedFolderWithFileOfSameName() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "x")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "x")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 5, name: "x"), onRequest: requests.record)
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
+
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["fileid"] == "5")
+		}
+
+		@Test
+		func failedListingStillCachesFolderOfSameName() async throws {
+			let requests = RequestRecorder()
+			let undecodableChild = #"{"isfolder":false,"name":"c.txt"}"#
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "x"), PCloudMockResponse.fileEntry(id: 5, name: "x"), undecodableChild])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, name: "x"), onRequest: requests.record)
+			]
+
+			await #expect(throws: (any Error).self) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
+
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
 		}
 
 		@Test
@@ -187,6 +241,35 @@ extension UnitTests {
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.createFolder(at: CloudPath("/b")) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func uploadFileOntoFileAndFolderOfSameNameThrowsItemAlreadyExists() async throws {
+			let localURL = try makeLocalFile()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFileAndFolderNamedX(fileFirst: true))]
+
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { _ = try await provider.uploadFile(from: localURL, to: CloudPath("/x"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// pCloud numbers files and folders separately, so a file's identifier must never be sent as a folder's, or the reverse.
+		@Test
+		func neverSendsAnIdentifierAsOneOfTheOtherType() async throws {
+			let localURL = try makeLocalFile()
+			let rootWithFolder = PCloudProviderTestResponse.rootWithFolder
+			let rootWithFile = PCloudProviderTestResponse.rootWithFile
+			let cases = [
+				ProviderCase(name: "deleteFile of a folder", responses: [rootWithFolder], operation: { try await $0.deleteFile(at: CloudPath("/folder")) }, expected: CloudProviderError.itemTypeMismatch),
+				ProviderCase(name: "deleteFolder of a file", responses: [rootWithFile], operation: { try await $0.deleteFolder(at: CloudPath("/file.txt")) }, expected: CloudProviderError.itemTypeMismatch),
+				ProviderCase(name: "moveFile of a folder", responses: [rootWithFolder], operation: { try await $0.moveFile(from: CloudPath("/folder"), to: CloudPath("/renamed")) }, expected: CloudProviderError.itemTypeMismatch),
+				ProviderCase(name: "moveFolder of a file", responses: [rootWithFile], operation: { try await $0.moveFolder(from: CloudPath("/file.txt"), to: CloudPath("/renamed")) }, expected: CloudProviderError.itemTypeMismatch),
+				ProviderCase(name: "lookup below a file", responses: [rootWithFile], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.itemNotFound),
+				ProviderCase(name: "createFolder in a file", responses: [rootWithFile], operation: { try await $0.createFolder(at: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.parentFolderDoesNotExist),
+				ProviderCase(name: "uploadFile into a file", responses: [rootWithFile], operation: { _ = try await $0.uploadFile(from: localURL, to: CloudPath("/file.txt/sub"), replaceExisting: false, progress: nil, onTaskCreation: nil) }, expected: CloudProviderError.parentFolderDoesNotExist),
+				ProviderCase(name: "move into a file", responses: [rootWithFile], operation: { try await $0.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.parentFolderDoesNotExist)
+			]
+
+			try await expectErrorsConsumingAllResponses(cases)
 		}
 
 		// MARK: - Paging
@@ -466,6 +549,17 @@ extension UnitTests {
 			try Data("content".utf8).write(to: localURL)
 			return localURL
 		}
+
+		/// Runs each case on a provider of its own and expects its error and every scripted response to be consumed.
+		private func expectErrorsConsumingAllResponses(_ cases: [ProviderCase<some Error & Equatable>], sourceLocation: SourceLocation = #_sourceLocation) async throws {
+			for testCase in cases {
+				let provider = try PCloudCloudProvider(client: .mocked())
+				URLProtocolMock.requestHandler = testCase.responses.map { URLProtocolMock.handler(body: $0) }
+
+				await #expect(throws: testCase.expected, "\(testCase.name)", sourceLocation: sourceLocation) { try await testCase.operation(provider) }
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(testCase.name)", sourceLocation: sourceLocation)
+			}
+		}
 	}
 }
 
@@ -478,6 +572,7 @@ private struct ProviderCase<Expected: Error & Equatable>: Sendable {
 
 private enum PCloudProviderTestResponse {
 	static let rootWithFile = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "file.txt")])
+	static let rootWithFolder = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "folder")])
 
 	static let isListing: @Sendable (URLSessionTask) -> Bool = { $0.originalRequest?.url?.path == "/listfolder" }
 	static let folderWithNullContents = #"{"result":0,"metadata":{"isfolder":true,"name":"folder","folderid":3,"modified":1792056600,"contents":null}}"#
@@ -485,6 +580,13 @@ private enum PCloudProviderTestResponse {
 	/// The root folder with a file of each name, whose identifiers count from 1.
 	static func rootWithFiles(_ names: [String]) -> String {
 		return PCloudMockResponse.folder(id: 0, contents: names.enumerated().map { PCloudMockResponse.fileEntry(id: UInt64($0 + 1), name: $1) })
+	}
+
+	/// The root folder with the file 5 and the folder 3, both named `x`, which pCloud allows in one folder.
+	static func rootWithFileAndFolderNamedX(fileFirst: Bool) -> String {
+		let file = PCloudMockResponse.fileEntry(id: 5, name: "x")
+		let folder = PCloudMockResponse.folderEntry(id: 3, name: "x")
+		return PCloudMockResponse.folder(id: 0, contents: fileFirst ? [file, folder] : [folder, file])
 	}
 
 	/// The listing, `stat` and `getfilelink` that precede the download of `/file.txt`.

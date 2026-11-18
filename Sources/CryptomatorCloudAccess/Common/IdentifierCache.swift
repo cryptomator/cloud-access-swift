@@ -105,6 +105,15 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		}
 	}
 
+	/// Adds or updates the item and returns the item it replaced, if any.
+	func replace(_ item: Item) throws -> Item? {
+		try dbQueue.write { db in
+			let replacedItem = try Item.fetchOne(db, key: item.cloudPath)
+			try item.save(db)
+			return replacedItem
+		}
+	}
+
 	/// Removes the item and the items of its descendants.
 	func invalidate(_ item: Item) throws {
 		try dbQueue.write { db in

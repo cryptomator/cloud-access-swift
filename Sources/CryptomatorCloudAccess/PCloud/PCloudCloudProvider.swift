@@ -103,7 +103,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		do {
 			let targetName = cloudPath.lastPathComponent
-			let existingContent = try await firstChild(of: parentItem, where: { $0.name == targetName })
+			let existingContent = try await child(named: targetName, in: parentItem)
 			if let existingContent, !replaceExisting || existingContent.isFolder {
 				throw CloudProviderError.itemAlreadyExists
 			}
@@ -145,7 +145,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let (sourceItem, targetParentItem) = try await resolveForMove(from: sourceCloudPath, to: targetCloudPath)
+		let (sourceItem, targetParentItem) = try await resolveForMove(from: sourceCloudPath, to: targetCloudPath, itemType: .file)
 		try Task.checkCancellation()
 		try await moveFile(from: sourceItem, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 	}
@@ -153,7 +153,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let (sourceItem, targetParentItem) = try await resolveForMove(from: sourceCloudPath, to: targetCloudPath)
+		let (sourceItem, targetParentItem) = try await resolveForMove(from: sourceCloudPath, to: targetCloudPath, itemType: .folder)
 		try Task.checkCancellation()
 		try await moveFolder(from: sourceItem, toParent: targetParentItem, targetCloudPath: targetCloudPath)
 	}
@@ -327,6 +327,11 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private func deleteFile(for item: PCloudItem) async throws {
 		CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) called")
+		guard item.itemType == .file else {
+			let error = CloudProviderError.itemTypeMismatch
+			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
+			throw error
+		}
 		do {
 			try await client.deleteFile(item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) finished")
@@ -346,6 +351,11 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private func deleteFolder(for item: PCloudItem) async throws {
 		CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) called")
+		guard item.itemType == .folder else {
+			let error = CloudProviderError.itemTypeMismatch
+			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
+			throw error
+		}
 		do {
 			try await client.deleteFolderRecursive(item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) finished")
@@ -417,22 +427,29 @@ public final class PCloudCloudProvider: CloudProvider {
 		return try await identifierCache.resolvePath(forItemAt: cloudPath, lookUpChild: getPCloudItem(for:withParentItem:))
 	}
 
-	private func resolveForMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws -> (PCloudItem, PCloudItem) {
+	private func resolveForMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, itemType: CloudItemType) async throws -> (PCloudItem, PCloudItem) {
 		let targetParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
 		let sourceItem = try await resolvePath(forItemAt: sourceCloudPath)
+		guard sourceItem.itemType == itemType else {
+			throw CloudProviderError.itemTypeMismatch
+		}
 		try Task.checkCancellation()
 		try await checkForNameCollision(targetCloudPath.lastPathComponent, inFolder: targetParentItem)
 		return (sourceItem, targetParentItem)
 	}
 
 	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> PCloudItem {
-		return try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getPCloudItem(for:withParentItem:))
+		let parentItem = try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getPCloudItem(for:withParentItem:))
+		guard parentItem.itemType == .folder else {
+			throw CloudProviderError.parentFolderDoesNotExist
+		}
+		return parentItem
 	}
 
 	private func getPCloudItem(for name: String, withParentItem parentItem: PCloudItem) async throws -> PCloudItem {
 		CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
 		do {
-			guard let content = try await firstChild(of: parentItem, where: { $0.name == name }) else {
+			guard parentItem.itemType == .folder, let content = try await child(named: name, in: parentItem) else {
 				throw CloudProviderError.itemNotFound
 			}
 			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) received metadata: \(content)")
@@ -474,40 +491,69 @@ public final class PCloudCloudProvider: CloudProvider {
 		}
 	}
 
-	private func firstChild(of folderItem: PCloudItem, where predicate: (PCloudMetadata) -> Bool) async throws -> PCloudMetadata? {
+	/// Returns the child of the given name, preferring a folder, because pCloud allows a file and a folder of the same name in one folder. A child after a folder of that name isn't decoded.
+	private func child(named name: String, in folderItem: PCloudItem) async throws -> PCloudMetadata? {
 		return try await withListing(of: folderItem) { listing in
 			var match: PCloudMetadata?
 			try forEachChild(of: listing) { child in
-				if predicate(child) {
-					match = child
+				guard child.name == name else {
+					return true
 				}
-				return match == nil
+				match = child
+				return !child.isFolder
 			}
 			return match
 		}
 	}
 
-	/// Saves the children of the listing in the snapshot and caches their items, stopping at the next child once the task is cancelled.
+	/**
+	 Saves the children of the listing in the snapshot and caches their items, stopping at the next child once the task is cancelled.
+
+	 A name that a file and a folder share caches the folder, as `child(named:in:)` resolves it. Once a file overwrites a cached folder, the listing's folders are cached again, because that folder may be listed before the file. This happens even if the fill fails or is cancelled, and the fill's error is thrown afterwards. A cached folder that the listing no longer holds stays overwritten by the file.
+	 */
 	private func fillSnapshot(_ snapshot: DirectoryContentSnapshot, from listing: PCloudFolderListing) throws {
 		let folderPath = snapshot.folderEnumerationPath
 		var index: Int64 = 0
-		try forEachChild(of: listing) { child in
-			try Task.checkCancellation()
-			guard child.name.isSinglePathComponent else {
-				CloudAccessDDLogDebug("PCloudCloudProvider: skipping item \(child.name) in \(folderPath.path), because its name is no single path component")
+		var overwroteCachedFolder = false
+		do {
+			try forEachChild(of: listing) { child in
+				try Task.checkCancellation()
+				guard child.name.isSinglePathComponent else {
+					CloudAccessDDLogDebug("PCloudCloudProvider: skipping item \(child.name) in \(folderPath.path), because its name is no single path component")
+					return true
+				}
+				let childPath = folderPath.appendingPathComponent(child.name)
+				let replacedItem = try identifierCache.replace(PCloudItem(cloudPath: childPath, metadata: child))
+				if !child.isFolder, replacedItem?.itemType == .folder {
+					overwroteCachedFolder = true
+				}
+				index += 1
+				try directoryContentCache.save(convertToCloudItemMetadata(child, at: childPath), in: snapshot, index: index)
 				return true
 			}
-			let childPath = folderPath.appendingPathComponent(child.name)
-			try identifierCache.addOrUpdate(PCloudItem(cloudPath: childPath, metadata: child))
-			index += 1
-			try directoryContentCache.save(convertToCloudItemMetadata(child, at: childPath), in: snapshot, index: index)
+		} catch {
+			if overwroteCachedFolder {
+				try? cacheFolders(of: listing, in: folderPath)
+			}
+			throw error
+		}
+		if overwroteCachedFolder {
+			try cacheFolders(of: listing, in: folderPath)
+		}
+	}
+
+	private func cacheFolders(of listing: PCloudFolderListing, in folderPath: CloudPath) throws {
+		try forEachChild(of: listing) { child in
+			if child.isFolder, child.name.isSinglePathComponent {
+				try identifierCache.addOrUpdate(PCloudItem(cloudPath: folderPath.appendingPathComponent(child.name), metadata: child))
+			}
 			return true
 		}
 	}
 
 	private func checkForNameCollision(_ name: String, inFolder parentItem: PCloudItem) async throws {
 		do {
-			if try await firstChild(of: parentItem, where: { $0.name == name }) != nil {
+			if try await child(named: name, in: parentItem) != nil {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		} catch PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) {

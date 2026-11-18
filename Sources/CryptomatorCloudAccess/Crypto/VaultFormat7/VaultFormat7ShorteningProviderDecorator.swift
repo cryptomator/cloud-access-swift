@@ -268,13 +268,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	}
 
 	private func downloadNameFile(_ c9sDirPath: CloudPath) async throws -> Data {
-		let nameFileCloudPath = c9sDirPath.appendingNameFileComponent()
-		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		defer {
-			try? FileManager.default.removeItem(at: localNameFileURL)
-		}
-		_ = try await delegate.downloadFile(from: nameFileCloudPath, to: localNameFileURL)
-		return try Data(contentsOf: localNameFileURL)
+		return try await delegate.downloadNameFile(at: c9sDirPath.appendingNameFileComponent())
 	}
 
 	private func fetchC9SItemMetadata(_ c9sDirPath: CloudPath) async throws -> CloudItemMetadata {

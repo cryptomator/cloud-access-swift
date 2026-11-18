@@ -144,7 +144,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	/**
 	 Restores the name of an item that the delegate listed, without moving a legacy name.
 
-	 - Throws: `VaultFormatError.invalidNameFile` as `VaultFormat6ShortenedNameCache.getOriginalPath(_:lngFileLoader:)` does, and the failure of the name file's download unchanged.
+	 - Throws: `VaultFormatError.invalidNameFile` as `VaultFormat6ShortenedNameCache.getOriginalPath(_:lngFileLoader:)` does, or if the name file is larger than `vaultNameFileMaxLength`. Other failures of the name file's download unchanged.
 	 */
 	func originalName(ofPhysicalItemAt cloudPath: CloudPath) async throws -> String {
 		return try await shortenedNameCache.getOriginalPath(cloudPath, lngFileLoader: { try await self.downloadNameFile($0) }).lastPathComponent
@@ -198,13 +198,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	}
 
 	private func downloadNameFile(_ lngFileName: String) async throws -> Data {
-		let nameFileCloudPath = getNameFileCloudPath(lngFileName)
-		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		defer {
-			try? FileManager.default.removeItem(at: localNameFileURL)
-		}
-		_ = try await delegate.downloadFile(from: nameFileCloudPath, to: localNameFileURL)
-		return try Data(contentsOf: localNameFileURL)
+		return try await delegate.downloadNameFile(at: getNameFileCloudPath(lngFileName))
 	}
 
 	private func getNameFileCloudPath(_ lngFileName: String) -> CloudPath {

@@ -99,6 +99,24 @@ extension UnitTests {
 			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/\(longName)"])
 		}
 
+		/// Both name files hold the name that hashes to their `.c9s` name, so only the size leaves the larger one out.
+		@Test
+		func fetchItemListSkipsNamesWhoseNameFileIsTooLarge() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let longestName = "\(String(repeating: "a", count: vaultNameFileMaxLength - ".c9r".count)).c9r"
+			let longestDirPath = "\(dirPath)/-cQZZfpxsSDQPcuYRwOXtKmQoTU=.c9s"
+			let tooLargeDirPath = "\(dirPath)/KOqmxbxIdVOtsmKM_zOEpV5IhKw=.c9s"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, longestDirPath, tooLargeDirPath], files: [
+				"\(longestDirPath)/contents.c9r": Data(),
+				"\(longestDirPath)/name.c9s": Data(longestName.utf8),
+				"\(tooLargeDirPath)/contents.c9r": Data(),
+				"\(tooLargeDirPath)/name.c9s": Data("\(String(repeating: "a", count: vaultNameFileMaxLength - ".c9r".count + 1)).c9r".utf8)
+			])
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/\(longestName)"])
+		}
+
 		/// With one item per page, `name.c9s` fills the first page of the `.c9s` directory and `symlink.c9r` is on the second.
 		@Test
 		func fetchItemListFindsC9SItemOnLaterPage() async throws {

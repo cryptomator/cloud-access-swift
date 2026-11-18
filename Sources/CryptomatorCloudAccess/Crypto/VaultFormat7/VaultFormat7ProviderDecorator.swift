@@ -214,7 +214,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		let c9rPath = try getC9RPath(cleartextPath, parentDirId: parentDirId)
 		let dirFilePath = c9rPath.appendingDirFileComponent()
 		do {
-			return try await downloadFile(at: dirFilePath, of: delegate)
+			return try await delegate.downloadDirFile(at: dirFilePath)
 		} catch CloudProviderError.itemNotFound {
 			try Task.checkCancellation()
 			if try await delegate.checkForItemExistence(at: c9rPath) {
@@ -283,15 +283,6 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 
 	// MARK: - Convenience
 
-	private func downloadFile(at cloudPath: CloudPath, of provider: CloudProvider) async throws -> Data {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		defer {
-			try? FileManager.default.removeItem(at: localURL)
-		}
-		_ = try await provider.downloadFile(from: cloudPath, to: localURL)
-		return try Data(contentsOf: localURL)
-	}
-
 	/// The provider below the shortening decorator, which lists every item, also one whose shortened name can't be restored.
 	private var physicalDelegate: CloudProvider {
 		return (delegate as? VaultFormat7ShorteningProviderDecorator)?.delegate ?? delegate
@@ -332,7 +323,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 			}
 			var dirIds = [Data]()
 			for dirFile in try await provider.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where isDirFile(dirFile) {
-				try await dirIds.append(self.downloadFile(at: dirFile.cloudPath, of: provider))
+				try await dirIds.append(provider.downloadDirFile(at: dirFile.cloudPath))
 			}
 			return dirIds
 		})

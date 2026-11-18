@@ -128,6 +128,23 @@ extension UnitTests {
 			#expect(provider.moved.isEmpty)
 		}
 
+		/// Both name files hold the name that hashes to their `.lng` name, so only the size leaves the larger one out.
+		@Test
+		func fetchItemListSkipsNamesWhoseNameFileIsTooLarge() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let longestName = String(repeating: "a", count: vaultNameFileMaxLength)
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/GX36U5MEL5HOKVCAWLUURFYCRAVHZ5CY.lng": Data(),
+				"\(dirPath)/57IHRLSOPZN3LK6DXOYTGLXGIBW4MJMB.lng": Data(),
+				"pathToVault/m/GX/36/GX36U5MEL5HOKVCAWLUURFYCRAVHZ5CY.lng": Data(longestName.utf8),
+				"pathToVault/m/57/IH/57IHRLSOPZN3LK6DXOYTGLXGIBW4MJMB.lng": Data(String(repeating: "a", count: vaultNameFileMaxLength + 1).utf8)
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/\(longestName)"])
+			#expect(provider.moved.isEmpty)
+		}
+
 		@Test
 		func fetchItemListMovesLegacyShortenedNameToOriginalName() async throws {
 			let provider = makeProviderWithLegacyShortenedName()

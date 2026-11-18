@@ -213,7 +213,7 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	private func readDirId(_ cleartextPath: CloudPath, parentDirId: Data) async throws -> Data {
 		let folderCiphertextPath = try getFolderCiphertextPath(cleartextPath, parentDirId: parentDirId)
 		do {
-			return try await downloadFile(at: folderCiphertextPath, of: delegate)
+			return try await delegate.downloadDirFile(at: folderCiphertextPath)
 		} catch CloudProviderError.itemNotFound {
 			let fileCiphertextPath = try getFileCiphertextPath(cleartextPath, parentDirId: parentDirId)
 			try Task.checkCancellation()
@@ -313,15 +313,6 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 
 	// MARK: - Convenience
 
-	private func downloadFile(at cloudPath: CloudPath, of provider: CloudProvider) async throws -> Data {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		defer {
-			try? FileManager.default.removeItem(at: localURL)
-		}
-		_ = try await provider.downloadFile(from: cloudPath, to: localURL)
-		return try Data(contentsOf: localURL)
-	}
-
 	/**
 	 Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 
@@ -341,7 +332,7 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 			guard originalName.hasPrefix("0") else {
 				return []
 			}
-			return try await [self.downloadFile(at: item.cloudPath, of: provider)]
+			return try await [provider.downloadDirFile(at: item.cloudPath)]
 		})
 		try await deletion.deleteDirectory(of: dirId, containingDirIds: containingDirIds)
 	}

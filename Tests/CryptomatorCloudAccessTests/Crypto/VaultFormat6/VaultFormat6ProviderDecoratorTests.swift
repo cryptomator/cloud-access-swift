@@ -117,6 +117,13 @@ extension UnitTests {
 			#expect([CloudPath("/File 1")] == itemList.items.map(\.cloudPath))
 		}
 
+		@Test
+		func fetchItemListWithTooLargeDirFileThrowsInvalidDirectoryReference() async throws {
+			let provider = makeNestedProvider(dirFiles: ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": String(repeating: "a", count: vaultDirFileMaxLength + 1)])
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.fetchItemList(forFolderAt: CloudPath("/Directory 1"), withPageToken: nil) }
+		}
+
 		@Test(arguments: Stacking.allCases)
 		func testDownloadFile(stacking: Stacking) async throws {
 			let fixture = try VaultFormat6Fixture(stacking: stacking, vaultPath: vaultPath, cryptor: cryptor)

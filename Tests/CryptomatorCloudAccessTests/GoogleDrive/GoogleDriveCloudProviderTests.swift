@@ -140,6 +140,29 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		@Test
+		func downloadThroughShortcutIsMarkedAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([
+					GoogleDriveMockResponse.file(id: "F", name: "file.txt"),
+					GoogleDriveMockResponse.shortcut(id: "S", name: "link.txt", targetID: "T", targetMimeType: "text/plain")
+				])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "T", name: "target.txt")),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "T", name: "target.txt")),
+				URLProtocolMock.handler(body: "content"),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt")),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			let shortcutMetadata = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appendingPathComponent("link.txt"), progress: nil, onTaskCreation: nil)
+			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+
+			#expect(shortcutMetadata.isAlias)
+			#expect(!fileMetadata.isAlias)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
 		@Test
 		func listingFailsIfShortcutTargetRequestFails() async throws {

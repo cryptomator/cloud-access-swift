@@ -131,11 +131,11 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	// MARK: - Operations
 
-	private func fetchItemMetadata(for item: GoogleDriveItem) async throws -> CloudItemMetadata {
+	private func fetchItemMetadata(for item: GoogleDriveItem, isAlias: Bool = false) async throws -> CloudItemMetadata {
 		return try await perform("fetchItemMetadata(for: \(item.identifier))") {
 			let file = try await client.file(id: item.resolvedIdentifier, fields: GoogleDriveCloudProvider.metadataFields)
 			try identifierCache.addOrUpdate(item)
-			return try convertToCloudItemMetadata(file, at: item.cloudPath)
+			return try convertToCloudItemMetadata(file, at: item.cloudPath, isAlias: isAlias)
 		}
 	}
 
@@ -181,7 +181,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		guard item.resolvedItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
-		let remoteMetadata = try await fetchItemMetadata(for: item)
+		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: item.shortcut != nil)
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			try await perform("downloadFile(for: \(item.identifier), to: \(localURL))") {

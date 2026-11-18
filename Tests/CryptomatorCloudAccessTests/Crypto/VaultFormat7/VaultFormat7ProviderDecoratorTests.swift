@@ -777,6 +777,30 @@ extension UnitTests {
 			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
 		}
 
+		/// On Google Drive, a shortcut can share a genuine `dir.c9r`'s name, and a read of that path can reach the shortcut's target.
+		@Test
+		func deleteFolderKeepsFolderWhoseDirFileDownloadsThroughAlias() async throws {
+			let subfolderPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r"
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r": "dir2-id"], aliasedDownloads: ["\(subfolderPath)/dir.c9r"])
+			let (listedFolders, _) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", subfolderPath])
+			#expect(provider.deleted == [])
+		}
+
+		@Test
+		func deleteFolderWhoseOwnDirFileDownloadsThroughAliasThrowsInvalidDirectoryReference() async throws {
+			let dirFilePath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r"
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], aliasedDownloads: [dirFilePath])
+			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
+			#expect(listedFolders.withLock { $0 } == [])
+			#expect(transferredFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r", dirFilePath])
+			#expect(provider.deleted == [])
+		}
+
 		@Test
 		func deleteFolderWithDirFileNamingAncestorThrowsInvalidDirectoryReference() async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5.c9r": "dir1-id"])
@@ -1118,13 +1142,13 @@ extension UnitTests {
 
 		// MARK: - Internal
 
-		/// Returns a provider that holds `Directory 1`, the given subdirectory references (by path below `pathToVault/d` and dir ID, replacing a default one) and the given folders and files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases.
-		func makeNestedProvider(subdirectories: [String: String], folders: Set<String> = [], files: [String: Data] = [:], maxPageSize: Int = .max, aliases: Set<String> = []) -> CloudProviderMock {
+		/// Returns a provider that holds `Directory 1`, the given subdirectory references (by path below `pathToVault/d` and dir ID, replacing a default one) and the given folders and files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
+		func makeNestedProvider(subdirectories: [String: String], folders: Set<String> = [], files: [String: Data] = [:], maxPageSize: Int = .max, aliases: Set<String> = [], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
 			let directories = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"]
 			let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r": "dir1-id"].merging(subdirectories) { $1 }
 			let folders = folders.union(["pathToVault", "pathToVault/d"] + (directories + references.keys).map { "pathToVault/d/\($0)" })
 			let dirFiles = Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)/dir.c9r", Data($0.value.utf8)) })
-			return CloudProviderMock(folders: folders, files: dirFiles.merging(files) { $1 }, maxPageSize: maxPageSize, aliases: aliases)
+			return CloudProviderMock(folders: folders, files: dirFiles.merging(files) { $1 }, maxPageSize: maxPageSize, aliases: aliases, aliasedDownloads: aliasedDownloads)
 		}
 
 		/// Returns a provider whose `Directory 1` is a `.c9r` holding the given files and folders by name.

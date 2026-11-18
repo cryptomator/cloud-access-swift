@@ -184,8 +184,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 				continue
 			}
 			let childCloudPath = cloudPath.appendingPathComponent(name)
-			try identifierCache.addOrUpdate(MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem))
-			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath, isAlias: driveItem.remoteItem != nil))
+			let child = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
+			try identifierCache.addOrUpdate(child)
+			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath, isAlias: child.isRemoteItem))
 		}
 		return CloudItemList(items: items, nextPageToken: collection.nextLink)
 	}
@@ -196,7 +197,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 		let contentRequest = try contentRequest(for: item)
 		let driveItem = try await fetchDriveItem(for: item, with: downloadItemRequest(for: item))
-		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath)
+		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath, isAlias: item.isRemoteItem)
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			if let downloadURL = driveItem.downloadURL.flatMap(URL.init(string:)), downloadURL.scheme?.lowercased() == "https" {

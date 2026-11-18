@@ -11,7 +11,7 @@ import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
-/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems`, `aliases` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
+/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems`, `aliases`, `aliasedDownloads` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
 public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	private struct State {
 		var calls: [String] = []
@@ -33,8 +33,10 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	let maxPageSize: Int
 	/// Whether creating a folder at a fixture folder or file, or uploading to a fixture file without `replaceExisting`, throws `itemAlreadyExists`, as with a real provider. Created, deleted and moved items don't count.
 	let rejectsExistingItems: Bool
-	/// The paths of the fixture items that a listing marks as aliases, as a provider marks a shortcut. Metadata reads don't mark them.
+	/// The paths of the fixture items that a listing marks as aliases, as a provider marks a shortcut. Metadata reads and downloads don't mark them (see `aliasedDownloads`).
 	let aliases: Set<String>
+	/// The paths of the fixture files whose download reports an alias, as Google Drive and Microsoft Graph do for a path that resolves to one.
+	let aliasedDownloads: Set<String>
 	let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 	private let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -156,12 +158,13 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		return (listedFolders, transferredFiles)
 	}
 
-	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false, aliases: Set<String> = []) {
+	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false, aliases: Set<String> = [], aliasedDownloads: Set<String> = []) {
 		self.folders = folders
 		self.files = files
 		self.maxPageSize = maxPageSize
 		self.rejectsExistingItems = rejectsExistingItems
 		self.aliases = aliases
+		self.aliasedDownloads = aliasedDownloads
 	}
 
 	@concurrent
@@ -210,7 +213,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		try await transferHook?(cloudPath, phases[0])
 		try data.write(to: localURL, options: .withoutOverwriting)
 		phases.completeTransfer()
-		return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .file, lastModifiedDate: lastModifiedDate, size: data.count)
+		return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .file, lastModifiedDate: lastModifiedDate, size: data.count, isAlias: aliasedDownloads.contains(cloudPath.path))
 	}
 
 	@concurrent

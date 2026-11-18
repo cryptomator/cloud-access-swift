@@ -148,11 +148,11 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		try await delegate.deleteFile(at: ciphertextCloudPath)
 	}
 
-	/// Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path.
+	/// Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path. Throws `VaultFormatError.invalidDirectoryReference` before deleting anything if a download reaches one of these dir files through an alias.
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1) }, treatingAsMissing: { error in
+		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1, refusingAlias: true) }, treatingAsMissing: { error in
 			// `itemTypeMismatch`: the `.c9r` exists, but the download found no `dir.c9r`, e.g., it's a symlink.
 			// `itemNotFound`: the `.c9r` is gone, or it's a `.c9s` that the shortening decorator reports as missing because it holds no item file.
 			// Either way it's deleted without a walk unless it lists a `dir.c9r`.
@@ -207,14 +207,14 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	// MARK: - Encryption
 
 	private func getDirId(_ cleartextPath: CloudPath) async throws -> Data {
-		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.readDirId($0, parentDirId: $1) })
+		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.readDirId($0, parentDirId: $1, refusingAlias: false) })
 	}
 
-	private func readDirId(_ cleartextPath: CloudPath, parentDirId: Data) async throws -> Data {
+	private func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool) async throws -> Data {
 		let c9rPath = try getC9RPath(cleartextPath, parentDirId: parentDirId)
 		let dirFilePath = c9rPath.appendingDirFileComponent()
 		do {
-			return try await delegate.downloadDirFile(at: dirFilePath)
+			return try await delegate.downloadDirFile(at: dirFilePath, refusingAlias: refusingAlias)
 		} catch CloudProviderError.itemNotFound {
 			try Task.checkCancellation()
 			if try await delegate.checkForItemExistence(at: c9rPath) {
@@ -313,7 +313,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	/**
 	 Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 
-	 Lists below the shortening decorator and follows every `dir.c9r` file of a `.c9r` or `.c9s` folder without reading its name, so that a subfolder whose `name.c9s` is invalid or can't be read is deleted with its parent instead of keeping a directory without a reference. It skips a `dir.c9r` that the listing marks as an alias.
+	 Lists below the shortening decorator and follows every `dir.c9r` file of a `.c9r` or `.c9s` folder without reading its name, so that a subfolder whose `name.c9s` is invalid or can't be read is deleted with its parent instead of keeping a directory without a reference. It skips a `dir.c9r` that the listing marks as an alias. If a download reaches a `dir.c9r` through an alias, it fails the `.c9r` or `.c9s` item, which then stays.
 	 */
 	private func deleteCiphertextDir(_ dirId: Data, containingDirIds: Set<Data>) async throws {
 		let provider = physicalDelegate
@@ -323,7 +323,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 			}
 			var dirIds = [Data]()
 			for dirFile in try await provider.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where isDirFile(dirFile) && !dirFile.isAlias {
-				try await dirIds.append(provider.downloadDirFile(at: dirFile.cloudPath))
+				try await dirIds.append(provider.downloadDirFile(at: dirFile.cloudPath, refusingAlias: true))
 			}
 			return dirIds
 		})

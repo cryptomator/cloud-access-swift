@@ -14,6 +14,7 @@ import Testing
 extension UnitTests {
 	final class MicrosoftGraphCloudProviderTests {
 		private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#
+		private static let remoteFileItem = #"{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let downloadURL = "https://content.example.com/dl/SECRET-PATH?tempauth=SECRET"
 		private static let fileItemWithDownloadURL = #"{"id":"F","name":"file.txt","size":7,"file":{},"fileSystemInfo":{"lastModifiedDateTime":"2026-11-16T10:00:00Z"},"@microsoft.graph.downloadUrl":"\#(MicrosoftGraphCloudProviderTests.downloadURL)"}"#
 
@@ -104,13 +105,32 @@ extension UnitTests {
 		/// A shared item added to My files lists as its target's type, and requests for its path reach the target.
 		@Test
 		func listingMarksRemoteItemAsAlias() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}},{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}},\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#)]
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}},\#(MicrosoftGraphCloudProviderTests.remoteFileItem),\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#)]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 
 			#expect(itemList.items.map(\.cloudPath) == [CloudPath("/shared"), CloudPath("/shared.txt"), CloudPath("/file.txt")])
 			#expect(itemList.items.map(\.itemType) == [.folder, .file, .file])
 			#expect(itemList.items.map(\.isAlias) == [true, true, false])
+		}
+
+		@Test
+		func downloadThroughRemoteItemIsMarkedAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.remoteFileItem),\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#),
+				URLProtocolMock.handler(body: #"{"id":"remoteFile","name":"shared.txt","size":7,"file":{}}"#),
+				URLProtocolMock.handler(body: "content"),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			let remoteItemMetadata = try await provider.downloadFile(from: CloudPath("/shared.txt"), to: tmpDirURL.appendingPathComponent("shared.txt"), progress: nil, onTaskCreation: nil)
+			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+
+			#expect(remoteItemMetadata.isAlias)
+			#expect(!fileMetadata.isAlias)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
@@ -535,7 +555,7 @@ extension UnitTests {
 
 		@Test
 		func testChildrenRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 			let request = try provider.childrenRequest(for: item)
 			#expect(request.httpMethod == "GET")
 			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100&$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem") == request.url)
@@ -544,7 +564,7 @@ extension UnitTests {
 
 		@Test
 		func testContentRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 			let request = try provider.contentRequest(for: item)
 			#expect(request.httpMethod == "GET")
 			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/content") == request.url)
@@ -553,7 +573,7 @@ extension UnitTests {
 
 		@Test
 		func testCreateUploadSessionRequest() throws {
-			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 			let request = try provider.createUploadSessionRequest(for: parentItem, with: "Test.txt")
 			#expect(request.httpMethod == "POST")
 			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier:/Test.txt:/createUploadSession") == request.url)
@@ -586,7 +606,7 @@ extension UnitTests {
 
 		@Test
 		func testCreateFolderRequest() throws {
-			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder)
+			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 			let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"folder\":{},\"name\":\"subFolder\"}"
 			let request = try provider.createFolderRequest(for: parentItem, with: "subFolder")
 			#expect(request.httpMethod == "POST")
@@ -596,7 +616,7 @@ extension UnitTests {
 
 		@Test
 		func testDeleteItemRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
+			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file, isRemoteItem: false)
 			let request = try provider.deleteItemRequest(for: item)
 			#expect(request.httpMethod == "DELETE")
 			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier") == request.url)
@@ -605,8 +625,8 @@ extension UnitTests {
 
 		@Test
 		func testMoveItemRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file)
-			let newParentItem = MicrosoftGraphItem(cloudPath: CloudPath("/Folder"), identifier: "TestIdentifier-Folder", driveIdentifier: nil, itemType: .folder)
+			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file, isRemoteItem: false)
+			let newParentItem = MicrosoftGraphItem(cloudPath: CloudPath("/Folder"), identifier: "TestIdentifier-Folder", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 			let targetCloudPath = CloudPath("/Folder/test.txt")
 			let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"test.txt\",\"parentReference\":{\"id\":\"TestIdentifier-Folder\"}}"
 			let request = try provider.moveItemRequest(for: item, with: newParentItem, targetCloudPath: targetCloudPath)

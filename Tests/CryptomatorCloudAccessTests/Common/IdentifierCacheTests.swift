@@ -51,7 +51,7 @@ enum CacheKind: CaseIterable, CustomTestStringConvertible {
 		case .googleDrive:
 			return try IdentifierCacheProbe { GoogleDriveItem(cloudPath: $0, identifier: "TestABC--\($1)@^", itemType: $2, shortcut: nil) }
 		case .microsoftGraph:
-			return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2) }
+			return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2, isRemoteItem: false) }
 		}
 	}
 }

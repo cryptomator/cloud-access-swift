@@ -14,7 +14,7 @@ public struct CloudItemMetadata: Equatable, Sendable {
 	public let itemType: CloudItemType
 	public let lastModifiedDate: Date?
 	public let size: Int?
-	/// Whether a listing returned the item as a reference to another item (a Google Drive shortcut, a Microsoft Graph remote item). The walk of a vault folder delete follows no dir ID through such an item. Only listings set it. Metadata reads, downloads and uploads never do.
+	/// Whether a listing returned the item, or a download reached it, as a reference to another item (a Google Drive shortcut, a Microsoft Graph remote item). A vault folder delete skips a listed alias and refuses a dir file downloaded through one. Metadata reads and uploads never set it.
 	let isAlias: Bool
 
 	public init(name: String, cloudPath: CloudPath, itemType: CloudItemType, lastModifiedDate: Date?, size: Int?) {

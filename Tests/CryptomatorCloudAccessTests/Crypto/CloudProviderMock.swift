@@ -233,6 +233,9 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		record("deleteFolder")
+		if files[cloudPath.path] != nil, !deleted.contains(cloudPath.path) {
+			throw CloudProviderError.itemTypeMismatch
+		}
 		guard !deleted.contains(cloudPath.path), folders.contains(cloudPath.path) || createdFolders.contains(cloudPath.path) else {
 			throw CloudProviderError.itemNotFound
 		}

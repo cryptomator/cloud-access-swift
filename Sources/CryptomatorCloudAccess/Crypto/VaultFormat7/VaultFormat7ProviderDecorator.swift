@@ -167,7 +167,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		let holdsUnreadableDirFile = directory.dirId == nil ? try await holdsDirFile(ciphertextCloudPath) : false
 		try Task.checkCancellation()
 		if holdsUnreadableDirFile {
-			// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing. Deleting the `.c9r` would orphan its directory, and the listing has cached the new ID, so a later delete can read it.
+			// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing. Deleting the `.c9r` would orphan its directory. A later delete can read the new ID once the provider has cached it, which some providers' listings do.
 			throw CloudProviderError.itemNotFound
 		}
 		try await withoutCancellation {

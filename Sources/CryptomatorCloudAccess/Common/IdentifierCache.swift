@@ -13,7 +13,7 @@ import GRDB
 protocol IdentifierCacheItem: FetchableRecord, PersistableRecord, Equatable {
 	/// The item of the root folder, which a new cache holds.
 	static var rootItem: Self { get }
-	/// The provider's error for a cache that holds no item of a path's ancestors, not even the root.
+	/// The provider's error for a cache that holds no item of a path's ancestors, not even the root, or whose item of a folder on a path changed during both attempts to resolve the path.
 	static var inconsistentCacheError: Error { get }
 	var cloudPath: CloudPath { get }
 	/// Adds the columns of the item's properties besides its cloud path, identifier and item type.
@@ -110,16 +110,31 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		_ = try replace(item)
 	}
 
-	/// Adds or updates the item like `addOrUpdate(_:)` and returns the item it replaced, if any.
+	/// Adds or updates the item like `addOrUpdate(_:)` and returns the item that was cached at its path before, if any.
 	func replace(_ item: Item) throws -> Item? {
 		try dbQueue.write { db in
-			let replacedItem = try Item.fetchOne(db, key: item.cloudPath)
-			if let replacedItem, !replacedItem.isSameItem(as: item) {
-				try deleteSubtree(of: item.cloudPath, in: db)
-			}
-			try item.save(db)
-			return replacedItem
+			try save(item, in: db)
 		}
+	}
+
+	/// Adds or updates the item like `addOrUpdate(_:)` only if the cached item at the parent's path is still the same item as the parent, and returns whether it did.
+	private func addOrUpdate(_ item: Item, ifStillBelow parentItem: Item) throws -> Bool {
+		try dbQueue.write { db in
+			guard let cachedParentItem = try Item.fetchOne(db, key: parentItem.cloudPath), cachedParentItem.isSameItem(as: parentItem) else {
+				return false
+			}
+			_ = try save(item, in: db)
+			return true
+		}
+	}
+
+	private func save(_ item: Item, in db: Database) throws -> Item? {
+		let replacedItem = try Item.fetchOne(db, key: item.cloudPath)
+		if let replacedItem, !replacedItem.isSameItem(as: item) {
+			try deleteSubtree(of: item.cloudPath, in: db)
+		}
+		try item.save(db)
+		return replacedItem
 	}
 
 	/// Removes the item and the items of its descendants.
@@ -136,11 +151,23 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	// MARK: - Path Resolution
 
 	/**
-	 Returns the item of the path, starting at its nearest cached ancestor and looking up each further component in its parent folder. Every item that was looked up is cached.
+	 Returns the item of the path, starting at the path or its nearest cached ancestor and looking up each further component in its parent folder. It caches each item it looked up only if its parent folder's cached item is still the same item it was looked up in.
+
+	 If a parent folder's cached item changed during a lookup, it starts over once from the nearest cached ancestor, because a caller caches the returned item and the items below it without that check. If that happens again, it throws `Item.inconsistentCacheError`.
 
 	 - Parameter lookUpChild: Returns the item of the given name in the given folder, or throws `CloudProviderError.itemNotFound`.
 	 */
 	func resolvePath(forItemAt cloudPath: CloudPath, lookUpChild: (_ name: String, _ parentItem: Item) async throws -> Item) async throws -> Item {
+		for _ in 0 ..< 2 {
+			if let item = try await attemptToResolvePath(forItemAt: cloudPath, lookUpChild: lookUpChild) {
+				return item
+			}
+		}
+		throw Item.inconsistentCacheError
+	}
+
+	/// Resolves the path like `resolvePath(forItemAt:lookUpChild:)`, or returns `nil` if a parent folder's cached item changed during a lookup.
+	private func attemptToResolvePath(forItemAt cloudPath: CloudPath, lookUpChild: (_ name: String, _ parentItem: Item) async throws -> Item) async throws -> Item? {
 		var cachedPath = cloudPath
 		var cachedItem = get(cachedPath)
 		while cachedItem == nil, !cachedPath.pathComponents.isEmpty {
@@ -152,8 +179,11 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		}
 		for name in cloudPath.pathComponents.dropFirst(cachedPath.pathComponents.count) {
 			try Task.checkCancellation()
-			item = try await lookUpChild(name, item)
-			try addOrUpdate(item)
+			let childItem = try await lookUpChild(name, item)
+			guard try addOrUpdate(childItem, ifStillBelow: item) else {
+				return nil
+			}
+			item = childItem
 		}
 		return item
 	}

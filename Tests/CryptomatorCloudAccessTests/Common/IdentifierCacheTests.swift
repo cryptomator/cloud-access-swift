@@ -246,6 +246,77 @@ extension UnitTests {
 
 			#expect(cache.get(CloudPath("/foo/bar")) == nil)
 		}
+
+		@Test
+		func resolvePathCachesLookedUpItems() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar/baz")) { name, parentItem in
+				BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(item.identifier == "F/bar/baz")
+			#expect(cache.get(CloudPath("/foo/bar"))?.identifier == "F/bar")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathLooksUpAgainInReplacedFolder() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+			var lookups: [String] = []
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar/baz")) { name, parentItem in
+				lookups.append("\(parentItem.identifier)/\(name)")
+				if lookups.count == 1 {
+					try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "G", itemType: .folder))
+				}
+				return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(lookups == ["F/bar", "G/bar", "G/bar/baz"])
+			#expect(item.identifier == "G/bar/baz")
+			#expect(cache.get(CloudPath("/foo/bar"))?.identifier == "G/bar")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathLooksUpAgainFromAncestorOfInvalidatedFolder() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let folder = BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder)
+			try cache.addOrUpdate(folder)
+			var lookups: [String] = []
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar")) { name, parentItem in
+				lookups.append("\(parentItem.identifier)/\(name)")
+				if lookups.count == 1 {
+					try cache.invalidate(folder)
+				}
+				return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(lookups == ["F/bar", "0/foo", "0/foo/bar"])
+			#expect(cache.get(CloudPath("/foo"))?.identifier == "0/foo")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathThrowsIfFolderChangesDuringBothAttempts() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+			var lookupCount = 0
+
+			await #expect(throws: BoxError.inconsistentCache) {
+				try await cache.resolvePath(forItemAt: CloudPath("/foo/bar")) { name, parentItem in
+					lookupCount += 1
+					try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F\(lookupCount)", itemType: .folder))
+					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .file)
+				}
+			}
+			#expect(lookupCount == 2)
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
 	}
 
 	struct IdentifierCacheDatabaseTests {

@@ -22,6 +22,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		var transferHook: (@Sendable (CloudPath, Progress?) async throws -> Void)?
 		var mutationHook: (@Sendable () -> Void)?
 		var metadataHook: (@Sendable (CloudPath) throws -> Void)?
+		var metadataOverride: (@Sendable (CloudPath) throws -> CloudItemMetadata?)?
 		var moveHook: (@Sendable () throws -> Void)?
 		var listingHook: (@Sendable (CloudPath, String?) throws -> Void)?
 		var afterMutationHook: (@Sendable (String, CloudPath) throws -> Void)?
@@ -73,6 +74,12 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		set { state.withLock { $0.metadataHook = newValue } }
 	}
 
+	/// Runs after `metadataHook` and returns the metadata of an item instead of the fixture, which it falls back to for `nil`. An error that it throws fails the call.
+	var metadataOverride: (@Sendable (CloudPath) throws -> CloudItemMetadata?)? {
+		get { state.withLock { $0.metadataOverride } }
+		set { state.withLock { $0.metadataOverride = newValue } }
+	}
+
 	/// Runs before a file is moved, which fails with the error that the hook throws.
 	var moveHook: (@Sendable () throws -> Void)? {
 		get { state.withLock { $0.moveHook } }
@@ -100,6 +107,40 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		}
 	}
 
+	/// Returns a `metadataOverride` that answers the reads of the given cloud path with the given item types in order, repeating the last one. A `nil` type answers with `CloudProviderError.itemNotFound`. Other cloud paths fall back to the fixture.
+	static func reading(_ itemTypes: [CloudItemType?], at path: String) -> @Sendable (CloudPath) throws -> CloudItemMetadata? {
+		let readCount = OSAllocatedUnfairLock(initialState: 0)
+		return { cloudPath in
+			guard cloudPath.path == path else {
+				return nil
+			}
+			let index = readCount.withLock { count in
+				defer { count += 1 }
+				return min(count, itemTypes.count - 1)
+			}
+			guard let itemType = itemTypes[index] else {
+				throw CloudProviderError.itemNotFound
+			}
+			return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: nil, size: nil)
+		}
+	}
+
+	/// Returns a `listingHook` that records the listed folders and fails the listing of a folder that was listed before, so that a delete that loops ends.
+	static func listingEachFolderOnce(recordingInto listedFolders: OSAllocatedUnfairLock<[String]>) -> @Sendable (CloudPath, String?) throws -> Void {
+		return { cloudPath, pageToken in
+			guard pageToken == nil else {
+				return
+			}
+			let isListedBefore = listedFolders.withLock { listedFolders in
+				defer { listedFolders.append(cloudPath.path) }
+				return listedFolders.contains(cloudPath.path)
+			}
+			if isListedBefore {
+				throw CloudProviderError.quotaInsufficient
+			}
+		}
+	}
+
 	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false) {
 		self.folders = folders
 		self.files = files
@@ -112,6 +153,9 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		try Task.checkCancellation()
 		record("fetchItemMetadata")
 		try metadataHook?(cloudPath)
+		if let metadata = try metadataOverride?(cloudPath) {
+			return metadata
+		}
 		return try getItemMetadata(at: cloudPath)
 	}
 

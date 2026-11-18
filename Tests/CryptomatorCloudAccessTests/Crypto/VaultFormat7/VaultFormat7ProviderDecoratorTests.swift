@@ -508,7 +508,7 @@ extension UnitTests {
 				}
 				switch cloudPath.path {
 				case "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC": throw CloudProviderError.deletionIncomplete
-				case "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD": throw CloudProviderError.unauthorized
+				case "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD": throw CloudProviderError.quotaInsufficient
 				default: break
 				}
 			}
@@ -575,8 +575,8 @@ extension UnitTests {
 			#expect(provider.deleted == [])
 		}
 
-		/// The `itemTypeMismatch` of the directory of `Directory 2` must not reach `deleteFolder`'s catch that deletes the `.c9r` of a broken folder.
-		@Test(arguments: zip([CloudProviderError.unauthorized, .itemTypeMismatch], [CloudProviderError.unauthorized, .itemNotFound]))
+		/// When the directory of `Directory 2` lists with `itemTypeMismatch` but its metadata reports a folder, it exists but can't be listed, so the delete throws `itemNotFound`.
+		@Test(arguments: zip([CloudProviderError.quotaInsufficient, .itemTypeMismatch], [CloudProviderError.quotaInsufficient, .itemNotFound]))
 		func deleteFolderWithFailedSubdirectoryAndDeletedSiblingKeepsParent(failure: CloudProviderError, thrown: CloudProviderError) async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"])
 			provider.listingHook = { cloudPath, _ in
@@ -594,11 +594,11 @@ extension UnitTests {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"])
 			provider.transferHook = { cloudPath, _ in
 				if cloudPath.path == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r" {
-					throw CloudProviderError.unauthorized
+					throw CloudProviderError.quotaInsufficient
 				}
 			}
 			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
-			await #expect(throws: CloudProviderError.unauthorized) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			await #expect(throws: CloudProviderError.quotaInsufficient) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
 			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
 		}
 
@@ -608,7 +608,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3.c9r": "dir3-id"], maxPageSize: 1)
 			provider.listingHook = { cloudPath, _ in
 				switch cloudPath.path {
-				case "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC": throw CloudProviderError.unauthorized
+				case "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC": throw CloudProviderError.quotaInsufficient
 				case "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD": throw CloudProviderError.itemNotFound
 				default: break
 				}
@@ -624,7 +624,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data()], maxPageSize: 1)
 			provider.listingHook = { cloudPath, pageToken in
 				switch (cloudPath.path, pageToken) {
-				case ("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", _): throw CloudProviderError.unauthorized
+				case ("pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", _): throw CloudProviderError.quotaInsufficient
 				case ("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", .some): throw CloudProviderError.itemNotFound
 				default: break
 				}
@@ -687,6 +687,319 @@ extension UnitTests {
 			#expect(provider.deleted.contains("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"))
 		}
 
+		/// A subfolder whose `name.c9s` can't be read is deleted with its parent, and the `.c9s` of a file holds no `dir.c9r` to follow.
+		@Test
+		func deleteFolderFollowsDirFilesOfC9SWithoutReadingNames() async throws {
+			let folderC9SPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/folder.c9s"
+			let fileC9SPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file.c9s"
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/folder.c9s": "dir2-id"], folders: [fileC9SPath], files: ["\(folderC9SPath)/name.c9s": Data(), "\(fileC9SPath)/contents.c9r": Data(), "\(fileC9SPath)/name.c9s": Data()])
+			let downloadedNameFiles = OSAllocatedUnfairLock(initialState: [String]())
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.lastPathComponent == "name.c9s" {
+					downloadedNameFiles.withLock { $0.append(cloudPath.path) }
+					throw CloudProviderError.quotaInsufficient
+				}
+			}
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+			#expect(downloadedNameFiles.withLock { $0 } == [])
+		}
+
+		/// Only a `.c9r` or `.c9s` folder is a Cryptomator item, so the directory of the `dir.c9r` in another folder isn't deleted.
+		@Test
+		func deleteFolderIgnoresDirFileOfOtherFolder() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/backup": "dir2-id"])
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+		}
+
+		@Test
+		func deleteFolderWithDirFileNamingAncestorThrowsInvalidDirectoryReference() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5.c9r": "dir1-id"])
+			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
+			provider.listingHook = CloudProviderMock.listingEachFolderOnce(recordingInto: listedFolders)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5.c9r"])
+			#expect(provider.deleted == [])
+		}
+
+		/// `Directory 5` inside `Directory 3` refers to the directory of `Directory 2`, which contains both.
+		@Test
+		func deleteFolderWithDirFileCycleBelowFolderThrowsInvalidDirectoryReference() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir3.c9r": "dir3-id", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/dir5.c9r": "dir2-id"])
+			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
+			provider.listingHook = CloudProviderMock.listingEachFolderOnce(recordingInto: listedFolders)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			let listed = listedFolders.withLock { $0 }
+			#expect(Set(listed).count == listed.count)
+			#expect(provider.deleted == [])
+		}
+
+		@Test(arguments: zip(["/Directory 1", "/Directory 1/Directory 2"], [["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r": ""], ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir1-id"]]))
+		func deleteFolderWhoseDirFileNamesRootOrParentDeletesNothing(path: String, subdirectories: [String: String]) async throws {
+			let provider = makeNestedProvider(subdirectories: subdirectories)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath(path)) }
+			#expect(!provider.calls.contains("fetchItemList"))
+			#expect(provider.deleted == [])
+		}
+
+		/// The dir file of `Directory 1` names the root, so `Directory 2` would resolve to the root's `Directory 2`.
+		@Test
+		func deleteFolderBelowFolderWhoseDirFileNamesRootReadsNoFurtherDirFile() async throws {
+			let provider = makeNestedProvider(subdirectories: ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r": "", "00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir2.c9r": "dir2-id"])
+			let downloadedFiles = OSAllocatedUnfairLock(initialState: [String]())
+			provider.transferHook = { cloudPath, _ in
+				downloadedFiles.withLock { $0.append(cloudPath.path) }
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
+			#expect(downloadedFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"])
+			#expect(provider.deleted == [])
+		}
+
+		/// Another device moved the folder away and created a new one at its path, which the cache doesn't know.
+		@Test
+		func deleteFolderWithStaleCachedDirIdDeletesNothingAndInvalidatesCache() async throws {
+			let provider = VaultFormat7CloudProviderMock()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir2-id".utf8))
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(!provider.calls.contains("fetchItemList"))
+			#expect(provider.deleted == [])
+			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) == nil)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted.sorted() == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"])
+		}
+
+		/// `File 1` doesn't exist in the directory of `Directory 1`, whose stale cached dir ID must still be detected.
+		@Test
+		func deleteMissingFolderBelowFolderWithStaleCachedDirIdInvalidatesCache() async throws {
+			let provider = VaultFormat7CloudProviderMock()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir2-id".utf8))
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/File 1")) }
+			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) == nil)
+			#expect(!provider.calls.contains("deleteFolder"))
+		}
+
+		/// The first dir file read is that of the deleted folder itself, or that of its parent.
+		@Test(arguments: ["/Directory 1", "/Directory 1/Directory 2"])
+		func deleteFolderCancelledWhileReadingDirFileChangesNothing(path: String) async throws {
+			let provider = VaultFormat7CloudProviderMock()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir2-id".utf8))
+			let transfer = SuspendedTransfer()
+			provider.transferHook = transfer.run
+			let deletion = Task {
+				try await decorator.deleteFolder(at: CloudPath(path))
+			}
+			await transfer.suspended.wait()
+			let calls = provider.calls
+			deletion.cancel()
+			transfer.resume()
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: deletion) }
+			#expect(provider.calls == calls)
+			#expect(try Data("dir2-id".utf8) == decorator.dirIdCache.get(CloudPath("/Directory 1")))
+		}
+
+		/// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing, while the folder still lists it.
+		@Test
+		func deleteFolderWithUnreadableListedDirFileKeepsReference() async throws {
+			let provider = VaultFormat7CloudProviderMock()
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The listing of the `.c9r` is the last request before the delete, so a cancellation during it stops the delete, also when it finds a `dir.c9r`.
+		@Test(arguments: [[], ["dir.c9r"]])
+		func deleteFolderCancelledWhileListingFolderWithUnreadableDirFileThrowsCancellationError(files: [String]) async throws {
+			let provider = makeBrokenFolderProvider(files: files)
+			provider.transferHook = { _, _ in
+				throw CloudProviderError.itemNotFound
+			}
+			provider.listingHook = { cloudPath, _ in
+				if cloudPath.path == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r" {
+					withUnsafeCurrentTask { $0?.cancel() }
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			let deletion = Task {
+				try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: deletion) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The `.c9s` of a long name is listed physically, so its unreadable `dir.c9r` keeps the reference, and a `.c9s` that a partial delete left with only `name.c9s` is deleted.
+		@Test(arguments: [true, false])
+		func deleteFolderWithLongNameWithoutReadableDirFile(holdsDirFile: Bool) async throws {
+			let c9sPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"
+			let fixture = VaultFormat7CloudProviderMock()
+			let provider = CloudProviderMock(folders: fixture.folders, files: fixture.files.filter { holdsDirFile || $0.key != "\(c9sPath)/dir.c9r" })
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "\(c9sPath)/dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+			if holdsDirFile {
+				await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)")) }
+				#expect(provider.deleted == [])
+			} else {
+				try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)"))
+				#expect(provider.deleted == [c9sPath])
+			}
+		}
+
+		/// A `dir.c9r` folder holds no dir ID, so the walk doesn't follow it and the parent is deleted.
+		@Test
+		func deleteFolderWithSubfolderHoldingDirFolderDeletesParent() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], folders: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r/dir.c9r"])
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+		}
+
+		/// Only a `dir.c9r` file holds a dir ID, so a `.c9r` without one is deleted without a walk.
+		@Test(arguments: zip([["symlink.c9r"], []], [[], ["dir.c9r"]]))
+		func deleteFolderWithoutDirFileDeletesReference(files: [String], folders: [String]) async throws {
+			let provider = makeBrokenFolderProvider(files: files, folders: folders)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+		}
+
+		/// The `dir.c9r` lies on the second page of the `.c9r`, whose listing may also fail.
+		@Test(arguments: [false, true])
+		func deleteFolderWithUnreadableDirFileOnLaterPageKeepsReference(laterPageFails: Bool) async throws {
+			let provider = makeBrokenFolderProvider(files: ["aaa", "dir.c9r"], maxPageSize: 1)
+			provider.transferHook = { _, _ in
+				throw CloudProviderError.itemNotFound
+			}
+			provider.listingHook = { cloudPath, pageToken in
+				if laterPageFails, cloudPath.path == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", pageToken != nil {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The `dir.c9r` on the first page keeps the reference, whatever a later page would answer.
+		@Test
+		func deleteFolderWithUnreadableDirFileListedOnFirstPageRequestsNoFurtherPage() async throws {
+			let provider = makeBrokenFolderProvider(files: ["dir.c9r", "zzz"], maxPageSize: 1)
+			provider.transferHook = { _, _ in
+				throw CloudProviderError.itemNotFound
+			}
+			let laterPageRequested = TestSignal("later page of the .c9r requested")
+			provider.listingHook = { cloudPath, pageToken in
+				if cloudPath.path == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", pageToken != nil {
+					laterPageRequested.fulfill()
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(laterPageRequested.fulfillmentCount == 0)
+			#expect(provider.deleted == [])
+		}
+
+		/// A file at the path of a folder's directory is deleted, and then the folder, as Cryptomator Desktop does.
+		@Test(arguments: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"])
+		func deleteFolderWithFileAtDirectoryPathDeletesFileAndFolder(strayFile: String) async throws {
+			let strayFilePath = "pathToVault/d/\(strayFile)"
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], files: [strayFilePath: Data()])
+			provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: strayFilePath)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.deleted.first == strayFilePath)
+			#expect(provider.deleted.contains("pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"))
+			#expect(provider.deleted.last == "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r")
+		}
+
+		@Test(arguments: [CloudItemType.folder, .symlink, .unknown])
+		func deleteFolderWithOtherItemAtDirectoryPathKeepsReference(itemType: CloudItemType) async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": Data()])
+			provider.metadataOverride = CloudProviderMock.reading([itemType], at: "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(!provider.calls.contains("deleteFile"))
+			#expect(provider.deleted == [])
+		}
+
+		/// On S3, a prefix holding objects can appear beside an object of the same name.
+		@Test
+		func deleteFolderWithDirectoryPathRemainingAfterFileDeleteKeepsReference() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": Data()])
+			provider.metadataOverride = CloudProviderMock.reading([.file, .folder], at: "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.calls == ["downloadFile", "fetchItemList", "fetchItemMetadata", "deleteFile", "fetchItemMetadata"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+		}
+
+		/// The item at the path disappeared between its listing and its metadata read.
+		@Test
+		func deleteFolderWithDirectoryPathGoneAfterListingDeletesReference() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": Data()])
+			provider.metadataOverride = CloudProviderMock.reading([nil], at: "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(provider.calls.contains("fetchItemMetadata"))
+			#expect(provider.deleted == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"])
+		}
+
+		@Test
+		func deleteFolderWithRefusedFileDeleteAtDirectoryPathKeepsReference() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": Data()])
+			provider.metadataOverride = CloudProviderMock.reading([.file], at: "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+			provider.afterMutationHook = CloudProviderMock.failing("deleteFile", with: CloudProviderError.deletionIncomplete)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+		}
+
+		@Test
+		func deleteFolderWithFailedMetadataReadAtDirectoryPathKeepsReference() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB": Data()])
+			provider.metadataHook = { _ in
+				throw CloudProviderError.unauthorized
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.unauthorized) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// Only a first page tells a file at the path from a directory, so a later page's `itemTypeMismatch` neither deletes anything nor lets the `.c9r` be deleted.
+		@Test
+		func deleteFolderWithItemTypeMismatchOnLaterPageKeepsReference() async throws {
+			let provider = makeNestedProvider(subdirectories: [:], files: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/a.c9r": Data(), "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/b.c9r": Data()], maxPageSize: 1)
+			provider.listingHook = { cloudPath, pageToken in
+				if cloudPath.path == "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", pageToken != nil {
+					throw CloudProviderError.itemTypeMismatch
+				}
+			}
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(!provider.calls.contains("fetchItemMetadata"))
+			#expect(provider.deleted == [])
+		}
+
 		@Test(arguments: Stacking.allCases)
 		func moveFolderWithMoveCompletedUpdatesCacheAndRethrows(stacking: Stacking) async throws {
 			let fixture = try VaultFormat7Fixture(stacking: stacking, vaultPath: vaultPath, cryptor: cryptor)
@@ -733,13 +1046,20 @@ extension UnitTests {
 
 		// MARK: - Internal
 
-		/// Returns a provider whose `Directory 1` holds the given subdirectory references, by path below `pathToVault/d` and dir ID. The directories of `dir1-id` to `dir4-id` exist.
-		func makeNestedProvider(subdirectories: [String: String], files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
+		/// Returns a provider that holds `Directory 1`, the given subdirectory references (by path below `pathToVault/d` and dir ID, replacing a default one) and the given folders and files. The directories of `dir1-id` to `dir4-id` exist.
+		func makeNestedProvider(subdirectories: [String: String], folders: Set<String> = [], files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
 			let directories = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"]
 			let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r": "dir1-id"].merging(subdirectories) { $1 }
-			let folders = Set(["pathToVault", "pathToVault/d"] + (directories + references.keys).map { "pathToVault/d/\($0)" })
+			let folders = folders.union(["pathToVault", "pathToVault/d"] + (directories + references.keys).map { "pathToVault/d/\($0)" })
 			let dirFiles = Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)/dir.c9r", Data($0.value.utf8)) })
 			return CloudProviderMock(folders: folders, files: dirFiles.merging(files) { $1 }, maxPageSize: maxPageSize)
+		}
+
+		/// Returns a provider whose `Directory 1` is a `.c9r` holding the given files and folders by name.
+		func makeBrokenFolderProvider(files: [String] = [], folders: [String] = [], maxPageSize: Int = .max) -> CloudProviderMock {
+			let c9rPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r"
+			let baseFolders: Set = ["pathToVault", "pathToVault/d", "pathToVault/d/00", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", c9rPath]
+			return CloudProviderMock(folders: baseFolders.union(folders.map { "\(c9rPath)/\($0)" }), files: Dictionary(uniqueKeysWithValues: files.map { ("\(c9rPath)/\($0)", Data()) }), maxPageSize: maxPageSize)
 		}
 
 		func assertDeleted(_ temporaryURLs: [URL], sourceLocation: SourceLocation = #_sourceLocation) {

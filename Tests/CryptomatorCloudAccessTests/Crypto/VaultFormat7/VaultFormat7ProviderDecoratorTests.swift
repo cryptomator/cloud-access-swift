@@ -332,6 +332,35 @@ extension UnitTests {
 			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
 		}
 
+		/// cryptolib sizes the encryption progress from the attributes of the URL it gets, which don't follow a symbolic link.
+		@Test
+		func uploadFileThroughSymbolicLinkEncryptsTarget() async throws {
+			let fixture = try VaultFormat7Fixture(stacking: .plain, vaultPath: vaultPath, cryptor: cryptor)
+			let targetURL = tmpDirURL.appendingPathComponent("target", isDirectory: false)
+			try "cleartext1".write(to: targetURL, atomically: true, encoding: .utf8)
+			let linkURL = tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: targetURL)
+			let encryptedURLs = OSAllocatedUnfairLock(initialState: [URL]())
+			cryptor.encryptContentHook = { cleartextURL, _ in
+				encryptedURLs.withLock { $0.append(cleartextURL) }
+			}
+			_ = try await fixture.decorator.uploadFile(from: linkURL, to: CloudPath("/File 1"), replaceExisting: false)
+			#expect(encryptedURLs.withLock { $0 }.map(\.lastPathComponent) == ["target"])
+		}
+
+		@Test(arguments: [false, true])
+		func uploadFileFromUnusableSourceThrowsBeforeAnyRequest(sourceIsFolder: Bool) async throws {
+			let fixture = try VaultFormat7Fixture(stacking: .plain, vaultPath: vaultPath, cryptor: cryptor)
+			let sourceURL = sourceIsFolder ? tmpDirURL : tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			if !sourceIsFolder {
+				try FileManager.default.createSymbolicLink(at: sourceURL, withDestinationURL: tmpDirURL.appendingPathComponent("missing", isDirectory: false))
+			}
+			await #expect(throws: sourceIsFolder ? CloudProviderError.itemTypeMismatch : .itemNotFound) {
+				try await fixture.decorator.uploadFile(from: sourceURL, to: CloudPath("/Directory 1/File"), replaceExisting: false)
+			}
+			#expect(fixture.provider.calls == [])
+		}
+
 		@Test(arguments: Stacking.allCases)
 		func testCreateFolder(stacking: Stacking) async throws {
 			let fixture = try VaultFormat7Fixture(stacking: stacking, vaultPath: vaultPath, cryptor: cryptor)
@@ -724,6 +753,17 @@ extension UnitTests {
 			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
 			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5.c9r"])
+			#expect(provider.deleted == [])
+		}
+
+		@Test
+		func deleteFolderWithDirFileNamingFolderItselfThrowsInvalidDirectoryReference() async throws {
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir1-id"])
+			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
+			provider.listingHook = CloudProviderMock.listingEachFolderOnce(recordingInto: listedFolders)
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r"])
 			#expect(provider.deleted == [])
 		}
 

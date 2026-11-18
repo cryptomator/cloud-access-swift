@@ -101,6 +101,7 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(cleartextLocalURL.isFileURL)
 		try Task.checkCancellation()
+		let cleartextFile = try LocalUploadFile(cleartextLocalURL)
 		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
@@ -113,16 +114,15 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		let fileCiphertextPath = try getFileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId)
-		let ciphertextMetadata: CloudItemMetadata
 		do {
-			try await cryptor.encryptContent(from: cleartextLocalURL, to: ciphertextLocalURL, progress: phases[1])
-			try Task.checkCancellation()
-			ciphertextMetadata = try await delegate.uploadFile(from: ciphertextLocalURL, to: fileCiphertextPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+			try await cryptor.encryptContent(from: cleartextFile.url, to: ciphertextLocalURL, progress: phases[1])
 		} catch CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
 			throw CloudProviderError.itemNotFound
 		} catch POSIXError.EISDIR {
 			throw CloudProviderError.itemTypeMismatch
 		}
+		try Task.checkCancellation()
+		let ciphertextMetadata = try await delegate.uploadFile(from: ciphertextLocalURL, to: fileCiphertextPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
 		let cleartextMetadata = try toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
 		phases.completeTransfer()
 		return cleartextMetadata
@@ -167,15 +167,13 @@ final class VaultFormat6ProviderDecorator: CloudProvider {
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1) }, treatingAsMissing: { error in
-			// `deleteFile` then throws `itemNotFound` for the missing dir file itself.
-			error as? CloudProviderError == .itemNotFound
-		})
+		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.readDirId($0, parentDirId: $1) }, treatingAsMissing: { _ in false })
+		guard let dirId = directory.dirId else {
+			throw CloudProviderError.itemNotFound
+		}
 		let folderCiphertextPath = try getFolderCiphertextPath(cleartextCloudPath, parentDirId: directory.parentDirId)
 		try await withoutCancellation {
-			if let dirId = directory.dirId {
-				try await self.deleteCiphertextDir(dirId, containingDirIds: directory.containingDirIds)
-			}
+			try await self.deleteCiphertextDir(dirId, containingDirIds: directory.containingDirIds)
 			try await self.delegate.deleteFile(at: folderCiphertextPath)
 			try self.dirIdCache.invalidate(cleartextCloudPath)
 		}

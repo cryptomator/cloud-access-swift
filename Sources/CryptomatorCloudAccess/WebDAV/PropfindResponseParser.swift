@@ -38,6 +38,11 @@ private struct PropfindResponseElementProperties: Equatable {
 	let collection: Bool
 	let lastModified: Date?
 	let contentLength: Int?
+
+	/// Combines the properties of two `propstat` groups of one element, because a server may spread an element's properties over several groups with status 200. The element is a collection if either group says so. For the other properties, a value in `other` wins.
+	func merging(_ other: PropfindResponseElementProperties) -> PropfindResponseElementProperties {
+		return PropfindResponseElementProperties(collection: collection || other.collection, lastModified: other.lastModified ?? lastModified, contentLength: other.contentLength ?? contentLength)
+	}
 }
 
 private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLParserDelegate {
@@ -84,7 +89,7 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 			switch elementName {
 			case "propstat":
 				if statusCode == 200 {
-					parentDelegate?.setElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
+					parentDelegate?.addElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
 				}
 				parser.delegate = parentDelegate
 			case "getlastmodified":
@@ -119,8 +124,8 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		self.responseURL = responseURL
 	}
 
-	func setElementProperties(_ elementProperties: PropfindResponseElementProperties) {
-		self.elementProperties = elementProperties
+	func addElementProperties(_ properties: PropfindResponseElementProperties) {
+		elementProperties = elementProperties?.merging(properties) ?? properties
 	}
 
 	// MARK: - XMLParserDelegate

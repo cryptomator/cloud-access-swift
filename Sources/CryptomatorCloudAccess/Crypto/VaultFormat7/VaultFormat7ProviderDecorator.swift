@@ -95,6 +95,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	func uploadFile(from cleartextLocalURL: URL, to cleartextCloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(cleartextLocalURL.isFileURL)
 		try Task.checkCancellation()
+		let cleartextFile = try LocalUploadFile(cleartextLocalURL)
 		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
@@ -102,16 +103,15 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		}
 		let parentDirId = try await getParentDirId(cleartextCloudPath)
 		let ciphertextCloudPath = try getC9RPath(cleartextCloudPath, parentDirId: parentDirId)
-		let ciphertextMetadata: CloudItemMetadata
 		do {
-			try await cryptor.encryptContent(from: cleartextLocalURL, to: ciphertextLocalURL, progress: phases[1])
-			try Task.checkCancellation()
-			ciphertextMetadata = try await delegate.uploadFile(from: ciphertextLocalURL, to: ciphertextCloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+			try await cryptor.encryptContent(from: cleartextFile.url, to: ciphertextLocalURL, progress: phases[1])
 		} catch CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
 			throw CloudProviderError.itemNotFound
 		} catch POSIXError.EISDIR {
 			throw CloudProviderError.itemTypeMismatch
 		}
+		try Task.checkCancellation()
+		let ciphertextMetadata = try await delegate.uploadFile(from: ciphertextLocalURL, to: ciphertextCloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
 		let cleartextMetadata = try toCleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
 		phases.completeTransfer()
 		return cleartextMetadata

@@ -17,6 +17,7 @@ public final class S3CloudProvider: CloudProvider {
 	private let minPartSize: Int
 	private let maxPartCount: Int
 	fileprivate static let delimiter = "/"
+	private static let fileContentType = "application/octet-stream"
 	private static let folderContentType = "application/x-directory"
 	private static let s3MaxPageSize = 1000
 
@@ -142,14 +143,6 @@ public final class S3CloudProvider: CloudProvider {
 		let localFile = try LocalUploadFile(localURL)
 		let fileSize = Int(localFile.size)
 		let partSize = try multipartUploadPartSize(forFileSize: fileSize)
-		let resourceKey: URLResourceKey = if #available(iOS 14.0, *) {
-			.contentTypeKey
-		} else {
-			.typeIdentifierKey
-		}
-		let resourceValues = try localFile.url.resourceValues(forKeys: [resourceKey])
-		let maybeContentType = resourceValues.typeIdentifier
-		let contentType = maybeContentType ?? "application/octet-stream"
 		let key = getKey(for: cloudPath)
 		let phases = Progress.phases(of: progress, 999)
 		do {
@@ -164,9 +157,9 @@ public final class S3CloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) precondition done, uploading file…")
 			if let partSize {
-				try await uploadLargeFile(from: localFile.url, key: key, contentType: contentType, fileSize: fileSize, partSize: partSize, progress: phases[0])
+				try await uploadLargeFile(from: localFile.url, key: key, fileSize: fileSize, partSize: partSize, progress: phases[0])
 			} else {
-				try await client.upload(key: key, fromFile: localFile.url, contentType: contentType, progress: phases[0], onTaskCreation: onTaskCreation)
+				try await client.upload(key: key, fromFile: localFile.url, contentType: S3CloudProvider.fileContentType, progress: phases[0], onTaskCreation: onTaskCreation)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) finished, fetching metadata…")
 			// The upload committed with its PUT or its completion, so the metadata is fetched even if the task is cancelled meanwhile.
@@ -375,10 +368,9 @@ public final class S3CloudProvider: CloudProvider {
 	}
 
 	/// Uploads the file as a multipart upload, one part after the other, each from a temporary file, so that no part is held in memory. The progress counts bytes, so each part's share is its length.
-	// swiftlint:disable:next function_parameter_count
-	private func uploadLargeFile(from localURL: URL, key: String, contentType: String, fileSize: Int, partSize: Int, progress: Progress?) async throws {
+	private func uploadLargeFile(from localURL: URL, key: String, fileSize: Int, partSize: Int, progress: Progress?) async throws {
 		progress?.totalUnitCount = Int64(fileSize)
-		try await client.multipartUpload(key: key, contentType: contentType) { uploadID in
+		try await client.multipartUpload(key: key, contentType: S3CloudProvider.fileContentType) { uploadID in
 			let fileHandle = try FileHandle(forReadingFrom: localURL)
 			defer {
 				try? fileHandle.close()

@@ -123,6 +123,17 @@ extension UnitTests {
 			#expect(expectedChildElements == childElements)
 		}
 
+		@Test
+		func responseWithSeveral200Propstats() throws {
+			let xmlParser = try getXMLParser(forResource: "several-200-propstats", withExtension: "xml")
+			let rootURL = try #require(URL(string: "/"))
+			let parser = PropfindResponseParser(xmlParser, responseURL: rootURL)
+			let expectedElements = try [
+				PropfindResponseElement(depth: 1, url: #require(URL(string: "/folder/", relativeTo: rootURL)), collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: 0)
+			]
+			#expect(try parser.getElements() == expectedElements)
+		}
+
 		/// The depth counts the segments of the percent-encoded path, so neither an encoded slash nor an escape that isn't valid UTF-8 changes it.
 		@Test
 		func depthCountsEncodedSegments() throws {

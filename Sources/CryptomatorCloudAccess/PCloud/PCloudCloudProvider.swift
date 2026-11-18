@@ -509,7 +509,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	/**
 	 Saves the children of the listing in the snapshot and caches their items, stopping at the next child once the task is cancelled.
 
-	 A name that a file and a folder share caches the folder, as `child(named:in:)` resolves it. Once a file overwrites a cached folder, the listing's folders are cached again, because that folder may be listed before the file. This happens even if the fill fails or is cancelled, and the fill's error is thrown afterwards. A cached folder that the listing no longer holds stays overwritten by the file.
+	 A name that a file and a folder share caches the folder, as `child(named:in:)` resolves it. Once a file overwrites a cached folder, the listing's folders are cached again, because that folder may be listed before the file. The overwrite drops the items cached below that folder, so they are looked up again. This happens even if the fill fails or is cancelled, and the fill's error is thrown afterwards. A cached folder that the listing no longer holds stays overwritten by the file.
 	 */
 	private func fillSnapshot(_ snapshot: DirectoryContentSnapshot, from listing: PCloudFolderListing) throws {
 		let folderPath = snapshot.folderEnumerationPath

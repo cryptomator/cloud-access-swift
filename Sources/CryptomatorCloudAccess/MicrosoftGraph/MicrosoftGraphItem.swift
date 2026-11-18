@@ -49,6 +49,11 @@ extension MicrosoftGraphItem {
 		table.column(isRemoteItemKey, .boolean).notNull()
 	}
 
+	/// Leaves out the drive identifier, which only addresses the requests, because the identifier already names the item.
+	func isSameItem(as other: MicrosoftGraphItem) -> Bool {
+		return identifier == other.identifier && itemType == other.itemType && isRemoteItem == other.isRemoteItem
+	}
+
 	func encode(to container: inout PersistenceContainer) throws {
 		container[MicrosoftGraphItem.cloudPathKey] = cloudPath
 		container[MicrosoftGraphItem.identifierKey] = identifier

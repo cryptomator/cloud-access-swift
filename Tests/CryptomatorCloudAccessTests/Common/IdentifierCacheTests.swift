@@ -20,7 +20,7 @@ struct IdentifierCacheProbe {
 	let containsNothing: (_ path: String) -> Bool
 	let containsRootItem: () -> Bool
 
-	init<Item: IdentifierCacheItem & Equatable>(makeItem: @escaping (_ cloudPath: CloudPath, _ identifier: Int, _ itemType: CloudItemType) -> Item) throws {
+	init<Item: IdentifierCacheItem>(makeItem: @escaping (_ cloudPath: CloudPath, _ identifier: Int, _ itemType: CloudItemType) -> Item) throws {
 		let cache = try IdentifierCache<Item>()
 		self.itemType = Item.self
 		self.add = { try cache.addOrUpdate(makeItem(CloudPath($0), $1, $2)) }
@@ -97,12 +97,28 @@ extension UnitTests {
 		}
 
 		@Test(arguments: CacheKind.allCases)
-		func updateWithDifferentIdentifierForCachedCloudPath(kind: CacheKind) throws {
+		func updateWithDifferentItemRemovesSubPaths(kind: CacheKind) throws {
 			let cache = try kind.makeProbe()
-			try cache.add("/abc/test--a-", 1234, .folder)
-			try cache.add("/abc/test--a-", 5678, .folder)
+			try cache.add("/foo", 123, .folder)
+			try cache.add("/foo/bar", 234, .file)
+			try cache.add("/foo bar", 345, .folder)
 
-			#expect(cache.contains("/abc/test--a-", 5678, .folder))
+			try cache.add("/foo", 567, .folder)
+
+			#expect(cache.contains("/foo", 567, .folder))
+			#expect(cache.containsNothing("/foo/bar"))
+			#expect(cache.contains("/foo bar", 345, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func updateWithEqualItemKeepsSubPaths(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/foo", 123, .folder)
+			try cache.add("/foo/bar", 234, .file)
+
+			try cache.add("/foo", 123, .folder)
+
+			#expect(cache.contains("/foo/bar", 234, .file))
 		}
 
 		@Test(arguments: CacheKind.allCases)
@@ -184,6 +200,40 @@ extension UnitTests {
 			try cache.addOrUpdate(itemToStore)
 
 			#expect(itemToStore == cache.get(itemToStore.cloudPath))
+		}
+
+		@Test
+		func updateWithOtherDriveIdentifierKeepsSubPaths() throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			let child = MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: "abc", itemType: .file, isRemoteItem: false)
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(child)
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "ABC", itemType: .folder, isRemoteItem: false))
+
+			#expect(cache.get(child.cloudPath) == child)
+		}
+
+		@Test
+		func updateWithRemoteItemOfSameIdentifierRemovesSubPaths() throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: "abc", itemType: .file, isRemoteItem: false))
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: true))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
+
+		@Test
+		func updateWithShortcutOfSameIdentifierRemovesSubPaths() throws {
+			let cache = try IdentifierCache<GoogleDriveItem>()
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder, shortcut: nil))
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", itemType: .file, shortcut: nil))
+
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder, shortcut: GoogleDriveShortcut(targetIdentifier: "T", targetItemType: .folder)))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
 		}
 	}
 

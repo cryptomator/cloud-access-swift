@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 
 /// An item of a provider that addresses its items by identifiers, which `IdentifierCache` keeps under its cloud path.
-protocol IdentifierCacheItem: FetchableRecord, PersistableRecord {
+protocol IdentifierCacheItem: FetchableRecord, PersistableRecord, Equatable {
 	/// The item of the root folder, which a new cache holds.
 	static var rootItem: Self { get }
 	/// The provider's error for a cache that holds no item of a path's ancestors, not even the root.
@@ -18,6 +18,8 @@ protocol IdentifierCacheItem: FetchableRecord, PersistableRecord {
 	var cloudPath: CloudPath { get }
 	/// Adds the columns of the item's properties besides its cloud path, identifier and item type.
 	static func addExtraColumns(to table: TableDefinition)
+	/// Whether the item is the same as the other, so that the items cached below the other stay valid. It compares only what a request for a descendant goes through, never a value that changes with the item's content.
+	func isSameItem(as other: Self) -> Bool
 }
 
 extension IdentifierCacheItem {
@@ -38,6 +40,10 @@ extension IdentifierCacheItem {
 	}
 
 	static func addExtraColumns(to table: TableDefinition) {}
+
+	func isSameItem(as other: Self) -> Bool {
+		return self == other
+	}
 }
 
 /// Matches a cloud path and its descendants, comparing the paths literally and case-sensitively, so that no character of a path acts as a wildcard.
@@ -99,16 +105,18 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		}
 	}
 
+	/// Adds or updates the item. Replacing another item also removes the items of the path's descendants, because they were cached below the replaced item, e.g. inside a shortcut's target.
 	func addOrUpdate(_ item: Item) throws {
-		try dbQueue.write { db in
-			try item.save(db)
-		}
+		_ = try replace(item)
 	}
 
-	/// Adds or updates the item and returns the item it replaced, if any.
+	/// Adds or updates the item like `addOrUpdate(_:)` and returns the item it replaced, if any.
 	func replace(_ item: Item) throws -> Item? {
 		try dbQueue.write { db in
 			let replacedItem = try Item.fetchOne(db, key: item.cloudPath)
+			if let replacedItem, !replacedItem.isSameItem(as: item) {
+				try deleteSubtree(of: item.cloudPath, in: db)
+			}
 			try item.save(db)
 			return replacedItem
 		}
@@ -117,8 +125,12 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	/// Removes the item and the items of its descendants.
 	func invalidate(_ item: Item) throws {
 		try dbQueue.write { db in
-			try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: item.cloudPath.path))
+			try deleteSubtree(of: item.cloudPath, in: db)
 		}
+	}
+
+	private func deleteSubtree(of cloudPath: CloudPath, in db: Database) throws {
+		try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: cloudPath.path))
 	}
 
 	// MARK: - Path Resolution

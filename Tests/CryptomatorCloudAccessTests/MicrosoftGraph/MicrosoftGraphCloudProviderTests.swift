@@ -151,6 +151,23 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// A provider that lists a folder only through a page token, e.g. in a relaunched process, caches the folder's row before its children.
+		@Test
+		func downloadBelowRemoteItemListedThroughPageTokenIsMarkedAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.remoteFolderItem),
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/shared"), withPageToken: "https://graph.microsoft.com/v1.0/drives/remoteDrive/items/remote/children?$skiptoken=NEXT")
+			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+
+			#expect(metadata.isAlias)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
 		@Test
 		func listingSkipsNamesThatAreNoSinglePathComponent() async throws {

@@ -47,12 +47,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
-		if let urlString = pageToken {
-			return try await fetchItemList(forFolderAt: cloudPath, with: urlString)
-		}
 		let item = try await resolvePath(forItemAt: cloudPath)
 		try Task.checkCancellation()
-		return try await fetchItemList(for: item)
+		return try await fetchItemList(for: item, pageToken: pageToken)
 	}
 
 	@concurrent
@@ -151,9 +148,12 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
 	}
 
-	private func fetchItemList(for item: MicrosoftGraphItem) async throws -> CloudItemList {
+	private func fetchItemList(for item: MicrosoftGraphItem, pageToken: String?) async throws -> CloudItemList {
 		guard item.itemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
+		}
+		if let urlString = pageToken {
+			return try await fetchItemList(forFolderAt: item.cloudPath, with: urlString)
 		}
 		let request = try childrenRequest(for: item)
 		return try await fetchItemList(forFolderAt: item.cloudPath, with: request)

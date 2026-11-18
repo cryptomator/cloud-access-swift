@@ -163,6 +163,31 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// Only the folder that holds the item counts, so that a vault reached through a shortcut stays usable.
+		@Test
+		func downloadBelowFolderShortcutIsMarkedAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "link", targetID: "T", targetMimeType: GoogleDriveJSON.folderMimeType)])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "T", name: "target")),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "F", name: "file.txt"), GoogleDriveMockResponse.folder(id: "G", name: "sub")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "H", name: "file.txt")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt")),
+				URLProtocolMock.handler(body: "content"),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "H", name: "file.txt")),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/link"), withPageToken: nil)
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/link/sub"), withPageToken: nil)
+			let childMetadata = try await provider.downloadFile(from: CloudPath("/link/file.txt"), to: tmpDirURL.appendingPathComponent("child.txt"), progress: nil, onTaskCreation: nil)
+			let grandchildMetadata = try await provider.downloadFile(from: CloudPath("/link/sub/file.txt"), to: tmpDirURL.appendingPathComponent("grandchild.txt"), progress: nil, onTaskCreation: nil)
+
+			#expect(childMetadata.isAlias)
+			#expect(!grandchildMetadata.isAlias)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
 		@Test
 		func listingFailsIfShortcutTargetRequestFails() async throws {

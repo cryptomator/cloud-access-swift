@@ -35,7 +35,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	let rejectsExistingItems: Bool
 	/// The paths of the fixture items that a listing marks as aliases, as a provider marks a shortcut. Metadata reads and downloads don't mark them (see `aliasedDownloads`).
 	let aliases: Set<String>
-	/// The paths of the fixture files whose download reports an alias, as Google Drive and Microsoft Graph do for a path that resolves to one.
+	/// The paths of the fixture files whose download reports an alias, as Google Drive and Microsoft Graph do when the path, or the folder that holds it, resolves to one.
 	let aliasedDownloads: Set<String>
 	let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 	private let state = OSAllocatedUnfairLock(initialState: State())

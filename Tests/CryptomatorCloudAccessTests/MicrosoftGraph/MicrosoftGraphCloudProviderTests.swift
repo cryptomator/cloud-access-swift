@@ -14,6 +14,7 @@ import Testing
 extension UnitTests {
 	final class MicrosoftGraphCloudProviderTests {
 		private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#
+		private static let remoteFolderItem = #"{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let remoteFileItem = #"{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let downloadURL = "https://content.example.com/dl/SECRET-PATH?tempauth=SECRET"
 		private static let fileItemWithDownloadURL = #"{"id":"F","name":"file.txt","size":7,"file":{},"fileSystemInfo":{"lastModifiedDateTime":"2026-11-16T10:00:00Z"},"@microsoft.graph.downloadUrl":"\#(MicrosoftGraphCloudProviderTests.downloadURL)"}"#
@@ -105,7 +106,7 @@ extension UnitTests {
 		/// A shared item added to My files lists as its target's type, and requests for its path reach the target.
 		@Test
 		func listingMarksRemoteItemAsAlias() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}},\#(MicrosoftGraphCloudProviderTests.remoteFileItem),\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#)]
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.remoteFolderItem),\#(MicrosoftGraphCloudProviderTests.remoteFileItem),\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#)]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 
@@ -130,6 +131,23 @@ extension UnitTests {
 
 			#expect(remoteItemMetadata.isAlias)
 			#expect(!fileMetadata.isAlias)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func downloadBelowRemoteItemIsMarkedAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.remoteFolderItem)]}"#),
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/shared"), withPageToken: nil)
+			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+
+			#expect(metadata.isAlias)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 

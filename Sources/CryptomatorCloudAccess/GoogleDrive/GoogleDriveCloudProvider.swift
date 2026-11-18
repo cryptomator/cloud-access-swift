@@ -177,11 +177,16 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
+	/// Whether the item, or the cached row of the folder that holds it, is a shortcut, in which case the request reaches the shortcut's target or an item inside it.
+	private func isReachedThroughShortcut(_ item: GoogleDriveItem) -> Bool {
+		return item.shortcut != nil || identifierCache.get(item.cloudPath.deletingLastPathComponent())?.shortcut != nil
+	}
+
 	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		guard item.resolvedItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
-		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: item.shortcut != nil)
+		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: isReachedThroughShortcut(item))
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			try await perform("downloadFile(for: \(item.identifier), to: \(localURL))") {

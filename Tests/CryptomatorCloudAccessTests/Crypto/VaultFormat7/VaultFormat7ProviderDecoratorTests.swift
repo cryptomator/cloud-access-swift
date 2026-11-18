@@ -802,6 +802,18 @@ extension UnitTests {
 		}
 
 		@Test
+		func deleteFolderWhoseAncestorDirFileDownloadsThroughAliasThrowsInvalidDirectoryReference() async throws {
+			let ancestorDirFilePath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"
+			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id"], aliasedDownloads: [ancestorDirFilePath])
+			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat7ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
+			#expect(listedFolders.withLock { $0 } == [])
+			#expect(transferredFiles.withLock { $0 } == [ancestorDirFilePath])
+			#expect(provider.deleted == [])
+		}
+
+		@Test
 		func deleteFolderWithDirFileNamingAncestorThrowsInvalidDirectoryReference() async throws {
 			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5.c9r": "dir1-id"])
 			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())

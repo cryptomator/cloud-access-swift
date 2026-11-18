@@ -191,13 +191,19 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return CloudItemList(items: items, nextPageToken: collection.nextLink)
 	}
 
+	/// Whether the item, or the cached row of the folder that holds it, is a remote item, in which case the request reaches the remote item's target or an item inside it.
+	private func isReachedThroughRemoteItem(_ item: MicrosoftGraphItem) -> Bool {
+		return item.isRemoteItem || identifierCache.get(item.cloudPath.deletingLastPathComponent())?.isRemoteItem == true
+	}
+
 	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		guard item.itemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let contentRequest = try contentRequest(for: item)
+		let isAlias = isReachedThroughRemoteItem(item)
 		let driveItem = try await fetchDriveItem(for: item, with: downloadItemRequest(for: item))
-		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath, isAlias: item.isRemoteItem)
+		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath, isAlias: isAlias)
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			if let downloadURL = driveItem.downloadURL.flatMap(URL.init(string:)), downloadURL.scheme?.lowercased() == "https" {

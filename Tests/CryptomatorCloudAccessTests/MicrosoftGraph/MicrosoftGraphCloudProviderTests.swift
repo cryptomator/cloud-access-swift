@@ -101,6 +101,18 @@ extension UnitTests {
 			#expect(itemList.items.count == 1000)
 		}
 
+		/// A shared item added to My files lists as its target's type, and requests for its path reach the target.
+		@Test
+		func listingMarksRemoteItemAsAlias() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}},{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}},\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#)]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+			#expect(itemList.items.map(\.cloudPath) == [CloudPath("/shared"), CloudPath("/shared.txt"), CloudPath("/file.txt")])
+			#expect(itemList.items.map(\.itemType) == [.folder, .file, .file])
+			#expect(itemList.items.map(\.isAlias) == [true, true, false])
+		}
+
 		/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
 		@Test
 		func listingSkipsNamesThatAreNoSinglePathComponent() async throws {

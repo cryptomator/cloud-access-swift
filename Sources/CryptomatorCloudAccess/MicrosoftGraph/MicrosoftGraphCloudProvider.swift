@@ -185,7 +185,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			}
 			let childCloudPath = cloudPath.appendingPathComponent(name)
 			try identifierCache.addOrUpdate(MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem))
-			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath))
+			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath, isAlias: driveItem.remoteItem != nil))
 		}
 		return CloudItemList(items: items, nextPageToken: collection.nextLink)
 	}
@@ -461,14 +461,14 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
-	private func convertToCloudItemMetadata(_ driveItem: MicrosoftGraphAPI.DriveItem, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func convertToCloudItemMetadata(_ driveItem: MicrosoftGraphAPI.DriveItem, at cloudPath: CloudPath, isAlias: Bool = false) throws -> CloudItemMetadata {
 		guard let name = driveItem.name else {
 			throw MicrosoftGraphError.missingItemName
 		}
 		let itemType = driveItem.cloudItemType
 		let lastModifiedDate = driveItem.fileSystemInfo?.lastModifiedDate
 		let size = Int(driveItem.size ?? 0)
-		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size, isAlias: isAlias)
 	}
 
 	func convertStandardError(_ error: Error) -> Error {

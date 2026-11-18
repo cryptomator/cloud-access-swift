@@ -85,6 +85,19 @@ extension UnitTests {
 			}
 			#expect(listedPages.withLock { $0 } == ["dirs/top#", "dirs/x#", "dirs/y1#", "dirs/x#1"])
 		}
+
+		/// An alias's target need not lie inside the deleted directory, so its dir IDs aren't read.
+		@Test
+		func aliasIsNotFollowed() async throws {
+			let provider = CloudProviderMock(folders: ["dirs", "dirs/top", "dirs/top/alias", "dirs/top/sub", "dirs/x"], files: [:], aliases: ["dirs/top/alias"])
+			let resolvedItems = OSAllocatedUnfairLock(initialState: [String]())
+			try await deleteDirectory(of: provider, stop: CiphertextDirectoryDeletionStop()) { item in
+				resolvedItems.withLock { $0.append(item.name) }
+				return item.name == "sub" ? [Data("x".utf8)] : []
+			}
+			#expect(resolvedItems.withLock { $0 } == ["sub"])
+			#expect(provider.deleted == ["dirs/x", "dirs/top"])
+		}
 	}
 }
 

@@ -106,20 +106,38 @@ extension UnitTests {
 					GoogleDriveMockResponse.shortcut(id: "S1", name: "broken", targetID: "T1", targetMimeType: "text/plain"),
 					GoogleDriveMockResponse.shortcut(id: "S2", name: "private", targetID: "T2", targetMimeType: "text/plain"),
 					GoogleDriveMockResponse.shortcut(id: "S3", name: "forbidden", targetID: "T3", targetMimeType: "text/plain"),
-					GoogleDriveMockResponse.shortcut(id: "S4", name: "link", targetID: "T4", targetMimeType: "application/vnd.google-apps.folder")
+					GoogleDriveMockResponse.shortcut(id: "S4", name: "link", targetID: "T4", targetMimeType: "application/vnd.google-apps.folder"),
+					GoogleDriveMockResponse.shortcut(id: "S5", name: "link.txt", targetID: "T5", targetMimeType: "text/plain")
 				])),
 				URLProtocolMock.handler(statusCode: 404, body: GoogleDriveMockResponse.error(status: 404, reason: "notFound")),
 				URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientFilePermissions")),
 				URLProtocolMock.handler(statusCode: 403),
-				URLProtocolMock.handler(body: #"{"mimeType":"application/vnd.google-apps.folder","modifiedTime":"\#(GoogleDriveMockResponse.modifiedTime)"}"#)
+				URLProtocolMock.handler(body: #"{"mimeType":"application/vnd.google-apps.folder","modifiedTime":"\#(GoogleDriveMockResponse.modifiedTime)"}"#),
+				URLProtocolMock.handler(body: #"{"mimeType":"text/plain","modifiedTime":"\#(GoogleDriveMockResponse.modifiedTime)","size":"9"}"#)
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 
 			#expect([
 				CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: 7),
-				CloudItemMetadata(name: "link", cloudPath: CloudPath("/link"), itemType: .folder, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: nil)
+				CloudItemMetadata(name: "link", cloudPath: CloudPath("/link"), itemType: .folder, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: nil),
+				CloudItemMetadata(name: "link.txt", cloudPath: CloudPath("/link.txt"), itemType: .file, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: 9)
 			] == itemList.items)
+			#expect(itemList.items.map(\.isAlias) == [false, true, true])
+		}
+
+		/// A shortcut without its target's type can't be resolved, so it lists as itself.
+		@Test
+		func listingMarksShortcutWithoutTargetTypeAsAlias() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "link", targetID: "T", targetMimeType: nil)]))
+			]
+
+			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+			#expect(itemList.items.map(\.itemType) == [.symlink])
+			#expect(itemList.items.map(\.isAlias) == [true])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
@@ -229,7 +247,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 204, onRequest: record)
 			]
 
-			_ = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+			let shortcutMetadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
 			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 			_ = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
@@ -238,6 +256,7 @@ extension UnitTests {
 			try await provider.moveFile(from: CloudPath("/folder/file.txt"), to: CloudPath("/moved.txt"))
 			try await provider.deleteFolder(at: CloudPath("/folder"))
 
+			#expect(!shortcutMetadata.isAlias)
 			let sent = requests.requests
 			#expect(sent.count == 16)
 			#expect(sent[1].url?.path == "/drive/v3/files/T1")

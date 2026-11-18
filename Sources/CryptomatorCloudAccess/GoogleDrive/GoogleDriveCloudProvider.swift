@@ -162,7 +162,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 				let child = try GoogleDriveItem(cloudPath: item.cloudPath.appendingPathComponent(name), file: file)
 				try identifierCache.addOrUpdate(child)
 				guard let shortcut = child.shortcut else {
-					try items.append(convertToCloudItemMetadata(file, at: child.cloudPath))
+					try items.append(convertToCloudItemMetadata(file, at: child.cloudPath, isAlias: file.mimeType == GoogleDriveJSON.shortcutMimeType))
 					continue
 				}
 				try Task.checkCancellation()
@@ -295,7 +295,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	private func resolveShortcut(_ shortcut: GoogleDriveShortcut, at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("GoogleDriveCloudProvider: resolveShortcut(\(shortcut.targetIdentifier), at: \(cloudPath.path)) called")
 		let file = try await client.file(id: shortcut.targetIdentifier, fields: GoogleDriveCloudProvider.shortcutTargetFields)
-		return try convertToCloudItemMetadata(file, at: cloudPath)
+		return try convertToCloudItemMetadata(file, at: cloudPath, isAlias: true)
 	}
 
 	// MARK: - Helpers
@@ -316,8 +316,8 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	private func convertToCloudItemMetadata(_ file: GoogleDriveFile, at cloudPath: CloudPath) throws -> CloudItemMetadata {
-		return try CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: file.cloudItemType, lastModifiedDate: file.lastModifiedDate, size: file.sizeValue)
+	private func convertToCloudItemMetadata(_ file: GoogleDriveFile, at cloudPath: CloudPath, isAlias: Bool = false) throws -> CloudItemMetadata {
+		return try CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: file.cloudItemType, lastModifiedDate: file.lastModifiedDate, size: file.sizeValue, isAlias: isAlias)
 	}
 
 	/// Logs the operation and converts the errors that it throws.

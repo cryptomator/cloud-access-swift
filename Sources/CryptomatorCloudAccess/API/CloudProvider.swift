@@ -177,7 +177,7 @@ public protocol CloudProvider: Sendable {
 	 - Parameter targetCloudPath: The cloud path of the desired destination.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `sourceCloudPath`.
-	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the folder is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it.
+	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the folder is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it. Through a vault provider, the leftovers can still refer to the moved folder's directory, so deleting the source, or a folder that contains it, deletes the moved folder's content.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`. If the source doesn't exist either, a provider may throw this or `itemNotFound`, so this doesn't imply that the source exists. To tell a taken name from an earlier move that already completed, a caller checks the source and the target itself.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.

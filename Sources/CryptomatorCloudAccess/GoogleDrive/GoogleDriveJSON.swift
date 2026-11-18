@@ -80,12 +80,13 @@ struct GoogleDriveFileMetadata: Encodable, Sendable {
 
 enum GoogleDriveJSON {
 	static let folderMimeType = "application/vnd.google-apps.folder"
+	static let shortcutMimeType = "application/vnd.google-apps.shortcut"
 
 	static func cloudItemType(ofMimeType mimeType: String) -> CloudItemType {
 		switch mimeType {
 		case folderMimeType:
 			return .folder
-		case "application/vnd.google-apps.shortcut":
+		case shortcutMimeType:
 			return .symlink
 		default:
 			return .file

@@ -288,7 +288,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 		return (delegate as? VaultFormat7ShorteningProviderDecorator)?.delegate ?? delegate
 	}
 
-	/// Whether the folder of a `.c9r` or `.c9s` holds a `dir.c9r` file, as listed below the shortening decorator. A first page that throws `itemNotFound` or `itemTypeMismatch` means none. Any other failure is thrown, because the pages not listed yet may hold it.
+	/// Whether the folder of a `.c9r` or `.c9s` holds a `dir.c9r` file, as listed below the shortening decorator. A first page that throws `itemNotFound` or `itemTypeMismatch` means none. Any other failure is thrown, because the pages not listed yet may hold it. A `dir.c9r` that the listing marks as an alias counts too, because keeping a `.c9r` whose dir ID can't be read is the safe side.
 	private func holdsDirFile(_ c9rPath: CloudPath) async throws -> Bool {
 		let shorteningDecorator = delegate as? VaultFormat7ShorteningProviderDecorator
 		let provider = shorteningDecorator?.delegate ?? delegate
@@ -313,7 +313,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 	/**
 	 Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 
-	 Lists below the shortening decorator and follows every `dir.c9r` file of a `.c9r` or `.c9s` folder without reading its name, so that a subfolder whose `name.c9s` is invalid or can't be read is deleted with its parent instead of keeping a directory without a reference.
+	 Lists below the shortening decorator and follows every `dir.c9r` file of a `.c9r` or `.c9s` folder without reading its name, so that a subfolder whose `name.c9s` is invalid or can't be read is deleted with its parent instead of keeping a directory without a reference. It skips a `dir.c9r` that the listing marks as an alias.
 	 */
 	private func deleteCiphertextDir(_ dirId: Data, containingDirIds: Set<Data>) async throws {
 		let provider = physicalDelegate
@@ -322,7 +322,7 @@ class VaultFormat7ProviderDecorator: CloudProvider, @unchecked Sendable {
 				return []
 			}
 			var dirIds = [Data]()
-			for dirFile in try await provider.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where isDirFile(dirFile) {
+			for dirFile in try await provider.fetchItemListExhaustively(forFolderAt: item.cloudPath).items where isDirFile(dirFile) && !dirFile.isAlias {
 				try await dirIds.append(provider.downloadDirFile(at: dirFile.cloudPath))
 			}
 			return dirIds

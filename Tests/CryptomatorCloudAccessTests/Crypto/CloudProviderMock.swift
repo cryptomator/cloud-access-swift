@@ -11,7 +11,7 @@ import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
-/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
+/// `@unchecked Sendable`: `folders`, `files`, `maxPageSize`, `rejectsExistingItems`, `aliases` and `lastModifiedDate` are immutable, everything else is protected by `state`. The class is subclassed by the vault format mocks.
 public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	private struct State {
 		var calls: [String] = []
@@ -33,6 +33,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	let maxPageSize: Int
 	/// Whether creating a folder at a fixture folder or file, or uploading to a fixture file without `replaceExisting`, throws `itemAlreadyExists`, as with a real provider. Created, deleted and moved items don't count.
 	let rejectsExistingItems: Bool
+	/// The paths of the fixture items that a listing marks as aliases, as a provider marks a shortcut. Metadata reads don't mark them.
+	let aliases: Set<String>
 	let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 	private let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -141,11 +143,25 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		}
 	}
 
-	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false) {
+	/// Replaces `listingHook` and `transferHook` with hooks that record the paths of the listed folders and of the transferred files.
+	func recordingListingsAndTransfers() -> (listedFolders: OSAllocatedUnfairLock<[String]>, transferredFiles: OSAllocatedUnfairLock<[String]>) {
+		let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
+		let transferredFiles = OSAllocatedUnfairLock(initialState: [String]())
+		listingHook = { cloudPath, _ in
+			listedFolders.withLock { $0.append(cloudPath.path) }
+		}
+		transferHook = { cloudPath, _ in
+			transferredFiles.withLock { $0.append(cloudPath.path) }
+		}
+		return (listedFolders, transferredFiles)
+	}
+
+	init(folders: Set<String>, files: [String: Data], maxPageSize: Int = .max, rejectsExistingItems: Bool = false, aliases: Set<String> = []) {
 		self.folders = folders
 		self.files = files
 		self.maxPageSize = maxPageSize
 		self.rejectsExistingItems = rejectsExistingItems
+		self.aliases = aliases
 	}
 
 	@concurrent
@@ -175,7 +191,11 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		let pageStart = pageToken.flatMap(Int.init) ?? 0
 		let page = children.dropFirst(pageStart).prefix(maxPageSize)
 		let nextPageStart = pageStart + page.count
-		return try CloudItemList(items: page.map { try getItemMetadata(at: CloudPath($0)) }, nextPageToken: nextPageStart < children.count ? String(nextPageStart) : nil)
+		let items = try page.map { path in
+			let metadata = try getItemMetadata(at: CloudPath(path))
+			return CloudItemMetadata(name: metadata.name, cloudPath: metadata.cloudPath, itemType: metadata.itemType, lastModifiedDate: metadata.lastModifiedDate, size: metadata.size, isAlias: aliases.contains(path))
+		}
+		return CloudItemList(items: items, nextPageToken: nextPageStart < children.count ? String(nextPageStart) : nil)
 	}
 
 	@concurrent

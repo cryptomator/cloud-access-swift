@@ -18,11 +18,13 @@ private extension DateFormatter {
 }
 
 extension Date {
+	private static let rfc822Formatter = DateFormatter.rfc822Formatter()
+
 	static func date(fromRFC822 string: String) -> Date? {
-		return DateFormatter.rfc822Formatter().date(from: string)
+		return rfc822Formatter.date(from: string)
 	}
 
 	static func rfc822String(from date: Date) -> String {
-		return DateFormatter.rfc822Formatter().string(from: date)
+		return rfc822Formatter.string(from: date)
 	}
 }

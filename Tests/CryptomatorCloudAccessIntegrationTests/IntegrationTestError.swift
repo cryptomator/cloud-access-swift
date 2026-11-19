@@ -14,4 +14,5 @@ enum IntegrationTestError: Error, Equatable {
 	case itemNotVisible(CloudPath)
 	case fixtureTimeout(Duration)
 	case budgetExceeded(Duration)
+	case driveNotFound(name: String)
 }

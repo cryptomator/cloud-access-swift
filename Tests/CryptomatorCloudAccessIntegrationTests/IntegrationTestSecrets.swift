@@ -58,6 +58,26 @@ enum IntegrationTestSecrets {
 		get throws { try value(for: "MICROSOFT_GRAPH_REFRESH_TOKEN") }
 	}
 
+	static var microsoftGraphSharePointTenantId: String {
+		get throws { try value(for: "MICROSOFT_GRAPH_SHAREPOINT_TENANT_ID") }
+	}
+
+	static var microsoftGraphSharePointClientId: String {
+		get throws { try value(for: "MICROSOFT_GRAPH_SHAREPOINT_CLIENT_ID") }
+	}
+
+	static var microsoftGraphSharePointClientSecret: String {
+		get throws { try value(for: "MICROSOFT_GRAPH_SHAREPOINT_CLIENT_SECRET") }
+	}
+
+	static var microsoftGraphSharePointSiteURL: URL {
+		get throws { try url(for: "MICROSOFT_GRAPH_SHAREPOINT_SITE_URL") }
+	}
+
+	static var microsoftGraphSharePointDriveName: String {
+		get throws { try value(for: "MICROSOFT_GRAPH_SHAREPOINT_DRIVE_NAME") }
+	}
+
 	static var pCloudAccessToken: String {
 		get throws { try value(for: "PCLOUD_ACCESS_TOKEN") }
 	}

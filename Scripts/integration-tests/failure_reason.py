@@ -9,7 +9,7 @@ import re
 KNOWN_ERRORS = {
     "itemNotFound", "itemAlreadyExists", "itemTypeMismatch", "parentFolderDoesNotExist", "pageTokenInvalid",
     "quotaInsufficient", "unauthorized", "noInternetConnection", "deletionIncomplete", "moveCompletedWithSourceRemaining",
-    "consistencyTimeout", "itemNotVisible", "fixtureTimeout", "budgetExceeded",
+    "consistencyTimeout", "itemNotVisible", "fixtureTimeout", "budgetExceeded", "driveNotFound",
 }
 
 def reason(message):

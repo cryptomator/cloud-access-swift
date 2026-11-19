@@ -57,7 +57,7 @@ struct IntegrationRunScope: SuiteTrait, TestScoping {
 	}
 
 	private static func sweepLeftovers(of kind: IntegrationProvider) async throws {
-		let provider = try kind.makeProvider()
+		let provider = try await kind.makeProvider()
 		let cutoffDate = Date(timeIntervalSinceNow: -maximumAge)
 		let rootFolders = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/")).items.filter { $0.itemType == .folder }
 		for folder in rootFolders {

@@ -14,6 +14,7 @@ enum IntegrationProvider: String, CaseIterable, Codable, Sendable {
 	case dropbox
 	case googleDrive = "googledrive"
 	case microsoftGraph = "microsoftgraph"
+	case sharePoint = "sharepoint"
 	case pCloud = "pcloud"
 	case s3
 	case webDAV = "webdav"

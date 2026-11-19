@@ -236,8 +236,9 @@ actor IntegrationFixtures {
 	}
 
 	private func buildAccount(for kind: IntegrationProvider) async throws -> IntegrationAccount {
-		let provider = try kind.makeProvider()
-		let limitedProvider = try kind.makeProvider(maxPageSize: IntegrationFixtures.maxPageSizeForLimitedProvider)
+		let (provider, limitedProvider) = try await kind.semaphore.withPermit(budget: IntegrationFixtures.buildStepBudget) {
+			try await (kind.makeProvider(), kind.makeProvider(maxPageSize: IntegrationFixtures.maxPageSizeForLimitedProvider))
+		}
 		let runRoot = CloudPath("/\(IntegrationFixtures.runRootName)")
 		runRoots[kind] = RunRoot(provider: provider, path: runRoot)
 		try await kind.semaphore.withPermit(budget: IntegrationFixtures.buildStepBudget) { try await provider.createFolderIfMissing(at: runRoot) }

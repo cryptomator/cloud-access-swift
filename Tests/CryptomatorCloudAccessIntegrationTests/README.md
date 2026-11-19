@@ -18,6 +18,11 @@ export GOOGLE_DRIVE_REFRESH_TOKEN=...
 export MICROSOFT_GRAPH_CLIENT_ID=...
 export MICROSOFT_GRAPH_REDIRECT_URI_SCHEME=...
 export MICROSOFT_GRAPH_REFRESH_TOKEN=...
+export MICROSOFT_GRAPH_SHAREPOINT_TENANT_ID=...
+export MICROSOFT_GRAPH_SHAREPOINT_CLIENT_ID=...
+export MICROSOFT_GRAPH_SHAREPOINT_CLIENT_SECRET=...
+export MICROSOFT_GRAPH_SHAREPOINT_SITE_URL=...
+export MICROSOFT_GRAPH_SHAREPOINT_DRIVE_NAME=...
 export PCLOUD_APP_KEY=...
 export PCLOUD_ACCESS_TOKEN=...
 export PCLOUD_HTTP_API_HOST_NAME=...
@@ -107,6 +112,16 @@ func extractMicrosoftGraphRefreshToken() {
 }
 ```
 
+#### SharePoint
+
+The SharePoint tests authenticate as an app of the test tenant with the client credentials grant, so they need no stored login. The app holds only the Microsoft Graph application permission `Sites.Selected`, so it can reach only the sites it is granted:
+
+1. Register a single-tenant app in the Microsoft Entra admin center. Under API permissions, add the Microsoft Graph application permission `Sites.Selected` and grant admin consent for the tenant.
+2. Create a client secret for the app. Its value is `MICROSOFT_GRAPH_SHAREPOINT_CLIENT_SECRET`, which usually holds a `~` and therefore needs single quotes. The app's client ID is `MICROSOFT_GRAPH_SHAREPOINT_CLIENT_ID`, and the tenant's ID is `MICROSOFT_GRAPH_SHAREPOINT_TENANT_ID`. A secret expires after at most 24 months, and the SharePoint tests fail until it is replaced.
+3. Grant the app the test site as an admin, e.g. in Graph Explorer with the delegated permission `Sites.FullControl.All`. Look up the site's ID with `GET https://graph.microsoft.com/v1.0/sites/<host>:/sites/<name>`. Then grant the role `write` with `POST https://graph.microsoft.com/v1.0/sites/<site ID>/permissions` and the body `{"roles": ["write"], "grantedToIdentities": [{"application": {"id": "<client ID>", "displayName": "<app name>"}}]}`.
+
+`MICROSOFT_GRAPH_SHAREPOINT_SITE_URL` is the site's URL, e.g. `https://<tenant>.sharepoint.com/sites/<name>`. `MICROSOFT_GRAPH_SHAREPOINT_DRIVE_NAME` is the name of the document library that the tests work in, as the site shows it.
+
 #### pCloud
 
 To get the access token and API host name for pCloud, sign in once in a debug build of the iOS app whose `PCloudSetup` gets a storage like the one in the Google Drive section. Make the storage print the `accessToken` of the saved JSON as `PCLOUD_ACCESS_TOKEN` and its `apiHost` as `PCLOUD_HTTP_API_HOST_NAME`.
@@ -117,7 +132,7 @@ The tests are Swift Testing suites that run in parallel in one process, so the t
 
 A vault backend builds its providers through `VaultProviderFactory`, like the app does, so each is a crypto decorator over a shortening decorator. Vault format 7 has no backend, because its decorators differ from those of format 8 only in `createFolder`, which the unit tests cover. Its cipher combo, `sivCtrMac`, runs in the `vf6` backend, because the `vf8` vault uses `sivGcm` like a new vault of the app.
 
-`INTEGRATION_BACKENDS` selects the backends: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf8`). Unset or empty selects all backends, and `none` selects none, so only the tests that don't depend on the selection run. An unknown token fails `backendSelectionIsValid`, so a typo can't pass a run that tested nothing. The provider tokens are `box`, `dropbox`, `googledrive`, `microsoftgraph`, `pcloud`, `s3`, `webdav` and `localfilesystem`. `xcodebuild` passes a variable to the tests only with the prefix `TEST_RUNNER_`, which it strips, so set `TEST_RUNNER_INTEGRATION_BACKENDS` in its environment.
+`INTEGRATION_BACKENDS` selects the backends: comma-separated provider tokens (`pcloud`) or backend tokens (`pcloud-vf8`). Unset or empty selects all backends, and `none` selects none, so only the tests that don't depend on the selection run. An unknown token fails `backendSelectionIsValid`, so a typo can't pass a run that tested nothing. The provider tokens are `box`, `dropbox`, `googledrive`, `microsoftgraph`, `sharepoint`, `pcloud`, `s3`, `webdav` and `localfilesystem`. `xcodebuild` passes a variable to the tests only with the prefix `TEST_RUNNER_`, which it strips, so set `TEST_RUNNER_INTEGRATION_BACKENDS` in its environment.
 
 The package's scheme, `CryptomatorCloudAccess-Package`, holds the unit tests too, so select the integration tests with `-only-testing`. To run the tests of one provider:
 
@@ -176,6 +191,10 @@ The respective `CloudProvider` is tested here very generally for the specificati
 
 - Correct use of the cache for `resolvePath`.
 - Downloads from an item's pre-authenticated download URL instead of `/content`, tested in `MicrosoftGraphTests`. The conformance tests can't tell the two apart, because a refused download URL falls back to `/content`.
+
+### SharePoint
+
+- Fetching a drive by its identifier through `MicrosoftGraphDiscovery`, tested in `SharePointTests`. The conformance tests don't cover it, because the backend finds its drive among the site's drives.
 
 ### pCloud
 

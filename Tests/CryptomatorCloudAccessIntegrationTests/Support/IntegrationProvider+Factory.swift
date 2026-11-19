@@ -16,6 +16,7 @@ enum SharedCredentials {
 	static let googleDrive = Result { try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest") }
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
 	static let microsoftGraph = Result { try MicrosoftGraphCredentialMock() }
+	static let sharePoint = MicrosoftGraphCredential.sharePointIntegrationTest()
 	static let pCloud = Result { try PCloudCredential.integrationTest() }
 }
 
@@ -23,7 +24,7 @@ extension IntegrationProvider {
 	/// The folder that the local file system provider works in, removed at the end of the run.
 	static let localFileSystemRootURL = FileManager.default.temporaryDirectory.appendingPathComponent("iOS-IntegrationTests-\(UUID().uuidString)", isDirectory: true)
 
-	func makeProvider(maxPageSize: Int = .max) throws -> CloudProvider {
+	func makeProvider(maxPageSize: Int = .max) async throws -> CloudProvider {
 		switch self {
 		case .box:
 			return try BoxCloudProvider(credential: SharedCredentials.box, maxPageSize: maxPageSize)
@@ -33,6 +34,8 @@ extension IntegrationProvider {
 			return try GoogleDriveCloudProvider(credential: SharedCredentials.googleDrive.get(), maxPageSize: maxPageSize)
 		case .microsoftGraph:
 			return try MicrosoftGraphCloudProvider(credential: SharedCredentials.microsoftGraph.get(), maxPageSize: maxPageSize)
+		case .sharePoint:
+			return try await MicrosoftGraphCloudProvider(credential: SharedCredentials.sharePoint, driveIdentifier: SharePointTestDrive.shared.identifier(), maxPageSize: maxPageSize)
 		case .pCloud:
 			return try PCloudCloudProvider(credential: SharedCredentials.pCloud.get(), maxPageSize: maxPageSize)
 		case .s3:
@@ -58,6 +61,8 @@ extension IntegrationProvider {
 			let credential = try MicrosoftGraphCredentialMock()
 			try await credential.deauthenticate()
 			return try MicrosoftGraphCloudProvider(credential: credential)
+		case .sharePoint:
+			return try await MicrosoftGraphCloudProvider(credential: .sharePointIntegrationTestInvalid(), driveIdentifier: SharePointTestDrive.shared.identifier())
 		case .pCloud:
 			return try PCloudCloudProvider(credential: .integrationTestInvalid())
 		case .s3:

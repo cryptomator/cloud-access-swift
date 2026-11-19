@@ -248,7 +248,7 @@ func assertRowCounts(of cache: DirectoryContentCache, entries: Int, snapshots: I
 	#expect(snapshotCount == snapshots, sourceLocation: sourceLocation)
 }
 
-private func rowCount(of table: String, in cache: DirectoryContentDBCache) throws -> Int {
+func rowCount(of table: String, in cache: DirectoryContentDBCache) throws -> Int {
 	return try cache.dbWriter.read { db in
 		try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
 	}

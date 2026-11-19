@@ -52,6 +52,13 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file")) }
 		}
 
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func fetchItemMetadataBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath(path)) }
+			#expect(try await !provider.checkForItemExistence(at: CloudPath(path)))
+		}
+
 		@Test
 		func testFetchItemList() async throws {
 			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
@@ -96,6 +103,12 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil) }
 		}
 
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func fetchItemListBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemList(forFolderAt: CloudPath(path), withPageToken: nil) }
+		}
+
 		@Test
 		func fetchItemListFiltersHiddenItems() async throws {
 			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
@@ -136,12 +149,12 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file"), to: localURL) }
 		}
 
-		@Test
-		func downloadFileWithNotFoundErrorBelowFile() async throws {
-			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
-			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func downloadFileWithNotFoundErrorBelowFile(path: String) async throws {
+			try makeFile()
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file/child"), to: localURL) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath(path), to: localURL) }
+			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
 		@Test
@@ -250,6 +263,14 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/dir/file"), replaceExisting: false) }
 		}
 
+		@Test(arguments: ["/file/child", "/file/child/grandchild"], [false, true])
+		func uploadFileBelowFile(path: String, replaceExisting: Bool) async throws {
+			try makeFile()
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath(path), replaceExisting: replaceExisting) }
+		}
+
 		@Test
 		func testCreateFolder() async throws {
 			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
@@ -271,6 +292,12 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.createFolder(at: CloudPath("/dir/dir")) }
 		}
 
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func createFolderBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.createFolder(at: CloudPath(path)) }
+		}
+
 		@Test
 		func testDeleteFile() async throws {
 			let fileURL = tmpDirURL.appendingPathComponent("file", isDirectory: false)
@@ -282,6 +309,12 @@ extension UnitTests {
 		@Test
 		func deleteFileWithNotFoundError() async {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/file")) }
+		}
+
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func deleteFileBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath(path)) }
 		}
 
 		@Test
@@ -323,6 +356,29 @@ extension UnitTests {
 			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
 			FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath("/bar/baz")) }
+		}
+
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func moveFileWithSourceBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.moveFile(from: CloudPath(path), to: CloudPath("/bar")) }
+			FileManager.default.createFile(atPath: tmpDirURL.appendingPathComponent("bar", isDirectory: false).path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.moveFile(from: CloudPath(path), to: CloudPath("/bar")) }
+		}
+
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func moveFileWithTargetBelowFile(path: String) async throws {
+			try makeFile()
+			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: false)
+			FileManager.default.createFile(atPath: sourceURL.path, contents: nil, attributes: nil)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath(path)) }
+			#expect(FileManager.default.fileExists(atPath: sourceURL.path))
+		}
+
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func moveFileWithMissingSourceAndTargetBelowFile(path: String) async throws {
+			try makeFile()
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath(path)) }
 		}
 
 		/// A local folder that the system refuses to read can't be fixed by signing in, so the system's error passes through.
@@ -413,6 +469,61 @@ extension UnitTests {
 		}
 
 		@Test
+		func securityScopedAccessIsStoppedAfterUploadCompletedItsProgress() async throws {
+			let filePath = tmpDirURL.appendingPathComponent("file").path
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			_ = recorder.takeEvents()
+			let progress = Progress(totalUnitCount: 1)
+			recorder.isOperationFinished = { progress.fractionCompleted == 1 }
+			_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+		}
+
+		@Test
+		func securityScopedAccessIsStoppedAfterDownloadCompletedItsProgress() async throws {
+			try makeFile()
+			let filePath = tmpDirURL.appendingPathComponent("file").path
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			_ = recorder.takeEvents()
+			let progress = Progress(totalUnitCount: 1)
+			recorder.isOperationFinished = { progress.fractionCompleted == 1 }
+			_ = try await provider.downloadFile(from: CloudPath("/file"), to: localURL, progress: progress, onTaskCreation: nil)
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+		}
+
+		@Test
+		func securityScopedAccessIsStoppedAfterListingFilledItsSnapshot() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			for name in ["file 0", "file 1"] {
+				FileManager.default.createFile(atPath: dirURL.appendingPathComponent(name, isDirectory: false).path, contents: nil, attributes: nil)
+			}
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			_ = recorder.takeEvents()
+			let cache = try #require(provider.cache as? DirectoryContentDBCache)
+			// A snapshot that fits on its first page is deleted when it's published, so its rows exist only until then.
+			recorder.isOperationFinished = { (try? rowCount(of: "entries", in: cache)) == 2 }
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/dir"), withPageToken: nil)
+			#expect([.start(dirURL.path), .stop(dirURL.path, isOperationFinished: true)] == recorder.takeEvents())
+		}
+
+		@Test
+		func securityScopedAccessIsStoppedAfterFailedOperation() async throws {
+			let filePath = tmpDirURL.appendingPathComponent("file").path
+			let recorder = SecurityScopedAccessRecorder()
+			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
+			_ = recorder.takeEvents()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file")) }
+			#expect([.start(filePath), .stop(filePath, isOperationFinished: true)] == recorder.takeEvents())
+		}
+
+		@Test
 		func throwsCancellationErrorInCancelledTask() async throws {
 			let recorder = SecurityScopedAccessRecorder()
 			let provider = try LocalFileSystemProvider(rootURL: tmpDirURL, securityScopedAccess: recorder.securityScopedAccess)
@@ -491,6 +602,28 @@ extension UnitTests {
 		}
 
 		@Test
+		func convertNotDirectoryErrors() {
+			let notDirectory = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTDIR))
+			let ioError = NSError(domain: NSPOSIXErrorDomain, code: Int(EIO))
+			#expect((provider.convertStandardError(CocoaError(.fileReadUnknown, userInfo: [NSUnderlyingErrorKey: notDirectory])) as? CloudProviderError) == .itemNotFound)
+			#expect((provider.convertStandardError(CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: notDirectory])) as? CloudProviderError) == .itemNotFound)
+			let unchangedErrors = [
+				CocoaError(.fileReadUnknown, userInfo: [NSUnderlyingErrorKey: ioError]),
+				CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: ioError]),
+				CocoaError(.fileReadUnknown),
+				CocoaError(.fileReadNoPermission),
+				CocoaError(.fileWriteOutOfSpace)
+			]
+			for error in unchangedErrors {
+				#expect((provider.convertStandardError(error) as? CocoaError) == error, "\(error)")
+			}
+			#expect((provider.convertCreationError(CocoaError(.fileWriteOutOfSpace)) as? CloudProviderError) == .quotaInsufficient)
+			#expect((provider.convertCreationError(CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: notDirectory])) as? CloudProviderError) == .parentFolderDoesNotExist)
+			let ioWriteError = CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: ioError])
+			#expect((provider.convertCreationError(ioWriteError) as? CocoaError) == ioWriteError)
+		}
+
+		@Test
 		func testGetItemName() {
 			let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
 			#expect(provider.getItemName(forItemAt: iCloudPlaceholderFileURL) == "test.txt")
@@ -506,6 +639,11 @@ extension UnitTests {
 
 			let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
 			#expect(provider.getItemName(forItemAt: otherHiddenFolderURL) == ".Foo")
+		}
+
+		/// Creates the regular file `/file`.
+		private func makeFile() throws {
+			try "hello world".write(to: tmpDirURL.appendingPathComponent("file", isDirectory: false), atomically: true, encoding: .utf8)
 		}
 
 		/// Creates the file `/locked/file` and the folder `/locked/dir`, and takes every permission from `/locked` until the test ends.

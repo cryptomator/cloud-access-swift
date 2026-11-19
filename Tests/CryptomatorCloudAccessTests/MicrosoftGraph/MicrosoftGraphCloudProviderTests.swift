@@ -16,8 +16,9 @@ extension UnitTests {
 		private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#
 		private static let remoteFolderItem = #"{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let remoteFileItem = #"{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}}"#
-		private static let downloadURL = "https://content.example.com/dl/SECRET-PATH?tempauth=SECRET"
+		private static let downloadURL = "https://content.example.com/dl/SECRET%2FPATH?tempauth=SECRET%3D"
 		private static let fileItemWithDownloadURL = #"{"id":"F","name":"file.txt","size":7,"file":{},"fileSystemInfo":{"lastModifiedDateTime":"2026-11-16T10:00:00Z"},"@microsoft.graph.downloadUrl":"\#(MicrosoftGraphCloudProviderTests.downloadURL)"}"#
+		private static let folderItemOnOtherDrive = #"{"id":"P","name":"Folder","folder":{},"parentReference":{"driveId":"D2"}}"#
 
 		let provider: MicrosoftGraphCloudProvider
 		let maxPageSize = 100
@@ -70,6 +71,59 @@ extension UnitTests {
 		}
 
 		// MARK: - Listings
+
+		@Test
+		func listingRequestsTopAndSelectedFields() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[]}"#, onRequest: requests.record)]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+			let request = try #require(requests.requests.first)
+			#expect(request.httpMethod == "GET")
+			#expect(request.url?.path == "/v1.0/me/drive/items/root/children")
+			#expect(URLProtocolMock.queryParameter("$top", of: request) == "100")
+			#expect(URLProtocolMock.queryParameter("$select", of: request) == "id,name,size,folder,fileSystemInfo,parentReference,remoteItem")
+			#expect(request.url?.query(percentEncoded: true) == "%24top=100&%24select=id%2Cname%2Csize%2Cfolder%2CfileSystemInfo%2CparentReference%2CremoteItem")
+		}
+
+		@Test
+		func pageTokenIsSentUnchanged() async throws {
+			let pageToken = "https://graph.microsoft.com/v1.0/me/drive/items/root/children?$top=3&$skiptoken=a%3Db%2Bc"
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[]}"#, onRequest: requests.record)]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: pageToken)
+
+			#expect(requests.requests.map(\.url?.absoluteString) == [pageToken])
+		}
+
+		/// A remote item's requests go to its own drive, whatever drive the provider addresses.
+		@Test
+		func itemDriveTakesPrecedenceOverProviderDrive() async throws {
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(), driveIdentifier: "D1")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.remoteFolderItem)]}"#, onRequest: requests.record),
+				URLProtocolMock.handler(body: #"{"value":[]}"#, onRequest: requests.record)
+			]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/shared"), withPageToken: nil)
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/drives/D1/items/root/children", "/v1.0/drives/remoteDrive/items/remote/children"])
+		}
+
+		@Test
+		func driveIdentifiersAreEscaped() async throws {
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(), driveIdentifier: "b!D")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"value":[]}"#, onRequest: requests.record)]
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
+
+			#expect(requests.requests.map { $0.url?.path(percentEncoded: true) } == ["/v1.0/drives/b%21D/items/root/children"])
+		}
 
 		@Test
 		func pageTokenOutsideGraphIsInvalidWithoutRequest() async throws {
@@ -186,7 +240,8 @@ extension UnitTests {
 
 			#expect([CloudPath("/file.txt")] == itemList.items.map(\.cloudPath))
 			#expect(itemList.nextPageToken == "https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT")
-			#expect([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/a:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem")] == requests.requests.map(\.url))
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/a:"])
+			#expect(requests.requests.map { URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields])
 			#expect(logCapture.messages.count(where: { $0.hasSuffix("because its name is no single path component") }) == 2)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -215,10 +270,29 @@ extension UnitTests {
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
 			#expect(metadata.size == 7)
-			#expect([
-				URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/file.txt:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem"),
-				URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem")
-			] == requests.requests.map(\.url))
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
+			#expect(requests.requests.map { URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields, MicrosoftGraphAPI.DriveItem.selectedFields])
+		}
+
+		@Test
+		func pathLookupEscapesNameAsOneComponent() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)]
+
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/a=b #%.txt")) }
+
+			#expect(requests.requests.map { $0.url?.path(percentEncoded: true) } == ["/v1.0/me/drive/items/root:/a%3Db%20%23%25.txt:"])
+		}
+
+		@Test
+		func itemIdentifiersAreEscaped() async throws {
+			let item = #"{"id":"A!1","name":"file.txt","file":{}}"#
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: item), URLProtocolMock.handler(body: item, onRequest: requests.record)]
+
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(requests.requests.map { $0.url?.path(percentEncoded: true) } == ["/v1.0/me/drive/items/A%211"])
 		}
 
 		/// An inaccessible item answers 403, which signing in again wouldn't fix.
@@ -300,6 +374,31 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// The chunks go to the upload URL exactly as the response spells it.
+		@Test
+		func uploadCreatesSessionByPath() async throws {
+			let uploadURL = "https://upload.example.com/up/a%2Fb?tempauth=x%3Dy"
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(body: #"{"uploadUrl":"\#(uploadURL)"}"#, onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
+			]
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "content"), to: CloudPath("/a=b.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+
+			let sentRequests = requests.requests
+			try #require(sentRequests.count == 2)
+			#expect(sentRequests[0].httpMethod == "POST")
+			#expect(sentRequests[0].httpBody?.isEmpty ?? true)
+			#expect(sentRequests[0].url?.path == "/v1.0/me/drive/items/root:/a=b.txt:/createUploadSession")
+			#expect(sentRequests[0].url?.path(percentEncoded: true) == "/v1.0/me/drive/items/root:/a%3Db.txt:/createUploadSession")
+			#expect(sentRequests[1].url?.absoluteString == uploadURL)
+			#expect(sentRequests[1].httpMethod == "PUT")
+			#expect(sentRequests[1].value(forHTTPHeaderField: "Content-Length") == "7")
+			#expect(sentRequests[1].value(forHTTPHeaderField: "Content-Range") == "bytes 0-6/7")
+		}
+
 		@Test
 		func downloadWithCancellationDuringOnTaskCreation() async throws {
 			let provider = provider
@@ -342,10 +441,10 @@ extension UnitTests {
 			let progress = Progress(totalUnitCount: 1)
 			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
-			let chunks = OSAllocatedUnfairLock(initialState: [(range: String?, body: Data)]())
+			let chunks = OSAllocatedUnfairLock(initialState: [(method: String?, range: String?, body: Data)]())
 			let fractionBeforeSecondChunk = OSAllocatedUnfairLock<Double?>(initialState: nil)
 			let recordChunk: @Sendable (URLRequest) -> Void = { request in
-				chunks.withLock { $0.append((request.value(forHTTPHeaderField: "Content-Range"), URLProtocolMock.body(of: request))) }
+				chunks.withLock { $0.append((request.httpMethod, request.value(forHTTPHeaderField: "Content-Range"), URLProtocolMock.body(of: request))) }
 			}
 			let taskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = uploadPreparation() + [
@@ -361,6 +460,7 @@ extension UnitTests {
 			})
 
 			let sentChunks = chunks.withLock { $0 }
+			#expect(sentChunks.map(\.method) == ["PUT", "PUT"])
 			#expect(sentChunks.map(\.range) == ["bytes 0-5242879/7864320", "bytes 5242880-7864319/7864320"])
 			#expect([content.prefix(chunkLength), content.suffix(from: chunkLength)] == sentChunks.map(\.body))
 			// The first chunk holds two thirds of the bytes.
@@ -387,6 +487,24 @@ extension UnitTests {
 				let error = try await #require(throws: (any Error).self, "\(testCase.statusCode)") { try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 				#expect(String(describing: testCase.expectedError) == String(describing: error), "\(testCase.statusCode)")
 				#expect(URLProtocolMock.requestHandler.isEmpty, "\(testCase.statusCode)")
+			}
+		}
+
+		@Test
+		func uploadSessionErrorsStopBeforeAnyChunk() async throws {
+			let cases: [(sessionBody: String, expectsDecodingError: Bool)] = [("{}", false), (#"{"uploadUrl":""}"#, false), (#"{"uploadUrl":"http://upload.example.com/up/TOKEN"}"#, false), (#"{"uploadUrl":"https:/up/TOKEN"}"#, false), (#"{"uploadUrl":42}"#, true)]
+			let localURL = try makeLocalFile(content: "content")
+			for testCase in cases {
+				URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(body: testCase.sessionBody), URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem)]
+
+				let error = try await #require(throws: (any Error).self, "\(testCase.sessionBody)") { try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+				switch error {
+				case is DecodingError where testCase.expectsDecodingError, MicrosoftGraphError.unexpectedContent where !testCase.expectsDecodingError:
+					break
+				default:
+					Issue.record("\(testCase.sessionBody): unexpected error \(error)")
+				}
+				#expect(URLProtocolMock.requestHandler.count == 1, "\(testCase.sessionBody)")
 			}
 		}
 
@@ -429,11 +547,11 @@ extension UnitTests {
 
 			let metadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
 
-			#expect([
-				URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/root:/file.txt:?$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem"),
-				URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F"),
-				URL(string: MicrosoftGraphCloudProviderTests.downloadURL)
-			] == requests.requests.map(\.url))
+			let sentRequests = requests.requests
+			try #require(sentRequests.count == 3)
+			#expect(sentRequests[0].url?.path == "/v1.0/me/drive/items/root:/file.txt:")
+			#expect(URLProtocolMock.queryParameter("$select", of: sentRequests[0]) == MicrosoftGraphAPI.DriveItem.selectedFields)
+			#expect(["https://graph.microsoft.com/v1.0/me/drive/items/F", MicrosoftGraphCloudProviderTests.downloadURL] == sentRequests.dropFirst().map(\.url?.absoluteString))
 			#expect(requests.requests.last?.value(forHTTPHeaderField: "Authorization") == nil)
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(Date(timeIntervalSince1970: 1_794_823_200) == metadata.lastModifiedDate)
@@ -441,7 +559,7 @@ extension UnitTests {
 
 		@Test
 		func downloadWithoutUsableDownloadURLGoesThroughGraph() async throws {
-			for metadataBody in [MicrosoftGraphCloudProviderTests.fileItem, MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "http://")] {
+			for metadataBody in [MicrosoftGraphCloudProviderTests.fileItem, MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "http://"), MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "https:/")] {
 				let provider = try MicrosoftGraphCloudProvider(client: .mocked())
 				let requests = RequestRecorder()
 				let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
@@ -454,6 +572,8 @@ extension UnitTests {
 				_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
 
 				#expect([URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/F/content")] == requests.requests.map(\.url), "\(metadataBody)")
+				#expect(requests.requests.first?.httpMethod == "GET", "\(metadataBody)")
+				#expect(requests.requests.first?.httpBody?.isEmpty ?? true, "\(metadataBody)")
 				#expect(requests.requests.first?.value(forHTTPHeaderField: "Authorization") == "Bearer TOKEN", "\(metadataBody)")
 				#expect(try Data("content".utf8) == Data(contentsOf: localURL), "\(metadataBody)")
 			}
@@ -586,88 +706,112 @@ extension UnitTests {
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
-		// MARK: - Requests
+		// MARK: - Mutations
 
 		@Test
-		func testChildrenRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
-			let request = try provider.childrenRequest(for: item)
-			#expect(request.httpMethod == "GET")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children?$top=100&$select=id,name,size,folder,fileSystemInfo,parentReference,remoteItem") == request.url)
-			#expect(request.httpBody == nil)
-		}
+		func createFolderPostsNameAndFolderFacet() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"S","name":"subFolder","folder":{}}"#, onRequest: requests.record)
+			]
 
-		@Test
-		func testContentRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
-			let request = try provider.contentRequest(for: item)
-			#expect(request.httpMethod == "GET")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/content") == request.url)
-			#expect(request.httpBody == nil)
-		}
+			try await provider.createFolder(at: CloudPath("/subFolder"))
 
-		@Test
-		func testCreateUploadSessionRequest() throws {
-			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
-			let request = try provider.createUploadSessionRequest(for: parentItem, with: "Test.txt")
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "POST")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier:/Test.txt:/createUploadSession") == request.url)
-			#expect(request.httpBody == nil)
+			#expect(request.url?.path == "/v1.0/me/drive/items/root/children")
+			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+			#expect(try (["@odata.type": "#microsoft.graph.driveItem", "name": "subFolder", "folder": NSDictionary()] as NSDictionary) == MicrosoftGraphCloudProviderTests.jsonBody(of: request))
 		}
 
 		@Test
-		func testFileChunkUploadRequest() throws {
-			let uploadURL = try #require(URL(string: "example.com"))
-			let chunkLength = 26
-			let totalLength = 128
-			let request = provider.fileChunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: 0, totalLength: totalLength)
-			#expect(request.httpMethod == "PUT")
-			#expect(request.value(forHTTPHeaderField: "Content-Length") == "26")
-			#expect(request.value(forHTTPHeaderField: "Content-Range") == "bytes 0-25/128")
-			#expect(uploadURL == request.url)
-		}
+		func deleteSendsDeleteForItem() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
 
-		@Test
-		func fileChunkUploadRequestWithOffset() throws {
-			let uploadURL = try #require(URL(string: "example.com"))
-			let chunkLength = 26
-			let totalLength = 128
-			let request = provider.fileChunkUploadRequest(withUploadURL: uploadURL, chunkLength: chunkLength, offset: 26, totalLength: totalLength)
-			#expect(request.httpMethod == "PUT")
-			#expect(request.value(forHTTPHeaderField: "Content-Length") == "26")
-			#expect(request.value(forHTTPHeaderField: "Content-Range") == "bytes 26-51/128")
-			#expect(uploadURL == request.url)
-		}
+			try await provider.deleteFile(at: CloudPath("/file.txt"))
 
-		@Test
-		func testCreateFolderRequest() throws {
-			let parentItem = MicrosoftGraphItem(cloudPath: CloudPath("/testFolder"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
-			let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"folder\":{},\"name\":\"subFolder\"}"
-			let request = try provider.createFolderRequest(for: parentItem, with: "subFolder")
-			#expect(request.httpMethod == "POST")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier/children") == request.url)
-			#expect(expectedRequestBody.data(using: .utf8) == request.httpBody)
-		}
-
-		@Test
-		func testDeleteItemRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file, isRemoteItem: false)
-			let request = try provider.deleteItemRequest(for: item)
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "DELETE")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier") == request.url)
-			#expect(request.httpBody == nil)
+			#expect(request.url?.path == "/v1.0/me/drive/items/F")
+			#expect(request.httpBody?.isEmpty ?? true)
 		}
 
+		/// A refused delete leaves the item, so its cached identifier stays.
 		@Test
-		func testMoveItemRequest() throws {
-			let item = MicrosoftGraphItem(cloudPath: CloudPath("/test.txt"), identifier: "TestIdentifier", driveIdentifier: nil, itemType: .file, isRemoteItem: false)
-			let newParentItem = MicrosoftGraphItem(cloudPath: CloudPath("/Folder"), identifier: "TestIdentifier-Folder", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
-			let targetCloudPath = CloudPath("/Folder/test.txt")
-			let expectedRequestBody = "{\"@odata.type\":\"#microsoft.graph.driveItem\",\"name\":\"test.txt\",\"parentReference\":{\"id\":\"TestIdentifier-Folder\"}}"
-			let request = try provider.moveItemRequest(for: item, with: newParentItem, targetCloudPath: targetCloudPath)
+		func refusedDeleteThrowsAndKeepsCachedItem() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				URLProtocolMock.handler(statusCode: 403),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
+			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 403) = error else {
+				Issue.record("Unexpected error: \(error)")
+				return
+			}
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/F"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The new parent reference names the target folder's own drive.
+		@Test
+		func movePatchesNameAndParentsOwnDrive() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = movePreparation(folderItem: MicrosoftGraphCloudProviderTests.folderItemOnOtherDrive, onRequest: requests.record) + [
+				URLProtocolMock.handler(body: #"{"id":"F","name":"renamed.txt","file":{},"parentReference":{"driveId":"D2"}}"#, onRequest: requests.record)
+			]
+
+			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/Folder/renamed.txt"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/Folder:", "/v1.0/drives/D2/items/P:/renamed.txt:", "/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
+			let request = try #require(requests.requests.last)
 			#expect(request.httpMethod == "PATCH")
-			#expect(URL(string: "https://graph.microsoft.com/v1.0/me/drive/items/TestIdentifier") == request.url)
-			#expect(expectedRequestBody.data(using: .utf8) == request.httpBody)
+			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+			#expect(try (["@odata.type": "#microsoft.graph.driveItem", "name": "renamed.txt", "parentReference": ["id": "P", "driveId": "D2"]] as NSDictionary) == MicrosoftGraphCloudProviderTests.jsonBody(of: request))
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The provider's drive is never written into the new parent reference.
+		@Test
+		func moveIntoParentWithoutDriveOmitsDriveID() async throws {
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(), driveIdentifier: "D")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = movePreparation(folderItem: #"{"id":"P","name":"Folder","folder":{}}"#, onRequest: requests.record) + [
+				URLProtocolMock.handler(body: #"{"id":"F","name":"renamed.txt","file":{}}"#, onRequest: requests.record)
+			]
+
+			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/Folder/renamed.txt"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/drives/D/items/root:/Folder:", "/v1.0/drives/D/items/P:/renamed.txt:", "/v1.0/drives/D/items/root:/file.txt:", "/v1.0/drives/D/items/F"])
+			let request = try #require(requests.requests.last)
+			#expect(try (["@odata.type": "#microsoft.graph.driveItem", "name": "renamed.txt", "parentReference": ["id": "P"]] as NSDictionary) == MicrosoftGraphCloudProviderTests.jsonBody(of: request))
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Graph accepted the move, so the source's cached item is gone even though the response can't be decoded.
+		@Test
+		func moveWithUndecodableResponseInvalidatesSource() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = movePreparation(folderItem: MicrosoftGraphCloudProviderTests.folderItemOnOtherDrive, onRequest: { _ in }) + [
+				URLProtocolMock.handler(body: "{"),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
+			]
+
+			await #expect(throws: DecodingError.self) { try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/Folder/renamed.txt")) }
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		// MARK: - Helpers
@@ -687,10 +831,23 @@ extension UnitTests {
 			return [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(body: #"{"uploadUrl":"https://upload.example.com/up/TOKEN"}"#)]
 		}
 
+		/// The responses of the lookups before a move of `/file.txt` to `/Folder/renamed.txt` with an empty cache: of the folder, of the target, which isn't found, and of the source.
+		private func movePreparation(folderItem: String, onRequest: @escaping @Sendable (URLRequest) -> Void) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return [
+				URLProtocolMock.handler(body: folderItem, onRequest: onRequest),
+				URLProtocolMock.handler(statusCode: 404, onRequest: onRequest),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: onRequest)
+			]
+		}
+
 		private func makeLocalFile(content: String) throws -> URL {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
 			try Data(content.utf8).write(to: localURL)
 			return localURL
+		}
+
+		private static func jsonBody(of request: URLRequest) throws -> NSDictionary? {
+			return try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? NSDictionary
 		}
 
 		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {

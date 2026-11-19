@@ -9,8 +9,8 @@
 import Foundation
 
 enum MicrosoftGraphError: Error {
-	case invalidURL
 	case inconsistentCache
 	case missingItemName
+	case unexpectedContent
 	case unexpectedHTTPStatusCode(code: Int)
 }

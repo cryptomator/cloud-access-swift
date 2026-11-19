@@ -10,7 +10,22 @@ import Foundation
 
 enum MicrosoftGraphAPI {
 	static let host = "graph.microsoft.com"
-	static let baseURL = "https://\(host)/v1.0"
+
+	/// The address of a drive item in the drive it names, or else in the signed-in user's drive.
+	struct ItemAddress {
+		let driveIdentifier: String?
+		let itemIdentifier: String
+
+		/// The path below the API version.
+		var percentEncodedPath: String {
+			let item = HTTPClientSupport.pathComponent(itemIdentifier)
+			if let driveIdentifier {
+				return "/drives/\(HTTPClientSupport.pathComponent(driveIdentifier))/items/\(item)"
+			} else {
+				return "/me/drive/items/\(item)"
+			}
+		}
+	}
 
 	struct DriveItem: Decodable {
 		// swiftlint:disable:next nesting
@@ -109,13 +124,15 @@ enum MicrosoftGraphAPI {
 		var parentReference: ItemReference?
 	}
 
-	static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-		return try JSONDecoder().decode(type, from: data)
+	/// Parses a URL that a response hands out for requests without the access token, e.g., an upload session's or a file's download URL. Returns `nil` unless it is an HTTPS URL with a host.
+	static func preAuthenticatedURL(_ string: String?) -> URL? {
+		guard let string, let url = URL(string: string), url.scheme?.lowercased() == "https", url.host(percentEncoded: true)?.isEmpty == false else {
+			return nil
+		}
+		return url
 	}
 
-	static func encode(_ value: some Encodable) throws -> Data {
-		let encoder = JSONEncoder()
-		encoder.outputFormatting = .sortedKeys
-		return try encoder.encode(value)
+	static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+		return try JSONDecoder().decode(type, from: data)
 	}
 }

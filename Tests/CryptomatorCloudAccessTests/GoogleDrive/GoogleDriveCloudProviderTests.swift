@@ -227,7 +227,7 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/a/b")) }
 
 			#expect([CloudPath("/ok")] == itemList.items.map(\.cloudPath))
-			#expect(requests.requests.map { GoogleDriveCloudProviderTests.queryParameter("q", of: $0) } == ["'root' in parents and name contains 'a' and trashed = false"])
+			#expect(requests.requests.map { URLProtocolMock.queryParameter("q", of: $0) } == ["'root' in parents and name contains 'a' and trashed = false"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -263,7 +263,7 @@ extension UnitTests {
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
 			#expect(CloudPath("/file.txt") == metadata.cloudPath)
-			#expect(requests.requests.map { GoogleDriveCloudProviderTests.queryParameter("pageToken", of: $0) } == [nil, "P2"])
+			#expect(requests.requests.map { URLProtocolMock.queryParameter("pageToken", of: $0) } == [nil, "P2"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -308,14 +308,14 @@ extension UnitTests {
 			let sent = requests.requests
 			#expect(sent.count == 16)
 			#expect(sent[1].url?.path == "/drive/v3/files/T1")
-			#expect(GoogleDriveCloudProviderTests.queryParameter("q", of: sent[2]) == "'T1' in parents and trashed = false")
-			#expect(GoogleDriveCloudProviderTests.queryParameter("q", of: sent[3]) == "'T1' in parents and name contains 'file.txt' and trashed = false")
+			#expect(URLProtocolMock.queryParameter("q", of: sent[2]) == "'T1' in parents and trashed = false")
+			#expect(URLProtocolMock.queryParameter("q", of: sent[3]) == "'T1' in parents and name contains 'file.txt' and trashed = false")
 			#expect(try (["name": "file.txt", "parents": ["T1"]] as NSDictionary) == (JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sent[4])) as? NSDictionary))
 			#expect(sent[7].url?.path == "/drive/v3/files/T2")
 			#expect(sent[8].url?.path == "/download/drive/v3/files/T2")
-			#expect([sent[10].httpMethod, sent[10].url?.path, GoogleDriveCloudProviderTests.queryParameter("addParents", of: sent[10]), GoogleDriveCloudProviderTests.queryParameter("removeParents", of: sent[10])] == ["PATCH", "/drive/v3/files/S2", "T1", "root"])
+			#expect([sent[10].httpMethod, sent[10].url?.path, URLProtocolMock.queryParameter("addParents", of: sent[10]), URLProtocolMock.queryParameter("removeParents", of: sent[10])] == ["PATCH", "/drive/v3/files/S2", "T1", "root"])
 			#expect(try (["name": "new", "parents": ["T1"], "mimeType": GoogleDriveJSON.folderMimeType] as NSDictionary) == (JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sent[12])) as? NSDictionary))
-			#expect([sent[14].url?.path, GoogleDriveCloudProviderTests.queryParameter("addParents", of: sent[14]), GoogleDriveCloudProviderTests.queryParameter("removeParents", of: sent[14])] == ["/drive/v3/files/F", "root", "T1"])
+			#expect([sent[14].url?.path, URLProtocolMock.queryParameter("addParents", of: sent[14]), URLProtocolMock.queryParameter("removeParents", of: sent[14])] == ["/drive/v3/files/F", "root", "T1"])
 			#expect([sent[15].httpMethod, sent[15].url?.path] == ["DELETE", "/drive/v3/files/S1"])
 		}
 
@@ -361,7 +361,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
 				{ request in
 					// Answers with the requested fields only, as Drive does.
-					let fields = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "fields" }?.value } ?? ""
+					let fields = URLProtocolMock.queryParameter("fields", of: request) ?? ""
 					let file: [String: String] = ["id": "F", "name": "renamed.txt", "mimeType": "text/plain", "modifiedTime": GoogleDriveMockResponse.modifiedTime].filter { fields.split(separator: ",").contains(Substring($0.key)) }
 					return try URLProtocolMock.handler(body: String(bytes: JSONSerialization.data(withJSONObject: file), encoding: .utf8) ?? "")(request)
 				},
@@ -656,10 +656,6 @@ extension UnitTests {
 			let fractionAfterLastAttempt = try #require(fractions.last, sourceLocation: sourceLocation)
 			#expect(abs(fractionAfterFirstAttempt / 2 - fractionAtRetry) <= 0.01, sourceLocation: sourceLocation)
 			#expect(abs(fractionAfterFirstAttempt - fractionAfterLastAttempt) <= 0.01, sourceLocation: sourceLocation)
-		}
-
-		private static func queryParameter(_ name: String, of request: URLRequest) -> String? {
-			return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value }
 		}
 
 		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {

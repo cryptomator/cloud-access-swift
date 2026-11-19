@@ -22,6 +22,11 @@ extension URLProtocolMock {
 		}
 		return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
 	}
+
+	/// The decoded value of the first query parameter of the name.
+	static func queryParameter(_ name: String, of request: URLRequest) -> String? {
+		return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value }
+	}
 }
 
 /// Records the requests that reach `URLProtocolMock`, with their bodies.

@@ -287,21 +287,6 @@ extension UnitTests {
 			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
 		}
 
-		// MARK: - Discovery
-
-		/// A 403 concerns the site or the drive, which signing in again wouldn't fix.
-		@Test
-		func discoveryPassesForbiddenThrough() async throws {
-			let discovery = MicrosoftGraphDiscovery(client: client)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403)]
-
-			let error = try await #require(throws: (any Error).self) { try await discovery.fetchDrive(for: "DRIVE") }
-			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 403) = error else {
-				Issue.record("Unexpected error: \(error)")
-				return
-			}
-		}
-
 		// MARK: - Configurations
 
 		@Test

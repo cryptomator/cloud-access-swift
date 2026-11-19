@@ -25,10 +25,6 @@ struct Resumer<T>: Sendable {
 		takeContinuation()?.resume(throwing: error)
 	}
 
-	func resume(with result: sending Result<T, some Error>) {
-		takeContinuation()?.resume(with: result)
-	}
-
 	private func takeContinuation() -> CheckedContinuation<T, any Error>? {
 		let continuation = continuation.withLock { continuation in
 			defer { continuation = nil }

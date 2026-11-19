@@ -8,8 +8,8 @@
 
 import Foundation
 
-/// Checks for `CancellationError` and for `URLError.cancelled`, which `URLSession` reports for a cancelled task or an invalidated session.
-/// Errors outside `NSURLErrorDomain` are unwrapped recursively through `NSUnderlyingErrorKey`, because SDKs wrap the errors of their requests.
+/// Checks for `CancellationError` and for `URLError.cancelled`, which `URLSession` reports for a cancelled task or an invalidated session. An `NSError` in `NSURLErrorDomain` casts to `URLError`.
+/// Any other error is unwrapped recursively through `NSUnderlyingErrorKey`, because SDKs wrap the errors of their requests.
 func isCancellationError(_ error: Error) -> Bool {
 	if error is CancellationError {
 		return true
@@ -18,9 +18,6 @@ func isCancellationError(_ error: Error) -> Bool {
 		return urlError.code == .cancelled
 	}
 	let nsError = error as NSError
-	if nsError.domain == NSURLErrorDomain {
-		return nsError.code == NSURLErrorCancelled
-	}
 	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
 		return isCancellationError(underlyingError)
 	}

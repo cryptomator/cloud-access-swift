@@ -59,7 +59,11 @@ func runWebAuthenticationSession(url: URL, callbackURLScheme: String, anchor: AS
 		withExtendedLifetime(contextProvider) {}
 	}
 	return try await runWebAuthenticationSession(logPrefix: logPrefix, convertError: convertError) { (completion: @escaping @Sendable (URL?, Error?) -> Void) in
-		let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, completionHandler: completion)
+		let session = if #available(iOS 17.4, *) {
+			ASWebAuthenticationSession(url: url, callback: .customScheme(callbackURLScheme), completionHandler: completion)
+		} else {
+			ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, completionHandler: completion)
+		}
 		session.presentationContextProvider = contextProvider
 		session.prefersEphemeralWebBrowserSession = prefersEphemeralWebBrowserSession
 		return session

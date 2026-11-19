@@ -11,7 +11,8 @@ import Foundation
 private extension DateFormatter {
 	static func rfc822Formatter() -> DateFormatter {
 		let formatter = DateFormatter()
-		formatter.locale = Locale(identifier: "en_US")
+		formatter.locale = Locale(identifier: "en_US_POSIX")
+		formatter.timeZone = TimeZone(identifier: "GMT")
 		formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
 		return formatter
 	}

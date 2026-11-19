@@ -17,9 +17,6 @@ func isNetworkConnectionError(_ error: Error) -> Bool {
 		return urlError.code.isNetworkConnectionErrorCode
 	}
 	let nsError = error as NSError
-	if nsError.domain == NSURLErrorDomain {
-		return URLError.Code(rawValue: nsError.code).isNetworkConnectionErrorCode
-	}
 	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
 		return isNetworkConnectionError(underlyingError)
 	}

@@ -97,6 +97,16 @@ extension UnitTests {
 			#expect(rootChild.deletingLastPathComponent().path == "/")
 		}
 
+		/// A dot or a space forms one `Character` with a combining mark after it or a prepended mark (e.g. U+0600) before it, but it still separates the extension or rules it out.
+		@Test
+		func extensionSeparatorInCombinedCharacter() {
+			let cloudPath = CloudPath("/foo/report.\u{301}txt")
+			#expect(cloudPath.pathExtension == "\u{301}txt")
+			#expect(cloudPath.deletingPathExtension().path == "/foo/report")
+			#expect(CloudPath("/foo").appendingPathExtension("bar\u{600}.").path == "/foo")
+			#expect(CloudPath("/foo").appendingPathExtension("bar \u{301}").path == "/foo")
+		}
+
 		@Test
 		func testPathComponents() {
 			#expect(CloudPath("/foo/bar/").pathComponents == ["/", "foo", "bar"])

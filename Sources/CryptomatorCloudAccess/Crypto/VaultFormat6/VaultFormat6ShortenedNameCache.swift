@@ -42,12 +42,10 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 	private static let threshold = 129
 	private static let lngSuffix = ".lng"
 
-	private let vaultPath: CloudPath
 	private let ciphertextNameCompIdx: Int
 	private let inMemoryDB: DatabaseQueue
 
 	init(vaultPath: CloudPath) throws {
-		self.vaultPath = vaultPath
 		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
 		self.inMemoryDB = try DatabaseQueue()
 		try inMemoryDB.write { db in

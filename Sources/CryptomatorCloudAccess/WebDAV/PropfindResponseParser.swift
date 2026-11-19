@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import GRDB
 
 enum PropfindResponseParserError: Error {
 	case parsingAborted

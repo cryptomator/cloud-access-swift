@@ -15,9 +15,6 @@ public enum VaultProviderFactoryError: Error {
 }
 
 public enum VaultProviderFactory {
-	private static let masterkeyFilename = "masterkey.cryptomator"
-	private static let masterkeyFileId = "masterkeyfile:\(masterkeyFilename)"
-
 	public static func createVaultProvider(from unverifiedVaultConfig: UnverifiedVaultConfig, masterkey: Masterkey, vaultPath: CloudPath, with provider: CloudProvider) throws -> CloudProvider {
 		guard isSupported(unverifiedVaultConfig: unverifiedVaultConfig) else {
 			throw VaultProviderFactoryError.unsupportedVaultConfig
@@ -47,9 +44,7 @@ public enum VaultProviderFactory {
 			return false
 		}
 		switch VaultConfigHelper.getType(for: unverifiedVaultConfig) {
-		case .hub:
-			return true
-		case .masterkeyFile:
+		case .hub, .masterkeyFile:
 			return true
 		case .unknown:
 			return false

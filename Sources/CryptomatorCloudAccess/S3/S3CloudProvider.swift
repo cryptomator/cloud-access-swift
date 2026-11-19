@@ -89,9 +89,8 @@ public final class S3CloudProvider: CloudProvider {
 				throw await checkContinuationTokenForInvalidity(continuationToken: pageToken, folderPath: cloudPath, error: error)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) received output: \(output)")
-			let listedItems = CloudItemList(listObjects: output, listedPrefix: prefix)
-			let itemList = removeParentFolderFrom(itemList: listedItems, parentFolderPath: cloudPath)
-			// A key with the prefix, be it the folder's marker or a key that was left out, proves that the folder exists, although the page may hold no item. Without one, the folder may also be missing or a file.
+			let itemList = CloudItemList(listObjects: output, listedPrefix: prefix)
+			// Any key with the prefix, also one that the item list leaves out, proves that the folder exists, although the page may hold no item. Without one, the folder may also be missing or a file.
 			let hasKeyWithPrefix = output.contents.contains(where: { $0.key.deletingPrefix(prefix) != nil }) || output.commonPrefixes.contains(where: { $0.deletingPrefix(prefix) != nil })
 			if !hasKeyWithPrefix, cloudPath != .root {
 				try await assertFolderExists(at: cloudPath)
@@ -413,16 +412,13 @@ public final class S3CloudProvider: CloudProvider {
 		return S3ListObjectsResult(contents: result.contents.filter { hasPrefix($0.key) }, commonPrefixes: result.commonPrefixes.filter(hasPrefix), nextContinuationToken: result.nextContinuationToken)
 	}
 
-	func getKey(for cloudPath: CloudPath, isFolder: Bool = false) -> String {
+	func getKey(for cloudPath: CloudPath) -> String {
 		if cloudPath == .root {
 			return ""
 		}
 		var path = cloudPath.path
 		if path.unicodeScalars.first == "/" {
 			path.unicodeScalars.removeFirst()
-		}
-		if isFolder, path.unicodeScalars.last != "/" {
-			path += "/"
 		}
 		return path
 	}
@@ -433,17 +429,6 @@ public final class S3CloudProvider: CloudProvider {
 			return key
 		}
 		return key + S3CloudProvider.delimiter
-	}
-
-	/**
-	 Removes the folder corresponding given `parentFolderPath` from the given `itemList`.
-
-	 Since S3 includes the folder itself in the resulting list for a `listObjectsV2` request, it has to be removed again afterwards.
-	 */
-	func removeParentFolderFrom(itemList: CloudItemList, parentFolderPath: CloudPath) -> CloudItemList {
-		var items = itemList.items
-		items.removeAll(where: { $0.cloudPath == parentFolderPath && $0.itemType == .folder })
-		return CloudItemList(items: items, nextPageToken: itemList.nextPageToken)
 	}
 
 	// - MARK: Error Conversion
@@ -613,7 +598,7 @@ extension CloudItemMetadata {
 }
 
 extension CloudItemList {
-	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out those that are neither the prefix itself nor directly below it, which only a server that ignores the delimiter or the prefix returns.
+	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out the folder's own marker, which S3 lists with the folder's items. It leaves out those that aren't directly below the prefix, too, which only a server that ignores the delimiter or the prefix returns.
 	init(listObjects: S3ListObjectsResult, listedPrefix: String? = nil) {
 		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.filter { CloudItemList.isAddressable($0, listedPrefix: listedPrefix) }.map { prefix in
 			let subFolderCloudPath = CloudPath(S3CloudProvider.delimiter + prefix)
@@ -624,7 +609,7 @@ extension CloudItemList {
 		self.init(items: items, nextPageToken: listObjects.nextContinuationToken)
 	}
 
-	/// Whether a cloud path addresses the key: every segment, after dropping one trailing slash, is a single path component. Any other key, e.g., `a//b`, `a/../b` or `/a`, would standardize to a cloud path that names another key.
+	/// Whether a cloud path addresses the key: every segment, after dropping one trailing slash, is a single path component. Any other key, e.g., `a//b`, `a/../b` or `/a`, would standardize to a cloud path that names another key. With a listed prefix, the key must also be an item of that listing: directly below the prefix, and not the folder's own marker.
 	private static func isAddressable(_ key: String, listedPrefix: String?) -> Bool {
 		var segments = key.pathSegments()
 		if segments.count > 1, segments.last == "" {
@@ -641,18 +626,16 @@ extension CloudItemList {
 			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(listedPrefix)")
 			return false
 		}
-		// The remainder is empty for the folder's marker and holds a slash at most at its end for a key directly below the prefix.
+		// The remainder is empty for the folder's marker.
+		guard !remainder.isEmpty else {
+			return false
+		}
+		// A key directly below the prefix holds a slash at most at its end.
 		guard !remainder.unicodeScalars.dropLast().contains("/") else {
 			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it isn't directly below the listed prefix \(listedPrefix)")
 			return false
 		}
 		return true
-	}
-}
-
-extension CloudPath {
-	static var root: CloudPath {
-		return CloudPath("/")
 	}
 }
 

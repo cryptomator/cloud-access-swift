@@ -44,9 +44,13 @@ extension String {
 		return pathSegments().standardized().joined(separator: "/")
 	}
 
-	/// Splits the string at every slash, keeping empty segments. It compares Unicode scalars, because a slash forms one `Character` with a combining mark after it or a prepended mark (e.g. U+0600) before it, so a `Character`-based search misses it.
 	func pathSegments() -> [String] {
-		return unicodeScalars.split(separator: "/", omittingEmptySubsequences: false).map { String(Substring($0)) }
+		return segments(separatedBy: "/")
+	}
+
+	/// Splits the string at every occurrence of the separator, keeping empty segments. It compares Unicode scalars, because a separator such as `/` or `.` forms one `Character` with a combining mark after it or a prepended mark (e.g. U+0600) before it, so a `Character`-based search misses it.
+	func segments(separatedBy separator: Unicode.Scalar) -> [String] {
+		return unicodeScalars.split(separator: separator, omittingEmptySubsequences: false).map { String(Substring($0)) }
 	}
 
 	/// Whether appending the string to a cloud path adds exactly one component equal to the string, rather than nesting it, dropping a slash or resolving to the folder or its parent.
@@ -56,10 +60,6 @@ extension String {
 }
 
 private extension [String] {
-	subscript(safe index: Index) -> Element? {
-		return indices.contains(index) ? self[index] : nil
-	}
-
 	func standardized() -> [String] {
 		var standardized: [String] = []
 		for element in self where !element.isEmpty && element != "." {
@@ -109,19 +109,11 @@ public struct CloudPath: Equatable, Codable, Sendable {
 	}
 
 	public var pathExtension: String {
-		let lastComponent = lastPathComponent
-		if !lastComponent.contains(".") {
+		let extensionComponents = lastPathComponent.segments(separatedBy: ".")
+		guard extensionComponents.count > 1, let lastExtensionComponent = extensionComponents.last, !lastExtensionComponent.isEmpty, !lastExtensionComponent.unicodeScalars.contains(" ") else {
 			return ""
 		}
-		let extensionComponents = lastComponent.components(separatedBy: ".")
-		guard let lastExtensionComponent = extensionComponents.last else {
-			return ""
-		}
-		if lastExtensionComponent.isEmpty || lastExtensionComponent.contains(" ") {
-			return ""
-		} else {
-			return lastExtensionComponent
-		}
+		return lastExtensionComponent
 	}
 
 	public init(_ path: String) {
@@ -151,7 +143,7 @@ public struct CloudPath: Equatable, Codable, Sendable {
 	}
 
 	public func appendingPathExtension(_ pathExtension: String) -> CloudPath {
-		if pathExtension.isEmpty || pathExtension.contains(" ") || pathExtension.unicodeScalars.contains("/") || pathExtension.last == "." {
+		if pathExtension.isEmpty || pathExtension.unicodeScalars.contains(" ") || pathExtension.unicodeScalars.contains("/") || pathExtension.unicodeScalars.last == "." {
 			return self
 		}
 		var components = path.pathSegments()
@@ -166,12 +158,18 @@ public struct CloudPath: Equatable, Codable, Sendable {
 		if lastComponent.isEmpty || lastComponent == "." || lastComponent == ".." {
 			return self
 		}
-		var extensionComponents = lastComponent.components(separatedBy: ".")
+		var extensionComponents = lastComponent.segments(separatedBy: ".")
 		let lastExtensionComponent = extensionComponents.removeLast()
 		if extensionComponents.isEmpty || lastExtensionComponent.isEmpty {
 			return self
 		}
 		components.append(extensionComponents.joined(separator: "."))
 		return CloudPath(components.joined(separator: "/"))
+	}
+}
+
+extension CloudPath {
+	static var root: CloudPath {
+		return CloudPath("/")
 	}
 }

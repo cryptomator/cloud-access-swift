@@ -45,26 +45,6 @@ private extension Array {
 }
 
 private extension CloudPath {
-	func lastPathComponents(_ count: Int) -> [String] {
-		precondition(count > 0)
-		var lastPathComponents: [String] = []
-		var cloudPath = self
-		for _ in 1 ... count {
-			lastPathComponents.append(cloudPath.lastPathComponent)
-			cloudPath = cloudPath.deletingLastPathComponent()
-		}
-		return lastPathComponents
-	}
-
-	func appendingPathComponents(_ pathComponents: [String]) -> CloudPath {
-		if pathComponents.count == 1 {
-			return appendingPathComponent(pathComponents[0])
-		} else {
-			let remainingComponents = Array(pathComponents[1...])
-			return appendingPathComponent(pathComponents[0]).appendingPathComponents(remainingComponents)
-		}
-	}
-
 	func deletingLastPathComponents(_ count: Int) -> CloudPath {
 		precondition(count >= 0)
 		if count == 0 {
@@ -98,13 +78,11 @@ private extension CloudPath {
 final class VaultFormat7ShortenedNameCache: Sendable {
 	private static let c9sSuffix = ".c9s"
 
-	private let vaultPath: CloudPath
 	private let threshold: Int
 	private let ciphertextNameCompIdx: Int
 	private let inMemoryDB: DatabaseQueue
 
 	init(vaultPath: CloudPath, threshold: Int) throws {
-		self.vaultPath = vaultPath
 		self.threshold = threshold
 		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
 		self.inMemoryDB = try DatabaseQueue()

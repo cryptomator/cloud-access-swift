@@ -8,7 +8,7 @@ import re
 # The cases of CloudProviderError and IntegrationTestError.
 KNOWN_ERRORS = {
     "itemNotFound", "itemAlreadyExists", "itemTypeMismatch", "parentFolderDoesNotExist", "pageTokenInvalid",
-    "quotaInsufficient", "unauthorized", "noInternetConnection",
+    "quotaInsufficient", "unauthorized", "noInternetConnection", "deletionIncomplete", "moveCompletedWithSourceRemaining",
     "consistencyTimeout", "itemNotVisible", "fixtureTimeout", "budgetExceeded",
 }
 

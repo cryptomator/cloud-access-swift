@@ -18,3 +18,13 @@ inclusive_language:
 type_name:
   max_length: 50
   allowed_symbols: "_"
+
+custom_rules:
+  # Every non-private method of a provider or decorator named like a CloudProvider requirement is taken as its witness.
+  concurrent_cloud_provider_witness:
+    name: "@concurrent CloudProvider witness"
+    message: "Mark every CloudProvider method of a provider or decorator @concurrent; the compiler doesn't flag a witness that omits it."
+    included: "Sources/.*(CloudProvider|ProviderDecorator|LocalFileSystemProvider)\\.swift"
+    excluded: "Sources/CryptomatorCloudAccess/API/CloudProvider\\.swift"
+    regex: '^(?<!@concurrent\n)\t(?:(?:public|package|internal|override|final|nonisolated) )*func (?:fetchItemMetadata|fetchItemList|downloadFile|uploadFile|createFolder|deleteFile|deleteFolder|moveFile|moveFolder)\('
+    severity: error

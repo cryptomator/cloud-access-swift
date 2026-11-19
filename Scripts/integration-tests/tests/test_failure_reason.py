@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import unittest
 
@@ -8,6 +9,11 @@ from failure_reason import KNOWN_ERRORS, reason
 SENTINEL = "SECRETKEY123"
 URL = "https://user:{}@example.com/file?token={}".format(SENTINEL, SENTINEL)
 WITHHELD = "details withheld"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+ERROR_ENUMS = [
+    "Sources/CryptomatorCloudAccess/API/CloudProviderError.swift",
+    "Tests/CryptomatorCloudAccessIntegrationTests/IntegrationTestError.swift",
+]
 
 
 class ReasonTests(unittest.TestCase):
@@ -23,6 +29,14 @@ class ReasonTests(unittest.TestCase):
         self.assert_reason("NSURLErrorDomain -1001", "Error Domain=NSURLErrorDomain Code=-1001")
         self.assert_reason("NSURLErrorDomain -1001", 'Caught error: Error Domain=NSURLErrorDomain Code=-1001 "The request timed out." UserInfo={{NSErrorFailingURLStringKey={}}}'.format(URL))
         self.assert_reason("com.example.Sub_domain-1 7", "{} failed with Error Domain=com.example.Sub_domain-1 Code=7".format(URL))
+
+    def test_known_errors_are_the_cases_of_the_swift_enums(self):
+        cases = set()
+        for path in ERROR_ENUMS:
+            with open(os.path.join(REPO_ROOT, path)) as file:
+                for names in re.findall(r"^\tcase ([^\n]+)", file.read(), re.MULTILINE):
+                    cases.update(re.sub(r"\(.*?\)", "", name).strip() for name in names.split(","))
+        self.assertEqual(cases, KNOWN_ERRORS)
 
     def test_known_error_is_reduced_to_its_case(self):
         for error in sorted(KNOWN_ERRORS):

@@ -60,7 +60,7 @@ extension UnitTests {
 		func invalidateMatchesPathsLiterally() throws {
 			let dirId = Data("foobar".utf8)
 			let cases: [(invalidated: String, kept: [String])] = [
-				("/a", ["/ab", "/A/x", "/a_b"]),
+				("/a", ["/ab", "/A/x", "/a_b", "/a.", "/a0"]),
 				("/a_b", ["/aXb/x"]),
 				("/a%", ["/abc"])
 			]

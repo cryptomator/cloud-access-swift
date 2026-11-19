@@ -48,13 +48,10 @@ extension IdentifierCacheItem {
 
 /// Matches a cloud path and its descendants, comparing the paths literally and case-sensitively, so that no character of a path acts as a wildcard.
 enum CloudPathSubtree {
-	static func condition(column: String) -> String {
-		return "\(column) = ? OR substr(\(column), 1, length(?)) = ?"
-	}
-
-	static func arguments(for path: String) -> StatementArguments {
-		let prefix = path == "/" ? path : path + "/"
-		return [path, prefix, prefix]
+	static func condition(_ column: Column, path: String) -> SQLExpression {
+		// A descendant starts with `<base>/`, where `base` drops the root's slash. Under the column's default `BINARY` collation in a UTF-8 database, these are exactly the paths from `<base>/` up to, but excluding, `<base>0` (`0` is the byte after `/`). The column's index can search that range.
+		let base = path == "/" ? "" : path
+		return column == path || (column >= base + "/" && column < base + "0")
 	}
 }
 
@@ -145,7 +142,7 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	}
 
 	private func deleteSubtree(of cloudPath: CloudPath, in db: Database) throws {
-		try db.execute(sql: "DELETE FROM \(Item.databaseTableName) WHERE \(CloudPathSubtree.condition(column: Item.cloudPathKey))", arguments: CloudPathSubtree.arguments(for: cloudPath.path))
+		try Item.filter(CloudPathSubtree.condition(Column(Item.cloudPathKey), path: cloudPath.path)).deleteAll(db)
 	}
 
 	// MARK: - Path Resolution

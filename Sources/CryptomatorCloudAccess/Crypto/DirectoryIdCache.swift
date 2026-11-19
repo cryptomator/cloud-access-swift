@@ -129,7 +129,7 @@ final class DirectoryIdCache: Sendable {
 	/// Removes the directory ID of the path and those of its descendants.
 	func invalidate(_ cleartextPath: CloudPath) throws {
 		try inMemoryDB.write { db in
-			try db.execute(sql: "DELETE FROM \(CachedEntry.databaseTableName) WHERE \(CloudPathSubtree.condition(column: CachedEntry.cleartextPathKey))", arguments: CloudPathSubtree.arguments(for: key(cleartextPath)))
+			_ = try CachedEntry.filter(CloudPathSubtree.condition(Column(CachedEntry.cleartextPathKey), path: key(cleartextPath))).deleteAll(db)
 		}
 	}
 

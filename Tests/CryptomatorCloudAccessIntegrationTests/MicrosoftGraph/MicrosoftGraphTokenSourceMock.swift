@@ -10,10 +10,7 @@ import Foundation
 import os
 @testable import CryptomatorCloudAccessCore
 
-enum MicrosoftGraphTokenSourceMockError: Error {
-	case tokenRequestFailed(statusCode: Int)
-}
-
+/// A token source over an in-memory login with the test account's refresh token. Its access token has expired, so the first request refreshes it.
 final class MicrosoftGraphTokenSourceMock: BearerTokenSource {
 	private let lockedOverrideAccessToken = OSAllocatedUnfairLock<String?>(initialState: nil)
 	var overrideAccessToken: String? {
@@ -21,31 +18,39 @@ final class MicrosoftGraphTokenSourceMock: BearerTokenSource {
 		set { lockedOverrideAccessToken.withLock { $0 = newValue } }
 	}
 
-	/// The request for the access token, shared by concurrent callers so that the refresh token is redeemed once.
-	private let lockedAccessTokenTask = OSAllocatedUnfairLock<Task<String, Error>?>(initialState: nil)
+	private let tokenSource: StoredOAuthTokenSource
+
+	init() throws {
+		let account = "IntegrationTest"
+		let storage = MemoryOAuthTokenStorage()
+		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: IntegrationTestSecrets.microsoftGraphRefreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .microsoftGraph, account: account))
+		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("MicrosoftGraphTokenLocks", isDirectory: true)
+		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
+		let clientID = try IntegrationTestSecrets.microsoftGraphClientId
+		let redirectURI = try IntegrationTestSecrets.microsoftGraphRedirectUri
+		let session = SplitURLSession(configuration: HTTPClientSupport.tokenEndpointConfiguration())
+		self.tokenSource = StoredOAuthTokenSource(provider: .microsoftGraph, account: account, persistence: oauth, legacyDecoder: { _ in
+			throw CocoaError(.coderReadCorrupt)
+		}, refresher: { token in
+			guard let refreshToken = token.refreshToken else {
+				throw CloudProviderError.unauthorized
+			}
+			let body = try await OAuthTokenEndpoint.post([
+				("client_id", clientID),
+				("scope", "https://graph.microsoft.com/Files.ReadWrite"),
+				("refresh_token", refreshToken),
+				("redirect_uri", redirectURI),
+				("grant_type", "refresh_token")
+			], host: "login.microsoftonline.com", path: "/common/oauth2/v2.0/token", on: session)
+			return try JSONDecoder().decode(OAuthTokenResponse.self, from: body).token(now: Date(), fallbackRefreshToken: refreshToken)
+		}, revoke: { _ in })
+	}
 
 	func accessToken() async throws -> String {
 		if let overrideAccessToken {
 			return overrideAccessToken
 		}
-		let accessTokenTask = lockedAccessTokenTask.withLock { accessTokenTask in
-			if let accessTokenTask {
-				return accessTokenTask
-			}
-			let newAccessTokenTask = Task { try await self.requestAccessToken() }
-			accessTokenTask = newAccessTokenTask
-			return newAccessTokenTask
-		}
-		do {
-			return try await accessTokenTask.value
-		} catch {
-			lockedAccessTokenTask.withLock { lockedTask in
-				if lockedTask == accessTokenTask {
-					lockedTask = nil
-				}
-			}
-			throw error
-		}
+		return try await tokenSource.accessToken()
 	}
 
 	/// A token that was invalidated stays invalid, so that a refresh can't hand an unauthorized provider a valid token.
@@ -53,41 +58,10 @@ final class MicrosoftGraphTokenSourceMock: BearerTokenSource {
 		guard overrideAccessToken == nil else {
 			throw CloudProviderError.unauthorized
 		}
-		return try await self.accessToken()
-	}
-
-	private func requestAccessToken() async throws -> String {
-		let (data, response) = try await URLSession.shared.data(for: getAccessTokenRequest())
-		let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-		guard statusCode == 200 else {
-			throw MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: statusCode)
-		}
-		return try getAccessTokenResponse(from: data).accessToken
-	}
-
-	private func getAccessTokenRequest() throws -> URLRequest {
-		let url = URL(string: "https://login.microsoftonline.com/common/oauth2/v2.0/token")!
-		var request = URLRequest(url: url)
-		request.httpMethod = "POST"
-		var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
-		components.queryItems = try [
-			URLQueryItem(name: "client_id", value: IntegrationTestSecrets.microsoftGraphClientId),
-			URLQueryItem(name: "scope", value: "https://graph.microsoft.com/Files.ReadWrite"),
-			URLQueryItem(name: "refresh_token", value: IntegrationTestSecrets.microsoftGraphRefreshToken),
-			URLQueryItem(name: "redirect_uri", value: IntegrationTestSecrets.microsoftGraphRedirectUri),
-			URLQueryItem(name: "grant_type", value: "refresh_token")
-		]
-		request.httpBody = Data(components.url!.query!.utf8)
-		return request
-	}
-
-	private func getAccessTokenResponse(from data: Data) throws -> AccessTokenResponse {
-		let decoder = JSONDecoder()
-		decoder.keyDecodingStrategy = .convertFromSnakeCase
-		return try decoder.decode(AccessTokenResponse.self, from: data)
+		return try await tokenSource.refresh(rejecting: accessToken)
 	}
 }
 
-struct AccessTokenResponse: Codable {
-	let accessToken: String
+private extension OAuthProvider {
+	static let microsoftGraph = OAuthProvider(rawValue: "microsoftgraph")
 }

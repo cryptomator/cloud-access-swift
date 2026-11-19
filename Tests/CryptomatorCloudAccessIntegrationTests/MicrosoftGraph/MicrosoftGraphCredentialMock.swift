@@ -11,8 +11,8 @@ import Foundation
 
 /// `@unchecked Sendable`: restates the conformance of `MicrosoftGraphCredential`; this subclass adds no state.
 class MicrosoftGraphCredentialMock: MicrosoftGraphCredential, @unchecked Sendable {
-	init() {
-		let tokenSource = MicrosoftGraphTokenSourceMock()
+	init() throws {
+		let tokenSource = try MicrosoftGraphTokenSourceMock()
 		let clientApplication = MSALPublicClientApplicationStub()
 		super.init(identifier: "IntegrationTests", scopes: MicrosoftGraphType.oneDrive.scopes, tokenSource: tokenSource, clientApplication: clientApplication)
 	}

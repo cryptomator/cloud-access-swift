@@ -32,7 +32,7 @@ extension IntegrationTests.ProviderSpecific {
 						downloads.withLock { $0.append(RecordedDownload(host: url.host(), isThroughGraph: url.path.hasSuffix("/content"))) }
 					}
 				})
-				let client = MicrosoftGraphHTTPClient(tokenSource: SharedCredentials.microsoftGraph.tokenSource, configuration: MicrosoftGraphHTTPClient.foregroundConfiguration(), metadataConfiguration: nil, hooks: hooks)
+				let client = try MicrosoftGraphHTTPClient(tokenSource: SharedCredentials.microsoftGraph.get().tokenSource, configuration: MicrosoftGraphHTTPClient.foregroundConfiguration(), metadataConfiguration: nil, hooks: hooks)
 				let provider = try MicrosoftGraphCloudProvider(client: client)
 				let cloudPath = try await context.makeSandbox().appendingPathComponent("file.txt")
 

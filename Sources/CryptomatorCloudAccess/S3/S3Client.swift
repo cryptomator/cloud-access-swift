@@ -29,7 +29,6 @@ final class S3Client: Sendable {
 	private static let clockSkewTolerance: TimeInterval = 5 * 60
 	private static let clockSkewErrorCodes: Set<String> = ["RequestTimeTooSkewed", "RequestExpired", "SignatureDoesNotMatch"]
 	private static let transientStatusCodes: Set<Int> = [429, 500, 502, 503, 504]
-	private static let transientErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
 
 	let endpoint: S3Endpoint
 	private let signer: S3Signer
@@ -103,7 +102,7 @@ final class S3Client: Sendable {
 				}
 			}, result: { body in
 				let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
-				guard let transientCode = refusals.first?.code, refusals.allSatisfy({ $0.code.map(S3Client.transientErrorCodes.contains) ?? false }) else {
+				guard let transientCode = refusals.first?.code, refusals.allSatisfy({ S3Error.isTransient(code: $0.code) }) else {
 					return refusals
 				}
 				throw S3Error(statusCode: 200, code: transientCode)
@@ -337,7 +336,7 @@ final class S3Client: Sendable {
 		case let urlError as URLError:
 			return HTTPClientSupport.isTransient(urlError)
 		case let s3Error as S3Error:
-			return transientStatusCodes.contains(s3Error.statusCode) || s3Error.code.map(transientErrorCodes.contains) ?? false
+			return transientStatusCodes.contains(s3Error.statusCode) || S3Error.isTransient(code: s3Error.code)
 		case S3ResponseError.unparseableResult:
 			return true
 		default:

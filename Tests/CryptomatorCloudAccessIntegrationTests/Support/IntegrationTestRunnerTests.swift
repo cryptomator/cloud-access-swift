@@ -155,13 +155,6 @@ extension IntegrationTests {
 		}
 
 		@Test
-		func tokenRequestFailureOfMicrosoftGraphIsTransientOnlyForServerErrors() {
-			#expect(isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 503)))
-			#expect(isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 429)))
-			#expect(!isTransientIntegrationError(MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode: 400)))
-		}
-
-		@Test
 		func serviceErrorsOfProvidersAreTransient() {
 			let errors: [Error] = [
 				URLError(.networkConnectionLost),

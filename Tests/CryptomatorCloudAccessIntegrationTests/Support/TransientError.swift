@@ -11,9 +11,6 @@ import Foundation
 
 private let transientURLErrorCodes: Set<URLError.Code> = [.timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet]
 
-/// The S3 error codes of server errors, throttling and request timeouts.
-private let transientS3ErrorCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
-
 /**
  Checks whether the error is a hiccup of the network or the service that the same test, run again, is expected to pass: a connection problem, a timeout, HTTP 408, 429 or 5xx, a failed OAuth token request with such a status, a Google Drive 403 for an exceeded rate limit, a Dropbox 409 for too many write operations, or an eventually consistent provider that didn't catch up in time.
 
@@ -38,9 +35,6 @@ private func isTransient(_ error: Error, depth: Int) -> Bool {
 		return isTransient
 	}
 	let nsError = error as NSError
-	if isTransientNSError(nsError) {
-		return true
-	}
 	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error, isTransient(underlyingError, depth: depth + 1) {
 		return true
 	}
@@ -65,12 +59,12 @@ private func isTransientSwiftError(_ error: Error) -> Bool? {
 		return isTransientHTTPStatusCode(statusCode)
 	case let DropboxError.apiError(statusCode, summary):
 		return isTransientHTTPStatusCode(statusCode) || DropboxError.isRetryable(statusCode: statusCode, summary: summary)
-	case let MicrosoftGraphTokenSourceMockError.tokenRequestFailed(statusCode), let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
+	case let MicrosoftGraphError.unexpectedHTTPStatusCode(statusCode), let BoxError.apiError(statusCode, _, _), let OAuthTokenEndpointError.unsuccessfulResponse(statusCode, _, _):
 		return isTransientHTTPStatusCode(statusCode)
 	case let GoogleDriveError.apiError(statusCode, reason, _):
 		return isTransientHTTPStatusCode(statusCode) || GoogleDriveError.isRetryable(statusCode: statusCode, reason: reason)
 	case let error as S3Error:
-		return error.code.map(transientS3ErrorCodes.contains) ?? false || isTransientHTTPStatusCode(error.statusCode)
+		return S3Error.isTransient(code: error.code) || isTransientHTTPStatusCode(error.statusCode)
 	default:
 		return (error as? PCloudError).map(isTransientPCloudError)
 	}
@@ -86,8 +80,4 @@ private func isTransientPCloudError(_ error: PCloudError) -> Bool {
 	default:
 		return false
 	}
-}
-
-private func isTransientNSError(_ error: NSError) -> Bool {
-	return error.domain == NSURLErrorDomain && transientURLErrorCodes.contains(URLError.Code(rawValue: error.code))
 }

@@ -23,6 +23,8 @@ struct S3Error: Error, Equatable, CustomStringConvertible {
 	/// The bucket's region if the response names a valid one, as S3 does in an error to a request in another region.
 	let bucketRegion: String?
 
+	private static let transientCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
+
 	init(statusCode: Int, code: String? = nil, message: String? = nil, argumentName: String? = nil, reason: String? = nil, bucketRegion: String? = nil) {
 		self.statusCode = statusCode
 		self.code = code
@@ -35,6 +37,11 @@ struct S3Error: Error, Equatable, CustomStringConvertible {
 	/// A body that isn't an `<Error>` document yields an error with only the status and the header's bucket region, if that is a valid region.
 	init(statusCode: Int, body: Data, bucketRegionHeader: String? = nil) {
 		self = S3Error(errorDocument: body, statusCode: statusCode, bucketRegionHeader: bucketRegionHeader) ?? S3Error(statusCode: statusCode, bucketRegion: bucketRegionHeader.flatMap(S3Error.validRegion))
+	}
+
+	/// Whether the code is one of a server error, throttling or a request timeout.
+	static func isTransient(code: String?) -> Bool {
+		return code.map(transientCodes.contains) ?? false
 	}
 
 	/**

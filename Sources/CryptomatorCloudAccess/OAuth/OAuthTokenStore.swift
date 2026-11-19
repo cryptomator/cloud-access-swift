@@ -330,7 +330,7 @@ final class OAuthTokenStore: Sendable {
 	}
 
 	func makeLock() -> CrossProcessFileLock {
-		let accountHash = SHA256.hash(data: Data(accountKey.account.utf8)).map { String(format: "%02x", $0) }.joined()
+		let accountHash = SHA256.hash(data: Data(accountKey.account.utf8)).hexEncodedString()
 		return CrossProcessFileLock(directory: lockDirectory, name: "\(accountKey.provider.rawValue)-\(accountHash)", events: lockEvents)
 	}
 

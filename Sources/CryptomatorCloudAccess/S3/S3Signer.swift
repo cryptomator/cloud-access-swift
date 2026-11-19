@@ -56,7 +56,7 @@ struct S3Signer: Sendable {
 	}
 
 	static func sha256Hex(_ data: Data) -> String {
-		return hex(SHA256.hash(data: data))
+		return SHA256.hash(data: data).hexEncodedString()
 	}
 
 	// MARK: - Signing
@@ -100,7 +100,7 @@ struct S3Signer: Sendable {
 		for component in [S3Signer.dateStamp(of: dateTime), region, S3Signer.service, "aws4_request"] {
 			key = SymmetricKey(data: Data(HMAC<SHA256>.authenticationCode(for: Data(component.utf8), using: key)))
 		}
-		return S3Signer.hex(HMAC<SHA256>.authenticationCode(for: Data(stringToSign.utf8), using: key))
+		return HMAC<SHA256>.authenticationCode(for: Data(stringToSign.utf8), using: key).hexEncodedString()
 	}
 
 	private func scope(dateTime: String) -> String {
@@ -142,10 +142,6 @@ struct S3Signer: Sendable {
 
 	private static func dateStamp(of dateTime: String) -> String {
 		return String(dateTime.prefix(8))
-	}
-
-	private static func hex(_ bytes: some Sequence<UInt8>) -> String {
-		return bytes.map { String(format: "%02x", $0) }.joined()
 	}
 }
 

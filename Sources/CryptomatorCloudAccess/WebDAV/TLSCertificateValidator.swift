@@ -6,18 +6,12 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CommonCrypto
+import CryptoKit
 import Foundation
 import os
 
 public enum TLSCertificateValidatorError: Error {
 	case validationFailed
-}
-
-private extension Sequence<UInt8> {
-	func toHexString(separator: String = "") -> String {
-		return map { String(format: "%02lx", $0) }.joined(separator: separator)
-	}
 }
 
 private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSessionTaskDelegate, Sendable {
@@ -42,10 +36,7 @@ private final class TLSCertificateValidatorURLSessionDelegate: NSObject, URLSess
 	// MARK: - Internal
 
 	private func calculateFingerprint(from certificate: Data) -> String {
-		let bytes = [UInt8](certificate)
-		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA256_DIGEST_LENGTH))
-		CC_SHA256(bytes, UInt32(bytes.count) as CC_LONG, &digest)
-		return digest.toHexString(separator: " ")
+		return SHA256.hash(data: certificate).hexEncodedString(separator: " ")
 	}
 
 	private func handleChallenge(_ challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
@@ -70,6 +61,10 @@ public final class TLSCertificateValidator: Sendable {
 		let urlSessionDelegate = TLSCertificateValidatorURLSessionDelegate()
 		self.urlSession = TLSCertificateValidator.createURLSession(delegate: urlSessionDelegate)
 		self.urlSessionDelegate = urlSessionDelegate
+	}
+
+	deinit {
+		urlSession.invalidateAndCancel()
 	}
 
 	private static func createURLSession(delegate: URLSessionDelegate) -> URLSession {

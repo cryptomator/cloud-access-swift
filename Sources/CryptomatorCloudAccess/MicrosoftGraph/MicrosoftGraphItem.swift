@@ -49,9 +49,26 @@ extension MicrosoftGraphItem {
 		table.column(isRemoteItemKey, .boolean).notNull()
 	}
 
-	/// Compares the drive identifier ignoring case, because OneDrive may return a drive's identifier in different cases.
 	func isSameItem(as other: MicrosoftGraphItem) -> Bool {
-		return identifier == other.identifier && driveIdentifier?.lowercased() == other.driveIdentifier?.lowercased() && itemType == other.itemType && isRemoteItem == other.isRemoteItem
+		return identifier == other.identifier && MicrosoftGraphItem.isSameDrive(driveIdentifier, other.driveIdentifier) && itemType == other.itemType && isRemoteItem == other.isRemoteItem
+	}
+
+	/// Compares drive identifiers exactly, because Graph documents them as case-sensitive. Two OneDrive Personal drive identifiers (15 or 16 hex digits) compare by value instead, because Graph may return one such drive's identifier in either case and without its leading zero.
+	private static func isSameDrive(_ driveIdentifier: String?, _ otherDriveIdentifier: String?) -> Bool {
+		if driveIdentifier == otherDriveIdentifier {
+			return true
+		}
+		guard let driveIdentifier, let otherDriveIdentifier, let value = personalDriveValue(of: driveIdentifier), let otherValue = personalDriveValue(of: otherDriveIdentifier) else {
+			return false
+		}
+		return value == otherValue
+	}
+
+	private static func personalDriveValue(of driveIdentifier: String) -> UInt64? {
+		guard driveIdentifier.wholeMatch(of: /[0-9A-Fa-f]{15,16}/) != nil else {
+			return nil
+		}
+		return UInt64(driveIdentifier, radix: 16)
 	}
 
 	func encode(to container: inout PersistenceContainer) throws {

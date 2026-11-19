@@ -271,6 +271,17 @@ extension UnitTests {
 		}
 
 		@Test
+		func downloadFileWithLongNameKeepsAliasMarker() async throws {
+			let dirPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+			let lngPath = "\(dirPath)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/11", dirPath], files: [lngPath: Data("dir3-id".utf8)], aliasedDownloads: [lngPath])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let metadata = try await shorteningDecorator.downloadFile(from: CloudPath("\(dirPath)/0\(String(repeating: "dir3", count: 33))"), to: localURL)
+			#expect(metadata.isAlias)
+		}
+
+		@Test
 		func uploadFileWithLongName() async throws {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)

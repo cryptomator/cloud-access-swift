@@ -614,6 +614,54 @@ extension UnitTests {
 			#expect(!provider.calls.contains("moveFile"))
 		}
 
+		/// A shortcut named like a dir file downloads its target, which can name a directory outside the deleted folder.
+		@Test
+		func deleteFolderDoesNotFollowAliasDirFile() async throws {
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0alias": "dir2-id"], aliases: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0alias"])
+			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+			#expect(transferredFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+		}
+
+		/// A shortened alias is skipped before its `.lng` name file is read.
+		@Test
+		func deleteFolderDoesNotFollowShortenedAliasDirFile() async throws {
+			let lngPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0\(String(repeating: "dir3", count: 33))".utf8)], aliases: [lngPath])
+			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
+			let decorator = try makeShorteningDecorator(over: provider)
+			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+			#expect(transferredFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+		}
+
+		/// On Google Drive, a shortcut can share a genuine dir file's name, and a read of that path can reach the shortcut's target.
+		@Test
+		func deleteFolderKeepsFolderWhoseDirFileDownloadsThroughAlias() async throws {
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id"], aliasedDownloads: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2"])
+			let (listedFolders, _) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+			#expect(provider.deleted == [])
+		}
+
+		@Test
+		func deleteFolderWhoseOwnDirFileDownloadsThroughAliasThrowsInvalidDirectoryReference() async throws {
+			let dirFilePath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2"
+			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id"], aliasedDownloads: [dirFilePath])
+			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
+			let decorator = try VaultFormat6ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
+			#expect(listedFolders.withLock { $0 } == [])
+			#expect(transferredFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1", dirFilePath])
+			#expect(provider.deleted == [])
+		}
+
 		@Test
 		func deleteFolderWithDirFileNamingAncestorThrowsInvalidDirectoryReference() async throws {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/0dir5": "dir1-id"])
@@ -746,12 +794,12 @@ extension UnitTests {
 
 		// MARK: - Internal
 
-		/// Returns a provider that holds `Directory 1`, the given dir files (by path below `pathToVault/d` and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist.
-		func makeNestedProvider(dirFiles: [String: String], files: [String: Data] = [:]) -> CloudProviderMock {
+		/// Returns a provider that holds `Directory 1`, the given dir files (by path below `pathToVault/d` and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
+		func makeNestedProvider(dirFiles: [String: String], files: [String: Data] = [:], aliases: Set<String> = [], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
 			let directories = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"]
 			let folders = Set(["pathToVault", "pathToVault/d"] + directories.map { "pathToVault/d/\($0)" })
 			let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": "dir1-id"].merging(dirFiles) { $1 }
-			return CloudProviderMock(folders: folders, files: Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)", Data($0.value.utf8)) }).merging(files) { $1 })
+			return CloudProviderMock(folders: folders, files: Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)", Data($0.value.utf8)) }).merging(files) { $1 }, aliases: aliases, aliasedDownloads: aliasedDownloads)
 		}
 
 		func makeShorteningDecorator(over provider: CloudProvider) throws -> VaultFormat6ProviderDecorator {

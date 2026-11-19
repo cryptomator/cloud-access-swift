@@ -47,12 +47,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
-		if let urlString = pageToken {
-			return try await fetchItemList(forFolderAt: cloudPath, with: urlString)
-		}
 		let item = try await resolvePath(forItemAt: cloudPath)
 		try Task.checkCancellation()
-		return try await fetchItemList(for: item)
+		return try await fetchItemList(for: item, pageToken: pageToken)
 	}
 
 	@concurrent
@@ -151,9 +148,12 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
 	}
 
-	private func fetchItemList(for item: MicrosoftGraphItem) async throws -> CloudItemList {
+	private func fetchItemList(for item: MicrosoftGraphItem, pageToken: String?) async throws -> CloudItemList {
 		guard item.itemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
+		}
+		if let urlString = pageToken {
+			return try await fetchItemList(forFolderAt: item.cloudPath, with: urlString)
 		}
 		let request = try childrenRequest(for: item)
 		return try await fetchItemList(forFolderAt: item.cloudPath, with: request)
@@ -184,10 +184,16 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 				continue
 			}
 			let childCloudPath = cloudPath.appendingPathComponent(name)
-			try identifierCache.addOrUpdate(MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem))
-			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath))
+			let child = MicrosoftGraphItem(cloudPath: childCloudPath, driveItem: driveItem)
+			try identifierCache.addOrUpdate(child)
+			try items.append(convertToCloudItemMetadata(driveItem, at: childCloudPath, isAlias: child.isRemoteItem))
 		}
 		return CloudItemList(items: items, nextPageToken: collection.nextLink)
+	}
+
+	/// Whether the item, or the cached row of the folder that holds it, is a remote item, in which case the request reaches the remote item's target or an item inside it.
+	private func isReachedThroughRemoteItem(_ item: MicrosoftGraphItem) -> Bool {
+		return item.isRemoteItem || identifierCache.get(item.cloudPath.deletingLastPathComponent())?.isRemoteItem == true
 	}
 
 	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
@@ -195,8 +201,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let contentRequest = try contentRequest(for: item)
+		let isAlias = isReachedThroughRemoteItem(item)
 		let driveItem = try await fetchDriveItem(for: item, with: downloadItemRequest(for: item))
-		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath)
+		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath, isAlias: isAlias)
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			if let downloadURL = driveItem.downloadURL.flatMap(URL.init(string:)), downloadURL.scheme?.lowercased() == "https" {
@@ -461,14 +468,14 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Helpers
 
-	private func convertToCloudItemMetadata(_ driveItem: MicrosoftGraphAPI.DriveItem, at cloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func convertToCloudItemMetadata(_ driveItem: MicrosoftGraphAPI.DriveItem, at cloudPath: CloudPath, isAlias: Bool = false) throws -> CloudItemMetadata {
 		guard let name = driveItem.name else {
 			throw MicrosoftGraphError.missingItemName
 		}
 		let itemType = driveItem.cloudItemType
 		let lastModifiedDate = driveItem.fileSystemInfo?.lastModifiedDate
 		let size = Int(driveItem.size ?? 0)
-		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size, isAlias: isAlias)
 	}
 
 	func convertStandardError(_ error: Error) -> Error {

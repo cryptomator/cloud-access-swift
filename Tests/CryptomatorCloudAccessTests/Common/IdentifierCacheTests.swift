@@ -20,7 +20,7 @@ struct IdentifierCacheProbe {
 	let containsNothing: (_ path: String) -> Bool
 	let containsRootItem: () -> Bool
 
-	init<Item: IdentifierCacheItem & Equatable>(makeItem: @escaping (_ cloudPath: CloudPath, _ identifier: Int, _ itemType: CloudItemType) -> Item) throws {
+	init<Item: IdentifierCacheItem>(makeItem: @escaping (_ cloudPath: CloudPath, _ identifier: Int, _ itemType: CloudItemType) -> Item) throws {
 		let cache = try IdentifierCache<Item>()
 		self.itemType = Item.self
 		self.add = { try cache.addOrUpdate(makeItem(CloudPath($0), $1, $2)) }
@@ -51,7 +51,7 @@ enum CacheKind: CaseIterable, CustomTestStringConvertible {
 		case .googleDrive:
 			return try IdentifierCacheProbe { GoogleDriveItem(cloudPath: $0, identifier: "TestABC--\($1)@^", itemType: $2, shortcut: nil) }
 		case .microsoftGraph:
-			return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2) }
+			return try IdentifierCacheProbe { MicrosoftGraphItem(cloudPath: $0, identifier: "TestABC--\($1)@^", driveIdentifier: "Drive\($1)", itemType: $2, isRemoteItem: false) }
 		}
 	}
 }
@@ -97,12 +97,28 @@ extension UnitTests {
 		}
 
 		@Test(arguments: CacheKind.allCases)
-		func updateWithDifferentIdentifierForCachedCloudPath(kind: CacheKind) throws {
+		func updateWithDifferentItemRemovesSubPaths(kind: CacheKind) throws {
 			let cache = try kind.makeProbe()
-			try cache.add("/abc/test--a-", 1234, .folder)
-			try cache.add("/abc/test--a-", 5678, .folder)
+			try cache.add("/foo", 123, .folder)
+			try cache.add("/foo/bar", 234, .file)
+			try cache.add("/foo bar", 345, .folder)
 
-			#expect(cache.contains("/abc/test--a-", 5678, .folder))
+			try cache.add("/foo", 567, .folder)
+
+			#expect(cache.contains("/foo", 567, .folder))
+			#expect(cache.containsNothing("/foo/bar"))
+			#expect(cache.contains("/foo bar", 345, .folder))
+		}
+
+		@Test(arguments: CacheKind.allCases)
+		func updateWithEqualItemKeepsSubPaths(kind: CacheKind) throws {
+			let cache = try kind.makeProbe()
+			try cache.add("/foo", 123, .folder)
+			try cache.add("/foo/bar", 234, .file)
+
+			try cache.add("/foo", 123, .folder)
+
+			#expect(cache.contains("/foo/bar", 234, .file))
 		}
 
 		@Test(arguments: CacheKind.allCases)
@@ -184,6 +200,122 @@ extension UnitTests {
 			try cache.addOrUpdate(itemToStore)
 
 			#expect(itemToStore == cache.get(itemToStore.cloudPath))
+		}
+
+		@Test(arguments: [("0123456789abcdef", "0123456789ABCDEF"), ("0123456789abcdef", "123456789ABCDEF")])
+		func updateWithOtherSpellingOfPersonalDriveIdentifierKeepsSubPaths(driveIdentifier: String, otherSpelling: String) throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			let child = MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: driveIdentifier, itemType: .file, isRemoteItem: false)
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: driveIdentifier, itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(child)
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: otherSpelling, itemType: .folder, isRemoteItem: false))
+
+			#expect(cache.get(child.cloudPath) == child)
+		}
+
+		@Test(arguments: [("abc", "def"), ("b!Ab", "b!ab"), ("0123456789abcdef", "0123456789abcdee"), ("0123456789abcdef", "+123456789abcdef"), ("0123456789abcdef", nil)] as [(String, String?)])
+		func updateWithOtherDriveOfSameIdentifierRemovesSubPaths(driveIdentifier: String, otherDriveIdentifier: String?) throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: driveIdentifier, itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: driveIdentifier, itemType: .file, isRemoteItem: false))
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: otherDriveIdentifier, itemType: .folder, isRemoteItem: false))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
+
+		@Test
+		func updateWithRemoteItemOfSameIdentifierRemovesSubPaths() throws {
+			let cache = try IdentifierCache<MicrosoftGraphItem>()
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: false))
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", driveIdentifier: "abc", itemType: .file, isRemoteItem: false))
+
+			try cache.addOrUpdate(MicrosoftGraphItem(cloudPath: CloudPath("/foo"), identifier: "F", driveIdentifier: "abc", itemType: .folder, isRemoteItem: true))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
+
+		@Test
+		func updateWithShortcutOfSameIdentifierRemovesSubPaths() throws {
+			let cache = try IdentifierCache<GoogleDriveItem>()
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder, shortcut: nil))
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", itemType: .file, shortcut: nil))
+
+			try cache.addOrUpdate(GoogleDriveItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder, shortcut: GoogleDriveShortcut(targetIdentifier: "T", targetItemType: .folder)))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
+
+		@Test
+		func resolvePathCachesLookedUpItems() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar/baz")) { name, parentItem in
+				BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(item.identifier == "F/bar/baz")
+			#expect(cache.get(CloudPath("/foo/bar"))?.identifier == "F/bar")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathLooksUpAgainInReplacedFolder() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+			var lookups: [String] = []
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar/baz")) { name, parentItem in
+				lookups.append("\(parentItem.identifier)/\(name)")
+				if lookups.count == 1 {
+					try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "G", itemType: .folder))
+				}
+				return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(lookups == ["F/bar", "G/bar", "G/bar/baz"])
+			#expect(item.identifier == "G/bar/baz")
+			#expect(cache.get(CloudPath("/foo/bar"))?.identifier == "G/bar")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathLooksUpAgainFromAncestorOfInvalidatedFolder() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let folder = BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder)
+			try cache.addOrUpdate(folder)
+			var lookups: [String] = []
+
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/foo/bar")) { name, parentItem in
+				lookups.append("\(parentItem.identifier)/\(name)")
+				if lookups.count == 1 {
+					try cache.invalidate(folder)
+				}
+				return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: .folder)
+			}
+
+			#expect(lookups == ["F/bar", "0/foo", "0/foo/bar"])
+			#expect(cache.get(CloudPath("/foo"))?.identifier == "0/foo")
+			#expect(cache.get(item.cloudPath) == item)
+		}
+
+		@Test
+		func resolvePathThrowsIfFolderChangesDuringBothAttempts() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+			var lookupCount = 0
+
+			await #expect(throws: BoxError.inconsistentCache) {
+				try await cache.resolvePath(forItemAt: CloudPath("/foo/bar")) { name, parentItem in
+					lookupCount += 1
+					try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F\(lookupCount)", itemType: .folder))
+					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .file)
+				}
+			}
+			#expect(lookupCount == 2)
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
 		}
 	}
 

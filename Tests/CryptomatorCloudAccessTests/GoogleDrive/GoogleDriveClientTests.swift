@@ -661,8 +661,9 @@ enum GoogleDriveMockResponse {
 		return #"{"id":"\#(id)","name":"\#(name)","mimeType":"application/vnd.google-apps.folder","modifiedTime":"\#(modifiedTime)"}"#
 	}
 
-	static func shortcut(id: String, name: String, targetID: String, targetMimeType: String) -> String {
-		return #"{"id":"\#(id)","name":"\#(name)","mimeType":"application/vnd.google-apps.shortcut","modifiedTime":"\#(modifiedTime)","shortcutDetails":{"targetId":"\#(targetID)","targetMimeType":"\#(targetMimeType)"}}"#
+	static func shortcut(id: String, name: String, targetID: String, targetMimeType: String?) -> String {
+		let targetMimeTypeMember = targetMimeType.map { #","targetMimeType":"\#($0)""# } ?? ""
+		return #"{"id":"\#(id)","name":"\#(name)","mimeType":"application/vnd.google-apps.shortcut","modifiedTime":"\#(modifiedTime)","shortcutDetails":{"targetId":"\#(targetID)"\#(targetMimeTypeMember)}}"#
 	}
 
 	static func files(_ files: [String], nextPageToken: String? = nil) -> String {

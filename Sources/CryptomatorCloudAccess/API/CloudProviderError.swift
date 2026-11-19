@@ -19,6 +19,6 @@ public enum CloudProviderError: Error {
 	case noInternetConnection
 	/// Thrown by `deleteFolder` or `deleteFile` when the cloud refused to delete the item, wholly or in part. The item may still exist, and a later delete can finish it.
 	case deletionIncomplete
-	/// Thrown by `moveFolder` or `moveFile` once the target is complete and usable, when leftovers remain at the source.
+	/// Thrown by `moveFolder` or `moveFile` once the target is complete and usable, when leftovers remain at the source. Through a vault provider, a folder's leftovers can still refer to the moved folder's directory, so deleting the source, or a folder that contains it, deletes the moved folder's content.
 	case moveCompletedWithSourceRemaining
 }

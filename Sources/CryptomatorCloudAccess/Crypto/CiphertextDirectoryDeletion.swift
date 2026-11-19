@@ -69,6 +69,8 @@ final class CiphertextDirectoryDeletionStop: Sendable {
  An error that stops the delete (see `CiphertextDirectoryDeletionStop`) ends that: no level fetches another page or admits another item, and every directory with skipped work below it stays.
 
  A dir ID of the vault root, of a folder that contains the deleted one, or of a directory on the recursion path fails its item with `VaultFormatError.invalidDirectoryReference` instead of being followed, because following it would delete a directory that the delete must keep, or loop forever.
+
+ An item that the provider's listing marks as an alias (a shortcut to another item) is never followed, because its target need not lie inside the deleted folder. It goes with its directory.
  */
 struct CiphertextDirectoryDeletion: Sendable {
 	/// The provider that holds the ciphertext directories, below any shortening decorator, so that a listing shows every item, also one whose shortened name can't be restored.
@@ -142,6 +144,9 @@ struct CiphertextDirectoryDeletion: Sendable {
 	private func deleteSubdirectories(of item: CloudItemMetadata, visitedDirIds: Set<Data>) async throws -> Error? {
 		if let stopError = stop.error {
 			return stopError
+		}
+		if item.isAlias {
+			return nil
 		}
 		do {
 			for dirId in try await subdirectoryIds(item) {

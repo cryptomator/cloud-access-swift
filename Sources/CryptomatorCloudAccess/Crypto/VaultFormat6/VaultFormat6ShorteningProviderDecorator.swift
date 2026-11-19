@@ -183,7 +183,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		} catch let error where !(error is CancellationError) && error as? CloudProviderError != .noInternetConnection {
 			throw LegacyNameNotMoved()
 		}
-		return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
+		return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
 	}
 
 	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.
@@ -191,9 +191,9 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 		let shortened = shortenedNameCache.getShortenedPath(originalPath)
 		if shortened.pointsToLNG {
 			let originalItemType = guessItemTypeByFileName(originalPath.lastPathComponent)
-			return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
+			return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
 		} else {
-			return CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size)
+			return CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
 		}
 	}
 

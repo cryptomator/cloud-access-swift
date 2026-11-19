@@ -8,6 +8,10 @@ updates:
     # immediately-yanked version is not picked up automatically.
     cooldown:
       default-days: 3
+    ignore:
+      # Upstream's 3.0.0 tag lacks the patches of our fork's 3.0.0-cryptomator.N tags, which sort before it.
+      - dependency-name: "github.com/cryptomator/joseswift"
+        versions: ["3.0.0"]
     groups:
       swift-dependencies:
         patterns:

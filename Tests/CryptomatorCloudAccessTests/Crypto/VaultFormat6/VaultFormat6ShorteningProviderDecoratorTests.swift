@@ -41,13 +41,24 @@ extension UnitTests {
 		/// A name of 129 characters, which old Cryptomator versions shortened and current ones keep.
 		private let legacyOriginalName = "0" + String(repeating: "A", count: 128)
 		private let legacyShortenedName = "TZWGC22CUSVOSQATCBD3274ZQV7ZI53A.lng"
+		/// A legacy name whose spelling with U+212A KELVIN SIGN for its last `K` equals it as a `String` and shortens to the same name, because the name is hashed in NFC. Cryptolib can't decrypt that spelling.
+		private let legacyOriginalNameWithK = "0" + String(repeating: "K", count: 128)
+		private let legacyOriginalNameWithKelvinSign = "0" + String(repeating: "K", count: 127) + "\u{212A}"
+		private let legacyShortenedNameWithK = "GZFZP46N7NNDDAFEEDBD52V5HV4UQVDA.lng"
+		private var legacyFolders: Set<String> {
+			["pathToVault", "pathToVault/d", "pathToVault/d/00", legacyDirPath]
+		}
 
 		private func makeProviderWithLegacyShortenedName(files: [String: Data] = [:], maxPageSize: Int = .max) -> CloudProviderMock {
-			let legacyFiles = [
-				"\(legacyDirPath)/\(legacyShortenedName)": Data(),
-				"pathToVault/m/TZ/WG/\(legacyShortenedName)": Data(legacyOriginalName.utf8)
+			return CloudProviderMock(folders: legacyFolders, files: legacyFiles(legacyShortenedName, nameFileContent: legacyOriginalName).merging(files) { $1 }, maxPageSize: maxPageSize)
+		}
+
+		private func legacyFiles(_ shortenedName: String, nameFileContent: String) -> [String: Data] {
+			let prefix = shortenedName.prefix(4)
+			return [
+				"\(legacyDirPath)/\(shortenedName)": Data(),
+				"pathToVault/m/\(prefix.prefix(2))/\(prefix.suffix(2))/\(shortenedName)": Data(nameFileContent.utf8)
 			]
-			return CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", legacyDirPath], files: legacyFiles.merging(files) { $1 }, maxPageSize: maxPageSize)
 		}
 
 		@Test
@@ -198,31 +209,72 @@ extension UnitTests {
 		/**
 		 A provider that checks the source first reports the moved item as `itemNotFound`, one that checks the target first as `itemAlreadyExists`.
 
-		 The test seeds the name that the item was moved to, and the mock's files don't change. With a page size of 2 the page therefore holds both names, like a page listed during a move that copies and then deletes, and the listing returns the item once. The original name sorts before the shortened one, and the mock's page token is the start index, so with a page size of 1 the page at token `1` holds only the shortened name, like a page listed before the move.
+		 The test seeds the name that the item was moved to with another size than the shortened name, so that the size shows whose metadata the listing returns. The mock's files don't change. With a page size of 2 the page therefore holds both names, like a page listed during a move that copies and then deletes, and the listing returns the item once. The original name sorts before the shortened one, and the mock's page token is the start index, so with a page size of 1 the page at token `1` holds only the shortened name, like a page listed before the move.
 
-		 The metadata hook reports the shortened name as gone, because the mock's files don't show the move.
+		 The shortened name stays readable, as through a stale cached ID or during a move that copies and then deletes. The metadata hook checks that the listing returns the original's metadata without reading the shortened name.
 		 */
 		@Test
 		func fetchItemListReturnsLegacyShortenedNameThatAnotherListingMoved() async throws {
 			let shortenedPath = CloudPath("\(legacyDirPath)/\(legacyShortenedName)")
-			let reportShortenedNameAsGone: @Sendable (CloudPath) throws -> Void = { cloudPath in
-				if cloudPath == shortenedPath {
-					throw CloudProviderError.itemNotFound
-				}
-			}
 			let pages: [(pageToken: String?, listedNames: [String])] = [(nil, [legacyOriginalName, legacyShortenedName]), ("1", [legacyShortenedName])]
 			for error in [CloudProviderError.itemNotFound, .itemAlreadyExists] {
 				for page in pages {
-					let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data()], maxPageSize: page.listedNames.count)
+					let provider = makeProviderWithLegacyShortenedName(files: ["\(legacyDirPath)/\(legacyOriginalName)": Data(count: 7)], maxPageSize: page.listedNames.count)
 					provider.moveHook = { throw error }
-					provider.metadataHook = reportShortenedNameAsGone
+					provider.metadataHook = { cloudPath in
+						#expect(cloudPath != shortenedPath)
+					}
 					let listedItems = try await provider.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken).items
 					#expect(page.listedNames == listedItems.map(\.name))
 					let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 					let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: page.pageToken)
 					#expect(itemList.items.map(\.cloudPath.path) == ["\(legacyDirPath)/\(legacyOriginalName)"], "\(error), page size \(page.listedNames.count)")
+					#expect(itemList.items.map(\.name) == [legacyOriginalName], "\(error), page size \(page.listedNames.count)")
+					#expect(itemList.items.map(\.size) == [7], "\(error), page size \(page.listedNames.count)")
 				}
 			}
+		}
+
+		/// The metadata override reports at the original name either another name, as a stale cached ID on Box, Microsoft Graph or pCloud can, or the original name spelled with U+212A KELVIN SIGN, which equals it as a `String` but not by bytes. The test seeds the original name only so that, with a page size of 1, the page at token `1` holds only the shortened name.
+		@Test
+		func fetchItemListLeavesOutLegacyShortenedNameWhoseOriginalNameReportsAnotherName() async throws {
+			let cases = [
+				ReportedLegacyName(originalName: legacyOriginalName, shortenedName: legacyShortenedName, reportedName: "0" + String(repeating: "B", count: 128)),
+				ReportedLegacyName(originalName: legacyOriginalNameWithK, shortenedName: legacyShortenedNameWithK, reportedName: legacyOriginalNameWithKelvinSign)
+			]
+			for testCase in cases {
+				let originalPath = CloudPath("\(legacyDirPath)/\(testCase.originalName)")
+				for error in [CloudProviderError.itemNotFound, .itemAlreadyExists] {
+					let files = legacyFiles(testCase.shortenedName, nameFileContent: testCase.originalName).merging([originalPath.path: Data()]) { $1 }
+					let provider = CloudProviderMock(folders: legacyFolders, files: files, maxPageSize: 1)
+					provider.moveHook = { throw error }
+					provider.metadataOverride = { cloudPath in
+						cloudPath == originalPath ? CloudItemMetadata(name: testCase.reportedName, cloudPath: originalPath, itemType: .file, lastModifiedDate: nil, size: nil) : nil
+					}
+					let listedItems = try await provider.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: "1").items
+					#expect(listedItems.map(\.name) == [testCase.shortenedName])
+					let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+					let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: "1")
+					#expect(itemList.items.isEmpty, "\(error), \(testCase.shortenedName)")
+				}
+			}
+		}
+
+		/**
+		 A name file written outside Cryptomator can hold the original name with U+212A KELVIN SIGN, which shortens to the same name as the original name that the page lists. The mock finds a fixture item by `String` equality, so the lookup of that spelling reports the original item under the requested spelling, as Google Drive reports a name.
+
+		 The duplicate filter keeps a path's first entry, and the mock lists the original name first, so the provider reverses its pages to let the restored spelling come first.
+		 */
+		@Test
+		func fetchItemListKeepsOriginalNameWhenALegacyNameRestoresToACanonicallyEquivalentSpelling() async throws {
+			let files = legacyFiles(legacyShortenedNameWithK, nameFileContent: legacyOriginalNameWithKelvinSign).merging(["\(legacyDirPath)/\(legacyOriginalNameWithK)": Data()]) { $1 }
+			let provider = ReversedListingCloudProviderMock(folders: legacyFolders, files: files)
+			provider.moveHook = { throw CloudProviderError.itemAlreadyExists }
+			let listedItems = try await provider.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil).items
+			#expect(listedItems.map(\.name) == [legacyShortenedNameWithK, legacyOriginalNameWithK])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(legacyDirPath), withPageToken: nil)
+			#expect(itemList.items.map { Array($0.name.utf8) } == [Array(legacyOriginalNameWithKelvinSign.utf8), Array(legacyOriginalNameWithK.utf8)])
 		}
 
 		@Test
@@ -388,5 +440,21 @@ extension UnitTests {
 			await assertThrowsCancellationErrorInCancelledTask(shorteningDecorator)
 			#expect(provider.calls == [])
 		}
+	}
+}
+
+/// A legacy name and the name that the lookup of its original name reports.
+private struct ReportedLegacyName {
+	let originalName: String
+	let shortenedName: String
+	let reportedName: String
+}
+
+/// Lists each page in reverse order. `@unchecked Sendable`: restates the conformance of `CloudProviderMock`; this subclass adds no state.
+private final class ReversedListingCloudProviderMock: CloudProviderMock, @unchecked Sendable {
+	@concurrent
+	override func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
+		let itemList = try await super.fetchItemList(forFolderAt: cloudPath, withPageToken: pageToken)
+		return CloudItemList(items: itemList.items.reversed(), nextPageToken: itemList.nextPageToken)
 	}
 }

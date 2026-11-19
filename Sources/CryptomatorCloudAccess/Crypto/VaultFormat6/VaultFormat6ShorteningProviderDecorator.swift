@@ -147,11 +147,11 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	 - Throws: `VaultFormatError.invalidNameFile` as `VaultFormat6ShortenedNameCache.getOriginalPath(_:lngFileLoader:)` does, or if the name file is larger than `vaultNameFileMaxLength`. Other failures of the name file's download unchanged.
 	 */
 	func originalName(ofPhysicalItemAt cloudPath: CloudPath) async throws -> String {
-		return try await shortenedNameCache.getOriginalPath(cloudPath, lngFileLoader: { try await self.downloadNameFile($0) }).lastPathComponent
+		return try await getOriginalPath(cloudPath).lastPathComponent
 	}
 
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
-		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
+		let originalPath = try await getOriginalPath(shortenedMetadata.cloudPath)
 		return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
 	}
 
@@ -161,7 +161,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	 - Throws: `LegacyNameNotMoved` if the move fails, e.g., with `unauthorized`. After `itemNotFound` or `itemAlreadyExists`, it is also thrown if the lookup of the original name fails or reports another name. A missing internet connection and cancellation are thrown unchanged. `VaultFormatError.invalidNameFile` and the name file's download errors are thrown as `originalName(ofPhysicalItemAt:)` throws them.
 	 */
 	private func getOriginalMetadataOfListedItem(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
-		let originalPath = try await shortenedNameCache.getOriginalPath(shortenedMetadata.cloudPath, lngFileLoader: { try await self.downloadNameFile($0) })
+		let originalPath = try await getOriginalPath(shortenedMetadata.cloudPath)
 		guard originalPath != shortenedMetadata.cloudPath, !shortenedNameCache.getShortenedPath(originalPath).pointsToLNG else {
 			return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
 		}
@@ -184,6 +184,10 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 			throw LegacyNameNotMoved()
 		}
 		return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
+	}
+
+	private func getOriginalPath(_ shortenedPath: CloudPath) async throws -> CloudPath {
+		return try await shortenedNameCache.getOriginalPath(shortenedPath, lngFileLoader: { try await self.downloadNameFile($0) })
 	}
 
 	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.

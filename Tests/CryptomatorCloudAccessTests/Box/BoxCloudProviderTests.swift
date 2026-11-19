@@ -406,6 +406,24 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// Only the lookup of the existing file decides whether the upload creates a new file, so a 404 later in the upload of a new version is thrown without requesting a new-file upload.
+		@Test
+		func notFoundDuringUploadOfExistingFileDoesNotCreateNewFile() async throws {
+			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
+			] + (0 ..< 3).map { index in
+				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
+			} + [
+				URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found")),
+				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
+			]
+
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
 		/// A symbolic link's own size is the length of its destination, 9 bytes for `local.txt`, so only the target's 10 bytes reach the threshold.
 		@Test
 		func chunkedUploadThroughSymbolicLinkUsesSizeOfTarget() async throws {

@@ -72,7 +72,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let phases = Progress.phases(of: progress, 999)
 		do {
 			let metadata = try await fetchItemMetadata(at: cloudPath)
-			if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
+			if !replaceExisting || metadata.itemType == .folder {
 				throw CloudProviderError.itemAlreadyExists
 			}
 		} catch CloudProviderError.itemNotFound {

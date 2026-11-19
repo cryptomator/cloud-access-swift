@@ -161,7 +161,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 			// A PUT request on an existing file succeeds regardless of `replaceExisting`, so the metadata is fetched first to make that distinction.
 			do {
 				let metadata = try await getItemMetadata(at: cloudPath)
-				if !replaceExisting || (replaceExisting && metadata.itemType == .folder) {
+				if !replaceExisting || metadata.itemType == .folder {
 					throw CloudProviderError.itemAlreadyExists
 				}
 			} catch CloudProviderError.itemNotFound {

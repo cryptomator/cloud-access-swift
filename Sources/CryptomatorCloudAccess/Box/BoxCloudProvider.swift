@@ -185,24 +185,26 @@ public final class BoxCloudProvider: CloudProvider {
 	// swiftlint:disable:next function_parameter_count
 	private func uploadFile(for parentItem: BoxItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localFile.url), to: \(cloudPath), replaceExisting: \(replaceExisting)) called")
+		let existingItem: BoxItem?
 		do {
 			let item = try await resolvePath(forItemAt: cloudPath)
-			if !replaceExisting || (replaceExisting && item.itemType == .folder) {
+			if !replaceExisting || item.itemType == .folder {
 				throw CloudProviderError.itemAlreadyExists
 			}
-			try Task.checkCancellation()
-			if localFile.size >= chunkedUploadThreshold {
-				return try await uploadLargeExistingFile(for: item, from: localFile, to: cloudPath, progress: progress)
-			} else {
-				return try await uploadSmallExistingFile(for: item, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
-			}
+			existingItem = item
 		} catch CloudProviderError.itemNotFound {
-			try Task.checkCancellation()
-			if localFile.size >= chunkedUploadThreshold {
-				return try await uploadLargeNewFile(for: parentItem, from: localFile, to: cloudPath, progress: progress)
-			} else {
-				return try await uploadSmallNewFile(for: parentItem, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
-			}
+			existingItem = nil
+		}
+		try Task.checkCancellation()
+		switch (existingItem, localFile.size >= chunkedUploadThreshold) {
+		case let (item?, true):
+			return try await uploadLargeExistingFile(for: item, from: localFile, to: cloudPath, progress: progress)
+		case let (item?, false):
+			return try await uploadSmallExistingFile(for: item, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
+		case (nil, true):
+			return try await uploadLargeNewFile(for: parentItem, from: localFile, to: cloudPath, progress: progress)
+		case (nil, false):
+			return try await uploadSmallNewFile(for: parentItem, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 		}
 	}
 

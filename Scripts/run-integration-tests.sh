@@ -23,8 +23,6 @@ OUTPUT_DIR="integration-output"
 STILL_FAILING_FILE="$OUTPUT_DIR/still-failing.txt"
 TEST_BUNDLE="CryptomatorCloudAccessIntegrationTests"
 PYTHON_DIR="$(dirname "$0")/integration-tests"
-# A pair passes only with one of these results.
-PASSED_STATUSES="Passed|Expected Failure|Skipped"
 ONLY_FILE=""
 
 while [ $# -gt 0 ]; do
@@ -105,7 +103,7 @@ run_pass() {
   echo "::endgroup::"
 }
 
-# Parses a pass into $WORK_DIR/<name>.tsv: `<status>\t<nodeIdentifier>\t<token>\t<filter of the main pass if the token is ->\t<failure reasons>` per pair.
+# Parses a pass into $WORK_DIR/<name>.tsv, in the format of a parsed pass that pairs.py describes.
 # Both passes record the main pass's filter, which the re-run's own filter can differ from, so that their pairs match.
 # Returns non-zero if the pass is incomplete, e.g. if its result can't be read, a test process crashed, or the run failed
 # without a failed test. It then writes why to $WORK_DIR/<name>.incomplete.
@@ -128,12 +126,9 @@ publish_summary() {
   tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}" < "$SUMMARY_FILE"
 }
 
-# Prints the pairs of a parsed pass that didn't pass, as lines of a still-failing.txt.
+# Prints the pairs of a parsed pass to re-run, as lines of a still-failing.txt.
 not_passed() {
-  awk -F'\t' -v statuses="$PASSED_STATUSES" '
-    BEGIN { split(statuses, list, "|"); for (i in list) passed[list[i]] = 1 }
-    !($1 in passed) { line = $2 "\t" $3; if ($3 == "-") line = line "\t" $4; print line }
-  ' "$WORK_DIR/$1.tsv"
+  python3 -I "$PYTHON_DIR/pairs.py" "$WORK_DIR/$1.tsv"
 }
 
 if [ -n "$ONLY_FILE" ]; then
@@ -161,7 +156,7 @@ if [ -s "$WORK_DIR/failed-pass1.txt" ]; then
   fi
 fi
 
-python3 -I "$PYTHON_DIR/summary.py" "$WORK_DIR" "$STILL_FAILING_FILE" "$ONLY_FILE" "$PASSED_STATUSES" >> "$SUMMARY_FILE"
+python3 -I "$PYTHON_DIR/summary.py" "$WORK_DIR" "$STILL_FAILING_FILE" "$ONLY_FILE" >> "$SUMMARY_FILE"
 # A failed summary script fails the run, because still-failing.txt may then be incomplete.
 summary_status=$?
 

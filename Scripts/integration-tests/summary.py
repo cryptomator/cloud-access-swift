@@ -1,38 +1,31 @@
 # Prints the summary of both passes and writes the pairs that are still failing to the given file.
 #
-# Usage: summary.py <work dir> <still-failing file> <only file> <passed statuses>
+# Usage: summary.py <work dir> <still-failing file> <only file>
 
 import collections, os, sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pairs
+
 work_dir, still_failing_file, only_file = sys.argv[1], sys.argv[2], sys.argv[3]
 pass2_incomplete_file = os.path.join(work_dir, "pass2.incomplete")
-# A skip doesn't heal a pair that failed before: a pair of the re-run pass, or a pair that --only lists. A listed pair
-# that the main pass skips isn't re-run, because the re-run would select it the same way and skip it again.
-healed_statuses = set(sys.argv[4].split("|")) - {"Skipped"}
-# The filter of each pair that --only lists, which only a `-` token's line has.
-only_lines = [line.rstrip("\n").split("\t") for line in open(only_file) if line.strip()] if only_file else []
-listed = {tuple(fields[:2]): fields[2] if len(fields) > 2 else "" for fields in only_lines}
+listed = {(node_identifier, token): filter for node_identifier, token, filter in pairs.read_listed(only_file)} if only_file else {}
 
 def read(name):
-    path = os.path.join(work_dir, f"{name}.tsv")
-    if not os.path.exists(path):
-        return {}
-    pairs = {}
-    for line in open(path):
-        status, node_identifier, token, backends, failure_reasons = line.rstrip("\n").split("\t")
-        pairs[(node_identifier, token, backends)] = (status, failure_reasons)
-    return pairs
+    return {(pair.node_identifier, pair.token, pair.filter): (pair.status, pair.reasons) for pair in pairs.read_pass(os.path.join(work_dir, f"{name}.tsv"))}
 
 pass1, pass2 = read("pass1"), read("pass2")
 healed, still_failing = [], []
 counts = collections.defaultdict(lambda: collections.Counter())
 for key, (status, failure_reasons) in pass1.items():
     token = key[1]
-    if status == "Skipped" and key[:2] not in listed:
+    # A skip doesn't heal a pair that --only lists. A listed pair that the main pass skips isn't re-run, because the re-run
+    # would select it the same way and skip it again.
+    if status == pairs.SKIPPED and key[:2] not in listed:
         counts[token]["skipped"] += 1
-    elif status in healed_statuses:
+    elif status in pairs.PASSED:
         counts[token]["passed"] += 1
-    elif pass2.get(key, ("missing", ""))[0] in healed_statuses:
+    elif pass2.get(key, ("missing", ""))[0] in pairs.PASSED:
         counts[token]["passed on re-run"] += 1
         healed.append((key, failure_reasons))
     else:
@@ -48,7 +41,7 @@ for (node_identifier, token), backends in listed.items():
 
 with open(still_failing_file, "w") as file:
     for (node_identifier, token, backends), _ in still_failing:
-        file.write(f"{node_identifier}\t{token}" + (f"\t{backends}" if token == "-" else "") + "\n")
+        file.write(pairs.format_listed_line(node_identifier, token, backends) + "\n")
 
 print("## Integration tests\n")
 print("| Backend | Passed | Failed | Passed on re-run | Skipped |")

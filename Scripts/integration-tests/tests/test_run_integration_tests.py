@@ -192,6 +192,28 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertEqual("pcloud", self.calls()[0].filter)
         self.assert_last_call(2, "pcloud-plain", FETCH)
 
+    def test_pair_that_rerun_reports_as_expected_failure_is_healed(self):
+        self.write_pass("pass1", results(test_case(FETCH, "Failed", argument("pcloud-plain", "Failed"))), exit_code=65)
+        self.write_pass("pass2", results(test_case(FETCH, "Expected Failure", argument("pcloud-plain", "Expected Failure"))))
+
+        result = self.run_script()
+
+        self.assertEqual(0, result.exit_code)
+        self.assertEqual("", self.still_failing())
+        self.assertIn("| `pcloud-plain` | 0 | 0 | 1 | 0 |", result.stdout.splitlines())
+        self.assert_last_call(2, "pcloud-plain", FETCH)
+
+    def test_pair_of_unknown_status_is_rerun(self):
+        self.write_pass("pass1", results(test_case(FETCH, "Passed", {"nodeType": "Arguments", "name": "pcloud-plain", "children": []})))
+        self.write_pass("pass2", results(test_case(FETCH, "Passed", argument("pcloud-plain"))))
+
+        result = self.run_script()
+
+        self.assertEqual(0, result.exit_code)
+        self.assertEqual("", self.still_failing())
+        self.assertIn("| `pcloud-plain` | 0 | 0 | 1 | 0 |", result.stdout.splitlines())
+        self.assert_last_call(2, "pcloud-plain", FETCH)
+
     def test_pair_that_fails_again_stays_failing(self):
         self.write_pass("pass1", results(test_case(FETCH, "Failed", argument("pcloud-plain", "Failed", failure("Expectation failed: a == b", "/checkout/Tests/Conformance.swift", 12)))), exit_code=65)
         self.write_pass("pass2", results(test_case(FETCH, "Failed", argument("pcloud-plain", "Failed", failure("Caught error: unauthorized")))), exit_code=65)
@@ -339,6 +361,26 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertIn("| `-` | 1 | 0 | 0 | 0 |", result.stdout.splitlines())
         self.assert_last_call(1, "", RUNNER, FETCH)
 
+    def test_only_with_test_of_no_backend_without_filter_field_selects_all_backends(self):
+        only_file = self.write_file("{}\t-\n{}\tpcloud-plain\n".format(RUNNER, FETCH))
+        self.write_pass("pass1", results(test_case(FETCH, "Passed", argument("pcloud-plain"))))
+
+        result = self.run_script("--only", only_file)
+
+        self.assertEqual(1, result.exit_code)
+        self.assertEqual("{}\t-\t\n".format(RUNNER), self.still_failing())
+        self.assert_last_call(1, "", RUNNER, FETCH)
+
+    def test_only_keeps_filter_of_listed_test_of_no_backend(self):
+        only_file = self.write_file("{}\t-\tpcloud\n{}\tpcloud-plain\n".format(RUNNER, FETCH))
+        self.write_pass("pass1", results(test_case(FETCH, "Passed", argument("pcloud-plain"))))
+
+        result = self.run_script("--only", only_file)
+
+        self.assertEqual(1, result.exit_code)
+        self.assertEqual("{}\t-\tpcloud\n".format(RUNNER), self.still_failing())
+        self.assert_last_call(1, "pcloud,pcloud-plain", RUNNER, FETCH)
+
     def test_only_keeps_listed_pair_without_result_failing(self):
         only_file = self.write_file("{}\tpcloud-plain\n{}\tpcloud-plain\n".format(FETCH, DELETE))
         self.write_pass("pass1", results(test_case(DELETE, "Passed", argument("pcloud-plain"))))
@@ -364,7 +406,7 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertEqual(1, len(self.calls()))
 
     def test_malformed_only_file_runs_nothing(self):
-        contents = {"no tab": FETCH + "\n", "empty token": FETCH + "\t\n", "empty file": ""}
+        contents = {"no tab": FETCH + "\n", "empty test": "\ts3\n", "empty token": FETCH + "\t\n", "empty file": ""}
         for name, content in contents.items():
             with self.subTest(name):
                 result = self.run_script("--only", self.write_file(content))

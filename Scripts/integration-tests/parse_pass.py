@@ -6,6 +6,7 @@ import json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from failure_reason import reason
+import pairs
 
 results = json.load(open(sys.argv[1]))
 exit_code = int(sys.argv[2])
@@ -16,7 +17,7 @@ backend_token = re.compile(r"^[a-z0-9]+-[a-z0-9]+$")
 crash_marker = re.compile(r"^Crash: |Underlying Error: Crash: |did not finish|restarting after unexpected exit|lost connection", re.IGNORECASE)
 # A test process that exits before it starts testing is reported as `Early unexpected exit, operation never finished bootstrapping`.
 bootstrap_marker = re.compile(r"never finished bootstrapping")
-pairs = []
+pass_pairs = []
 # Why the pass is incomplete, in fixed words, because the messages behind them aren't redacted.
 incomplete_causes = []
 
@@ -59,9 +60,9 @@ def walk(node):
             incomplete_causes.append("a test process crashed")
         if arguments and all(backend_token.match(argument.get("name", "")) for argument in arguments):
             for argument in arguments:
-                pairs.append((argument.get("result", "unknown"), node_identifier, argument["name"], reasons(messages(argument) + messages(node))))
+                pass_pairs.append(pairs.Pair(argument.get("result", "unknown"), node_identifier, argument["name"], backends, reasons(messages(argument) + messages(node))))
         else:
-            pairs.append((node.get("result", "unknown"), node_identifier, token_for(node_identifier), reasons(test_messages)))
+            pass_pairs.append(pairs.Pair(node.get("result", "unknown"), node_identifier, token_for(node_identifier), backends, reasons(test_messages)))
         return
     for child in node.get("children", []):
         walk(child)
@@ -70,12 +71,12 @@ for node in results.get("testNodes", []):
     walk(node)
 # Only when the walk found no cause, because a runner error or crash also leaves no results or a failure without a failed test.
 if not incomplete_causes:
-    if not pairs:
+    if not pass_pairs:
         incomplete_causes.append("no test reported a result")
-    elif exit_code != 0 and not any(status == "Failed" for status, *_ in pairs):
+    elif exit_code != 0 and not any(pair.status == "Failed" for pair in pass_pairs):
         incomplete_causes.append("it failed without a failed test")
-for status, node_identifier, token, failure_reasons in pairs:
-    print(f"{status}\t{node_identifier}\t{token}\t{backends if token == '-' else ''}\t{failure_reasons}")
+for pair in pass_pairs:
+    print(pairs.format_pass_line(pair))
 if incomplete_causes:
     with open(sys.argv[4], "w") as file:
         file.write("; ".join(dict.fromkeys(incomplete_causes)))

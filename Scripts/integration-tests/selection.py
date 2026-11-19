@@ -2,20 +2,24 @@
 #
 # Usage: selection.py <pairs file> <test bundle>
 
-import sys
-lines = [line.rstrip("\n").split("\t") for line in open(sys.argv[1]) if line.strip()]
-if not lines or any(len(fields) < 2 or not fields[0].strip() or not fields[1].strip() for fields in lines):
-    sys.exit(f"{sys.argv[1]} lists no pairs, or a line has no test or token")
+import os, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pairs
+
+try:
+    listed = pairs.read_listed(sys.argv[1])
+except ValueError as error:
+    sys.exit(str(error))
 tokens = []
 all_backends = False
-for fields in lines:
-    if fields[1] == "-":
-        original = fields[2] if len(fields) > 2 else ""
+for _, token, original in listed:
+    if token == "-":
         # An empty filter selects all backends, so it must not narrow the filter to the other lines' tokens.
         all_backends = all_backends or not original
-        tokens += [token for token in original.split(",") if token]
+        tokens += [backend for backend in original.split(",") if backend]
     else:
-        tokens.append(fields[1])
+        tokens.append(token)
 print("" if all_backends else ",".join(dict.fromkeys(tokens)))
-for node_identifier in dict.fromkeys(fields[0] for fields in lines):
+for node_identifier in dict.fromkeys(node_identifier for node_identifier, _, _ in listed):
     print(f"-only-testing:{sys.argv[2]}/{node_identifier}")

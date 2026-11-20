@@ -69,6 +69,7 @@ struct DropboxPKCE: Sendable {
 public enum DropboxAuthenticator {
 	private nonisolated static let pendingAuthentication = OSAllocatedUnfairLock<PendingAuthentication?>(initialState: nil)
 	private nonisolated static let dAuthSchemes = ["dbapi-2", "dbapi-8-emm"]
+	private nonisolated static let loginCallback = WebLoginCallback(logPrefix: "DropboxAuthenticator", failure: DropboxAuthenticatorError.authenticationFailed)
 
 	/**
 	 Hands the login off to the Dropbox app, or shows Dropbox's authorize page if the app isn't installed or can't be opened, and stores the token of the login in the setup's `oauth` under the `uid` of the account.
@@ -80,7 +81,7 @@ public enum DropboxAuthenticator {
 	@available(iOSApplicationExtension, unavailable)
 	public static func authenticate(from viewController: UIViewController, setup: DropboxSetup) async throws -> DropboxCredential {
 		guard let window = viewController.view.window else {
-			throw authenticationFailed(because: "the view controller isn't part of a window")
+			throw loginCallback.authenticationFailed(because: "the view controller isn't part of a window")
 		}
 		let appKey = setup.appKey
 		let pkce = DropboxPKCE.random()
@@ -129,7 +130,7 @@ public enum DropboxAuthenticator {
 			}
 		}
 		// The session is ephemeral, so that adding an account asks which account to add. Otherwise Dropbox's authorize page preselects the account that the browser remembers.
-		let callbackURL = try await runWebAuthenticationSession(url: authorizeURL(appKey: appKey, pkce: pkce), callbackURLScheme: redirectScheme(appKey: appKey), anchor: anchor, prefersEphemeralWebBrowserSession: true, logPrefix: "DropboxAuthenticator", convertError: { convertLoginFlowError($0 ?? DropboxAuthenticatorError.authenticationFailed) })
+		let callbackURL = try await runWebAuthenticationSession(url: authorizeURL(appKey: appKey, pkce: pkce), callbackURLScheme: redirectScheme(appKey: appKey), anchor: anchor, prefersEphemeralWebBrowserSession: true, logPrefix: loginCallback.logPrefix, convertError: { convertLoginFlowError($0 ?? loginCallback.failure) })
 		return (callbackURL, pkce.webState)
 	}
 
@@ -226,9 +227,7 @@ public enum DropboxAuthenticator {
 	 The Dropbox app redirects to `/connect` with `oauth_code`, or, in older versions, with `oauth_token=oauth2code:` and the code in `oauth_token_secret`. Any other path of the Dropbox app means that the user cancelled, and so do the path `/cancel` and `error=access_denied` from the authorize page.
 	 */
 	nonisolated static func authorizationCode(fromCallbackURL callbackURL: URL, appKey: String, expectedState: String) throws -> String {
-		guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(appKey: appKey).lowercased() else {
-			throw authenticationFailed(because: "the callback URL doesn't match the redirect URI")
-		}
+		let components = try loginCallback.components(ofCallbackURL: callbackURL, scheme: redirectScheme(appKey: appKey), host: nil)
 		let queryItems = components.queryItems ?? []
 		let value: (String) -> String? = { name in
 			queryItems.first(where: { $0.name == name })?.value
@@ -238,46 +237,21 @@ public enum DropboxAuthenticator {
 		case ("1", "/connect"):
 			authorizationCode = value("oauth_code") ?? (value("oauth_token") == "oauth2code:" ? value("oauth_token_secret") : nil)
 		case ("1", _), ("2", "/cancel"):
-			throw userCancelled()
+			throw loginCallback.userCancelled()
 		case ("2", "/token"):
-			if value("error") == "access_denied" {
-				throw userCancelled()
-			}
-			guard value("error") == nil else {
-				throw authenticationFailed(because: "Dropbox returned an error")
-			}
+			try loginCallback.checkError(value("error"), providerName: "Dropbox")
 			authorizationCode = value("code")
 		default:
-			throw authenticationFailed(because: "the callback URL doesn't match the redirect URI")
+			throw loginCallback.authenticationFailed(because: "the callback URL doesn't match the redirect URI")
 		}
-		guard value("state") == expectedState else {
-			throw authenticationFailed(because: "the state doesn't match")
-		}
+		try loginCallback.checkState(value("state"), expected: expectedState)
 		guard let authorizationCode, !authorizationCode.isEmpty else {
-			throw authenticationFailed(because: "the code is missing")
+			throw loginCallback.authenticationFailed(because: "the code is missing")
 		}
 		return authorizationCode
 	}
 
 	nonisolated static func convertLoginFlowError(_ error: Error) -> Error {
-		guard let sessionError = error as? ASWebAuthenticationSessionError else {
-			return error
-		}
-		if sessionError.code == .canceledLogin {
-			return userCancelled()
-		} else {
-			CloudAccessDDLogDebug("DropboxAuthenticator: Authentication failed with error: \(sessionError.localizedDescription).")
-			return DropboxAuthenticatorError.authenticationFailed
-		}
-	}
-
-	private nonisolated static func userCancelled() -> CocoaError {
-		CloudAccessDDLogDebug("DropboxAuthenticator: Login flow canceled by the user.")
-		return CocoaError(.userCancelled)
-	}
-
-	private nonisolated static func authenticationFailed(because reason: String) -> DropboxAuthenticatorError {
-		CloudAccessDDLogDebug("DropboxAuthenticator: Authentication failed, because \(reason).")
-		return .authenticationFailed
+		return loginCallback.convertSessionError(error) ?? error
 	}
 }

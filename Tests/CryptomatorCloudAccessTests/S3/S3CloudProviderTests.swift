@@ -529,14 +529,37 @@ extension UnitTests {
 		@Test
 		func uploadFileOverMaximumSizeThrowsBeforeAnyRequest() async throws {
 			let provider = try makeMultipartProvider(maxPartCount: 1)
-			let localURL = tmpDirURL.appendingPathComponent("sparse.bin")
-			#expect(FileManager.default.createFile(atPath: localURL.path, contents: nil))
-			try FileHandle(forWritingTo: localURL).truncate(atOffset: UInt64(S3Client.maxPartSize + 1))
+			let localURL = try makeFileOverMaximumSize()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))]
 
 			let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 			#expect((error as? URLError)?.code == .dataLengthExceedsMaximum)
 			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		/// The local file's checks run inside the upload's logged span, so each failure is logged once.
+		@Test
+		func uploadFileLogsFailedLocalChecksOnce() async throws {
+			let provider = try makeMultipartProvider(maxPartCount: 1)
+			let oversizedURL = try makeFileOverMaximumSize()
+			let cases: [(localURL: URL, isExpected: (Error) -> Bool)] = [
+				(tmpDirURL.appendingPathComponent("missing.bin"), { ($0 as? CloudProviderError) == .itemNotFound }),
+				(oversizedURL, { ($0 as? URLError)?.code == .dataLengthExceedsMaximum })
+			]
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+
+			for (localURL, isExpected) in cases {
+				let error = try await #require(throws: (any Error).self) { try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+
+				#expect(isExpected(error), "\(error)")
+				let operation = "S3CloudProvider: uploadFile(from: \(localURL), to: /file.bin, replaceExisting: false)"
+				let messages = logCapture.messages
+				#expect(messages.filter { $0 == "\(operation) called" }.count == 1, "\(localURL)")
+				#expect(messages.filter { $0.hasPrefix("\(operation) failed with error:") }.count == 1, "\(localURL)")
+			}
 		}
 
 		@Test
@@ -1183,6 +1206,14 @@ extension UnitTests {
 			#expect(Array(repeating: ["uploadId": "upload-id"], count: attempts) == aborts.map(S3CloudProviderTests.queryParameters(of:)), sourceLocation: sourceLocation)
 			#expect(URLProtocolMock.requestHandler.isEmpty, sourceLocation: sourceLocation)
 			#expect(try temporaryFiles == uuidNamedTemporaryFiles(), sourceLocation: sourceLocation)
+		}
+
+		/// A sparse file one byte larger than the largest part, which a provider with `maxPartCount` 1 can't upload.
+		private func makeFileOverMaximumSize() throws -> URL {
+			let localURL = tmpDirURL.appendingPathComponent("sparse.bin")
+			#expect(FileManager.default.createFile(atPath: localURL.path, contents: nil))
+			try FileHandle(forWritingTo: localURL).truncate(atOffset: UInt64(S3Client.maxPartSize + 1))
+			return localURL
 		}
 
 		private func makeLocalFile(content: String) throws -> URL {

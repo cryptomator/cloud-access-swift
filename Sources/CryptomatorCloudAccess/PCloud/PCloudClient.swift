@@ -136,7 +136,7 @@ final class PCloudClient: Sendable {
 				throw PCloudError.unexpectedHTTPStatusCode(code: httpResponse.statusCode)
 			}
 		} catch {
-			PCloudClient.logFailure(of: "file link download", with: error)
+			PCloudClient.logFailure(of: "file link download", with: error, describe: PCloudError.descriptionWithoutMessage(of:))
 			throw PCloudClient.converted(error)
 		}
 	}
@@ -246,7 +246,7 @@ final class PCloudClient: Sendable {
 		return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
 	}
 
-	private static func logFailure(of command: String, with error: Error) {
-		CloudAccessDDLogDebug("PCloudClient: \(command) failed with \(error)")
+	private static func logFailure(of command: String, with error: Error, describe: (Error) -> String = { "\($0)" }) {
+		CloudAccessDDLogDebug("PCloudClient: \(command) failed with \(describe(error))")
 	}
 }

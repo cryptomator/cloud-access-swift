@@ -188,6 +188,7 @@ extension UnitTests {
 		func testConvertLoginFlowError() {
 			#expect((DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.canceledLogin)) as? CocoaError)?.code == .userCancelled)
 			#expect((DropboxAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? DropboxAuthenticatorError) == .authenticationFailed)
+			#expect((DropboxAuthenticator.convertLoginFlowError(URLError(.timedOut)) as? URLError)?.code == .timedOut)
 		}
 
 		// MARK: - PKCE

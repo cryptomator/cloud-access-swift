@@ -41,7 +41,7 @@ extension UnitTests {
 		@Test
 		func testConvertStandardError() {
 			let wrappedCancellationError = NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)])
-			#expect(provider.convertStandardError(wrappedCancellationError) is CancellationError)
+			#expect(GoogleDriveCloudProvider.convertStandardError(wrappedCancellationError) is CancellationError)
 			let cases: [(GoogleDriveError, CloudProviderError)] = [
 				(.apiError(statusCode: 401, reason: nil, message: nil), .unauthorized),
 				(.apiError(statusCode: 403, reason: "insufficientPermissions", message: nil), .unauthorized),
@@ -50,7 +50,7 @@ extension UnitTests {
 				(.apiError(statusCode: 507, reason: nil, message: nil), .quotaInsufficient)
 			]
 			for (error, expectedError) in cases {
-				#expect(expectedError == (provider.convertStandardError(error) as? CloudProviderError), "\(error)")
+				#expect(expectedError == (GoogleDriveCloudProvider.convertStandardError(error) as? CloudProviderError), "\(error)")
 			}
 		}
 
@@ -60,7 +60,7 @@ extension UnitTests {
 			for reason in ["userRateLimitExceeded", "rateLimitExceeded"] {
 				let error = GoogleDriveError.apiError(statusCode: 403, reason: reason, message: nil)
 
-				#expect(error == (provider.convertStandardError(error) as? GoogleDriveError), "\(reason)")
+				#expect(error == (GoogleDriveCloudProvider.convertStandardError(error) as? GoogleDriveError), "\(reason)")
 			}
 		}
 
@@ -70,7 +70,7 @@ extension UnitTests {
 			for reason in ["insufficientFilePermissions", "appNotAuthorizedToFile", "teamDriveMembershipRequired", "domainPolicy", "dailyLimitExceeded", nil] {
 				let error = GoogleDriveError.apiError(statusCode: 403, reason: reason, message: nil)
 
-				#expect(error == (provider.convertStandardError(error) as? GoogleDriveError), "\(reason ?? "nil")")
+				#expect(error == (GoogleDriveCloudProvider.convertStandardError(error) as? GoogleDriveError), "\(reason ?? "nil")")
 			}
 		}
 

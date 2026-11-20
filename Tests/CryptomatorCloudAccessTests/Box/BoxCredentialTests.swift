@@ -13,6 +13,8 @@ import Testing
 
 extension UnitTests {
 	final class BoxCredentialTests {
+		private static let previousLogin = OAuthToken(accessToken: "PREVIOUS", refreshToken: "PREVIOUS-REFRESH", expiresAt: nil, username: "Previous")
+
 		private let lockDirectoryURL: URL
 
 		init() {
@@ -191,6 +193,63 @@ extension UnitTests {
 			#expect(try credential.hasStoredLogin())
 		}
 
+		/// A failed user request throws what the provider's operations throw for its response.
+		@Test(arguments: BoxAccountFailure.mapped)
+		func getUsernameThrowsMappedError(_ failure: BoxAccountFailure) async {
+			URLProtocolMock.requestHandler = [failure.response]
+			let credential = BoxCredential(userID: "USER-ID", tokenSource: OAuthTokenSourceStub())
+
+			await #expect(throws: failure.expectedError) { try await credential.getUsername(client: .mocked()) }
+		}
+
+		@Test
+		func getUsernameThrowsUnauthorizedIfRefreshedTokenIsRejected() async {
+			let tokenSource = OAuthTokenSourceStub()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 401)]
+			let credential = BoxCredential(userID: "USER-ID", tokenSource: tokenSource)
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await credential.getUsername(client: .mocked(tokenSource: tokenSource)) }
+			#expect(tokenSource.rejectedTokens == ["TOKEN"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A 403 about an item or a policy isn't fixed by signing in again.
+		@Test
+		func getUsernameKeepsOtherForbiddenRaw() async {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "access_denied_insufficient_permissions"))]
+			let credential = BoxCredential(userID: "USER-ID", tokenSource: OAuthTokenSourceStub())
+
+			await #expect(throws: BoxError.apiError(statusCode: 403, code: "access_denied_insufficient_permissions", message: nil)) { try await credential.getUsername(client: .mocked()) }
+		}
+
+		@Test(arguments: BoxAccountFailure.mapped)
+		func failedUserRequestAtLoginThrowsMappedErrorAndStoresNothing(_ failure: BoxAccountFailure) async {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","refresh_token":"NEW-REFRESH"}"#),
+				failure.response
+			]
+			let buffer = TokenBuffer()
+			buffer.store(BoxCredentialTests.previousLogin)
+
+			await #expect(throws: failure.expectedError) { try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer)) }
+			#expect(BoxCredentialTests.previousLogin == buffer.token)
+		}
+
+		/// The sender returns a 401 on its last attempt before it could refresh, so the login maps it itself.
+		@Test
+		func unauthorizedLastUserRequestAtLoginThrowsUnauthorizedAndStoresNothing() async {
+			let userRequests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","refresh_token":"NEW-REFRESH"}"#)]
+				+ Array(repeating: URLProtocolMock.handler(statusCode: 503, onRequest: userRequests.record), count: 4)
+				+ [URLProtocolMock.handler(statusCode: 401, onRequest: userRequests.record)]
+			let buffer = TokenBuffer()
+			buffer.store(BoxCredentialTests.previousLogin)
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer)) }
+			#expect(userRequests.requests.count == 5)
+			#expect(BoxCredentialTests.previousLogin == buffer.token)
+		}
+
 		private func makeTokenSource(buffer: TokenBuffer) throws -> StoredOAuthTokenSource {
 			return try BoxCredential.makeTokenSource(userID: "USER-ID", oauth: .custom(storage: MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), endpoint: .mocked(), assertion: ActivityScript().assertion)
 		}
@@ -206,5 +265,26 @@ extension UnitTests {
 				BoxCredential.makeTokenSource(userID: userID, oauth: oauth, endpoint: endpoint, assertion: ActivityScript().assertion)
 			})
 		}
+	}
+}
+
+/// A response to the user request that the provider's operations map.
+struct BoxAccountFailure: Sendable, CustomTestStringConvertible {
+	static let mapped = [
+		BoxAccountFailure(statusCode: 403, code: "insufficient_scope", expectedError: .unauthorized),
+		BoxAccountFailure(statusCode: 403, code: "storage_limit_exceeded", expectedError: .quotaInsufficient),
+		BoxAccountFailure(statusCode: 404, code: "not_found", expectedError: .itemNotFound)
+	]
+
+	let statusCode: Int
+	let code: String
+	let expectedError: CloudProviderError
+
+	var response: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+		return URLProtocolMock.handler(statusCode: statusCode, body: BoxMockResponse.error(status: statusCode, code: code))
+	}
+
+	var testDescription: String {
+		return "\(statusCode) \(code)"
 	}
 }

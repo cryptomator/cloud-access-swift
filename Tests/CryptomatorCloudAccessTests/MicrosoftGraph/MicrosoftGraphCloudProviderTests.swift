@@ -43,9 +43,9 @@ extension UnitTests {
 		@Test
 		func testConvertStandardError() {
 			let cancellationError = NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled)
-			#expect(provider.convertStandardError(cancellationError) is CancellationError)
-			#expect(provider.convertStandardError(NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])) is CancellationError)
-			#expect((provider.convertStandardError(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)) as? CloudProviderError) == .noInternetConnection)
+			#expect(MicrosoftGraphCloudProvider.convertStandardError(cancellationError) is CancellationError)
+			#expect(MicrosoftGraphCloudProvider.convertStandardError(NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: cancellationError])) is CancellationError)
+			#expect((MicrosoftGraphCloudProvider.convertStandardError(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)) as? CloudProviderError) == .noInternetConnection)
 		}
 
 		@Test

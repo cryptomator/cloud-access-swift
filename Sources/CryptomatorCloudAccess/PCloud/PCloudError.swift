@@ -18,4 +18,12 @@ enum PCloudError: Error, Equatable {
 	case listingTooLarge
 	case inconsistentCache
 	case fileLinkNotFound
+
+	/// Describes an error for the log, leaving out an API error's message, which a content host could fill with the path of the file link that it refused.
+	static func descriptionWithoutMessage(of error: Error) -> String {
+		guard case let PCloudError.apiError(code, _) = error else {
+			return "\(error)"
+		}
+		return "pCloud API error \(code)"
+	}
 }

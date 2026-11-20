@@ -17,6 +17,7 @@ final class OAuthTokenSourceStub: OAuthTokenSource {
 		var rejectedTokens = [String]()
 		var username: String?
 		var failsUsernameUpdates = false
+		var accessTokenError: (any Error)?
 		var deauthenticationCount = 0
 	}
 
@@ -43,9 +44,20 @@ final class OAuthTokenSourceStub: OAuthTokenSource {
 		set { state.withLock { $0.failsUsernameUpdates = newValue } }
 	}
 
+	/// The error that `accessToken()` throws instead of handing out a token, e.g., a failed read of the token's storage.
+	var accessTokenError: (any Error)? {
+		get { state.withLock { $0.accessTokenError } }
+		set { state.withLock { $0.accessTokenError = newValue } }
+	}
+
 	func accessToken() async throws -> String {
 		await onAccessToken()
-		return state.withLock { $0.token }
+		return try state.withLock { state in
+			if let error = state.accessTokenError {
+				throw error
+			}
+			return state.token
+		}
 	}
 
 	func refresh(rejecting accessToken: String) async throws -> String {

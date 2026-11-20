@@ -7,6 +7,7 @@
 //
 
 import Foundation
+@preconcurrency import MSAL
 import Testing
 @testable import CryptomatorCloudAccessCore
 
@@ -86,6 +87,56 @@ extension UnitTests {
 				Issue.record("Unexpected error: \(error)")
 				return
 			}
+		}
+
+		/// MSAL wraps the URL loading system's errors of its token request in its own error.
+		@Test
+		func connectionFailureThatMSALWrapsThrowsNoInternetConnection() async throws {
+			let discovery = discoveryFailingTokenReads(with: MicrosoftGraphDiscoveryTests.msalError(wrapping: URLError(.notConnectedToInternet)))
+			let siteURL = try #require(URL(string: "https://contoso.sharepoint.com/sites/Team"))
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await discovery.fetchSharePointSite(for: siteURL) }
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await discovery.fetchSharePointDrives(for: "SITE") }
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await discovery.fetchDrive(for: "DRIVE") }
+		}
+
+		@Test
+		func cancellationThatMSALWrapsThrowsCancellationError() async throws {
+			let discovery = discoveryFailingTokenReads(with: MicrosoftGraphDiscoveryTests.msalError(wrapping: URLError(.cancelled)))
+			let siteURL = try #require(URL(string: "https://contoso.sharepoint.com/sites/Team"))
+
+			await #expect(throws: CancellationError.self) { try await discovery.fetchSharePointSite(for: siteURL) }
+			await #expect(throws: CancellationError.self) { try await discovery.fetchSharePointDrives(for: "SITE") }
+			await #expect(throws: CancellationError.self) { try await discovery.fetchDrive(for: "DRIVE") }
+		}
+
+		/// An error in `NSURLErrorDomain` is classified by its own code, so a timeout stays a timeout even if it wraps a cancellation or a failed connection.
+		@Test(arguments: [URLError.Code.cancelled, .notConnectedToInternet])
+		func outerURLErrorKeepsItsOwnCode(underlyingCode: URLError.Code) async throws {
+			let discovery = discoveryFailingTokenReads(with: URLError(.timedOut, userInfo: [NSUnderlyingErrorKey: URLError(underlyingCode)]))
+
+			let error = try await #require(throws: URLError.self) { try await discovery.fetchDrive(for: "DRIVE") }
+			#expect(error.code == .timedOut)
+		}
+
+		@Test
+		func malformedBodyIsPassedThrough() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"name":"Documents"}"#)]
+
+			await #expect(throws: DecodingError.self) { try await discovery.fetchDrive(for: "DRIVE") }
+		}
+
+		// MARK: - Helpers
+
+		private func discoveryFailingTokenReads(with error: Error) -> MicrosoftGraphDiscovery {
+			let tokenSource = OAuthTokenSourceStub()
+			tokenSource.accessTokenError = error
+			return MicrosoftGraphDiscovery(client: .mocked(tokenSource: tokenSource))
+		}
+
+		/// An error in `MSALErrorDomain` other than `interactionRequired`, which wraps the given error.
+		private static func msalError(wrapping underlyingError: URLError) -> NSError {
+			return NSError(domain: MSALErrorDomain, code: MSALError.internal.rawValue, userInfo: [NSUnderlyingErrorKey: underlyingError])
 		}
 	}
 }

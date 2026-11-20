@@ -296,7 +296,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		do {
 			return try await request()
 		} catch {
-			throw convertStandardError(error)
+			throw Self.convertStandardError(error)
 		}
 	}
 
@@ -331,7 +331,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		return CloudItemMetadata(name: name, cloudPath: cloudPath, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size, isAlias: isAlias)
 	}
 
-	func convertStandardError(_ error: Error) -> Error {
+	static func convertStandardError(_ error: Error) -> Error {
 		if isCancellationError(error) {
 			return CancellationError()
 		}

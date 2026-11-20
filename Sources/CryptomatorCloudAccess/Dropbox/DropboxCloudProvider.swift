@@ -254,13 +254,7 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	/// Logs the operation and converts the errors that it throws.
 	private func perform<T>(_ operation: String, _ body: () async throws -> T) async throws -> T {
-		CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) called")
-		do {
-			return try await body()
-		} catch {
-			CloudAccessDDLogDebug("DropboxCloudProvider: \(operation) failed with error: \(error)")
-			throw convertStandardError(error)
-		}
+		try await performLogged(operation, by: "DropboxCloudProvider", convert: convertStandardError, body)
 	}
 
 	func ensureParentFolderExists(for cloudPath: CloudPath) async throws {
@@ -284,13 +278,17 @@ public final class DropboxCloudProvider: CloudProvider {
 		return try CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.lastModifiedDate, size: Int(size))
 	}
 
-	/// Maps an unauthorized request and the route errors of a 409, whose `error_summary` starts with the tags of the route's argument, e.g., `path_lookup/not_found/..` for a missing item to delete.
-	func convertStandardError(_ error: Error) -> Error {
-		guard case let DropboxError.apiError(statusCode, summary) = error else {
+	static func convertUnauthorizedError(_ error: Error) -> Error {
+		guard case DropboxError.apiError(statusCode: 401, _) = error else {
 			return error
 		}
-		if statusCode == 401 {
-			return CloudProviderError.unauthorized
+		return CloudProviderError.unauthorized
+	}
+
+	/// Maps an unauthorized request and the route errors of a 409, whose `error_summary` starts with the tags of the route's argument, e.g., `path_lookup/not_found/..` for a missing item to delete.
+	func convertStandardError(_ error: Error) -> Error {
+		guard case let DropboxError.apiError(statusCode, summary) = error, statusCode != 401 else {
+			return DropboxCloudProvider.convertUnauthorizedError(error)
 		}
 		guard statusCode == 409 else {
 			return error

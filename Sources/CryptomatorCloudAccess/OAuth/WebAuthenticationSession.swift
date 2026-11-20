@@ -124,6 +124,69 @@ func runWebAuthenticationSession<Output: Sendable>(logPrefix: String, convertErr
 	}
 }
 
+/// The checks of a web login's callback URL and of the error that its session ended with, which log with the authenticator's prefix.
+struct WebLoginCallback: Sendable {
+	/// The name of the authenticator that the log lines start with.
+	let logPrefix: String
+	/// The error that a failed login throws, unless the user cancelled it.
+	let failure: any Error
+
+	func userCancelled() -> CocoaError {
+		CloudAccessDDLogDebug("\(logPrefix): Login flow canceled by the user.")
+		return CocoaError(.userCancelled)
+	}
+
+	func authenticationFailed(because reason: String) -> any Error {
+		CloudAccessDDLogDebug("\(logPrefix): Authentication failed, because \(reason).")
+		return failure
+	}
+
+	/**
+	 Converts an error of the web authentication session: a cancelled login to `CocoaError(.userCancelled)`, and any other session error to the failure.
+
+	 - Returns: `nil` for an error that isn't the session's.
+	 */
+	func convertSessionError(_ error: Error) -> Error? {
+		guard let sessionError = error as? ASWebAuthenticationSessionError else {
+			return nil
+		}
+		if sessionError.code == .canceledLogin {
+			return userCancelled()
+		}
+		CloudAccessDDLogDebug("\(logPrefix): Authentication failed with error: \(sessionError.localizedDescription).")
+		return failure
+	}
+
+	/**
+	 Returns the components of the callback URL if its scheme and, if given, its host match the redirect URI's, compared case-insensitively.
+
+	 - Throws: The failure if they don't match.
+	 */
+	func components(ofCallbackURL callbackURL: URL, scheme: String, host: String?) throws -> URLComponents {
+		guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == scheme.lowercased(), host.map({ components.host?.lowercased() == $0.lowercased() }) ?? true else {
+			throw authenticationFailed(because: "the callback URL doesn't match the redirect URI")
+		}
+		return components
+	}
+
+	/// Throws `CocoaError(.userCancelled)` for an `error` of `access_denied`, which means that the user denied access, and the failure for any other `error`.
+	func checkError(_ value: String?, providerName: String) throws {
+		if value == "access_denied" {
+			throw userCancelled()
+		}
+		guard value == nil else {
+			throw authenticationFailed(because: "\(providerName) returned an error")
+		}
+	}
+
+	/// Throws the failure if the callback's `state` isn't the request's.
+	func checkState(_ value: String?, expected: String) throws {
+		guard value == expected else {
+			throw authenticationFailed(because: "the state doesn't match")
+		}
+	}
+}
+
 private final class PresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
 	private let anchor: ASPresentationAnchor
 

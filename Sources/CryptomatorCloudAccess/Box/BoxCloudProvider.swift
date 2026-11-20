@@ -421,16 +421,10 @@ public final class BoxCloudProvider: CloudProvider {
 
 	/// Logs the operation and converts the errors that it throws.
 	private func perform<T>(_ operation: String, _ body: () async throws -> T) async throws -> T {
-		CloudAccessDDLogDebug("BoxCloudProvider: \(operation) called")
-		do {
-			return try await body()
-		} catch {
-			CloudAccessDDLogDebug("BoxCloudProvider: \(operation) failed with error: \(error)")
-			throw convertStandardError(error)
-		}
+		try await performLogged(operation, by: "BoxCloudProvider", convert: Self.convertStandardError, body)
 	}
 
-	func convertStandardError(_ error: Error) -> Error {
+	static func convertStandardError(_ error: Error) -> Error {
 		switch error {
 		case BoxError.apiError(statusCode: 403, code: "storage_limit_exceeded", _):
 			return CloudProviderError.quotaInsufficient

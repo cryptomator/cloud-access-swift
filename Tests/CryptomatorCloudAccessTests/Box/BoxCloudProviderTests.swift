@@ -338,7 +338,7 @@ extension UnitTests {
 
 		@Test
 		func unauthorizedIsUnauthorized() {
-			#expect((provider.convertStandardError(BoxError.apiError(statusCode: 401, code: nil, message: nil)) as? CloudProviderError) == .unauthorized)
+			#expect((BoxCloudProvider.convertStandardError(BoxError.apiError(statusCode: 401, code: nil, message: nil)) as? CloudProviderError) == .unauthorized)
 		}
 
 		@Test

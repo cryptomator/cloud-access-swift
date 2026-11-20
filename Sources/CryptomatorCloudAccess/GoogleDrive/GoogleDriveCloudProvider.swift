@@ -314,7 +314,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		case GoogleDriveError.apiError(statusCode: 404, _, _):
 			return true
 		case let GoogleDriveError.apiError(statusCode: 403, reason, _):
-			return !GoogleDriveError.isRetryable(statusCode: 403, reason: reason) && convertStandardError(error) is GoogleDriveError
+			return !GoogleDriveError.isRetryable(statusCode: 403, reason: reason) && Self.convertStandardError(error) is GoogleDriveError
 		default:
 			return false
 		}
@@ -326,16 +326,10 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	/// Logs the operation and converts the errors that it throws.
 	private func perform<T>(_ operation: String, _ body: () async throws -> T) async throws -> T {
-		CloudAccessDDLogDebug("GoogleDriveCloudProvider: \(operation) called")
-		do {
-			return try await body()
-		} catch {
-			CloudAccessDDLogDebug("GoogleDriveCloudProvider: \(operation) failed with error: \(error)")
-			throw convertStandardError(error)
-		}
+		try await performLogged(operation, by: "GoogleDriveCloudProvider", convert: Self.convertStandardError, body)
 	}
 
-	func convertStandardError(_ error: Error) -> Error {
+	static func convertStandardError(_ error: Error) -> Error {
 		switch error {
 		case _ where isCancellationError(error):
 			return CancellationError()

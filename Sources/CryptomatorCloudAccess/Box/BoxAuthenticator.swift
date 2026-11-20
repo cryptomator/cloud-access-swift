@@ -18,6 +18,7 @@ public enum BoxAuthenticatorError: Error {
 @MainActor
 public enum BoxAuthenticator {
 	private nonisolated static let redirectHost = "boxsdkoauth2redirect"
+	private nonisolated static let loginCallback = WebLoginCallback(logPrefix: "BoxAuthenticator", failure: BoxAuthenticatorError.authenticationFailed)
 
 	/**
 	 Shows Box's authorize page, and stores the token of the login in the setup's `oauth` under the user ID of the account.
@@ -28,7 +29,7 @@ public enum BoxAuthenticator {
 	 */
 	public static func authenticate(from viewController: UIViewController, setup: BoxSetup) async throws -> BoxCredential {
 		guard let window = viewController.view.window else {
-			throw authenticationFailed(because: "the view controller isn't part of a window")
+			throw loginCallback.authenticationFailed(because: "the view controller isn't part of a window")
 		}
 		let clientID = setup.clientID
 		let state = UUID().uuidString
@@ -60,52 +61,25 @@ public enum BoxAuthenticator {
 
 	/// The session is shared with the browser, which lets the user sign in to another account on Box's authorize page.
 	private static func runLoginFlow(url: URL, callbackURLScheme: String, anchor: ASPresentationAnchor) async throws -> URL {
-		return try await runWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, anchor: anchor, prefersEphemeralWebBrowserSession: false, logPrefix: "BoxAuthenticator", convertError: { convertLoginFlowError($0 ?? BoxAuthenticatorError.authenticationFailed) })
+		return try await runWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, anchor: anchor, prefersEphemeralWebBrowserSession: false, logPrefix: loginCallback.logPrefix, convertError: { convertLoginFlowError($0 ?? loginCallback.failure) })
 	}
 
 	/// Reads the authorization code from the query of the callback URL if its `state` matches the request's. An `error` of `access_denied`, which means that the user denied access, throws `CocoaError(.userCancelled)`.
 	nonisolated static func authorizationCode(fromCallbackURL callbackURL: URL, clientID: String, expectedState: String) throws -> String {
-		guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(clientID: clientID).lowercased(), components.host?.lowercased() == redirectHost else {
-			throw authenticationFailed(because: "the callback URL doesn't match the redirect URI")
-		}
+		let components = try loginCallback.components(ofCallbackURL: callbackURL, scheme: redirectScheme(clientID: clientID), host: redirectHost)
 		let queryItems = components.queryItems ?? []
 		let value: (String) -> String? = { name in
 			queryItems.first(where: { $0.name == name })?.value
 		}
-		if value("error") == "access_denied" {
-			throw userCancelled()
-		}
-		guard value("error") == nil else {
-			throw authenticationFailed(because: "Box returned an error")
-		}
-		guard value("state") == expectedState else {
-			throw authenticationFailed(because: "the state doesn't match")
-		}
+		try loginCallback.checkError(value("error"), providerName: "Box")
+		try loginCallback.checkState(value("state"), expected: expectedState)
 		guard let authorizationCode = value("code"), !authorizationCode.isEmpty else {
-			throw authenticationFailed(because: "the code is missing")
+			throw loginCallback.authenticationFailed(because: "the code is missing")
 		}
 		return authorizationCode
 	}
 
 	nonisolated static func convertLoginFlowError(_ error: Error) -> Error {
-		guard let sessionError = error as? ASWebAuthenticationSessionError else {
-			return error
-		}
-		if sessionError.code == .canceledLogin {
-			return userCancelled()
-		} else {
-			CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed with error: \(sessionError.localizedDescription).")
-			return BoxAuthenticatorError.authenticationFailed
-		}
-	}
-
-	private nonisolated static func userCancelled() -> CocoaError {
-		CloudAccessDDLogDebug("BoxAuthenticator: Login flow canceled by the user.")
-		return CocoaError(.userCancelled)
-	}
-
-	private nonisolated static func authenticationFailed(because reason: String) -> BoxAuthenticatorError {
-		CloudAccessDDLogDebug("BoxAuthenticator: Authentication failed, because \(reason).")
-		return .authenticationFailed
+		return loginCallback.convertSessionError(error) ?? error
 	}
 }

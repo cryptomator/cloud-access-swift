@@ -119,6 +119,50 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
+		// MARK: - Error Mapping
+
+		/// A failed request throws what the provider's operations throw for its response.
+		@Test(arguments: GoogleDriveAccountFailure.mapped)
+		func getUsernameThrowsMappedError(_ failure: GoogleDriveAccountFailure) async {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: failure.statusCode, body: GoogleDriveMockResponse.error(status: failure.statusCode, reason: failure.reason))]
+			let credential = GoogleDriveCredential(userID: "112233", tokenSource: OAuthTokenSourceStub())
+
+			await #expect(throws: failure.expectedError) { try await credential.getUsername(client: .mocked()) }
+		}
+
+		@Test
+		func getUsernameThrowsUnauthorizedIfRefreshedTokenIsRejected() async {
+			let tokenSource = OAuthTokenSourceStub()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(statusCode: 401)]
+			let credential = GoogleDriveCredential(userID: "112233", tokenSource: tokenSource)
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await credential.getUsername(client: .mocked(tokenSource: tokenSource)) }
+			#expect(tokenSource.rejectedTokens == ["TOKEN"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The client retried a rate limit until no attempt was left, which is no login failure.
+		@Test
+		func getUsernameKeepsExhaustedRateLimitRaw() async {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "rateLimitExceeded"), onRequest: requests.record), count: BearerRequestSender.maxAttemptCount)
+			let credential = GoogleDriveCredential(userID: "112233", tokenSource: OAuthTokenSourceStub())
+
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 403, reason: "rateLimitExceeded", message: "Error")) { try await credential.getUsername(client: .mocked()) }
+			#expect(requests.requests.count == BearerRequestSender.maxAttemptCount)
+		}
+
+		@Test
+		func getUsernameThrowsCancellationErrorForCancelledTokenRead() async {
+			let tokenSource = OAuthTokenSourceStub()
+			tokenSource.accessTokenError = NSError(domain: "Test", code: 0, userInfo: [NSUnderlyingErrorKey: URLError(.cancelled)])
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"user":{"emailAddress":"new@example.com"}}"#)]
+			let credential = GoogleDriveCredential(userID: "112233", tokenSource: tokenSource)
+
+			await #expect(throws: CancellationError.self) { try await credential.getUsername(client: .mocked(tokenSource: tokenSource)) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
 		// MARK: - Helpers
 
 		private func makeTokenSource(userID: String) -> StoredOAuthTokenSource {
@@ -132,5 +176,23 @@ extension UnitTests {
 			}
 			return "\(encode(#"{"alg":"RS256","typ":"JWT"}"#)).\(encode(claims)).c2ln"
 		}
+	}
+}
+
+/// A response to the account request that the provider's operations map.
+struct GoogleDriveAccountFailure: Sendable, CustomTestStringConvertible {
+	static let mapped = [
+		GoogleDriveAccountFailure(statusCode: 403, reason: "insufficientPermissions", expectedError: .unauthorized),
+		GoogleDriveAccountFailure(statusCode: 403, reason: "storageQuotaExceeded", expectedError: .quotaInsufficient),
+		GoogleDriveAccountFailure(statusCode: 404, reason: "notFound", expectedError: .itemNotFound),
+		GoogleDriveAccountFailure(statusCode: 507, reason: "insufficientStorage", expectedError: .quotaInsufficient)
+	]
+
+	let statusCode: Int
+	let reason: String
+	let expectedError: CloudProviderError
+
+	var testDescription: String {
+		return "\(statusCode) \(reason)"
 	}
 }

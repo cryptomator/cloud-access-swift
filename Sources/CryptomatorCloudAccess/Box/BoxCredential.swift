@@ -48,7 +48,7 @@ public final class BoxCredential: Sendable {
 
 	 Nothing is stored if the exchange or the user request fails, or the task was cancelled meanwhile.
 
-	 - Throws: `BoxCredentialError.missingUserID` if Box returned no user ID, and otherwise what the code exchange, the user request or saving the token throws.
+	 - Throws: `BoxCredentialError.missingUserID` if Box returned no user ID, the `CloudProviderError` that the provider's operations throw for the user request's response, e.g., `unauthorized`, and otherwise what the code exchange, the user request or saving the token throws.
 	 */
 	@concurrent
 	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, setup: BoxSetup) async throws -> BoxCredential {
@@ -60,7 +60,7 @@ public final class BoxCredential: Sendable {
 
 	static func completeAuthentication(authorizationCode: String, endpoint: BoxOAuthEndpoint, makeClient: (any OAuthTokenSource) -> BoxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> BoxCredential {
 		let token = try await endpoint.exchange(authorizationCode: authorizationCode)
-		let user = try await makeClient(StaticOAuthTokenSource(token: token.accessToken)).user()
+		let user = try await requestUser(of: makeClient(StaticOAuthTokenSource(token: token.accessToken)))
 		guard !user.id.isEmpty else {
 			throw BoxCredentialError.missingUserID
 		}
@@ -85,18 +85,30 @@ public final class BoxCredential: Sendable {
 		return try tokenSource.storedUsername()
 	}
 
-	/// Asks Box for the account's name, and stores it with the login if it changed.
+	/**
+	 Asks Box for the account's name, and stores it with the login if it changed.
+
+	 - Throws: `BoxCredentialError.noUsername` if Box returned no name, the `CloudProviderError` that the provider's operations throw for the request's response, e.g., `unauthorized`, and otherwise what the request throws.
+	 */
 	@concurrent
 	public func getUsername() async throws -> String {
 		return try await getUsername(client: .foreground(tokenSource: tokenSource))
 	}
 
 	func getUsername(client: BoxClient) async throws -> String {
-		guard let name = try await client.user().name else {
+		guard let name = try await BoxCredential.requestUser(of: client).name else {
 			throw BoxCredentialError.noUsername
 		}
 		await tokenSource.storeUsernameIfChanged(name)
 		return name
+	}
+
+	private static func requestUser(of client: BoxClient) async throws -> BoxUser {
+		do {
+			return try await client.user()
+		} catch {
+			throw BoxCloudProvider.convertStandardError(error)
+		}
 	}
 
 	/// Deletes the stored token and revokes it. The token is deleted also if the revocation fails.

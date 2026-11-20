@@ -26,6 +26,7 @@ struct PCloudCallback: Equatable {
 @MainActor
 public enum PCloudAuthenticator {
 	private nonisolated static let redirectHost = "oauth2redirect"
+	private nonisolated static let loginCallback = WebLoginCallback(logPrefix: "PCloudAuthenticator", failure: PCloudAuthenticatorError.authenticationFailed)
 
 	/**
 	 Shows pCloud's authorize page, and stores the token of the login in the setup's `oauth` under the user ID of the account.
@@ -36,7 +37,7 @@ public enum PCloudAuthenticator {
 	 */
 	public static func authenticate(from viewController: UIViewController, setup: PCloudSetup) async throws -> PCloudCredential {
 		guard let window = viewController.view.window else {
-			throw authenticationFailed(because: "the view controller isn't part of a window")
+			throw loginCallback.authenticationFailed(because: "the view controller isn't part of a window")
 		}
 		let appKey = setup.appKey
 		let state = UUID().uuidString
@@ -68,58 +69,38 @@ public enum PCloudAuthenticator {
 
 	/// The session is ephemeral, because pCloud's authorize page approves a remembered browser login without offering to switch accounts, which would make adding another account impossible.
 	private static func runLoginFlow(url: URL, callbackURLScheme: String, anchor: ASPresentationAnchor) async throws -> URL {
-		return try await runWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, anchor: anchor, prefersEphemeralWebBrowserSession: true, logPrefix: "PCloudAuthenticator", convertError: { convertLoginFlowError($0 ?? PCloudAuthenticatorError.authenticationFailed) })
+		return try await runWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme, anchor: anchor, prefersEphemeralWebBrowserSession: true, logPrefix: loginCallback.logPrefix, convertError: { convertLoginFlowError($0 ?? loginCallback.failure) })
 	}
 
 	/// Reads the login from the fragment of the callback URL, which carries `access_token`, `userid`, `hostname` and the `state` of the request. Completing the authentication validates the host.
 	nonisolated static func callback(fromCallbackURL callbackURL: URL, appKey: String, expectedState: String) throws -> PCloudCallback {
-		guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false), components.scheme?.lowercased() == redirectScheme(appKey: appKey), components.host?.lowercased() == redirectHost else {
-			throw authenticationFailed(because: "the callback URL doesn't match the redirect URI")
-		}
+		let components = try loginCallback.components(ofCallbackURL: callbackURL, scheme: redirectScheme(appKey: appKey), host: redirectHost)
 		guard let fragment = components.percentEncodedFragment else {
-			throw authenticationFailed(because: "the callback URL has no fragment")
+			throw loginCallback.authenticationFailed(because: "the callback URL has no fragment")
 		}
 		var parameters = [String: String]()
 		for pair in fragment.split(separator: "&") {
 			let nameAndValue = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
 			guard let name = nameAndValue[0].removingPercentEncoding, let value = (nameAndValue.count > 1 ? nameAndValue[1] : "").removingPercentEncoding else {
-				throw authenticationFailed(because: "the fragment isn't percent-encoded")
+				throw loginCallback.authenticationFailed(because: "the fragment isn't percent-encoded")
 			}
 			if parameters[name] == nil {
 				parameters[name] = value
 			}
 		}
-		if parameters["error"] == "access_denied" {
-			throw userCancelled()
-		}
-		guard parameters["error"] == nil else {
-			throw authenticationFailed(because: "pCloud returned an error")
-		}
-		guard parameters["state"] == expectedState else {
-			throw authenticationFailed(because: "the state doesn't match")
-		}
+		try loginCallback.checkError(parameters["error"], providerName: "pCloud")
+		try loginCallback.checkState(parameters["state"], expected: expectedState)
 		guard let accessToken = parameters["access_token"], !accessToken.isEmpty, let userID = parameters["userid"].flatMap(UInt64.init), let apiHostName = parameters["hostname"] else {
-			throw authenticationFailed(because: "a field is missing or invalid")
+			throw loginCallback.authenticationFailed(because: "a field is missing or invalid")
 		}
 		return PCloudCallback(accessToken: accessToken, userID: String(userID), apiHostName: apiHostName)
 	}
 
 	nonisolated static func convertLoginFlowError(_ error: Error) -> Error {
-		if let sessionError = error as? ASWebAuthenticationSessionError, sessionError.code == .canceledLogin {
-			return userCancelled()
-		} else {
-			CloudAccessDDLogDebug("PCloudAuthenticator: Authentication failed with error: \(error.localizedDescription).")
-			return PCloudAuthenticatorError.authenticationFailed
+		if let convertedError = loginCallback.convertSessionError(error) {
+			return convertedError
 		}
-	}
-
-	private nonisolated static func userCancelled() -> CocoaError {
-		CloudAccessDDLogDebug("PCloudAuthenticator: Login flow canceled by the user.")
-		return CocoaError(.userCancelled)
-	}
-
-	private nonisolated static func authenticationFailed(because reason: String) -> PCloudAuthenticatorError {
-		CloudAccessDDLogDebug("PCloudAuthenticator: Authentication failed, because \(reason).")
-		return .authenticationFailed
+		CloudAccessDDLogDebug("\(loginCallback.logPrefix): Authentication failed with error: \(error.localizedDescription).")
+		return loginCallback.failure
 	}
 }

@@ -82,13 +82,30 @@ extension UnitTests {
 			try await expectErrorsConsumingAllResponses(cases)
 		}
 
+		/// The content host's message could name the file link's path, so the failure logs show only the code, while the thrown error keeps the message.
 		@Test
-		func failedDownloadThrowsErrorOfResultAndLeavesNoFile() async throws {
+		func failedDownloadThrowsErrorOfResultAndLeavesNoFileOrMessageInLog() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
 			let localURL = tmpDirURL.appendingPathComponent("file.txt")
-			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(statusCode: 410, body: PCloudMockResponse.result(2009))]
+			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(statusCode: 410, body: #"{"result":2009,"error":"Cannot serve /SECRETPATH/file.txt"}"#)]
 
-			await #expect(throws: PCloudError.apiError(code: 2009, message: "Error 2009.")) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: PCloudError.apiError(code: 2009, message: "Cannot serve /SECRETPATH/file.txt")) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
+			let messages = logCapture.messages
+			#expect(messages.filter { $0.hasPrefix("PCloudClient: file link download failed with ") } == ["PCloudClient: file link download failed with pCloud API error 2009"])
+			#expect(messages.filter { $0.hasPrefix("PCloudCloudProvider: downloadFileLink(") && $0.hasSuffix(" failed with error: pCloud API error 2009") }.count == 1)
+			#expect(!logCapture.joinedMessages.contains("SECRETPATH"), "\(logCapture.joinedMessages)")
+		}
+
+		/// Only `deletefolderrecursive` documents 2028 (active shares), so `deletefile` passes it through.
+		@Test
+		func deleteFileWithActiveSharesCodeThrowsAPIError() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFile), URLProtocolMock.handler(body: PCloudMockResponse.result(2028))]
+
+			await #expect(throws: PCloudError.apiError(code: 2028, message: "Error 2028.")) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
 		}
 
 		// MARK: - Metadata
@@ -417,6 +434,35 @@ extension UnitTests {
 			for secret in [PCloudCredential.stubAccessToken, PCloudMockResponse.link.path, PCloudMockResponse.link.dwltag] {
 				#expect(!log.contains(secret), "\(secret) in \(log)")
 			}
+		}
+
+		/// The failure is logged once, with pCloud's code before it is mapped.
+		@Test
+		func refusedDeleteFileLogsRawCodeOnce() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFile), URLProtocolMock.handler(body: PCloudMockResponse.result(2003))]
+
+			await #expect(throws: CloudProviderError.deletionIncomplete) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
+
+			let failures = logCapture.messages.filter { $0.hasPrefix("PCloudCloudProvider: deleteFile(for: 5) failed with error:") }
+			#expect(failures.count == 1, "\(failures)")
+			#expect(failures.first?.contains("2003") == true, "\(failures)")
+		}
+
+		@Test
+		func deleteFileOfFolderLogsTypeMismatchOnce() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder)]
+
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFile(at: CloudPath("/folder")) }
+
+			#expect(logCapture.messages.filter { $0.hasPrefix("PCloudCloudProvider: deleteFile(for: 3) failed with error:") }.count == 1)
 		}
 
 		// MARK: - Transfers

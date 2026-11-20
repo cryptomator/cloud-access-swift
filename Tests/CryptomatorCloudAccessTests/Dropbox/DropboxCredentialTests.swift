@@ -101,6 +101,35 @@ extension UnitTests {
 			#expect(DropboxCredentialTests.previousLogin == buffer.token)
 		}
 
+		/// The sender returns a 401 on its last attempt before it could refresh, so the login maps it itself.
+		@Test
+		func unauthorizedLastAccountRequestThrowsUnauthorizedAndStoresNothing() async throws {
+			let accountRequests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxCredentialTests.exchangeResponse)]
+				+ Array(repeating: URLProtocolMock.handler(statusCode: 503, onRequest: accountRequests.record), count: 4)
+				+ [URLProtocolMock.handler(statusCode: 401, body: DropboxMockResponse.error("invalid_access_token/.."), onRequest: accountRequests.record)]
+			let buffer = TokenBuffer()
+			buffer.store(DropboxCredentialTests.previousLogin)
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer)) }
+			#expect(accountRequests.requests.count == 5)
+			#expect(DropboxCredentialTests.previousLogin == buffer.token)
+		}
+
+		/// The account request has no route errors, so a 409 isn't mapped like a provider operation's, whose `reset` would be `pageTokenInvalid`.
+		@Test
+		func conflictingAccountRequestStoresNothingAndThrowsRawError() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: DropboxCredentialTests.exchangeResponse),
+				URLProtocolMock.handler(statusCode: 409, body: DropboxMockResponse.error("reset/.."))
+			]
+			let buffer = TokenBuffer()
+			buffer.store(DropboxCredentialTests.previousLogin)
+
+			await #expect(throws: DropboxError.apiError(statusCode: 409, summary: "reset/..")) { try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer)) }
+			#expect(DropboxCredentialTests.previousLogin == buffer.token)
+		}
+
 		// MARK: - Username
 
 		@Test
@@ -115,6 +144,31 @@ extension UnitTests {
 
 			#expect(username == "user@example.com")
 			#expect(OAuthToken(accessToken: "ACCESS", refreshToken: "REFRESH", expiresAt: nil, username: "user@example.com") == buffer.token)
+		}
+
+		@Test
+		func getUsernameThrowsUnauthorizedIfRefreshedTokenIsRejected() async {
+			let tokenSource = OAuthTokenSourceStub()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 401, body: DropboxMockResponse.error("expired_access_token/..")),
+				URLProtocolMock.handler(statusCode: 401, body: DropboxMockResponse.error("expired_access_token/.."))
+			]
+			let credential = DropboxCredential(userID: "12345", tokenSource: tokenSource)
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await credential.getUsername(client: .mocked(tokenSource: tokenSource)) }
+			#expect(tokenSource.rejectedTokens == ["TOKEN"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test(arguments: [
+			DropboxAccountFailure(statusCode: 400, body: "Error in call to API function", expectedSummary: "Error in call to API function"),
+			DropboxAccountFailure(statusCode: 409, body: DropboxMockResponse.error("reset/.."), expectedSummary: "reset/..")
+		])
+		func getUsernameKeepsOtherFailuresRaw(_ failure: DropboxAccountFailure) async {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: failure.statusCode, body: failure.body)]
+			let credential = DropboxCredential(userID: "12345", tokenSource: OAuthTokenSourceStub())
+
+			await #expect(throws: DropboxError.apiError(statusCode: failure.statusCode, summary: failure.expectedSummary)) { try await credential.getUsername(client: .mocked()) }
 		}
 
 		// MARK: - Sign-Out
@@ -232,5 +286,16 @@ extension UnitTests {
 				DropboxCredential.makeTokenSource(userID: userID, oauth: oauth, endpoint: endpoint, assertion: ActivityScript().assertion)
 			})
 		}
+	}
+}
+
+/// A response to the account request that the provider's operations map otherwise or not at all.
+struct DropboxAccountFailure: Sendable, CustomTestStringConvertible {
+	let statusCode: Int
+	let body: String
+	let expectedSummary: String
+
+	var testDescription: String {
+		return "\(statusCode)"
 	}
 }

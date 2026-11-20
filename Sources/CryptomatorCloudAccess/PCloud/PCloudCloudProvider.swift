@@ -174,48 +174,29 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private func fetchFileMetadata(for item: PCloudItem) async throws -> CloudItemMetadata {
 		assert(item.itemType == .file)
-		CloudAccessDDLogDebug("PCloudCloudProvider: fetchFileMetadata(for: \(item.identifier)) called")
-		do {
+		return try await perform("fetchFileMetadata(for: \(item.identifier))", mapping: [APIErrorCode.fileDoesNotExist: .itemNotFound]) {
 			let metadata = try await client.stat(fileID: item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFileMetadata(for: \(item.identifier)) received metadata: \(metadata)")
 			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: item.cloudPath)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFileMetadata(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _) = error {
-				throw CloudProviderError.itemNotFound
-			} else {
-				throw error
-			}
 		}
 	}
 
 	private func fetchFolderMetadata(for item: PCloudItem) async throws -> CloudItemMetadata {
 		assert(item.itemType == .folder)
-		CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) called")
-		do {
+		return try await perform("fetchFolderMetadata(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound]) {
 			let metadata = try await withListing(of: item) { listing in listing.folder }
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received metadata: \(metadata)")
 			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: item.cloudPath)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) = error {
-				throw CloudProviderError.itemNotFound
-			} else {
-				throw error
-			}
 		}
 	}
 
 	private func fetchItemList(for item: PCloudItem) async throws -> CloudItemList {
-		CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) called")
-		guard item.itemType == .folder else {
-			let error = CloudProviderError.itemTypeMismatch
-			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) failed with error: \(error)")
-			throw error
-		}
-		do {
+		return try await perform("fetchItemList(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound]) {
+			guard item.itemType == .folder else {
+				throw CloudProviderError.itemTypeMismatch
+			}
 			let itemList = try await withListing(of: item) { listing in
 				try await directoryContentCache.publishSnapshot(of: item.cloudPath) { snapshot in
 					try fillSnapshot(snapshot, from: listing)
@@ -223,13 +204,6 @@ public final class PCloudCloudProvider: CloudProvider {
 			}
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) received first page of \(itemList.items.count) items")
 			return itemList
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) = error {
-				throw CloudProviderError.itemNotFound
-			} else {
-				throw error
-			}
 		}
 	}
 
@@ -254,170 +228,82 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private func getFileLink(for item: PCloudItem) async throws -> PCloudFileLink {
 		assert(item.itemType == .file)
-		CloudAccessDDLogDebug("PCloudCloudProvider: getFileLink(for: \(item.identifier)) called")
-		do {
+		return try await perform("getFileLink(for: \(item.identifier))", mapping: [APIErrorCode.fileDoesNotExist: .itemNotFound]) {
 			let fileLink = try await client.getFileLink(fileID: item.identifier)
 			// The file link grants access to the file's content, so it isn't logged.
 			CloudAccessDDLogDebug("PCloudCloudProvider: getFileLink(for: \(item.identifier)) received file link")
 			return fileLink
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: getFileLink(for: \(item.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _) = error {
-				throw CloudProviderError.itemNotFound
-			} else {
-				throw error
-			}
 		}
 	}
 
 	private func downloadFileLink(_ fileLink: PCloudFileLink, of item: PCloudItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: downloadFileLink(of: \(item.identifier), to: \(localURL)) called")
-		do {
+		try await perform("downloadFileLink(of: \(item.identifier), to: \(localURL))", mapping: [:], describe: PCloudError.descriptionWithoutMessage(of:)) {
 			try await client.download(fileLink, to: localURL, progress: progress, onTaskCreation: onTaskCreation)
 			CloudAccessDDLogDebug("PCloudCloudProvider: downloadFileLink(of: \(item.identifier), to: \(localURL)) finished")
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: downloadFileLink(of: \(item.identifier), to: \(localURL)) failed with error: \(error)")
-			throw error
 		}
 	}
 
 	private func uploadFile(for parentItem: PCloudItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		CloudAccessDDLogDebug("PCloudCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) called")
-		do {
+		return try await perform("uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path))", mapping: [APIErrorCode.folderDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			let metadata = try await client.upload(fromFile: localURL, parentID: parentItem.identifier, name: cloudPath.lastPathComponent, progress: progress, onTaskCreation: onTaskCreation)
 			CloudAccessDDLogDebug("PCloudCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) received metadata: \(metadata)")
 			let item = try PCloudItem(cloudPath: cloudPath, metadata: metadata)
 			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: cloudPath)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _):
-				throw CloudProviderError.parentFolderDoesNotExist
-			case PCloudError.apiError(APIErrorCode.userIsOverQuota, _):
-				throw CloudProviderError.quotaInsufficient
-			default:
-				throw error
-			}
 		}
 	}
 
 	private func createFolder(for parentItem: PCloudItem, with name: String) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) called")
-		do {
+		try await perform("createFolder(for: \(parentItem.identifier), with: \(name))", mapping: [APIErrorCode.componentOfParentDirectoryDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.folderAlreadyExists: .itemAlreadyExists, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			let metadata = try await client.createFolder(name: name, parentID: parentItem.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received metadata: \(metadata)")
 			let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
 			let item = try PCloudItem(cloudPath: cloudPath, metadata: metadata)
 			try identifierCache.addOrUpdate(item)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.componentOfParentDirectoryDoesNotExist, _):
-				throw CloudProviderError.parentFolderDoesNotExist
-			case PCloudError.apiError(APIErrorCode.folderAlreadyExists, _):
-				throw CloudProviderError.itemAlreadyExists
-			case PCloudError.apiError(APIErrorCode.userIsOverQuota, _):
-				throw CloudProviderError.quotaInsufficient
-			default:
-				throw error
-			}
 		}
 	}
 
 	private func deleteFile(for item: PCloudItem) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) called")
-		guard item.itemType == .file else {
-			let error = CloudProviderError.itemTypeMismatch
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
-			throw error
-		}
-		do {
+		try await perform("deleteFile(for: \(item.identifier))", mapping: [APIErrorCode.fileDoesNotExist: .itemNotFound, APIErrorCode.accessDenied: .deletionIncomplete]) {
+			guard item.itemType == .file else {
+				throw CloudProviderError.itemTypeMismatch
+			}
 			try await client.deleteFile(item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) finished")
 			try identifierCache.invalidate(item)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _):
-				throw CloudProviderError.itemNotFound
-			case PCloudError.apiError(APIErrorCode.accessDenied, _):
-				throw CloudProviderError.deletionIncomplete
-			default:
-				throw error
-			}
 		}
 	}
 
+	/// A refused delete throws `deletionIncomplete`, because pCloud doesn't document whether a refused recursive delete removed part of the folder.
 	private func deleteFolder(for item: PCloudItem) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) called")
-		guard item.itemType == .folder else {
-			let error = CloudProviderError.itemTypeMismatch
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
-			throw error
-		}
-		do {
+		try await perform("deleteFolder(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound, APIErrorCode.accessDenied: .deletionIncomplete, APIErrorCode.folderHasActiveShares: .deletionIncomplete]) {
+			guard item.itemType == .folder else {
+				throw CloudProviderError.itemTypeMismatch
+			}
 			try await client.deleteFolderRecursive(item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) finished")
 			try identifierCache.invalidate(item)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _):
-				throw CloudProviderError.itemNotFound
-			case PCloudError.apiError(APIErrorCode.accessDenied, _), PCloudError.apiError(APIErrorCode.folderHasActiveShares, _):
-				// pCloud doesn't document whether a refused recursive delete removed part of the folder.
-				throw CloudProviderError.deletionIncomplete
-			default:
-				throw error
-			}
 		}
 	}
 
 	private func moveFile(from sourceItem: PCloudItem, toParent targetParentItem: PCloudItem, targetCloudPath: CloudPath) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
-		do {
+		try await perform("moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.fileDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			// `renamefile` replaces a file at the target and has no parameter to refuse, whereas `renamefolder` refuses with 2004. A file that another client creates at the target after `checkForNameCollision` is therefore replaced.
 			let metadata = try await client.renameFile(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
 			CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
 			try identifierCache.invalidate(sourceItem)
 			let targetItem = try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			try identifierCache.addOrUpdate(targetItem)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _):
-				throw CloudProviderError.parentFolderDoesNotExist
-			case PCloudError.apiError(APIErrorCode.fileDoesNotExist, _):
-				throw CloudProviderError.itemNotFound
-			case PCloudError.apiError(APIErrorCode.userIsOverQuota, _):
-				throw CloudProviderError.quotaInsufficient
-			default:
-				throw error
-			}
 		}
 	}
 
 	private func moveFolder(from sourceItem: PCloudItem, toParent targetParentItem: PCloudItem, targetCloudPath: CloudPath) async throws {
-		CloudAccessDDLogDebug("PCloudCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) called")
-		do {
+		try await perform("moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderAlreadyExists: .itemAlreadyExists, APIErrorCode.folderDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			let metadata = try await client.renameFolder(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
 			CloudAccessDDLogDebug("PCloudCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
 			try identifierCache.invalidate(sourceItem)
 			let targetItem = try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			try identifierCache.addOrUpdate(targetItem)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) failed with error: \(error)")
-			switch error {
-			case PCloudError.apiError(APIErrorCode.folderAlreadyExists, _):
-				throw CloudProviderError.itemAlreadyExists
-			case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _):
-				throw CloudProviderError.itemNotFound
-			case PCloudError.apiError(APIErrorCode.userIsOverQuota, _):
-				throw CloudProviderError.quotaInsufficient
-			default:
-				throw error
-			}
 		}
 	}
 
@@ -447,20 +333,12 @@ public final class PCloudCloudProvider: CloudProvider {
 	}
 
 	private func getPCloudItem(for name: String, withParentItem parentItem: PCloudItem) async throws -> PCloudItem {
-		CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) called")
-		do {
+		return try await perform("getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound]) {
 			guard parentItem.itemType == .folder, let content = try await child(named: name, in: parentItem) else {
 				throw CloudProviderError.itemNotFound
 			}
 			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) received metadata: \(content)")
 			return try PCloudItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), metadata: content)
-		} catch {
-			CloudAccessDDLogDebug("PCloudCloudProvider: getPCloudItem(for: \(name), withParentItem: \(parentItem.identifier)) failed with error: \(error)")
-			if case PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) = error {
-				throw CloudProviderError.itemNotFound
-			} else {
-				throw error
-			}
 		}
 	}
 
@@ -559,6 +437,18 @@ public final class PCloudCloudProvider: CloudProvider {
 		} catch PCloudError.apiError(APIErrorCode.folderDoesNotExist, _) {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}
+	}
+
+	/// Logs the request and maps the API error codes that `mapping` lists. Any other error passes through unchanged.
+	private func perform<T>(_ operation: String, mapping: [Int: CloudProviderError], describe: (Error) -> String = { "\($0)" }, _ body: () async throws -> T) async throws -> T {
+		try await performLogged(operation, by: "PCloudCloudProvider", convert: { PCloudCloudProvider.convertAPIError($0, mapping: mapping) }, describe: describe, body)
+	}
+
+	private static func convertAPIError(_ error: Error, mapping: [Int: CloudProviderError]) -> Error {
+		guard case let PCloudError.apiError(code, _) = error, let mappedError = mapping[code] else {
+			return error
+		}
+		return mappedError
 	}
 
 	private func convertToCloudItemMetadata(_ metadata: PCloudMetadata, at cloudPath: CloudPath) throws -> CloudItemMetadata {

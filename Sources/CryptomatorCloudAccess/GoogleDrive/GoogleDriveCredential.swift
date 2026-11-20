@@ -77,14 +77,24 @@ public final class GoogleDriveCredential: Sendable {
 		return try tokenSource.storedUsername()
 	}
 
-	/// Asks Google for the account's email, and stores it with the login if it changed.
+	/**
+	 Asks Google for the account's email, and stores it with the login if it changed.
+
+	 - Throws: `GoogleDriveCredentialError.noUsername` if Google returned no email, the error that the provider's operations throw for the request's failure, e.g., `CloudProviderError.unauthorized` or `CancellationError`, and otherwise what the request throws.
+	 */
 	@concurrent
 	public func getUsername() async throws -> String {
 		return try await getUsername(client: .foreground(tokenSource: tokenSource))
 	}
 
 	func getUsername(client: GoogleDriveClient) async throws -> String {
-		guard let email = try await client.about().user?.emailAddress else {
+		let about: GoogleDriveAbout
+		do {
+			about = try await client.about()
+		} catch {
+			throw GoogleDriveCloudProvider.convertStandardError(error)
+		}
+		guard let email = about.user?.emailAddress else {
 			throw GoogleDriveCredentialError.noUsername
 		}
 		await tokenSource.storeUsernameIfChanged(email)

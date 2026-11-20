@@ -53,8 +53,7 @@ public final class S3CloudProvider: CloudProvider {
 
 	/// Lists the item's key as prefix (without trailing slash) instead of sending a `headObject` request, because some providers don't respond to that with an access denied error. A sibling such as `a/b 2/` or `a/b.txt` sorts before the folder `a/b/`, so when the first page holds only a sibling, the folder's own prefix is listed as well.
 	private func getItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
-		CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) called")
-		do {
+		return try await perform("fetchItemMetadata(at: \(cloudPath.path))") {
 			let output = try await listObjects(withPrefix: getKey(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
 			if let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) {
@@ -69,17 +68,13 @@ public final class S3CloudProvider: CloudProvider {
 				throw CloudProviderError.itemNotFound
 			}
 			return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) called")
-		do {
+		return try await perform("fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil"))") {
 			let prefix = getPrefix(for: cloudPath)
 			let output: S3ListObjectsResult
 			do {
@@ -96,9 +91,6 @@ public final class S3CloudProvider: CloudProvider {
 				try await assertFolderExists(at: cloudPath)
 			}
 			return itemList
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
@@ -106,10 +98,9 @@ public final class S3CloudProvider: CloudProvider {
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) called")
-		let key = getKey(for: cloudPath)
-		let phases = Progress.phases(of: progress, 999)
-		do {
+		return try await perform("downloadFile(from: \(cloudPath.path), to: \(localURL))") {
+			let key = getKey(for: cloudPath)
+			let phases = Progress.phases(of: progress, 999)
 			let remoteMetadata = try await getItemMetadata(at: cloudPath)
 			guard remoteMetadata.itemType == .file else {
 				throw CloudProviderError.itemTypeMismatch
@@ -127,9 +118,6 @@ public final class S3CloudProvider: CloudProvider {
 			CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) finished")
 			phases.completeTransfer()
 			return metadata
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: downloadFile(from: \(cloudPath.path), to: \(localURL)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
@@ -138,13 +126,12 @@ public final class S3CloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) called")
-		let localFile = try LocalUploadFile(localURL)
-		let fileSize = Int(localFile.size)
-		let partSize = try multipartUploadPartSize(forFileSize: fileSize)
-		let key = getKey(for: cloudPath)
-		let phases = Progress.phases(of: progress, 999)
-		do {
+		return try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting))") {
+			let localFile = try LocalUploadFile(localURL)
+			let fileSize = Int(localFile.size)
+			let partSize = try multipartUploadPartSize(forFileSize: fileSize)
+			let key = getKey(for: cloudPath)
+			let phases = Progress.phases(of: progress, 999)
 			do {
 				let metadata = try await getItemMetadata(at: cloudPath)
 				guard replaceExisting, metadata.itemType == .file else {
@@ -167,17 +154,13 @@ public final class S3CloudProvider: CloudProvider {
 			}
 			phases.completeTransfer()
 			return metadata
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) called")
-		do {
+		try await perform("createFolder(at: \(cloudPath.path))") {
 			if try await checkForItemExistence(at: cloudPath) {
 				throw CloudProviderError.itemAlreadyExists
 			}
@@ -186,47 +169,35 @@ public final class S3CloudProvider: CloudProvider {
 			// S3 has no folders, so a folder is a 0-byte object whose key is the folder path with a trailing slash.
 			try await client.putEmptyObject(key: getKey(for: cloudPath) + S3CloudProvider.delimiter, contentType: S3CloudProvider.folderContentType)
 			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) finished")
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) called")
-		do {
+		try await perform("deleteFile(at: \(cloudPath.path))") {
 			_ = try await getItemMetadata(at: cloudPath)
 			try Task.checkCancellation()
 			if try await isDeletionRefused(ofKey: getKey(for: cloudPath)) {
 				throw CloudProviderError.deletionIncomplete
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) finished")
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) called")
-		do {
+		try await perform("deleteFolder(at: \(cloudPath.path))") {
 			_ = try await getItemMetadata(at: cloudPath)
 			try await deleteFolderAfterCheck(at: cloudPath)
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
-		do {
+		try await perform("moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
 			let metadata = try await getItemMetadata(at: sourceCloudPath)
 			try await assertItemDoesNotExist(at: targetCloudPath)
 			try await assertParentFolderExists(for: targetCloudPath)
@@ -242,17 +213,13 @@ public final class S3CloudProvider: CloudProvider {
 				}
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) called")
-		do {
+		try await perform("moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
 			try await assertItemDoesExist(at: sourceCloudPath)
 			try await assertItemDoesNotExist(at: targetCloudPath)
 			try await assertParentFolderExists(for: targetCloudPath)
@@ -261,9 +228,6 @@ public final class S3CloudProvider: CloudProvider {
 				try await self.moveFolderAfterCheck(from: sourceCloudPath, to: targetCloudPath)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
-		} catch {
-			CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) failed with error: \(error)")
-			throw convertStandardError(error)
 		}
 	}
 
@@ -432,6 +396,11 @@ public final class S3CloudProvider: CloudProvider {
 	}
 
 	// - MARK: Error Conversion
+
+	/// Logs the operation and converts the errors that it throws.
+	private func perform<T>(_ operation: String, _ body: () async throws -> T) async throws -> T {
+		try await performLogged(operation, by: "S3CloudProvider", convert: convertStandardError, body)
+	}
 
 	func convertStandardError(_ error: Error) -> Error {
 		if error is CloudProviderError || error is CancellationError {

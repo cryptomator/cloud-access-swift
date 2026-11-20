@@ -17,11 +17,14 @@ extension UnitTests {
 		private let appKey = "AppKey"
 		private let state = "STATE"
 
+		/// The scheme and the host are compared case-insensitively.
 		@Test
 		func callbackFromCallbackURL() throws {
-			let callback = try callback(fromCallbackURL: "pclsdk-w-appkey://oauth2redirect#access_token=TOKEN%2B1&token_type=bearer&uid=7&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE")
+			for redirectURI in ["pclsdk-w-appkey://oauth2redirect", "PCLSDK-W-AppKey://OAuth2Redirect"] {
+				let callback = try callback(fromCallbackURL: "\(redirectURI)#access_token=TOKEN%2B1&token_type=bearer&uid=7&userid=7&locationid=2&hostname=eapi.pcloud.com&state=STATE")
 
-			#expect(PCloudCallback(accessToken: "TOKEN+1", userID: "7", apiHostName: "eapi.pcloud.com") == callback)
+				#expect(PCloudCallback(accessToken: "TOKEN+1", userID: "7", apiHostName: "eapi.pcloud.com") == callback, "\(redirectURI)")
+			}
 		}
 
 		@Test
@@ -60,6 +63,12 @@ extension UnitTests {
 		@Test
 		func convertLoginFlowErrorWithFailedSession() {
 			#expect((PCloudAuthenticator.convertLoginFlowError(ASWebAuthenticationSessionError(.presentationContextInvalid)) as? PCloudAuthenticatorError) == .authenticationFailed)
+		}
+
+		/// Unlike Box's and Dropbox's, pCloud's login flow fails for an error that isn't the session's.
+		@Test
+		func convertLoginFlowErrorWithOtherError() {
+			#expect((PCloudAuthenticator.convertLoginFlowError(NSError(domain: "Test", code: 1)) as? PCloudAuthenticatorError) == .authenticationFailed)
 		}
 
 		private func callback(fromCallbackURL callbackURL: String) throws -> PCloudCallback {

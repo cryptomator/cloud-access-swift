@@ -91,6 +91,21 @@ extension UnitTests {
 		}
 
 		@Test
+		func responseStopsAtTheNextElementOnceCancelled() async throws {
+			let cacheMock = cacheMock
+			let snapshot = DirectoryContentSnapshot(folderEnumerationPath: CloudPath("/folder"))
+			cacheMock.saveInIndexClosure = { _, _, _ in withUnsafeCurrentTask { $0?.cancel() } }
+			await #expect(throws: CancellationError.self) {
+				try await cancellingValue(of: Task {
+					let parser = try CachePropfindResponseParser(getXMLParser(forHrefs: ["/folder/", "/folder/a.txt", "/other/", "/folder/b.txt"]), responseURL: #require(URL(string: "/folder/")), cache: cacheMock, snapshot: snapshot)
+					try parser.fillCache()
+				})
+			}
+			#expect(cacheMock.saveInIndexReceivedInvocations.map(\.index) == [1])
+			assertCacheOnlySavedTo()
+		}
+
+		@Test
 		func responseWithMalformattedXML() throws {
 			let xmlParser = try getXMLParser(forResource: "malformatted-xml", withExtension: "xml")
 			let parser = try CachePropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")), cache: cacheMock, snapshot: snapshot)

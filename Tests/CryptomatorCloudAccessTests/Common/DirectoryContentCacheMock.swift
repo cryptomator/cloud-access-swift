@@ -10,7 +10,7 @@ import Foundation
 @testable import CryptomatorCloudAccessCore
 
 // swiftlint:disable all
-/// `@unchecked Sendable`: only used by the synchronous parser tests, which call it from a single thread.
+/// `@unchecked Sendable`: only the parser tests use it, and they never access it concurrently. A test that runs the parser in a task sets the mock up before it starts the task and reads it only after awaiting the task.
 final class DirectoryContentCacheMock: DirectoryContentCache, @unchecked Sendable {
 	// MARK: - save
 

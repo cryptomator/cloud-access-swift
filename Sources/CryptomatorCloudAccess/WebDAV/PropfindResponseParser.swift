@@ -254,11 +254,12 @@ final class CachePropfindResponseParser {
 		self.parser = PropfindResponseParser(parser, responseURL: responseURL)
 	}
 
-	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published.
-	/// - Throws: The error of a failed cache save. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. Otherwise the parser's error.
+	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published. Once the task is cancelled, the parsing stops at the next element.
+	/// - Throws: The error of a failed cache save, or `CancellationError`. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. Otherwise the parser's error.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
 		try parser.parse { element in
+			try Task.checkCancellation()
 			try self.cacheElement(element)
 		}
 		guard folderSegments != nil else {

@@ -27,6 +27,8 @@ public class CryptorMock: VaultCryptor, @unchecked Sendable {
 		var decryptFileNameError: Error?
 		var encryptContentHook: (@Sendable (_ cleartextURL: URL, _ ciphertextURL: URL) throws -> Void)?
 		var decryptContentHook: (@Sendable (_ ciphertextURL: URL, _ cleartextURL: URL) throws -> Void)?
+		var encryptionEncodings: [FileNameEncoding] = []
+		var decryptionEncodings: [FileNameEncoding] = []
 	}
 
 	let dirIds: [String: String]
@@ -52,6 +54,16 @@ public class CryptorMock: VaultCryptor, @unchecked Sendable {
 		set { hooks.withLock { $0.decryptContentHook = newValue } }
 	}
 
+	/// The encodings of the `encryptFileName` calls, in order.
+	var encryptionEncodings: [FileNameEncoding] {
+		hooks.withLock { $0.encryptionEncodings }
+	}
+
+	/// The encodings of the `decryptFileName` calls, in order.
+	var decryptionEncodings: [FileNameEncoding] {
+		hooks.withLock { $0.decryptionEncodings }
+	}
+
 	init(dirIds: [String: String], fileNames: [String: String], contents: [String: String]) {
 		self.dirIds = dirIds
 		self.fileNames = fileNames
@@ -67,6 +79,7 @@ public class CryptorMock: VaultCryptor, @unchecked Sendable {
 	}
 
 	public func encryptFileName(_ cleartextName: String, dirId: Data, encoding: FileNameEncoding) throws -> String {
+		hooks.withLock { $0.encryptionEncodings.append(encoding) }
 		if let ciphertextName = fileNames.someKey(for: cleartextName) {
 			return ciphertextName
 		} else {
@@ -75,6 +88,7 @@ public class CryptorMock: VaultCryptor, @unchecked Sendable {
 	}
 
 	public func decryptFileName(_ ciphertextName: String, dirId: Data, encoding: FileNameEncoding) throws -> String {
+		hooks.withLock { $0.decryptionEncodings.append(encoding) }
 		if let decryptFileNameError {
 			throw decryptFileNameError
 		}

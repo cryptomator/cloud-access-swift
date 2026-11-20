@@ -15,18 +15,21 @@ extension UnitTests {
 		let vaultPath = CloudPath("/foo/bar")
 		let cache: VaultFormat6ShortenedNameCache
 
-		init() throws {
-			self.cache = try VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
+		init() {
+			self.cache = VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
 		}
 
 		@Test
-		func testGetCached() throws {
-			let shortenedName = "4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng"
+		func getOriginalPathReadsNameCachedByShortening() async throws {
 			let originalName = String(repeating: "a", count: 130)
 
-			try cache.addToCache(shortenedName, originalName: originalName)
+			let shortened = cache.getShortenedPath(CloudPath("/foo/bar/d/2/30/\(originalName)"))
 
-			#expect(try originalName == cache.getCached(shortenedName))
+			let original = try await cache.getOriginalPath(shortened.cloudPath) { _ in
+				Issue.record("unexpected name file lookup")
+				return Data()
+			}
+			#expect(original.path == "/foo/bar/d/2/30/\(originalName)")
 		}
 
 		@Test
@@ -72,14 +75,15 @@ extension UnitTests {
 			}
 		}
 
-		/// A name file is the cloud's to write, so a name that would redirect the inflated path is rejected and not cached.
+		/// A name file is the cloud's to write, so a name that would redirect the inflated path is rejected and not cached, even if it hashes to the listed name.
 		@Test
 		func getOriginalPathWithNameThatIsNoSinglePathComponent() async throws {
 			let shortened = CloudPath("/foo/bar/d/2/30/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng")
 
 			for name in ["../x", "a/b", ".", ""] {
+				let listed = CloudPath("/foo/bar/d/2/30/\(shortenedNameHash(of: name, encoding: .base32)).lng")
 				await #expect(throws: VaultFormatError.invalidNameFile, "\(name)") {
-					try await cache.getOriginalPath(shortened) { _ in
+					try await cache.getOriginalPath(listed) { _ in
 						return Data(name.utf8)
 					}
 				}

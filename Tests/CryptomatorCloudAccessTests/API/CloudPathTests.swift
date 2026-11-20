@@ -107,6 +107,18 @@ extension UnitTests {
 			#expect(CloudPath("/foo").appendingPathExtension("bar \u{301}").path == "/foo")
 		}
 
+		/// An ASCII prefix or suffix forms one `Character` with a combining mark after it or a prepended mark before it, but it is still removed, and the rest keeps its bytes.
+		@Test
+		func removingASCIIAffixInCombinedCharacter() {
+			#expect("0\u{301}abc".removingASCIIPrefix("0").map { Array($0.utf8) } == Array("\u{301}abc".utf8))
+			#expect("x\u{600}.c9r".removingASCIISuffix(".c9r").map { Array($0.utf8) } == Array("x\u{600}".utf8))
+			#expect(".c9r".removingASCIISuffix(".c9r") == "")
+			#expect("abc".removingASCIIPrefix("0") == nil)
+			#expect("abc".removingASCIISuffix(".c9r") == nil)
+			#expect("".removingASCIIPrefix("0") == nil)
+			#expect("".removingASCIISuffix(".c9r") == nil)
+		}
+
 		@Test
 		func testPathComponents() {
 			#expect(CloudPath("/foo/bar/").pathComponents == ["/", "foo", "bar"])

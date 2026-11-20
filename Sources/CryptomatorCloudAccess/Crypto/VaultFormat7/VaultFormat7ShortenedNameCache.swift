@@ -6,41 +6,28 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CommonCrypto
 import Foundation
-import GRDB
 
 struct C9SDir {
 	let cloudPath: CloudPath
 	let originalName: String
 }
 
-struct VaultFormat7ShorteningResult {
-	let cloudPath: CloudPath
-	let c9sDir: C9SDir?
-	var pointsToC9S: Bool {
-		cloudPath == c9sDir?.cloudPath
-	}
-}
+enum VaultFormat7ShorteningResult {
+	/// A path that needs no shortening.
+	case unshortened(CloudPath)
+	/// The path of a `.c9s` directory itself.
+	case c9sDirectory(C9SDir)
+	/// The path of an item inside a `.c9s` directory.
+	case insideC9S(CloudPath)
 
-private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
-	static let databaseTableName = "entries"
-	static let shortenedNameKey = "shortenedName"
-	static let originalNameKey = "originalName"
-	let shortenedName: String
-	let originalName: String
-}
-
-extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) throws {
-		container[CachedEntry.shortenedNameKey] = shortenedName
-		container[CachedEntry.originalNameKey] = originalName
-	}
-}
-
-private extension Array {
-	func lastItemIndex() -> Int {
-		return index(before: endIndex)
+	var cloudPath: CloudPath {
+		switch self {
+		case let .unshortened(cloudPath), let .insideC9S(cloudPath):
+			return cloudPath
+		case let .c9sDirectory(c9sDir):
+			return c9sDir.cloudPath
+		}
 	}
 }
 
@@ -64,15 +51,6 @@ private extension CloudPath {
 		let prefix = Array(components[..<(components.count - tailSize)])
 		return CloudPath((prefix + tail).joined(separator: "/"))
 	}
-
-	func trimmingToPathComponent(at index: Int) -> CloudPath {
-		let components = path.pathSegments()
-		precondition(index < components.count)
-		let toBeRemoved = components.count - components.index(after: index)
-		assert(toBeRemoved >= 0)
-		let remainingComponents = Array(components[..<(components.count - toBeRemoved)])
-		return CloudPath(remainingComponents.joined(separator: "/"))
-	}
 }
 
 final class VaultFormat7ShortenedNameCache: Sendable {
@@ -80,18 +58,11 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 
 	private let threshold: Int
 	private let ciphertextNameCompIdx: Int
-	private let inMemoryDB: DatabaseQueue
+	private let originalNames = ShortenedNameMap()
 
-	init(vaultPath: CloudPath, threshold: Int) throws {
+	init(vaultPath: CloudPath, threshold: Int) {
 		self.threshold = threshold
-		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
-		self.inMemoryDB = try DatabaseQueue()
-		try inMemoryDB.write { db in
-			try db.create(table: CachedEntry.databaseTableName) { table in
-				table.column(CachedEntry.shortenedNameKey, .text).notNull().primaryKey()
-				table.column(CachedEntry.originalNameKey, .text).notNull()
-			}
-		}
+		self.ciphertextNameCompIdx = vaultPath.pathComponents.count + 3
 	}
 
 	/**
@@ -99,22 +70,24 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 	 This **does not** persist the original name to `name.c9s`, though.
 
 	 - Parameter originalPath: The unshortened path.
-	 - Returns: A `VaultFormat7ShorteningResult` object that is either based on the `originalPath` (if no shortening is required) or a shortened path.
+	 - Returns: `.unshortened(originalPath)` if no shortening is required, otherwise the shortened path as `.c9sDirectory` for a `.c9s` itself or `.insideC9S` for an item in one.
 	 */
 	func getShortenedPath(_ originalPath: CloudPath) -> VaultFormat7ShorteningResult {
 		if originalPath.pathComponents.count <= ciphertextNameCompIdx {
-			return VaultFormat7ShorteningResult(cloudPath: originalPath, c9sDir: nil)
+			return .unshortened(originalPath)
 		}
 		let originalName = originalPath.pathComponents[ciphertextNameCompIdx]
 		if originalName.count > threshold {
-			let shortenedName = deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix
+			let shortenedName = deflateName(originalName)
 			let shortenedPath = deflatePath(originalPath, with: shortenedName)
-			let c9sDirPath = shortenedPath.trimmingToPathComponent(at: ciphertextNameCompIdx)
-			let c9sDir = C9SDir(cloudPath: c9sDirPath, originalName: originalName)
-			try? addToCache(shortenedName, originalName: originalName)
-			return VaultFormat7ShorteningResult(cloudPath: shortenedPath, c9sDir: c9sDir)
+			originalNames.record(shortenedName: shortenedName, originalName: originalName)
+			if originalPath.pathComponents.count == ciphertextNameCompIdx + 1 {
+				return .c9sDirectory(C9SDir(cloudPath: shortenedPath, originalName: originalName))
+			} else {
+				return .insideC9S(shortenedPath)
+			}
 		} else {
-			return VaultFormat7ShorteningResult(cloudPath: originalPath, c9sDir: nil)
+			return .unshortened(originalPath)
 		}
 	}
 
@@ -132,10 +105,11 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 			return shortenedPath
 		}
 		let shortenedName = shortenedPath.pathComponents[ciphertextNameCompIdx]
-		if shortenedName.hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix) {
+		if shortenedName.removingASCIISuffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil {
 			let cutOff = shortenedPath.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirPath = shortenedPath.deletingLastPathComponents(cutOff)
-			let originalName = try await inflateName(shortenedName, c9sDirPath: c9sDirPath, nameC9SLoader: loadNameC9S)
+			// `getShortenedPath` maps the inflated path back to this `.c9s` only if the name is longer than the threshold and hashes to the `.c9s` name.
+			let originalName = try await originalNames.originalName(forShortenedName: shortenedName, loadingNameFile: { try await loadNameC9S(c9sDirPath) }, shortening: deflateName, accepting: { $0.count > threshold })
 			return inflatePath(shortenedPath, with: originalName)
 		} else {
 			return shortenedPath
@@ -145,53 +119,20 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 	/// Whether the path is a `.c9s` directory itself, as opposed to an item in one or an unshortened item.
 	func isC9SDirectory(_ cloudPath: CloudPath) -> Bool {
 		let pathComponents = cloudPath.pathComponents
-		return pathComponents.count == ciphertextNameCompIdx + 1 && pathComponents[ciphertextNameCompIdx].hasSuffix(VaultFormat7ShortenedNameCache.c9sSuffix)
+		return pathComponents.count == ciphertextNameCompIdx + 1 && pathComponents[ciphertextNameCompIdx].removingASCIISuffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil
 	}
 
 	// MARK: - Internal
 
 	private func deflateName(_ originalName: String) -> String {
-		let bytes = [UInt8](originalName.precomposedStringWithCanonicalMapping.utf8)
-		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
-		CC_SHA1(bytes, UInt32(bytes.count) as CC_LONG, &digest)
-		return Data(digest).base64UrlEncodedString()
+		return shortenedNameHash(of: originalName, encoding: .base64url) + VaultFormat7ShortenedNameCache.c9sSuffix
 	}
 
 	func deflatePath(_ originalPath: CloudPath, with shortenedName: String) -> CloudPath {
 		return originalPath.replacingPathComponent(at: ciphertextNameCompIdx, with: shortenedName)
 	}
 
-	private func inflateName(_ shortenedName: String, c9sDirPath: CloudPath, nameC9SLoader loadNameC9S: @Sendable (_ c9sDirPath: CloudPath) async throws -> Data) async throws -> String {
-		if let originalName = try? getCached(shortenedName) {
-			return originalName
-		} else {
-			let data = try await loadNameC9S(c9sDirPath)
-			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
-				throw VaultFormatError.invalidNameFile
-			}
-			// `getShortenedPath` maps the inflated path back to this `.c9s` only if the name is longer than the threshold and hashes to the `.c9s` name.
-			guard originalName.count > threshold, (deflateName(originalName) + VaultFormat7ShortenedNameCache.c9sSuffix).utf8.elementsEqual(shortenedName.utf8) else {
-				throw VaultFormatError.invalidNameFile
-			}
-			try? addToCache(shortenedName, originalName: originalName)
-			return originalName
-		}
-	}
-
 	private func inflatePath(_ shortenedPath: CloudPath, with originalName: String) -> CloudPath {
 		return shortenedPath.replacingPathComponent(at: ciphertextNameCompIdx, with: originalName)
-	}
-
-	func addToCache(_ shortenedName: String, originalName: String) throws {
-		try inMemoryDB.write { db in
-			try CachedEntry(shortenedName: shortenedName, originalName: originalName).save(db)
-		}
-	}
-
-	func getCached(_ shortenedName: String) throws -> String? {
-		let entry: CachedEntry? = try inMemoryDB.read { db in
-			return try CachedEntry.fetchOne(db, key: shortenedName)
-		}
-		return entry?.originalName
 	}
 }

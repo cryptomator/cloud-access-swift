@@ -22,7 +22,7 @@ private func isLeftOutOfListing(_ error: Error) -> Bool {
 
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat6ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath`.
  */
-final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
+final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
 	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let vaultPath: CloudPath
@@ -32,7 +32,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	init(delegate: CloudProvider, vaultPath: CloudPath) throws {
 		self.delegate = delegate
 		self.vaultPath = vaultPath
-		self.shortenedNameCache = try VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
+		self.shortenedNameCache = VaultFormat6ShortenedNameCache(vaultPath: vaultPath)
 		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 	}
 
@@ -194,7 +194,7 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata, originalPath: CloudPath) -> CloudItemMetadata {
 		let shortened = shortenedNameCache.getShortenedPath(originalPath)
 		if shortened.pointsToLNG {
-			let originalItemType = guessItemTypeByFileName(originalPath.lastPathComponent)
+			let originalItemType = parseVaultFormat6CiphertextName(originalPath.lastPathComponent).itemType
 			return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
 		} else {
 			return CloudItemMetadata(name: shortenedMetadata.name, cloudPath: originalPath, itemType: shortenedMetadata.itemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
@@ -212,16 +212,6 @@ final class VaultFormat6ShorteningProviderDecorator: CloudProvider {
 			.appendingPathComponent(String(lngFileNamePrefix.prefix(2)))
 			.appendingPathComponent(String(lngFileNamePrefix.suffix(2)))
 			.appendingPathComponent(lngFileName)
-	}
-
-	private func guessItemTypeByFileName(_ fileName: String) -> CloudItemType {
-		if fileName.hasPrefix("0") {
-			return .folder
-		} else if fileName.hasPrefix("1S") {
-			return .symlink
-		} else {
-			return .file
-		}
 	}
 
 	private func uploadNameFile(_ lngFileName: String, originalName: String) async throws {

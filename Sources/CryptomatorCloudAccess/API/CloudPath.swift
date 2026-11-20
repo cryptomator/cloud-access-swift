@@ -53,6 +53,22 @@ extension String {
 		return unicodeScalars.split(separator: separator, omittingEmptySubsequences: false).map { String(Substring($0)) }
 	}
 
+	/// Returns the string without the ASCII prefix, or `nil` if it doesn't start with it. It compares UTF-8 bytes, because a prefix forms one `Character` with a combining mark after it, so a `Character`-based search misses it.
+	func removingASCIIPrefix(_ prefix: String) -> String? {
+		guard utf8.starts(with: prefix.utf8) else {
+			return nil
+		}
+		return String(Substring(utf8.dropFirst(prefix.utf8.count)))
+	}
+
+	/// Returns the string without the ASCII suffix, or `nil` if it doesn't end with it. It compares UTF-8 bytes, because a suffix forms one `Character` with a prepended mark (e.g. U+0600) before it, so a `Character`-based search misses it.
+	func removingASCIISuffix(_ suffix: String) -> String? {
+		guard utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8) else {
+			return nil
+		}
+		return String(Substring(utf8.dropLast(suffix.utf8.count)))
+	}
+
 	/// Whether appending the string to a cloud path adds exactly one component equal to the string, rather than nesting it, dropping a slash or resolving to the folder or its parent.
 	var isSinglePathComponent: Bool {
 		return !isEmpty && !unicodeScalars.contains("/") && self != "." && self != ".."

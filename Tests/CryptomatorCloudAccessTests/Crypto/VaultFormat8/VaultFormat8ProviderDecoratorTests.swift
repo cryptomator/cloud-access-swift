@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
@@ -24,7 +25,7 @@ extension UnitTests {
 			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 			let provider = CloudProviderMock(folders: Set(), files: [:])
-			self.decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			self.decorator = try VaultFormat8ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			self.vaultPath = vaultPath
 			self.cryptor = cryptor
 			self.tmpDirURL = tmpDirURL
@@ -45,6 +46,25 @@ extension UnitTests {
 			#expect(provider.createdFiles.count == 2)
 			#expect(provider.createdFiles["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"] != nil)
 			#expect(provider.createdFiles["pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"] != nil)
+		}
+
+		/// `dirid.c9r` holds the dir ID of `dir.c9r` encrypted, and is uploaded last.
+		@Test
+		func createFolderRequests() async throws {
+			let requests = provider.recordingRequests()
+			let encryptedContents = OSAllocatedUnfairLock(initialState: [Data]())
+			cryptor.encryptContentHook = { cleartextURL, _ in
+				let cleartext = try Data(contentsOf: cleartextURL)
+				encryptedContents.withLock { $0.append(cleartext) }
+			}
+			try await decorator.createFolder(at: CloudPath("/Directory 1"))
+			let dirFilePath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r/dir.c9r"
+			let dirIdFilePath = "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ/dirid.c9r"
+			#expect(requests() == RecordedRequests(calls: ["createFolder", "uploadFile", "createFolder", "createFolder", "uploadFile"], transfers: [dirFilePath, dirIdFilePath], createdFolders: ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1.c9r", "pathToVault/d/99", "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"], createdFiles: [dirFilePath, dirIdFilePath]))
+			#expect(Data("some-encrypted-content".utf8) == provider.createdFiles[dirIdFilePath])
+			let dirId = try #require(provider.createdFiles[dirFilePath])
+			#expect(encryptedContents.withLock { $0 } == [dirId])
+			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) == provider.createdFiles[dirFilePath])
 		}
 
 		@Test
@@ -78,9 +98,8 @@ extension UnitTests {
 			cryptor.encryptContentHook = { _, _ in
 				throw CryptorMockError.notMocked
 			}
-			await #expect(throws: CryptorMockError.notMocked) { try await decorator.createFolder(at: CloudPath("/Directory 1")) }
-			#expect(provider.createdFolders.isEmpty)
-			#expect(provider.createdFiles.isEmpty)
+			await #expect(throws: CryptorMockError.notMocked) { try await decorator.createFolder(at: CloudPath("/Directory 1/Directory 1")) }
+			#expect(provider.calls == [])
 			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
 		}
 
@@ -89,9 +108,8 @@ extension UnitTests {
 			cryptor.encryptContentHook = { _, _ in
 				throw CancellationError()
 			}
-			await #expect(throws: CancellationError.self) { try await decorator.createFolder(at: CloudPath("/Directory 1")) }
-			#expect(provider.createdFolders.isEmpty)
-			#expect(provider.createdFiles.isEmpty)
+			await #expect(throws: CancellationError.self) { try await decorator.createFolder(at: CloudPath("/Directory 1/Directory 1")) }
+			#expect(provider.calls == [])
 			#expect(try FileManager.default.contentsOfDirectory(atPath: decorator.tmpDirURL.path) == [])
 		}
 
@@ -122,7 +140,7 @@ extension UnitTests {
 		@Test
 		func moveFolderWithMoveCompletedUpdatesCacheAndRethrows() async throws {
 			let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["dir1": "Directory 1", "dir2": "Directory 2"], contents: [:])
-			let decorator = try VaultFormat8ProviderDecorator(delegate: provider, vaultPath: vaultPath, cryptor: cryptor)
+			let decorator = try VaultFormat8ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try decorator.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
 			provider.afterMutationHook = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
 			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }

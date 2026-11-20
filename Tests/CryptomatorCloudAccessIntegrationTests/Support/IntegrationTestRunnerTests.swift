@@ -135,7 +135,7 @@ extension IntegrationTests {
 		/// The backends build their providers like the app does: a crypto decorator over the shortening decorator of the same format.
 		@Test(arguments: [IntegrationVaultFormat.vf6, .vf8])
 		func vaultBackendUsesTheDecoratorOfItsFormat(format: IntegrationVaultFormat) async throws {
-			let expectedShorteningType: CloudProvider.Type = format == .vf6 ? VaultFormat6ShorteningProviderDecorator.self : VaultFormat8ShorteningProviderDecorator.self
+			let expectedShorteningType: CloudProvider.Type = format == .vf6 ? VaultFormat6ShorteningProviderDecorator.self : VaultFormat7ShorteningProviderDecorator.self
 			try await withIntegrationFixture(IntegrationBackend(.localFileSystem, format)) { context in
 				let providers = try await [context.provider, context.makeLimitedProvider(), context.openVault()]
 				for provider in providers {

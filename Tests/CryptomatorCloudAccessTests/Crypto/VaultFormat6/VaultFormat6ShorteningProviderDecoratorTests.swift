@@ -309,6 +309,28 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil) }
 		}
 
+		/// The `.lng` suffix forms one `Character` with a prepended mark before it, but it still marks a shortened name. This one isn't a valid one, so the listing leaves it out.
+		@Test
+		func fetchItemListLeavesOutInvalidNameWhoseSuffixIsInCombinedCharacter() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/AB\u{600}.lng": Data(), "\(dirPath)/file1": Data()])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath.path) == ["\(dirPath)/file1"])
+		}
+
+		/// The invalid name doesn't count as restored, so the listing throws the lookup's error.
+		@Test
+		func fetchItemListWithInvalidNameWhoseSuffixIsInCombinedCharacterAndFailedNameLookupThrows() async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: [
+				"\(dirPath)/4HGUG7WD5CTA3M2ODUKQUT6HHCBNQO2B.lng": Data(),
+				"\(dirPath)/AB\u{600}.lng": Data()
+			])
+			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil) }
+		}
+
 		@Test
 		func downloadFileWithLongName() async throws {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)

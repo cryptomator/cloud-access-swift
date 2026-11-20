@@ -168,6 +168,55 @@ extension UnitTests {
 			#expect(reads.withLock { $0 } == 0)
 		}
 
+		/// Another device moved the folder away and created a new one at its path, which the cache doesn't know.
+		@Test(arguments: ["/one", "/one/two"])
+		func verifiedDirectoryWithStaleCachedDirIdInvalidatesPathAndThrowsItemNotFound(path: String) async throws {
+			try cache.addOrUpdate(CloudPath("/one"), dirId: Data("OLD".utf8))
+			try cache.addOrUpdate(CloudPath("/one/sub"), dirId: Data("SUB".utf8))
+			let reads = OSAllocatedUnfairLock(initialState: [String]())
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				_ = try await cache.verifiedDirectory(CloudPath(path), readDirId: { cleartextPath, _ in
+					reads.withLock { $0.append(cleartextPath.path) }
+					return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			#expect(reads.withLock { $0 } == ["/one"])
+			#expect(try cache.get(CloudPath("/one")) == nil)
+			#expect(try cache.get(CloudPath("/one/sub")) == nil)
+		}
+
+		@Test(arguments: ["", "ONE"])
+		func verifiedDirectoryWithDirIdRepeatingContainingOneThrowsInvalidDirectoryReference(repeatedDirId: String) async throws {
+			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
+					return Data((cleartextPath.lastPathComponent == "one" ? "ONE" : repeatedDirId).utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			#expect(try cache.get(CloudPath("/one/two")) == nil)
+		}
+
+		/// The dir IDs read before the cancelled read stay cached, and the cancelled read changes nothing, although its ID differs from the cached one.
+		@Test(arguments: ["/one", "/one/two"])
+		func verifiedDirectoryCancelledDuringReadKeepsCache(cancelledReadPath: String) async throws {
+			try cache.addOrUpdate(CloudPath(cancelledReadPath), dirId: Data("OLD".utf8))
+			let cache: DirectoryIdCache = cache
+			let verification = Task {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
+					if cleartextPath.path == cancelledReadPath {
+						withUnsafeCurrentTask { $0?.cancel() }
+					}
+					return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: verification) }
+			#expect(try Data("OLD".utf8) == cache.get(CloudPath(cancelledReadPath)))
+			if cancelledReadPath == "/one/two" {
+				#expect(try Data("ONE".utf8) == cache.get(CloudPath("/one")))
+			} else {
+				#expect(try cache.get(CloudPath("/one/two")) == nil)
+			}
+		}
+
 		@Test
 		func recursiveGet() async throws {
 			let path = CloudPath("/one/two/three")

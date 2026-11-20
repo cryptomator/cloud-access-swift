@@ -30,11 +30,9 @@ private extension CloudPath {
 
  With this decorator, it is expected that the cloud provider methods are being called with ciphertext paths. It transparently deflates/inflates filenames according to vault format 7, see the name shortening section at the security architecture page on [docs.cryptomator.org](https://docs.cryptomator.org/en/1.5/security/architecture/#name-shortening).
 
- It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds 220 characters.
-
- `@unchecked Sendable`: all stored properties are immutable and `Sendable`. The class is subclassed by `VaultFormat8ShorteningProviderDecorator`.
+ It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` or `VaultFormat8ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds the threshold, which is 220 characters unless a vault format 8 configuration gives another.
  */
-class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendable {
+final class VaultFormat7ShorteningProviderDecorator: VaultShorteningDecorator {
 	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let shortenedNameCache: VaultFormat7ShortenedNameCache
@@ -42,7 +40,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 
 	init(delegate: CloudProvider, vaultPath: CloudPath, threshold: Int) throws {
 		self.delegate = delegate
-		self.shortenedNameCache = try VaultFormat7ShortenedNameCache(vaultPath: vaultPath, threshold: threshold)
+		self.shortenedNameCache = VaultFormat7ShortenedNameCache(vaultPath: vaultPath, threshold: threshold)
 		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
 	}
 
@@ -60,7 +58,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		if shortened.pointsToC9S {
+		if case .c9sDirectory = shortened {
 			let shortenedMetadata = try await delegate.fetchItemMetadata(at: shortened.cloudPath)
 			do {
 				return try await getOriginalMetadata(shortenedMetadata)
@@ -86,8 +84,8 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		if shortened.pointsToC9S {
-			let contentsFilePath = shortened.cloudPath.appendingContentsFileComponent()
+		if case let .c9sDirectory(c9sDir) = shortened {
+			let contentsFilePath = c9sDir.cloudPath.appendingContentsFileComponent()
 			let contentsFileMetadata = try await delegate.downloadFile(from: contentsFilePath, to: localURL, progress: progress, onTaskCreation: onTaskCreation)
 			return getOriginalFileMetadata(contentsFileMetadata, originalPath: cloudPath)
 		} else {
@@ -100,8 +98,8 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
-			let contentsFilePath = shortened.cloudPath.appendingContentsFileComponent()
+		if case let .c9sDirectory(c9sDir) = shortened {
+			let contentsFilePath = c9sDir.cloudPath.appendingContentsFileComponent()
 			let newC9SContentsFileMetadata = try await withoutCancellation { () -> CloudItemMetadata? in
 				do {
 					try await self.delegate.createFolder(at: c9sDir.cloudPath)
@@ -125,7 +123,7 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		if shortened.pointsToC9S, let c9sDir = shortened.c9sDir {
+		if case let .c9sDirectory(c9sDir) = shortened {
 			try await withoutCancellation {
 				try await self.createC9SFolderAndUploadNameFile(c9sDir)
 			}
@@ -138,9 +136,9 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		if shortened.pointsToC9S {
-			try await restoringNameFile(of: shortened) {
-				try await self.delegate.deleteFolder(at: shortened.cloudPath)
+		if case let .c9sDirectory(c9sDir) = shortened {
+			try await restoringNameFile(of: c9sDir) {
+				try await self.delegate.deleteFolder(at: c9sDir.cloudPath)
 			}
 		} else {
 			try await delegate.deleteFile(at: shortened.cloudPath)
@@ -151,8 +149,12 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let shortened = shortenedNameCache.getShortenedPath(cloudPath)
-		try await restoringNameFile(of: shortened) {
-			try await self.delegate.deleteFolder(at: shortened.cloudPath)
+		if case let .c9sDirectory(c9sDir) = shortened {
+			try await restoringNameFile(of: c9sDir) {
+				try await self.delegate.deleteFolder(at: c9sDir.cloudPath)
+			}
+		} else {
+			try await delegate.deleteFolder(at: shortened.cloudPath)
 		}
 	}
 
@@ -161,31 +163,26 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		try Task.checkCancellation()
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
-
-		enum PathState { case shortened, unshortened }
-		let oldState: PathState = shortenedSource.pointsToC9S ? .shortened : .unshortened
-		let newState: PathState = shortenedTarget.pointsToC9S ? .shortened : .unshortened
-
-		switch (oldState, newState) {
-		case (.unshortened, .unshortened):
-			try await delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-		case (.unshortened, .shortened):
-			try await withoutCancellation {
-				try await self.createC9SFolderAndUploadNameFile(shortenedTarget.c9sDir!)
-				try await self.delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath.appendingContentsFileComponent())
-			}
-		case (.shortened, .unshortened):
+		switch (shortenedSource, shortenedTarget) {
+		case let (.c9sDirectory, .c9sDirectory(targetC9SDir)):
+			try await moveFolder(from: shortenedSource, toC9S: targetC9SDir)
+		case let (.c9sDirectory(sourceC9SDir), _):
 			try await withoutCancellation {
 				// A move that left `contents.c9r` at the source keeps the source `.c9s` whole. Deleting the `.c9s` could remove `name.c9s` but not `contents.c9r`, and a `.c9s` without a name can't be listed.
-				try await self.delegate.moveFile(from: shortenedSource.cloudPath.appendingContentsFileComponent(), to: shortenedTarget.cloudPath)
+				try await self.delegate.moveFile(from: sourceC9SDir.cloudPath.appendingContentsFileComponent(), to: shortenedTarget.cloudPath)
 				do {
-					try await self.delegate.deleteFolder(at: shortenedSource.cloudPath)
+					try await self.delegate.deleteFolder(at: sourceC9SDir.cloudPath)
 				} catch CloudProviderError.deletionIncomplete {
 					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
 			}
-		case (.shortened, .shortened):
-			try await moveFolder(from: shortenedSource, toC9S: shortenedTarget)
+		case let (_, .c9sDirectory(targetC9SDir)):
+			try await withoutCancellation {
+				try await self.createC9SFolderAndUploadNameFile(targetC9SDir)
+				try await self.delegate.moveFile(from: shortenedSource.cloudPath, to: targetC9SDir.cloudPath.appendingContentsFileComponent())
+			}
+		default:
+			try await delegate.moveFile(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 		}
 	}
 
@@ -194,20 +191,15 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		try Task.checkCancellation()
 		let shortenedSource = shortenedNameCache.getShortenedPath(sourceCloudPath)
 		let shortenedTarget = shortenedNameCache.getShortenedPath(targetCloudPath)
-
-		enum PathState { case shortened, unshortened }
-		let oldState: PathState = shortenedSource.pointsToC9S ? .shortened : .unshortened
-		let newState: PathState = shortenedTarget.pointsToC9S ? .shortened : .unshortened
-
-		switch (oldState, newState) {
-		case (.unshortened, .unshortened):
-			try await delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
-		case (.shortened, .unshortened):
+		switch (shortenedSource, shortenedTarget) {
+		case let (_, .c9sDirectory(targetC9SDir)):
+			try await moveFolder(from: shortenedSource, toC9S: targetC9SDir)
+		case let (.c9sDirectory(sourceC9SDir), _):
 			try await withoutCancellation {
 				var isSourceRemaining = false
 				do {
-					try await self.restoringNameFile(of: shortenedSource) {
-						try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+					try await self.restoringNameFile(of: sourceC9SDir) {
+						try await self.delegate.moveFolder(from: sourceC9SDir.cloudPath, to: shortenedTarget.cloudPath)
 					}
 				} catch CloudProviderError.moveCompletedWithSourceRemaining {
 					isSourceRemaining = true
@@ -221,25 +213,27 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
 			}
-		case (_, .shortened):
-			try await moveFolder(from: shortenedSource, toC9S: shortenedTarget)
+		default:
+			try await delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
 		}
 	}
 
 	// MARK: - Internal
 
 	/// Moves a folder to a `.c9s` and uploads the target's name file, also if the move left leftovers at the source. A `.c9s` source with leftovers gets its name file back before that upload, so that the leftovers stay listable even if the upload fails.
-	private func moveFolder(from shortenedSource: VaultFormat7ShorteningResult, toC9S shortenedTarget: VaultFormat7ShorteningResult) async throws {
+	private func moveFolder(from shortenedSource: VaultFormat7ShorteningResult, toC9S targetC9SDir: C9SDir) async throws {
 		try await withoutCancellation {
 			try await completingMove {
 				do {
-					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: shortenedTarget.cloudPath)
+					try await self.delegate.moveFolder(from: shortenedSource.cloudPath, to: targetC9SDir.cloudPath)
 				} catch CloudProviderError.moveCompletedWithSourceRemaining {
-					try await self.restoreNameFile(of: shortenedSource)
+					if case let .c9sDirectory(sourceC9SDir) = shortenedSource {
+						try await self.restoreNameFile(of: sourceC9SDir)
+					}
 					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
 			} finalize: {
-				try await self.uploadNameFile(shortenedTarget.c9sDir!)
+				try await self.uploadNameFile(targetC9SDir)
 			}
 		}
 	}
@@ -334,12 +328,12 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 		try await uploadNameFile(c9sDir)
 	}
 
-	/// Runs a delete or move of an item and, if it left leftovers, restores the name file of the item's `.c9s`.
-	private func restoringNameFile(of shortened: VaultFormat7ShorteningResult, after mutation: () async throws -> Void) async throws {
+	/// Runs a delete or move of a `.c9s` and, if it left leftovers, restores its name file.
+	private func restoringNameFile(of c9sDir: C9SDir, after mutation: () async throws -> Void) async throws {
 		do {
 			try await mutation()
 		} catch let leftoverError as CloudProviderError where [.deletionIncomplete, .moveCompletedWithSourceRemaining].contains(leftoverError) {
-			try await restoreNameFile(of: shortened)
+			try await restoreNameFile(of: c9sDir)
 			throw leftoverError
 		}
 	}
@@ -347,14 +341,11 @@ class VaultFormat7ShorteningProviderDecorator: CloudProvider, @unchecked Sendabl
 	/**
 	 Uploads the name file of an item's `.c9s` again after a delete or move left leftovers of it.
 
-	 The cloud can delete the name file but refuse to delete the rest, and a `.c9s` without a name file fails a listing page on which no other item is restored. With the name file, the leftovers list under the item's name, so that a later delete can find them. An item that isn't shortened has no name file, so nothing is uploaded for it.
+	 The cloud can delete the name file but refuse to delete the rest, and a `.c9s` without a name file fails a listing page on which no other item is restored. With the name file, the leftovers list under the item's name, so that a later delete can find them.
 
 	 - Throws: Only cancellation. A failed upload is ignored, so that it doesn't replace the outcome of the delete or move.
 	 */
-	private func restoreNameFile(of shortened: VaultFormat7ShorteningResult) async throws {
-		guard shortened.pointsToC9S, let c9sDir = shortened.c9sDir else {
-			return
-		}
+	private func restoreNameFile(of c9sDir: C9SDir) async throws {
 		do {
 			try await uploadNameFile(c9sDir)
 		} catch where !(error is CancellationError) {

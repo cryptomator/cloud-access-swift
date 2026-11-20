@@ -40,6 +40,7 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	let lastModifiedDate = Date(timeIntervalSinceReferenceDate: 0)
 	private let state = OSAllocatedUnfairLock(initialState: State())
 
+	/// The names of the methods called so far, also of a call that then threw `CancellationError` because its task was cancelled.
 	var calls: [String] {
 		state.withLock { $0.calls }
 	}
@@ -169,8 +170,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
-		try Task.checkCancellation()
 		record("fetchItemMetadata")
+		try Task.checkCancellation()
 		try metadataHook?(cloudPath)
 		if let metadata = try metadataOverride?(cloudPath) {
 			return metadata
@@ -180,8 +181,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
-		try Task.checkCancellation()
 		record("fetchItemList")
+		try Task.checkCancellation()
 		try listingHook?(cloudPath, pageToken)
 		if files[cloudPath.path] != nil {
 			throw CloudProviderError.itemTypeMismatch
@@ -204,8 +205,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	@concurrent
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		try Task.checkCancellation()
 		record("downloadFile")
+		try Task.checkCancellation()
 		guard let data = files[cloudPath.path] else {
 			throw CloudProviderError.itemNotFound
 		}
@@ -219,8 +220,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	@concurrent
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
-		try Task.checkCancellation()
 		record("uploadFile")
+		try Task.checkCancellation()
 		if rejectsExistingItems, !replaceExisting, files[cloudPath.path] != nil {
 			throw CloudProviderError.itemAlreadyExists
 		}
@@ -235,8 +236,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
-		try Task.checkCancellation()
 		record("createFolder")
+		try Task.checkCancellation()
 		if rejectsExistingItems, folders.contains(cloudPath.path) || files[cloudPath.path] != nil {
 			throw CloudProviderError.itemAlreadyExists
 		}
@@ -246,16 +247,16 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
-		try Task.checkCancellation()
 		record("deleteFile")
+		try Task.checkCancellation()
 		deleteItem(at: cloudPath)
 		try afterMutationHook?("deleteFile", cloudPath)
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
-		try Task.checkCancellation()
 		record("deleteFolder")
+		try Task.checkCancellation()
 		if files[cloudPath.path] != nil, !deleted.contains(cloudPath.path) {
 			throw CloudProviderError.itemTypeMismatch
 		}
@@ -268,8 +269,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		try Task.checkCancellation()
 		record("moveFile")
+		try Task.checkCancellation()
 		try moveHook?()
 		moveItem(from: sourceCloudPath, to: targetCloudPath)
 		try afterMutationHook?("moveFile", sourceCloudPath)
@@ -277,8 +278,8 @@ public class CloudProviderMock: CloudProvider, @unchecked Sendable {
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		try Task.checkCancellation()
 		record("moveFolder")
+		try Task.checkCancellation()
 		moveItem(from: sourceCloudPath, to: targetCloudPath)
 		try afterMutationHook?("moveFolder", sourceCloudPath)
 	}

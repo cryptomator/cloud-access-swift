@@ -6,9 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
-import CommonCrypto
 import Foundation
-import GRDB
 
 struct VaultFormat6ShorteningResult {
 	let cloudPath: CloudPath
@@ -17,43 +15,15 @@ struct VaultFormat6ShorteningResult {
 	}
 }
 
-private struct CachedEntry: Decodable, FetchableRecord, TableRecord {
-	static let databaseTableName = "entries"
-	static let shortenedNameKey = "shortenedName"
-	static let originalNameKey = "originalName"
-	let shortenedName: String
-	let originalName: String
-}
-
-extension CachedEntry: PersistableRecord {
-	func encode(to container: inout PersistenceContainer) throws {
-		container[CachedEntry.shortenedNameKey] = shortenedName
-		container[CachedEntry.originalNameKey] = originalName
-	}
-}
-
-private extension Array {
-	func lastItemIndex() -> Int {
-		return index(before: endIndex)
-	}
-}
-
 final class VaultFormat6ShortenedNameCache: Sendable {
 	private static let threshold = 129
 	private static let lngSuffix = ".lng"
 
 	private let ciphertextNameCompIdx: Int
-	private let inMemoryDB: DatabaseQueue
+	private let originalNames = ShortenedNameMap()
 
-	init(vaultPath: CloudPath) throws {
-		self.ciphertextNameCompIdx = vaultPath.pathComponents.lastItemIndex() + 4
-		self.inMemoryDB = try DatabaseQueue()
-		try inMemoryDB.write { db in
-			try db.create(table: CachedEntry.databaseTableName) { table in
-				table.column(CachedEntry.shortenedNameKey, .text).notNull().primaryKey()
-				table.column(CachedEntry.originalNameKey, .text).notNull()
-			}
-		}
+	init(vaultPath: CloudPath) {
+		self.ciphertextNameCompIdx = vaultPath.pathComponents.count + 3
 	}
 
 	/**
@@ -70,9 +40,9 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 		}
 		let originalName = originalPath.lastPathComponent
 		if originalName.count > VaultFormat6ShortenedNameCache.threshold {
-			let shortenedName = deflateName(originalName) + VaultFormat6ShortenedNameCache.lngSuffix
+			let shortenedName = deflateName(originalName)
 			let shortenedPath = deflatePath(originalPath, with: shortenedName)
-			try? addToCache(shortenedName, originalName: originalName)
+			originalNames.record(shortenedName: shortenedName, originalName: originalName)
 			return VaultFormat6ShorteningResult(cloudPath: shortenedPath)
 		} else {
 			return VaultFormat6ShorteningResult(cloudPath: originalPath)
@@ -94,11 +64,12 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 			return shortenedPath
 		}
 		let shortenedName = shortenedPath.lastPathComponent
-		if shortenedName.hasSuffix(VaultFormat6ShortenedNameCache.lngSuffix) {
-			guard VaultFormat6ShortenedNameCache.isDeflatedName(shortenedName) else {
+		if let hash = shortenedName.removingASCIISuffix(VaultFormat6ShortenedNameCache.lngSuffix) {
+			guard VaultFormat6ShortenedNameCache.isDeflatedHash(hash) else {
 				throw VaultFormatError.invalidNameFile
 			}
-			let originalName = try await inflateName(shortenedName, lngFileLoader: loadLngFile)
+			// Unlike in vault format 7, a name of any length is accepted, because old versions also shortened names of exactly 129 characters, which `getShortenedPath` leaves as they are.
+			let originalName = try await originalNames.originalName(forShortenedName: shortenedName, loadingNameFile: { try await loadLngFile(shortenedName) }, shortening: deflateName)
 			return inflatePath(shortenedPath, with: originalName)
 		} else {
 			return shortenedPath
@@ -108,54 +79,20 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 	// MARK: - Internal
 
 	private func deflateName(_ originalName: String) -> String {
-		let bytes = [UInt8](originalName.precomposedStringWithCanonicalMapping.utf8)
-		var digest = [UInt8](repeating: 0x00, count: Int(CC_SHA1_DIGEST_LENGTH))
-		CC_SHA1(bytes, UInt32(bytes.count) as CC_LONG, &digest)
-		return Data(digest).base32EncodedString()
+		return shortenedNameHash(of: originalName, encoding: .base32) + VaultFormat6ShortenedNameCache.lngSuffix
 	}
 
-	/// Whether the name has the shape of a name that `deflateName` produces: 32 Base32 characters followed by `.lng`. The path of a name file is built from the first four characters of the name, so a listed name of any other shape (e.g., `..AB.lng`) could point to another directory than the one its name file belongs in.
-	private static func isDeflatedName(_ shortenedName: String) -> Bool {
-		let name = shortenedName.utf8
-		let hash = name.dropLast(lngSuffix.utf8.count)
-		return name.suffix(lngSuffix.utf8.count).elementsEqual(lngSuffix.utf8) && hash.count == 32 && hash.allSatisfy { (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains($0) || (UInt8(ascii: "2") ... UInt8(ascii: "7")).contains($0) }
+	/// Whether the name before `.lng` has the shape of the hash that `deflateName` puts there: 32 Base32 characters. The path of a name file is built from the first four characters of the name, so a listed name of any other shape (e.g., `..AB.lng`) could point to another directory than the one its name file belongs in.
+	private static func isDeflatedHash(_ hash: String) -> Bool {
+		let hash = hash.utf8
+		return hash.count == 32 && hash.allSatisfy { (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains($0) || (UInt8(ascii: "2") ... UInt8(ascii: "7")).contains($0) }
 	}
 
 	func deflatePath(_ originalPath: CloudPath, with shortenedName: String) -> CloudPath {
 		return originalPath.deletingLastPathComponent().appendingPathComponent(shortenedName)
 	}
 
-	private func inflateName(_ shortenedName: String, lngFileLoader loadLngFile: @Sendable (_ lngFileName: String) async throws -> Data) async throws -> String {
-		if let originalName = try? getCached(shortenedName) {
-			return originalName
-		} else {
-			let data = try await loadLngFile(shortenedName)
-			guard let originalName = String(data: data, encoding: .utf8), originalName.isSinglePathComponent else {
-				throw VaultFormatError.invalidNameFile
-			}
-			// A name with another hash can't be addressed through the inflated path, which `getShortenedPath` shortens to that hash.
-			guard (deflateName(originalName) + VaultFormat6ShortenedNameCache.lngSuffix).utf8.elementsEqual(shortenedName.utf8) else {
-				throw VaultFormatError.invalidNameFile
-			}
-			try? addToCache(shortenedName, originalName: originalName)
-			return originalName
-		}
-	}
-
 	private func inflatePath(_ shortenedPath: CloudPath, with originalName: String) -> CloudPath {
 		return shortenedPath.deletingLastPathComponent().appendingPathComponent(originalName)
-	}
-
-	func addToCache(_ shortenedName: String, originalName: String) throws {
-		try inMemoryDB.write { db in
-			try CachedEntry(shortenedName: shortenedName, originalName: originalName).save(db)
-		}
-	}
-
-	func getCached(_ shortenedName: String) throws -> String? {
-		let entry: CachedEntry? = try inMemoryDB.read { db in
-			return try CachedEntry.fetchOne(db, key: shortenedName)
-		}
-		return entry?.originalName
 	}
 }

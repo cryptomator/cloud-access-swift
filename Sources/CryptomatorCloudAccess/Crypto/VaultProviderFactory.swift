@@ -21,8 +21,8 @@ public enum VaultProviderFactory {
 		}
 		let verifiedVaultConfig = try unverifiedVaultConfig.verify(rawKey: masterkey.rawKey)
 		let cryptor = Cryptor(masterkey: masterkey, scheme: verifiedVaultConfig.cipherCombo)
-		let shorteningDecorator = try VaultFormat8ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath, threshold: verifiedVaultConfig.shorteningThreshold)
-		return try VaultFormat8ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+		let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath, threshold: verifiedVaultConfig.shorteningThreshold)
+		return try VaultFormat8ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 	}
 
 	public static func createLegacyVaultProvider(from masterkey: Masterkey, vaultVersion: Int, vaultPath: CloudPath, with provider: CloudProvider) throws -> CloudProvider {
@@ -30,10 +30,10 @@ public enum VaultProviderFactory {
 		switch vaultVersion {
 		case 6:
 			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-			return try VaultFormat6ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+			return try VaultFormat6ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		case 7:
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-			return try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+			return try VaultFormat7ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		default:
 			throw VaultProviderFactoryError.unsupportedVaultVersion(version: vaultVersion)
 		}

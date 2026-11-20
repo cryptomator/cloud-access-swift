@@ -159,6 +159,22 @@ extension UnitTests {
 			#expect(itemList.items.isEmpty)
 		}
 
+		/// The `.c9s` suffix forms one `Character` with a prepended mark before it, but it still marks a `.c9s`, so the listing loads its name file. A missing name file fails the page, and an invalid one leaves the item out.
+		@Test(arguments: [false, true])
+		func fetchItemListLoadsNameFileOfC9SWhoseSuffixIsInCombinedCharacter(holdsNameFile: Bool) async throws {
+			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let c9sDirPath = "\(dirPath)/x\u{600}.c9s"
+			let nameFile: [String: Data] = holdsNameFile ? ["\(c9sDirPath)/name.c9s": Data("\(String(repeating: "a", count: 217)).c9r".utf8)] : [:]
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: nameFile.merging(["\(c9sDirPath)/contents.c9r": Data()]) { $1 })
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			if holdsNameFile {
+				let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
+				#expect(itemList.items.isEmpty)
+			} else {
+				await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil) }
+			}
+		}
+
 		@Test
 		func fetchItemListWithOnlyEmptyC9SIsEmpty() async throws {
 			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -664,7 +680,7 @@ extension UnitTests {
 			}
 			provider = VaultFormat7CloudProviderMock(folders: provider.folders, files: files, maxPageSize: maxPageSize, rejectsExistingItems: true)
 			shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
-			decorator = try VaultFormat7ProviderDecorator(delegate: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+			decorator = try VaultFormat7ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		}
 	}
 }

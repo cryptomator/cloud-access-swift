@@ -31,10 +31,25 @@ extension UnitTests {
 				Issue.record("Expected a VaultFormat8ProviderDecorator but received: \(type(of: vaultProvider))")
 				return
 			}
-			guard vaultFormat8Provider.delegate is VaultFormat8ShorteningProviderDecorator else {
-				Issue.record("Expected a VaultFormat8ShorteningProviderDecorator but received: \(type(of: vaultFormat8Provider.delegate))")
+			guard vaultFormat8Provider.delegate is VaultFormat7ShorteningProviderDecorator else {
+				Issue.record("Expected a VaultFormat7ShorteningProviderDecorator but received: \(type(of: vaultFormat8Provider.delegate))")
 				return
 			}
+			#expect((vaultFormat8Provider.physicalProvider as? CloudProviderMock) === cloudProviderMock)
+		}
+
+		/// A name longer than the config's threshold but not than the default of 220 is shortened.
+		@Test
+		func createVaultProviderShortensAtConfigThreshold() throws {
+			let vaultConfig = VaultConfig(id: "ABB9F673-F3E8-41A7-A43B-D29F5DA65068", format: 8, cipherCombo: .sivCtrMac, shorteningThreshold: 150)
+			let masterkey = try Masterkey.createFromRaw(rawKey: [UInt8](repeating: 0x55, count: 32) + [UInt8](repeating: 0x77, count: 32))
+			let token = try vaultConfig.toToken(keyId: "masterkeyfile:masterkey.cryptomator", rawKey: masterkey.rawKey)
+			let unverifiedVaultConfig = try UnverifiedVaultConfig(token: token)
+
+			let vaultProvider = try VaultProviderFactory.createVaultProvider(from: unverifiedVaultConfig, masterkey: masterkey, vaultPath: vaultPath, with: cloudProviderMock)
+			let shorteningDecorator = try #require((vaultProvider as? VaultFormat8ProviderDecorator)?.delegate as? VaultFormat7ShorteningProviderDecorator)
+			let shortened = shorteningDecorator.shortenedNameCache.getShortenedPath(CloudPath("/d/AB/CDEFGHIJKLMNOPQRSTUVWXYZ234567/\(String(repeating: "a", count: 196)).c9r"))
+			#expect(shortened.cloudPath.pathExtension == "c9s")
 		}
 
 		@Test
@@ -67,6 +82,7 @@ extension UnitTests {
 				Issue.record("Expected a VaultFormat7ShorteningProviderDecorator but received: \(type(of: vaultFormat7Provider.delegate))")
 				return
 			}
+			#expect((vaultFormat7Provider.physicalProvider as? CloudProviderMock) === cloudProviderMock)
 		}
 
 		@Test
@@ -82,6 +98,7 @@ extension UnitTests {
 				Issue.record("Expected a VaultFormat6ShorteningProviderDecorator but received: \(type(of: vaultFormat6Provider.delegate))")
 				return
 			}
+			#expect((vaultFormat6Provider.physicalProvider as? CloudProviderMock) === cloudProviderMock)
 		}
 
 		@Test

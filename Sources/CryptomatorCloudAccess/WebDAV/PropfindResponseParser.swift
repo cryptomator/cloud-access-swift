@@ -44,53 +44,31 @@ private struct PropfindResponseElementProperties: Equatable {
 	}
 }
 
-private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLParserDelegate {
-	private weak var parentDelegate: PropfindResponseElementParserDelegate?
+/// Outside a `response`, the delegate reads only the start of the next one. Inside a `response`, it reads the `href` and the start of a `propstat`. Inside a `propstat`, it reads only that group's properties and status. A `response` or `propstat` ends at the next end tag of that name, even a nested element's.
+private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
+	private struct PropstatState {
+		var xmlCharacterBuffer = ""
+		var insideOfResourceType = false
+		var collection = false
+		var lastModified: Date?
+		var contentLength: Int?
+		var statusCode: Int?
 
-	private var xmlCharacterBuffer = ""
-	private var insideOfResourceType = false
-	private var collection = false
-	private var lastModified: Date?
-	private var contentLength: Int?
-	private var statusCode: Int?
-
-	init(parentDelegate: PropfindResponseElementParserDelegate) {
-		self.parentDelegate = parentDelegate
-	}
-
-	// MARK: - XMLParserDelegate
-
-	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		guard let namespaceURI, namespaceURI == "DAV:" else {
-			return
-		}
-		switch elementName {
-		case "getlastmodified", "getcontentlength", "status":
-			xmlCharacterBuffer = ""
-		case "resourcetype":
-			insideOfResourceType = true
-		case "collection":
-			collection = insideOfResourceType
-		default:
-			break
-		}
-	}
-
-	func parser(_ parser: XMLParser, foundCharacters string: String) {
-		xmlCharacterBuffer += string
-	}
-
-	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-		guard let namespaceURI, namespaceURI == "DAV:" else {
-			return
-		}
-		autoreleasepool {
+		mutating func didStartElement(_ elementName: String) {
 			switch elementName {
-			case "propstat":
-				if statusCode == 200 {
-					parentDelegate?.addElementProperties(PropfindResponseElementProperties(collection: collection, lastModified: lastModified, contentLength: contentLength))
-				}
-				parser.delegate = parentDelegate
+			case "getlastmodified", "getcontentlength", "status":
+				xmlCharacterBuffer = ""
+			case "resourcetype":
+				insideOfResourceType = true
+			case "collection":
+				collection = insideOfResourceType
+			default:
+				break
+			}
+		}
+
+		mutating func didEndElement(_ elementName: String) {
+			switch elementName {
 			case "getlastmodified":
 				lastModified = Date.date(fromRFC822: xmlCharacterBuffer)
 			case "getcontentlength":
@@ -104,27 +82,27 @@ private class PropfindResponseElementPropertiesParserDelegate: NSObject, XMLPars
 			}
 		}
 	}
-}
 
-private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate {
-	private weak var parentDelegate: PropfindResponseParserDelegate?
-	private let responseURL: URL
+	private struct ResponseState {
+		var xmlCharacterBuffer = ""
+		var depth: Int?
+		var url: URL?
+		var elementProperties: PropfindResponseElementProperties?
+		var propstat: PropstatState?
 
-	// swiftlint:disable:next weak_delegate
-	private var elementPropertiesDelegate: PropfindResponseElementPropertiesParserDelegate?
-	private var xmlCharacterBuffer = ""
-	private var depth: Int?
-	private var url: URL?
-
-	var elementProperties: PropfindResponseElementProperties?
-
-	init(parentDelegate: PropfindResponseParserDelegate, responseURL: URL) {
-		self.parentDelegate = parentDelegate
-		self.responseURL = responseURL
+		mutating func addElementProperties(_ properties: PropfindResponseElementProperties) {
+			elementProperties = elementProperties?.merging(properties) ?? properties
+		}
 	}
 
-	func addElementProperties(_ properties: PropfindResponseElementProperties) {
-		elementProperties = elementProperties?.merging(properties) ?? properties
+	private let responseURL: URL
+	private let handleElement: (PropfindResponseElement) throws -> Void
+	private var response: ResponseState?
+	private(set) var abortError: Error?
+
+	init(responseURL: URL, handleElement: @escaping (PropfindResponseElement) throws -> Void) {
+		self.responseURL = responseURL
+		self.handleElement = handleElement
 	}
 
 	// MARK: - XMLParserDelegate
@@ -133,19 +111,30 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
-		switch elementName {
-		case "propstat":
-			elementPropertiesDelegate = PropfindResponseElementPropertiesParserDelegate(parentDelegate: self)
-			parser.delegate = elementPropertiesDelegate
-		case "href":
-			xmlCharacterBuffer = ""
-		default:
-			break
+		if response == nil {
+			if elementName == "response" {
+				response = ResponseState()
+			}
+		} else if response?.propstat != nil {
+			response?.propstat?.didStartElement(elementName)
+		} else {
+			switch elementName {
+			case "propstat":
+				response?.propstat = PropstatState()
+			case "href":
+				response?.xmlCharacterBuffer = ""
+			default:
+				break
+			}
 		}
 	}
 
 	func parser(_ parser: XMLParser, foundCharacters string: String) {
-		xmlCharacterBuffer += string
+		if response?.propstat != nil {
+			response?.propstat?.xmlCharacterBuffer += string
+		} else {
+			response?.xmlCharacterBuffer += string
+		}
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
@@ -153,23 +142,48 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 			return
 		}
 		autoreleasepool {
-			switch elementName {
-			case "response":
-				if let depth, let url, let elementProperties {
-					let element = PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength)
-					parentDelegate?.receivedElement(element)
-				}
-				parser.delegate = parentDelegate
-			case "href":
-				url = getURL(xmlCharacterBuffer)
-				depth = getDepth(url)
-			default:
-				break
+			if response?.propstat != nil {
+				didEndElementInPropstat(elementName)
+			} else if response != nil {
+				didEndElementInResponse(elementName, parser: parser)
 			}
 		}
 	}
 
 	// MARK: - Internal
+
+	private func didEndElementInPropstat(_ elementName: String) {
+		guard elementName == "propstat" else {
+			response?.propstat?.didEndElement(elementName)
+			return
+		}
+		if let propstat = response?.propstat, propstat.statusCode == 200 {
+			response?.addElementProperties(PropfindResponseElementProperties(collection: propstat.collection, lastModified: propstat.lastModified, contentLength: propstat.contentLength))
+		}
+		response?.propstat = nil
+	}
+
+	private func didEndElementInResponse(_ elementName: String, parser: XMLParser) {
+		switch elementName {
+		case "response":
+			if let depth = response?.depth, let url = response?.url, let elementProperties = response?.elementProperties {
+				let element = PropfindResponseElement(depth: depth, url: url, collection: elementProperties.collection, lastModified: elementProperties.lastModified, contentLength: elementProperties.contentLength)
+				do {
+					try handleElement(element)
+				} catch {
+					abortError = error
+					parser.abortParsing()
+				}
+			}
+			response = nil
+		case "href":
+			let url = getURL(response?.xmlCharacterBuffer ?? "")
+			response?.url = url
+			response?.depth = getDepth(url)
+		default:
+			break
+		}
+	}
 
 	private func getURL(_ href: String) -> URL? {
 		// workaround, because some servers don't escape spaces (e.g. cubby.com, powered by "IT Hit WebDAV Server .Net v3.0.520.0")
@@ -187,38 +201,9 @@ private class PropfindResponseElementParserDelegate: NSObject, XMLParserDelegate
 	}
 }
 
-private class PropfindResponseParserDelegate: NSObject, XMLParserDelegate, PropfindParserDelegate {
+final class PropfindResponseParser {
+	private let parser: XMLParser
 	private let responseURL: URL
-
-	// swiftlint:disable:next weak_delegate
-	private var elementDelegate: PropfindResponseElementParserDelegate?
-	weak var delegate: PropfindParserDelegate?
-
-	init(responseURL: URL) {
-		self.responseURL = responseURL
-	}
-
-	// MARK: - XMLParserDelegate
-
-	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-		guard let namespaceURI, namespaceURI == "DAV:" else {
-			return
-		}
-		if elementName == "response" {
-			elementDelegate = PropfindResponseElementParserDelegate(parentDelegate: self, responseURL: responseURL)
-			parser.delegate = elementDelegate
-		}
-	}
-
-	fileprivate func receivedElement(_ element: PropfindResponseElement) {
-		delegate?.receivedElement(element)
-	}
-}
-
-class PropfindResponseParser: PropfindParserDelegate {
-	fileprivate let parser: XMLParser
-	private let responseURL: URL
-	private lazy var elements = [PropfindResponseElement]()
 
 	init(_ parser: XMLParser, responseURL: URL) {
 		self.parser = parser
@@ -226,15 +211,20 @@ class PropfindResponseParser: PropfindParserDelegate {
 		self.responseURL = responseURL
 	}
 
-	func getElements() throws -> [PropfindResponseElement] {
-		let delegate = PropfindResponseParserDelegate(responseURL: responseURL)
-		delegate.delegate = self
+	/// Passes each element to `handleElement` as its `response` ends, so that a listing is read without holding its elements.
+	/// - Throws: The error that `handleElement` threw, which aborts the parsing. Otherwise the parser's error.
+	func parse(_ handleElement: @escaping (PropfindResponseElement) throws -> Void) throws {
+		let delegate = PropfindResponseParserDelegate(responseURL: responseURL, handleElement: handleElement)
 		parser.delegate = delegate
-		if parser.parse() {
-			return elements
-		} else {
-			throw parser.parserError ?? PropfindResponseParserError.parsingAborted
+		guard parser.parse() else {
+			throw delegate.abortError ?? parser.parserError ?? PropfindResponseParserError.parsingAborted
 		}
+	}
+
+	func getElements() throws -> [PropfindResponseElement] {
+		var elements = [PropfindResponseElement]()
+		try parse { elements.append($0) }
+		return elements
 	}
 
 	/// The element to take from the response to a `Depth: 0` request: the first whose decoded path segments equal the response URL's, because a response can list other elements before the requested one. If none does, or if the response URL can't be decoded, the first element is taken, because a server behind a path-rewriting proxy spells its hrefs differently from the request. An element's depth can't pick the element there, because with a prefix removed, another element can have the response URL's depth.
@@ -245,37 +235,31 @@ class PropfindResponseParser: PropfindParserDelegate {
 		}
 		return elements.first(where: { $0.url.decodedPathSegments == responseSegments }) ?? elements.first
 	}
-
-	fileprivate func receivedElement(_ element: PropfindResponseElement) {
-		elements.append(element)
-	}
 }
 
-class CachePropfindResponseParser: PropfindResponseParser {
+final class CachePropfindResponseParser {
 	let cache: DirectoryContentCache
 	let snapshot: DirectoryContentSnapshot
+	private let parser: PropfindResponseParser
 	private var elementsCached: Int64 = 0
 	private var isDirectory = false
 	/// The decoded path segments of the first usable element at the folder's depth, taken as the folder's own. The server may spell them differently from the request, and `String` equality treats canonically equivalent segments (NFC and NFD) as equal. Until that element arrives, an element's parent segments aren't compared with them.
 	private var folderSegments: [String]?
 	private let responseSegments: [String]
-	private var abortError: Error?
 
 	init(_ parser: XMLParser, responseURL: URL, cache: DirectoryContentCache, snapshot: DirectoryContentSnapshot) {
 		self.cache = cache
 		self.snapshot = snapshot
 		self.responseSegments = responseURL.decodedPathSegments ?? []
-		super.init(parser, responseURL: responseURL)
+		self.parser = PropfindResponseParser(parser, responseURL: responseURL)
 	}
 
 	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published.
 	/// - Throws: The error of a failed cache save. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. Otherwise the parser's error.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
-		do {
-			_ = try getElements()
-		} catch {
-			throw abortError ?? error
+		try parser.parse { element in
+			try self.cacheElement(element)
 		}
 		guard folderSegments != nil else {
 			throw WebDAVProviderError.invalidResponse
@@ -286,7 +270,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) finished")
 	}
 
-	override func receivedElement(_ element: PropfindResponseElement) {
+	private func cacheElement(_ element: PropfindResponseElement) throws {
 		guard let segments = element.url.decodedPathSegments else {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: skipping element \(element), because its path can't be decoded")
 			return
@@ -303,9 +287,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			if let folderSegments, segments != folderSegments {
 				// Either may be the listed folder, which one pass can't tell. Elements cached since the first were checked against it, so they may belong to another folder.
 				CloudAccessDDLogDebug("CachePropfindResponseParser: aborting, because element \(element) is a second element at the depth of the listed folder with another path")
-				abortError = WebDAVProviderError.invalidResponse
-				parser.abortParsing()
-				return
+				throw WebDAVProviderError.invalidResponse
 			}
 			folderSegments = segments
 			isDirectory = isDirectory || element.collection
@@ -330,12 +312,7 @@ class CachePropfindResponseParser: PropfindResponseParser {
 			try cache.save(cloudItemMetadata, in: snapshot, index: elementsCached)
 		} catch {
 			CloudAccessDDLogDebug("CachePropfindResponseParser: caching element \(element) failed with error: \(error)")
-			abortError = error
-			parser.abortParsing()
+			throw error
 		}
 	}
-}
-
-private protocol PropfindParserDelegate: AnyObject {
-	func receivedElement(_ element: PropfindResponseElement)
 }

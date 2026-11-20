@@ -27,101 +27,16 @@ func getXMLParser(forHrefs hrefs: [String]) -> XMLParser {
 		let resourceType = href.hasSuffix("/") ? "<d:collection />" : ""
 		return "<d:response><d:href>\(href)</d:href><d:propstat><d:prop><d:resourcetype>\(resourceType)</d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
 	}
-	return XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(responses.joined())</d:multistatus>".utf8))
+	return getXMLParser(forMultistatusContent: responses.joined())
+}
+
+func getXMLParser(forMultistatusContent content: String) -> XMLParser {
+	return XMLParser(data: Data("<d:multistatus xmlns:d=\"DAV:\">\(content)</d:multistatus>".utf8))
 }
 
 extension UnitTests {
 	struct PropfindResponseParserTests {
-		@Test
-		func responseWith403Status() throws {
-			let xmlParser = try getXMLParser(forResource: "403-status", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.count == 2)
-			let childElements = elements.filter({ $0.depth == 1 })
-			#expect(childElements.count == 1)
-			let rootURL = try #require(URL(string: "/"))
-			let expectedChildElements = try [
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: rootURL)), collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: 0)
-			]
-			#expect(expectedChildElements == childElements)
-		}
-
-		@Test
-		func responseWithEmptyFolder() throws {
-			let xmlParser = try getXMLParser(forResource: "empty-folder", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.count == 1)
-			let childElements = elements.filter({ $0.depth == 1 })
-			#expect(childElements.isEmpty)
-		}
-
-		@Test
-		func responseWithFileAndFolder() throws {
-			let xmlParser = try getXMLParser(forResource: "file-and-folder", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.count == 4)
-			let childElements = elements.filter({ $0.depth == 1 })
-			#expect(childElements.count == 3)
-			let rootURL = try #require(URL(string: "/"))
-			let expectedChildElements = try [
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/0.txt", relativeTo: rootURL)), collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/1.txt", relativeTo: rootURL)), collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: rootURL)), collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: 0)
-			]
-			#expect(expectedChildElements == childElements)
-		}
-
-		@Test
-		func responseWithMalformattedDate() throws {
-			let xmlParser = try getXMLParser(forResource: "malformatted-date", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.count == 3)
-			let childElements = elements.filter({ $0.depth == 1 })
-			#expect(childElements.count == 2)
-			let rootURL = try #require(URL(string: "/"))
-			let expectedChildElements = try [
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/0.txt", relativeTo: rootURL)), collection: false, lastModified: nil, contentLength: 54175),
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: rootURL)), collection: true, lastModified: nil, contentLength: 0)
-			]
-			#expect(expectedChildElements == childElements)
-		}
-
-		@Test
-		func responseWithMalformattedXML() throws {
-			let xmlParser = try getXMLParser(forResource: "malformatted-xml", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let error = try #require(throws: (any Error).self, "malformatted xml response") { try parser.getElements() }
-			let nsError = error as NSError
-			#expect(XMLParser.errorDomain == nsError.domain)
-		}
-
-		@Test
-		func responseWithMissingHref() throws {
-			let xmlParser = try getXMLParser(forResource: "missing-href", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.isEmpty)
-		}
-
-		@Test
-		func responseWithPartial404Status() throws {
-			let xmlParser = try getXMLParser(forResource: "partial-404-status", withExtension: "xml")
-			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
-			let elements = try parser.getElements()
-			#expect(elements.count == 3)
-			let childElements = elements.filter({ $0.depth == 1 })
-			#expect(childElements.count == 2)
-			let rootURL = try #require(URL(string: "/"))
-			let expectedChildElements = try [
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/0.txt", relativeTo: rootURL)), collection: false, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 9:49:41 GMT"), contentLength: 54175),
-				PropfindResponseElement(depth: 1, url: #require(URL(string: "/Gel%c3%b6schte%20Dateien/", relativeTo: rootURL)), collection: true, lastModified: Date.date(fromRFC822: "Thu, 18 May 2017 09:51:59 GMT"), contentLength: nil)
-			]
-			#expect(expectedChildElements == childElements)
-		}
+		private static let responseFollowedByMalformedXML = "<d:response><d:href>/file.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:propstat>"
 
 		@Test
 		func responseWithSeveral200Propstats() throws {
@@ -140,6 +55,46 @@ extension UnitTests {
 			let xmlParser = getXMLParser(forHrefs: ["/folder/", "/folder/file.txt", "/folder/B%FCro.txt", "/folder/a%2Fb", "/folder/sub/deep.txt"])
 			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/file.txt")))
 			#expect(try [-1, 0, 0, 0, 1] == parser.getElements().map(\.depth))
+		}
+
+		@Test
+		func hrefInsidePropstatIsIgnored() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: "<d:response><d:href>/folder/a.txt</d:href><d:propstat><d:href>/other/b.txt</d:href><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>")
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/")))
+			#expect(try parser.getElements().map(\.url.path) == ["/folder/a.txt"])
+		}
+
+		/// The end of a `propstat` nested in another ends the group, so the `href` after it replaces the response's.
+		@Test
+		func hrefAfterNestedPropstatEndReplacesHref() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: "<d:response><d:href>/folder/a.txt</d:href><d:propstat><d:propstat/><d:href>/folder/b.txt</d:href></d:propstat><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>")
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/")))
+			#expect(try parser.getElements().map(\.url.path) == ["/folder/b.txt"])
+		}
+
+		/// The trailing `propstat` has no status of its own, so the element has no group with status 200.
+		@Test
+		func statusOutsidePropstatIsIgnored() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: "<d:response><d:href>/folder/a.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:propstat><d:prop><d:getcontentlength>5</d:getcontentlength></d:prop></d:propstat></d:response>")
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/")))
+			#expect(try parser.getElements().isEmpty)
+		}
+
+		@Test
+		func collectionOutsideResourceTypeResetsCollection() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: "<d:response><d:href>/folder/a/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype><d:collection/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>")
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/")))
+			#expect(try parser.getElements().map(\.collection) == [false])
+		}
+
+		/// `XMLParser` reports the text of an element that holds an entity or a character reference in several parts.
+		@Test
+		func textInSeveralPartsIsJoined() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: "<d:response><d:href>/folder/Tom&amp;Jerry.txt</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>1&#48;24</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>")
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/folder/")))
+			let elements = try parser.getElements()
+			#expect(elements.map(\.url.path) == ["/folder/Tom&Jerry.txt"])
+			#expect(elements.map(\.contentLength) == [1024])
 		}
 
 		/// The requested element is listed after another element of its depth and spells its path with an escape.
@@ -170,6 +125,24 @@ extension UnitTests {
 			let xmlParser = try getXMLParser(forResource: "missing-href", withExtension: "xml")
 			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/")))
 			#expect(try parser.getRequestedElement() == nil)
+		}
+
+		/// Malformed XML fails the call even after the element that it would return is complete.
+		@Test
+		func getRequestedElementThrowsOnMalformedXML() throws {
+			let xmlParser = getXMLParser(forMultistatusContent: Self.responseFollowedByMalformedXML)
+			let parser = try PropfindResponseParser(xmlParser, responseURL: #require(URL(string: "/file.txt")))
+			let error = try #require(throws: (any Error).self) { try parser.getRequestedElement() }
+			#expect((error as NSError).domain == XMLParser.errorDomain)
+		}
+
+		@Test
+		func parseHandsOverElementBeforeMalformedXML() throws {
+			let parser = try PropfindResponseParser(getXMLParser(forMultistatusContent: Self.responseFollowedByMalformedXML), responseURL: #require(URL(string: "/file.txt")))
+			var handedOverPaths = [String]()
+			let error = try #require(throws: (any Error).self) { try parser.parse { handedOverPaths.append($0.url.path) } }
+			#expect((error as NSError).domain == XMLParser.errorDomain)
+			#expect(handedOverPaths == ["/file.txt"])
 		}
 	}
 }

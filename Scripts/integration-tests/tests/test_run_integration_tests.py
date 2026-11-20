@@ -37,13 +37,20 @@ def failure(text, file=None, line=None):
     return node
 
 
+def with_result(node, result):
+    """Adds the result to a node, unless it is None, which stands for a node reported without a result."""
+    if result is not None:
+        node["result"] = result
+    return node
+
+
 def argument(token, result="Passed", *failures):
-    return {"nodeType": "Arguments", "name": token, "result": result, "children": list(failures)}
+    return with_result({"nodeType": "Arguments", "name": token, "children": list(failures)}, result)
 
 
 def test_case(identifier, result="Passed", *children):
     name = identifier.rsplit("/", 1)[-1]
-    return {"nodeType": "Test Case", "name": name, "nodeIdentifier": identifier, "result": result, "children": list(children)}
+    return with_result({"nodeType": "Test Case", "name": name, "nodeIdentifier": identifier, "children": list(children)}, result)
 
 
 def skipped(identifier):
@@ -102,11 +109,18 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
     # Running
 
     def run_script(self, *arguments, **environment):
+        """Runs the script with clean stub logs, so that calls() returns the calls of this run."""
+        unexpected_log = os.path.join(self.fixtures, "unexpected.log")
+        for log in (os.path.join(self.fixtures, "calls.log"), unexpected_log):
+            if os.path.exists(log):
+                os.remove(log)
         path = [os.path.join(TESTS_DIR, "stubs"), os.path.join(self.root, "bin"), "/usr/bin", "/bin"]
         env = {"PATH": os.pathsep.join(path), "TMPDIR": os.path.join(self.root, "tmp"), "STUB_FIXTURES": self.fixtures}
         env.update(environment)
         process = subprocess.run([SCRIPT] + list(arguments), cwd=self.working_directory, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, timeout=120)
-        self.assertFalse(os.path.exists(os.path.join(self.fixtures, "unexpected.log")), "A stub was invoked in an unexpected way")
+        if os.path.exists(unexpected_log):
+            with open(unexpected_log) as file:
+                self.fail("A stub was invoked in an unexpected way: " + file.read())
         return Result(process.returncode, process.stdout, process.stderr)
 
     def calls(self):
@@ -204,15 +218,17 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assert_last_call(2, "pcloud-plain", FETCH)
 
     def test_pair_of_unknown_status_is_rerun(self):
-        self.write_pass("pass1", results(test_case(FETCH, "Passed", {"nodeType": "Arguments", "name": "pcloud-plain", "children": []})))
-        self.write_pass("pass2", results(test_case(FETCH, "Passed", argument("pcloud-plain"))))
+        self.write_pass("pass1", results(test_case(FETCH, "Passed", argument("pcloud-plain", None)), test_case(S3, None)))
+        self.write_pass("pass2", results(test_case(FETCH, "Passed", argument("pcloud-plain")), test_case(S3, "Passed")))
 
         result = self.run_script()
 
         self.assertEqual(0, result.exit_code)
         self.assertEqual("", self.still_failing())
-        self.assertIn("| `pcloud-plain` | 0 | 0 | 1 | 0 |", result.stdout.splitlines())
-        self.assert_last_call(2, "pcloud-plain", FETCH)
+        lines = result.stdout.splitlines()
+        self.assertIn("| `pcloud-plain` | 0 | 0 | 1 | 0 |", lines)
+        self.assertIn("| `s3` | 0 | 0 | 1 | 0 |", lines)
+        self.assert_last_call(2, "pcloud-plain,s3", FETCH, S3)
 
     def test_pair_that_fails_again_stays_failing(self):
         self.write_pass("pass1", results(test_case(FETCH, "Failed", argument("pcloud-plain", "Failed", failure("Expectation failed: a == b", "/checkout/Tests/Conformance.swift", 12)))), exit_code=65)
@@ -404,6 +420,24 @@ class RunIntegrationTestsScriptTests(unittest.TestCase):
         self.assertIn("| `s3` | 0 | 1 | 0 | 0 |", lines)
         self.assertIn("- `{}` `s3`: no failure message".format(S3), lines)
         self.assertEqual(1, len(self.calls()))
+
+    def test_only_heals_listed_pair_that_is_skipped_on_rerun_of_other_pairs(self):
+        only_file = self.write_file("{}\tpcloud-plain\n{}\tpcloud-vf8\n{}\tpcloud-plain\n".format(FETCH, FETCH, DELETE))
+        self.write_pass("pass1", results(
+            test_case(FETCH, "Failed", argument("pcloud-plain", "Skipped"), argument("pcloud-vf8", "Failed")),
+            test_case(DELETE, "Failed", argument("pcloud-plain", "Failed")),
+        ), exit_code=65)
+        # The re-run selects the failed pairs' tests and backends, so it also runs the skipped pair.
+        self.write_pass("pass2", results(test_case(FETCH, "Passed", argument("pcloud-plain"), argument("pcloud-vf8")), test_case(DELETE, "Passed", argument("pcloud-plain"))))
+
+        result = self.run_script("--only", only_file)
+
+        self.assertEqual(0, result.exit_code)
+        self.assertEqual("", self.still_failing())
+        lines = result.stdout.splitlines()
+        self.assertIn("| `pcloud-plain` | 0 | 0 | 2 | 0 |", lines)
+        self.assertIn("| `pcloud-vf8` | 0 | 0 | 1 | 0 |", lines)
+        self.assert_last_call(2, "pcloud-vf8,pcloud-plain", FETCH, DELETE)
 
     def test_malformed_only_file_runs_nothing(self):
         contents = {"no tab": FETCH + "\n", "empty test": "\ts3\n", "empty token": FETCH + "\t\n", "empty file": ""}

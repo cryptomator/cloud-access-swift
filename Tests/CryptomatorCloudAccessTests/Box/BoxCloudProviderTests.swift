@@ -189,7 +189,7 @@ extension UnitTests {
 				MutationCase(name: "move folder", preparation: [URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder), URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder)], success: URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "3", name: "renamed"))) { provider in
 					try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/renamed"))
 				},
-				MutationCase(name: "commit", preparation: [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot), URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)] + (0 ..< 3).map { index in URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#) }, success: URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))) { provider in
+				MutationCase(name: "commit", preparation: [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot), URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)] + BoxCloudProviderTests.uploadedPartResponses(), success: URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))) { provider in
 					_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 				}
 			]
@@ -392,9 +392,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: { request in
 					sessionRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
 				})
-			] + (0 ..< 3).map { index in
-				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
-			} + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
+			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
 			let metadata = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 
@@ -413,9 +411,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
-			] + (0 ..< 3).map { index in
-				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
-			} + [
+			] + BoxCloudProviderTests.uploadedPartResponses() + [
 				URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found")),
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
 			]
@@ -437,9 +433,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: { request in
 					sessionBody.withLock { $0 = URLProtocolMock.body(of: request) }
 				})
-			] + (0 ..< 3).map { index in
-				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
-			} + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
+			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
 			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
@@ -456,9 +450,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
-			] + (0 ..< 3).map { index in
-				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
-			} + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
+			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
 			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
@@ -496,6 +488,13 @@ extension UnitTests {
 
 		private static func digest(of string: String) -> String {
 			return "sha=\(Data(Insecure.SHA1.hash(data: Data(string.utf8))).base64EncodedString())"
+		}
+
+		/// The responses to the three part uploads of a 10-byte file in `uploadSession`'s 4-byte parts.
+		private static func uploadedPartResponses() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return (0 ..< 3).map { index in
+				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)"}}"#)
+			}
 		}
 
 		/// The listing and the metadata request that precede the download of `/file.txt`.

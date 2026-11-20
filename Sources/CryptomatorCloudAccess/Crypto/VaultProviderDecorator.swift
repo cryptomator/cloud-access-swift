@@ -18,7 +18,6 @@ import Foundation
 final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	let layout: Layout
 	/// The provider that the decorator passes ciphertext paths to, the shortening decorator if there is one.
-	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let shortening: Layout.Shortening?
 	let vaultPath: CloudPath

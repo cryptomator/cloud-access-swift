@@ -62,7 +62,7 @@ public final class DropboxCloudProvider: CloudProvider {
 				}
 			} else {
 				// Dropbox lists the root at "" instead of "/".
-				result = try await client.listFolder(path: cloudPath == CloudPath("/") ? "" : cloudPath.path, limit: maxPageSize)
+				result = try await client.listFolder(path: cloudPath == .root ? "" : cloudPath.path, limit: maxPageSize)
 			}
 			let items = try result.entries.compactMap { entry -> CloudItemMetadata? in
 				guard entry.name.isSinglePathComponent else {
@@ -259,7 +259,7 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	func ensureParentFolderExists(for cloudPath: CloudPath) async throws {
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
-		if parentCloudPath == CloudPath("/") {
+		if parentCloudPath == .root {
 			return
 		}
 		guard try await checkForItemExistence(at: parentCloudPath) else {

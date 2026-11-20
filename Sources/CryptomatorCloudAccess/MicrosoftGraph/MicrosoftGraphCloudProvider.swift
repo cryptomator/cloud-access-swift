@@ -9,18 +9,22 @@
 import Foundation
 
 public final class MicrosoftGraphCloudProvider: CloudProvider {
-	private static let maxUploadFileChunkLength = 16 * 320 * 1024 // 5MiB
+	/// Graph requires each chunk of an upload session but the last to be a multiple of this length.
+	static let uploadSessionChunkGranularity = 320 * 1024
 
 	private let client: MicrosoftGraphHTTPClient
 	private let driveIdentifier: String?
 	private let identifierCache: IdentifierCache<MicrosoftGraphItem>
 	private let maxPageSize: Int
+	/// The length of an upload session's chunks, a multiple of `uploadSessionChunkGranularity`. It defaults to 5 MiB.
+	private let uploadSessionChunkLength: Int
 
-	init(client: MicrosoftGraphHTTPClient, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
+	init(client: MicrosoftGraphHTTPClient, driveIdentifier: String? = nil, maxPageSize: Int = .max, uploadSessionChunkLength: Int = 16 * MicrosoftGraphCloudProvider.uploadSessionChunkGranularity) throws {
 		self.client = client
 		self.driveIdentifier = driveIdentifier
 		self.identifierCache = try IdentifierCache<MicrosoftGraphItem>()
 		self.maxPageSize = min(max(1, maxPageSize), 1000)
+		self.uploadSessionChunkLength = uploadSessionChunkLength
 	}
 
 	public convenience init(credential: MicrosoftGraphCredential, driveIdentifier: String? = nil, maxPageSize: Int = .max) throws {
@@ -244,7 +248,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	 */
 	private func uploadFileChunks(from localURL: URL, to uploadURL: URL, totalFileSize: Int, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> MicrosoftGraphAPI.DriveItem {
 		progress?.totalUnitCount = Int64(totalFileSize)
-		let taskHook = totalFileSize <= MicrosoftGraphCloudProvider.maxUploadFileChunkLength ? onTaskCreation : nil
+		let taskHook = totalFileSize <= uploadSessionChunkLength ? onTaskCreation : nil
 		let fileHandle = try FileHandle(forReadingFrom: localURL)
 		defer {
 			try? fileHandle.close()
@@ -252,7 +256,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		var offset = 0
 		while true {
 			try Task.checkCancellation()
-			let (chunkFileURL, chunkLength) = try HTTPClientSupport.writeTemporaryFile(copyingUpTo: MicrosoftGraphCloudProvider.maxUploadFileChunkLength, from: fileHandle)
+			let (chunkFileURL, chunkLength) = try HTTPClientSupport.writeTemporaryFile(copyingUpTo: uploadSessionChunkLength, from: fileHandle)
 			defer {
 				try? FileManager.default.removeItem(at: chunkFileURL)
 			}

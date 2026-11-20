@@ -73,7 +73,7 @@ final class DirectoryIdCache: Sendable {
 			throw VaultFormatError.invalidDirectoryReference
 		}
 		var containingDirIds = [Data()]
-		var ancestorPath = CloudPath("/")
+		var ancestorPath = CloudPath.root
 		for component in components.dropLast() {
 			ancestorPath = ancestorPath.appendingPathComponent(component)
 			let dirId: Data

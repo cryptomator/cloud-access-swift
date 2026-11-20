@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 
 struct GoogleDriveItem: Codable, IdentifierCacheItem, Equatable {
-	static let rootItem = GoogleDriveItem(cloudPath: CloudPath("/"), identifier: "root", itemType: .folder, shortcut: nil)
+	static let rootItem = GoogleDriveItem(cloudPath: .root, identifier: "root", itemType: .folder, shortcut: nil)
 	static let inconsistentCacheError: Error = GoogleDriveError.inconsistentCache
 	static let shortcutKey = "shortcut"
 

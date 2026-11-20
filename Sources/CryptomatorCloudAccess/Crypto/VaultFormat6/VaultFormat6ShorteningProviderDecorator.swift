@@ -23,7 +23,6 @@ private func isLeftOutOfListing(_ error: Error) -> Bool {
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat6ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath`.
  */
 final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
-	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let vaultPath: CloudPath
 	let shortenedNameCache: VaultFormat6ShortenedNameCache

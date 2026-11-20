@@ -411,12 +411,6 @@ private extension URL {
 
 /// Tells whether the error says that an item above the target on its path is no folder. Foundation reports that as `ENOTDIR`, nested as the underlying error of a Cocoa error such as `fileReadUnknown` or `fileWriteUnknown`.
 private func isNotDirectoryError(_ error: Error) -> Bool {
-	if let posixError = error as? POSIXError {
-		return posixError.code == .ENOTDIR
-	}
-	let nsError = error as NSError
-	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
-		return isNotDirectoryError(underlyingError)
-	}
-	return false
+	let posixError = underlyingErrorChain(of: error).lazy.compactMap { $0 as? POSIXError }.first
+	return posixError?.code == .ENOTDIR
 }

@@ -9,17 +9,15 @@
 import Foundation
 
 /// Checks for `CancellationError` and for `URLError.cancelled`, which `URLSession` reports for a cancelled task or an invalidated session. An `NSError` in `NSURLErrorDomain` casts to `URLError`.
-/// Any other error is unwrapped recursively through `NSUnderlyingErrorKey`, because SDKs wrap the errors of their requests.
+/// The first error of the underlying error chain that is either of them decides.
 func isCancellationError(_ error: Error) -> Bool {
-	if error is CancellationError {
-		return true
-	}
-	if let urlError = error as? URLError {
-		return urlError.code == .cancelled
-	}
-	let nsError = error as NSError
-	if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
-		return isCancellationError(underlyingError)
+	for chainedError in underlyingErrorChain(of: error) {
+		if chainedError is CancellationError {
+			return true
+		}
+		if let urlError = chainedError as? URLError {
+			return urlError.code == .cancelled
+		}
 	}
 	return false
 }

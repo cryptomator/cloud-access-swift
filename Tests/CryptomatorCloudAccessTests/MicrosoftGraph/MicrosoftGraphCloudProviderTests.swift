@@ -726,6 +726,20 @@ extension UnitTests {
 		}
 
 		@Test
+		func createFolderThrowsErrorOfUnsuccessfulStatus() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(statusCode: 409, body: #"{"error":{"code":"nameAlreadyExists","message":"Name already exists"}}"#)
+			]
+
+			let error = try await #require(throws: (any Error).self) { try await provider.createFolder(at: CloudPath("/subFolder")) }
+			guard case MicrosoftGraphError.unexpectedHTTPStatusCode(code: 409) = error else {
+				Issue.record("Unexpected error: \(error)")
+				return
+			}
+		}
+
+		@Test
 		func deleteSendsDeleteForItem() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [

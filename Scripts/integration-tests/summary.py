@@ -19,8 +19,9 @@ healed, still_failing = [], []
 counts = collections.defaultdict(lambda: collections.Counter())
 for key, (status, failure_reasons) in pass1.items():
     token = key[1]
-    # A skip doesn't heal a pair that --only lists. A listed pair that the main pass skips isn't re-run, because the re-run
-    # would select it the same way and skip it again.
+    # A skip doesn't heal a pair that --only lists. A listed pair that the main pass skips isn't selected for the re-run on
+    # its own, because the re-run would select it the same way and skip it again. It still heals if the re-run runs it
+    # for another failed pair of its test and backend.
     if status == pairs.SKIPPED and key[:2] not in listed:
         counts[token]["skipped"] += 1
     elif status in pairs.PASSED:
@@ -32,7 +33,7 @@ for key, (status, failure_reasons) in pass1.items():
         counts[token]["failed"] += 1
         still_failing.append((key, pass2.get(key, (None, failure_reasons))[1] or failure_reasons))
 # A listed pair that the main pass has no result for stays failing, so a test that didn't run can't drop out of
-# still-failing.txt. It isn't re-run either, because the re-run would select it the same way.
+# still-failing.txt. It isn't selected for the re-run on its own either, and a re-run result doesn't heal it.
 reported = {key[:2] for key in pass1}
 for (node_identifier, token), backends in listed.items():
     if (node_identifier, token) not in reported:

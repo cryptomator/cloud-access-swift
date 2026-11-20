@@ -642,3 +642,17 @@ enum S3MockResponse {
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\(continuation)\(contents)\(prefixes)</ListBucketResult>"
 	}
 }
+
+private extension Date {
+	private static let rfc822Formatter: DateFormatter = {
+		let formatter = DateFormatter()
+		formatter.locale = Locale(identifier: "en_US_POSIX")
+		formatter.timeZone = TimeZone(identifier: "GMT")
+		formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+		return formatter
+	}()
+
+	static func rfc822String(from date: Date) -> String {
+		return rfc822Formatter.string(from: date)
+	}
+}

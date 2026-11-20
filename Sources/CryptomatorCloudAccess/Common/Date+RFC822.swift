@@ -8,24 +8,16 @@
 
 import Foundation
 
-private extension DateFormatter {
-	static func rfc822Formatter() -> DateFormatter {
+extension Date {
+	private static let rfc822Formatter: DateFormatter = {
 		let formatter = DateFormatter()
 		formatter.locale = Locale(identifier: "en_US_POSIX")
 		formatter.timeZone = TimeZone(identifier: "GMT")
 		formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
 		return formatter
-	}
-}
-
-extension Date {
-	private static let rfc822Formatter = DateFormatter.rfc822Formatter()
+	}()
 
 	static func date(fromRFC822 string: String) -> Date? {
 		return rfc822Formatter.date(from: string)
-	}
-
-	static func rfc822String(from date: Date) -> String {
-		return rfc822Formatter.string(from: date)
 	}
 }

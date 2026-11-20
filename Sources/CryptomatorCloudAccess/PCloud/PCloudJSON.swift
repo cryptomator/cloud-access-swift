@@ -47,21 +47,15 @@ struct PCloudFileLink: Decodable, Sendable {
 }
 
 enum PCloudJSON {
-	/// The codes of a missing, failed or invalid login.
-	static let authenticationCodes: Set<Int> = [1000, 2000, 2094]
-
 	/**
 	 Returns the body of a successful pCloud result, whose `result` is 0.
 
-	 - Throws: `CloudProviderError.unauthorized` for an authentication code, `PCloudError.apiError` for any other non-zero `result`, and `PCloudError.unexpectedContent` if the body isn't a JSON object with an integer `result`.
+	 - Throws: `PCloudError.apiError` for a non-zero `result`, and `PCloudError.unexpectedContent` if the body isn't a JSON object with an integer `result`.
 	 */
 	static func result(of body: Data) throws -> Data {
 		let result = try decode(ResultResponse.self, from: body)
 		guard result.result != 0 else {
 			return body
-		}
-		if authenticationCodes.contains(result.result) {
-			throw CloudProviderError.unauthorized
 		}
 		throw PCloudError.apiError(code: result.result, message: result.error)
 	}

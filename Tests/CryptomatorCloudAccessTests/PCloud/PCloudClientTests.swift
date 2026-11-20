@@ -139,9 +139,9 @@ extension UnitTests {
 
 		// MARK: - Errors
 
-		@Test
-		func authenticationCodeIsUnauthorized() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.result(2094))]
+		@Test(arguments: [1000, 2000, 2094])
+		func authenticationCodeIsUnauthorized(code: Int) async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.result(code))]
 
 			await #expect(throws: CloudProviderError.unauthorized) { try await client.listFolder(0, to: listingURL()) }
 		}

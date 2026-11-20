@@ -33,7 +33,6 @@ private extension CloudPath {
  It's meaningless to use this shortening decorator without being decorated by an instance of `VaultFormat7ProviderDecorator` or `VaultFormat8ProviderDecorator` (crypto decorator). This shortening decorator explicitly only shortens the fourth path component relative to `vaultPath` if it exceeds the threshold, which is 220 characters unless a vault format 8 configuration gives another.
  */
 final class VaultFormat7ShorteningProviderDecorator: VaultShorteningDecorator {
-	// swiftlint:disable:next weak_delegate
 	let delegate: CloudProvider
 	let shortenedNameCache: VaultFormat7ShortenedNameCache
 	let tmpDirURL: URL

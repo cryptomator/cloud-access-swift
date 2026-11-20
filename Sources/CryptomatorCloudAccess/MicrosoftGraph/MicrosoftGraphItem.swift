@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 
 struct MicrosoftGraphItem: Decodable, IdentifierCacheItem, Equatable {
-	static let rootItem = MicrosoftGraphItem(cloudPath: CloudPath("/"), identifier: "root", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
+	static let rootItem = MicrosoftGraphItem(cloudPath: .root, identifier: "root", driveIdentifier: nil, itemType: .folder, isRemoteItem: false)
 	static let inconsistentCacheError: Error = MicrosoftGraphError.inconsistentCache
 	static let driveIdentifierKey = "driveIdentifier"
 	static let isRemoteItemKey = "isRemoteItem"

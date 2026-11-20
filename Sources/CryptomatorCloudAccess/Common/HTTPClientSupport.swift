@@ -133,9 +133,9 @@ enum HTTPClientSupport {
 		return url
 	}
 
-	/// Escapes an identifier from a response as one path component.
-	static func pathComponent(_ identifier: String) -> String {
-		return percentEncoded(identifier, encodeSlash: true)
+	/// Escapes a value as one path component, so that a slash in it can't add a level to the path.
+	static func pathComponent(_ value: String) -> String {
+		return percentEncoded(value, encodeSlash: true)
 	}
 
 	/// The caller deletes the returned file.

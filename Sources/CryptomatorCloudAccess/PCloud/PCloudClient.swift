@@ -241,8 +241,14 @@ final class PCloudClient: Sendable {
 		}
 	}
 
-	/// Maps connectivity errors here rather than in the provider, because `PCloudCredential.getUsername()` calls the client directly.
+	/// The codes of a missing, failed or invalid login.
+	private static let authenticationCodes: Set<Int> = [1000, 2000, 2094]
+
+	/// Maps authentication codes and connectivity errors here rather than in the provider, because `PCloudCredential` calls the client directly. Callers log the raw failure before converting it, so the log keeps the API code that `unauthorized` drops.
 	private static func converted(_ error: Error) -> Error {
+		if case let PCloudError.apiError(code, _) = error, PCloudClient.authenticationCodes.contains(code) {
+			return CloudProviderError.unauthorized
+		}
 		return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
 	}
 

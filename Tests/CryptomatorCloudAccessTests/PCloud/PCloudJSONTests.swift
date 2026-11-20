@@ -36,13 +36,6 @@ extension UnitTests {
 		}
 
 		@Test
-		func authenticationCodesAreUnauthorized() {
-			for code in [1000, 2000, 2094] {
-				#expect(throws: CloudProviderError.unauthorized, "\(code)") { try PCloudJSON.result(of: Data(#"{"result":\#(code),"error":"Log in failed."}"#.utf8)) }
-			}
-		}
-
-		@Test
 		func otherCodeIsAPIError() {
 			#expect(throws: PCloudError.apiError(code: 2041, message: "Connection broken.")) { try PCloudJSON.result(of: Data(#"{"result":2041,"error":"Connection broken."}"#.utf8)) }
 		}

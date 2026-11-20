@@ -11,7 +11,7 @@ import GRDB
 
 struct PCloudItem: Decodable, IdentifierCacheItem, Equatable {
 	static let rootFolderID: UInt64 = 0
-	static let rootItem = PCloudItem(cloudPath: CloudPath("/"), identifier: rootFolderID, itemType: .folder)
+	static let rootItem = PCloudItem(cloudPath: .root, identifier: rootFolderID, itemType: .folder)
 	static let inconsistentCacheError: Error = PCloudError.inconsistentCache
 
 	let cloudPath: CloudPath

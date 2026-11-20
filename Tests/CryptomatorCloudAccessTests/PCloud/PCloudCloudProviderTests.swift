@@ -100,6 +100,19 @@ extension UnitTests {
 			#expect(!logCapture.joinedMessages.contains("SECRETPATH"), "\(logCapture.joinedMessages)")
 		}
 
+		/// The client's failure log keeps the code of a rejected login, which the provider throws as `unauthorized`.
+		@Test
+		func downloadRejectedForLoginThrowsUnauthorizedAndLogsCode() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(statusCode: 403, body: PCloudMockResponse.result(2094))]
+
+			await #expect(throws: CloudProviderError.unauthorized) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil) }
+			#expect(logCapture.messages.filter { $0.hasPrefix("PCloudClient: file link download failed with ") } == ["PCloudClient: file link download failed with pCloud API error 2094"])
+		}
+
 		/// Only `deletefolderrecursive` documents 2028 (active shares), so `deletefile` passes it through.
 		@Test
 		func deleteFileWithActiveSharesCodeThrowsAPIError() async throws {

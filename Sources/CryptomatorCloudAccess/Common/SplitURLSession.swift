@@ -184,7 +184,7 @@ final class SplitURLSession: Sendable {
 		let response: URLResponse?
 		let body: Body
 		let error: Error?
-		/// A failure that was recorded while the task was running, e.g., by a challenge handler, the body limit or a download handler. It takes precedence over `error`, which may be the cancellation that the failure caused.
+		/// What a challenge handler, the body limit or a download handler recorded as the end of the task while it was running, usually a failure. It takes precedence over `error`, which may be the cancellation that it caused.
 		let recordedFailure: Error?
 
 		var data: Data? {
@@ -201,7 +201,7 @@ final class SplitURLSession: Sendable {
 	struct ChallengeDecision {
 		let disposition: URLSession.AuthChallengeDisposition
 		let credential: URLCredential?
-		/// The failure to record for the task, e.g., because its credential was rejected.
+		/// What to record as the end of the task, usually a failure, e.g., because its credential was rejected.
 		let failure: Error?
 	}
 

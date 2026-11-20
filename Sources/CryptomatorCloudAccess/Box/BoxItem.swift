@@ -10,7 +10,7 @@ import Foundation
 import GRDB
 
 struct BoxItem: Decodable, IdentifierCacheItem, Equatable {
-	static let rootItem = BoxItem(cloudPath: CloudPath("/"), identifier: "0", itemType: .folder)
+	static let rootItem = BoxItem(cloudPath: .root, identifier: "0", itemType: .folder)
 	static let inconsistentCacheError: Error = BoxError.inconsistentCache
 
 	let cloudPath: CloudPath

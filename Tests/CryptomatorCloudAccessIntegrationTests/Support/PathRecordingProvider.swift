@@ -38,7 +38,6 @@ final class PathRecordingProvider: CloudProvider {
 		var createdPaths = [CloudPath]()
 	}
 
-	// swiftlint:disable:next weak_delegate
 	private let delegate: CloudProvider
 	private let state = OSAllocatedUnfairLock(initialState: State())
 

@@ -21,6 +21,9 @@ extension IntegrationTests.ProviderSpecific {
 	@Suite(.enabled(if: IntegrationBackend.isSelected(.microsoftGraph)))
 	struct MicrosoftGraphTests {
 		private static let backend = IntegrationBackend(.microsoftGraph, .plain)
+		/// The smallest length that Graph allows for a chunk other than the last, which keeps the uploaded file small.
+		static let uploadSessionChunkLength = MicrosoftGraphCloudProvider.uploadSessionChunkGranularity
+		static let threeChunkFileLength = 2 * uploadSessionChunkLength + 1024
 
 		/// The conformance tests can't tell the download URL from `/content`, because a refused download URL falls back to `/content`.
 		@Test
@@ -41,6 +44,16 @@ extension IntegrationTests.ProviderSpecific {
 				let recordedDownloads = downloads.withLock { $0 }
 				#expect(!recordedDownloads.contains { $0.isThroughGraph })
 				#expect(recordedDownloads.contains { $0.host != MicrosoftGraphAPI.host })
+			}
+		}
+
+		/// Lowers the chunk length of an upload session to 320 KiB, so that a file of 641 KiB is uploaded in three chunks, as a new file and then replacing it.
+		@Test
+		func fileOfSeveralChunksIsUploaded() async throws {
+			try await withIntegrationFixture(MicrosoftGraphTests.backend) { context in
+				let provider = try MicrosoftGraphCloudProvider(client: .foreground(tokenSource: SharedCredentials.microsoftGraph.get().tokenSource), uploadSessionChunkLength: MicrosoftGraphTests.uploadSessionChunkLength)
+				let cloudPath = try await context.makeSandbox().appendingPathComponent("large.bin")
+				try await expectUploadRoundTrips(ofLength: MicrosoftGraphTests.threeChunkFileLength, to: cloudPath, through: provider, in: context)
 			}
 		}
 	}

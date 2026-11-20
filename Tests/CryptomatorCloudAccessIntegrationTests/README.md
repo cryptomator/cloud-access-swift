@@ -151,6 +151,8 @@ A conformance test takes `IntegrationBackend.selected` as its arguments, or a su
 - A test that changes anything works in a folder of its own from `context.makeSandbox()` and creates its items with `createPrerequisiteFolder(at:)` and `uploadPrerequisite(_:to:)`, which wait until the item is visible. `sandboxPath()` returns a unique path without creating anything.
 - Remote calls come before the expectations, because a retried test keeps the issues it recorded. For the same reason, expected errors go through `expectCloudProviderError(_:sourceLocation:_:)`, which rethrows a transient error instead of recording it. Use `eventually(on:_:)` to wait out the visibility lag after a change.
 
+A test that has to cross an upload threshold or a chunk boundary lowers that threshold or chunk length through the provider's internal init parameter, as far as the cloud allows, instead of transferring files of the default size. The 5-minute permit budget (see Retries) includes the transfer, which a slow uplink can't finish for files of several MiB.
+
 A provider-specific suite is nested in `IntegrationTests.ProviderSpecific`, so it runs within the sweep and cleanup of the run. It is gated with `.enabled(if: IntegrationBackend.isSelected(.<provider>))`. Its name is the provider token followed by `Tests`, in any case, e.g. `S3Tests` or `GoogleDriveTests`, because the CI script re-runs a failed test with the provider whose token it derives from the name. A test that needs no fixture runs its body through `withIntegrationRetries(on:_:)`, which retries and bounds it the same way.
 
 To add a provider, add a case to `IntegrationProvider` and create its providers in `IntegrationProvider+Factory.swift`. Read its secrets through `IntegrationTestSecrets`, add them to the sample above, and add each to the `env` of the step in `.github/workflows/build.yml` that writes the secrets file, with the prefix `SECRET_`.
@@ -191,10 +193,12 @@ The respective `CloudProvider` is tested here very generally for the specificati
 
 - Correct use of the cache for `resolvePath`.
 - Downloads from an item's pre-authenticated download URL instead of `/content`, tested in `MicrosoftGraphTests`. The conformance tests can't tell the two apart, because a refused download URL falls back to `/content`.
+- Uploads of more than one upload-session chunk (5 MiB), tested with a lowered chunk length in `MicrosoftGraphTests`.
 
 ### SharePoint
 
 - Fetching a drive by its identifier through `MicrosoftGraphDiscovery`, tested in `SharePointTests`. The conformance tests don't cover it, because the backend finds its drive among the site's drives.
+- Uploads of more than one upload-session chunk, tested with a lowered chunk length in `SharePointTests`.
 
 ### pCloud
 

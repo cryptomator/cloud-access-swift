@@ -624,6 +624,13 @@ extension UnitTests {
 		}
 
 		@Test
+		func appendingCloudPathAddsNoSlashForExistingFolder() throws {
+			try FileManager.default.createDirectory(at: tmpDirURL.appending(path: "dir/sub", directoryHint: .isDirectory), withIntermediateDirectories: true)
+			#expect(!tmpDirURL.appending(cloudPath: CloudPath("/dir")).hasDirectoryPath)
+			#expect(!tmpDirURL.appending(cloudPath: CloudPath("/dir/sub")).hasDirectoryPath)
+		}
+
+		@Test
 		func testGetItemName() {
 			let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
 			#expect(provider.getItemName(forItemAt: iCloudPlaceholderFileURL) == "test.txt")

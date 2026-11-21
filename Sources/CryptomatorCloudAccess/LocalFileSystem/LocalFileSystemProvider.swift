@@ -48,7 +48,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 		self.shouldStopAccessingRootURL = securityScopedAccess.start(rootURL)
 		self.maxPageSize = maxPageSize
 		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
-		let dbURL = tmpDirURL.appendingPathComponent("db.sqlite")
+		let dbURL = tmpDirURL.appending(component: "db.sqlite")
 		self.cache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}
 
@@ -64,7 +64,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		return try await withSecurityScopedAccess(to: url, "fetchItemMetadata(at: \(cloudPath.path))") {
 			try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent())
 		}
@@ -83,7 +83,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 
 	private func fillCache(_ snapshot: DirectoryContentSnapshot) async throws {
 		let cloudPath = snapshot.folderEnumerationPath
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "fillCache(\(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let readingIntent = NSFileAccessIntent.readingIntent(with: url)
@@ -114,7 +114,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 				guard !childURL.isHidden || FileManager.default.isUbiquitousItem(at: childURL) else {
 					continue
 				}
-				let iCloudCompatibleChildURL = url.appendingPathComponent(getItemName(forItemAt: childURL))
+				let iCloudCompatibleChildURL = url.appending(component: getItemName(forItemAt: childURL))
 				guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
 					continue
 				}
@@ -137,7 +137,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "downloadFile(from: \(cloudPath.path) to: \(localURL))"
 		return try await withSecurityScopedAccess(to: url, operation) {
 			let phases = Progress.phases(of: progress, 999)
@@ -163,7 +163,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting))"
 		return try await withSecurityScopedAccess(to: url, operation) {
 			let phases = Progress.phases(of: progress, 999)
@@ -181,7 +181,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "createFolder(at: \(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: [])
@@ -205,7 +205,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func deleteItem(at cloudPath: CloudPath) async throws {
-		let url = rootURL.appendingPathComponent(cloudPath)
+		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "deleteItem(at: \(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
@@ -236,8 +236,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		let sourceURL = rootURL.appendingPathComponent(sourceCloudPath)
-		let targetURL = rootURL.appendingPathComponent(targetCloudPath)
+		let sourceURL = rootURL.appending(cloudPath: sourceCloudPath)
+		let targetURL = rootURL.appending(cloudPath: targetCloudPath)
 		let operation = "moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))"
 		try await withSecurityScopedAccess(to: sourceURL, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)

@@ -46,6 +46,29 @@ extension UnitTests {
 		}
 
 		@Test
+		func appendingCloudPath() throws {
+			let basePath = "/\(UUID().uuidString)/foo"
+			for base in [URL(filePath: basePath, directoryHint: .notDirectory), URL(filePath: basePath + "/", directoryHint: .isDirectory)] {
+				#expect(base.appending(cloudPath: CloudPath("/")) == base)
+				#expect(base.appending(cloudPath: CloudPath("/bar")).path == basePath + "/bar")
+				#expect(base.appending(cloudPath: CloudPath("bar")).path == basePath + "/bar")
+				#expect(base.appending(cloudPath: CloudPath("/bar/")).path == basePath + "/bar")
+				#expect(base.appending(cloudPath: CloudPath("/bar/baz")).path == basePath + "/bar/baz")
+				#expect(base.appending(cloudPath: CloudPath("")).path == basePath + "/.")
+				#expect(base.appending(cloudPath: CloudPath("../y")).path == basePath + "/../y")
+				for name in ["a b", "a%2Fb", "q?x", "h#x", "e\u{301}"] {
+					#expect(Array(base.appending(cloudPath: CloudPath("/").appendingPathComponent(name)).path.utf8) == Array((basePath + "/" + name).utf8), "\(name)")
+				}
+
+				let decodedCloudPath = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/bar/"}"#.utf8))
+				#expect(decodedCloudPath.path == "/bar/")
+				#expect(base.appending(cloudPath: decodedCloudPath).hasDirectoryPath)
+				#expect(base.appending(cloudPath: decodedCloudPath).path == basePath + "/bar")
+			}
+			#expect(URL(filePath: "/", directoryHint: .isDirectory).appending(cloudPath: CloudPath("/bar")).path == "/bar")
+		}
+
+		@Test
 		func testTrimmingLeadingCharacters() {
 			#expect("foo" == "///foo".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))
 			#expect("foo///bar" == "/foo///bar".trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/")))

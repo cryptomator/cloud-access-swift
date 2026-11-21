@@ -21,12 +21,13 @@ public extension URL {
 		}
 	}
 
-	func appendingPathComponent(_ cloudPath: CloudPath) -> URL {
+	/// Appends the cloud path without consulting the file system, so an existing folder's URL gets a trailing slash only if the cloud path has one. The root returns the URL unchanged.
+	func appending(cloudPath: CloudPath) -> URL {
 		let trimmedPath = cloudPath.path.trimmingLeadingCharacters(in: CharacterSet(charactersIn: "/"))
 		if trimmedPath.isEmpty {
 			return self
 		} else {
-			return appendingPathComponent(trimmedPath)
+			return appending(path: trimmedPath)
 		}
 	}
 }

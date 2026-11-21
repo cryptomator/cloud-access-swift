@@ -13,8 +13,8 @@ public enum MicrosoftGraphCredentialError: Error {
 	case noUsername
 }
 
-/// `@unchecked Sendable`: all stored properties are immutable. `clientApplication` is only called by `getUsername()` and `deauthenticate()`, which are isolated to the main actor because MSAL doesn't document that it may be called from any thread. The class isn't `final` because tests subclass it.
-public class MicrosoftGraphCredential: @unchecked Sendable {
+/// `@unchecked Sendable`: all stored properties are immutable. `clientApplication` is only called by `getUsername()` and `deauthenticate()`, which are isolated to the main actor because MSAL doesn't document that it may be called from any thread.
+public final class MicrosoftGraphCredential: @unchecked Sendable {
 	public let identifier: String
 	public let scopes: [String]
 	let tokenSource: any BearerTokenSource

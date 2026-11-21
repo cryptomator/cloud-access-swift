@@ -19,17 +19,19 @@ extension UnitTests {
 	final class WebDAVCloudProviderTests {
 		let tmpDirURL: URL
 		let baseURL: URL
-		let client: WebDAVClientMock
+		let client: WebDAVClient
 		let provider: WebDAVCloudProvider
 
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			URLProtocolAuthenticationMock.authenticationChallenges = []
 			URLProtocolSequenceMock.steps = []
+			RecordingURLProtocolMock.log.reset()
+			RecordingURLProtocolAuthenticationMock.log.reset()
 			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 			self.baseURL = try #require(URL(string: "/cloud/remote.php/webdav/"))
-			self.client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
+			self.client = .mocked(baseURL: baseURL)
 			self.provider = try WebDAVCloudProvider(client: client)
 		}
 
@@ -51,7 +53,7 @@ extension UnitTests {
 			})
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(metadata.name == "About.txt")
 			#expect(metadata.cloudPath.path == "/Documents/About.txt")
 			#expect(metadata.itemType == .file)
@@ -99,21 +101,20 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func fetchItemMetadataWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) }
-			#expect(unauthorizedClient.propfindRequests["Documents/About.txt"] == .zero)
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -140,7 +141,7 @@ extension UnitTests {
 			})
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(metadata.name == "About.txt")
 			#expect(metadata.cloudPath.path == "/Documents/About.txt")
 			#expect(metadata.itemType == .file)
@@ -162,7 +163,7 @@ extension UnitTests {
 			})
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-			#expect(client.propfindRequests["."] == .one)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/"])
 			#expect(itemList.items.count == 5)
 			#expect(itemList.items.contains(where: { $0.name == "Documents" }))
 			#expect(itemList.items.contains(where: { $0.name == "Nextcloud Manual.pdf" }))
@@ -186,7 +187,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
-			#expect(client.propfindRequests["."] == .one)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -204,20 +205,19 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt"), withPageToken: nil) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .one)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func fetchItemListWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 
 			let failureResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
-			#expect(unauthorizedClient.propfindRequests["."] == .one)
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -239,21 +239,34 @@ extension UnitTests {
 
 		@Test
 		func fetchItemListWhileAnotherListingOfTheSameFolderFillsTheCache() async throws {
-			let gatedClient = FirstPropfindGateClient(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
-			let provider = try WebDAVCloudProvider(client: gatedClient, maxPageSize: 2)
+			let provider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: FirstRequestHoldingProtocolMock.self), maxPageSize: 2)
 			let itemListData = try getTestData(forResource: "item-list", withExtension: "xml")
-			// The held request reaches the mock after the other listing's request, so its response is queued second.
+			// The held request takes its response only once it's released, after the other listing's request, so its response is queued second.
 			try enqueueResponse(statusCode: 200, data: removingResponse(withHref: "/cloud/remote.php/webdav/Documents/", from: itemListData), for: baseURL)
 			try enqueueResponse(statusCode: 200, data: itemListData, for: baseURL)
+			let hold = RequestHold()
+			FirstRequestHoldingProtocolMock.arm(hold)
 
 			let heldListing = Task {
 				try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
 			}
-			await gatedClient.firstPropfindHeld.wait()
-			let otherItemList = try await releasingOnError(heldListing, by: gatedClient.firstPropfindReleased) {
-				try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+			await hold.reached.wait()
+			guard hold.reached.fulfillmentCount > 0 else {
+				// The timed-out wait has recorded the failure. Disarm the hold, and release it in case the first listing's request took it meanwhile.
+				_ = FirstRequestHoldingProtocolMock.takePendingHold()
+				hold.release()
+				_ = try? await cancellingValue(of: heldListing)
+				return
 			}
-			gatedClient.firstPropfindReleased.fulfill()
+			let otherItemList: CloudItemList
+			do {
+				otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
+			} catch {
+				hold.release()
+				_ = try? await cancellingValue(of: heldListing)
+				throw error
+			}
+			hold.release()
 			let itemList = try await cancellingValue(of: heldListing)
 
 			#expect(WebDAVCloudProviderTests.itemListNames == itemList.items.map(\.name).sorted())
@@ -382,8 +395,7 @@ extension UnitTests {
 			})
 
 			let metadata = try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil)
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.getRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "GET /cloud/remote.php/webdav/Documents/About.txt"])
 			let expectedData = try getTestData(forResource: "item-data", withExtension: "txt")
 			let actualData = try Data(contentsOf: localURL)
 			#expect(expectedData == actualData)
@@ -650,8 +662,7 @@ extension UnitTests {
 
 			let progress = Progress(totalUnitCount: 1)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.getRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "GET /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 			#expect(progress.fractionCompleted < 1)
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
@@ -682,8 +693,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.getRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "GET /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -702,15 +712,13 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.getRequests.isEmpty)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func downloadFileWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
@@ -718,8 +726,7 @@ extension UnitTests {
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL) }
-			#expect(unauthorizedClient.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(unauthorizedClient.getRequests.isEmpty)
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -757,8 +764,7 @@ extension UnitTests {
 
 			let progress = Progress(totalUnitCount: 1)
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt", "PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(metadata.name == "About.txt")
 			#expect(metadata.cloudPath.path == "/Documents/About.txt")
 			#expect(metadata.itemType == .file)
@@ -849,8 +855,7 @@ extension UnitTests {
 			})
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true)
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt", "PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(metadata.name == "About.txt")
 			#expect(metadata.cloudPath.path == "/Documents/About.txt")
 			#expect(metadata.itemType == .file)
@@ -863,8 +868,7 @@ extension UnitTests {
 		func uploadFileWithNotFoundError() async {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true) }
-			#expect(client.propfindRequests.isEmpty)
-			#expect(client.putRequests.isEmpty)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == [])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -884,8 +888,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.isEmpty)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -927,8 +930,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.isEmpty)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -954,8 +956,7 @@ extension UnitTests {
 				return (putResponse, nil)
 			})
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -981,15 +982,13 @@ extension UnitTests {
 				return (putResponse, nil)
 			})
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
-			#expect(client.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(client.putRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func uploadFileWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
@@ -998,8 +997,7 @@ extension UnitTests {
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
-			#expect(unauthorizedClient.propfindRequests["Documents/About.txt"] == .zero)
-			#expect(unauthorizedClient.putRequests.isEmpty)
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -1015,7 +1013,7 @@ extension UnitTests {
 				return (mkcolResponse, nil)
 			})
 			try await provider.createFolder(at: CloudPath("/foo"))
-			#expect(client.mkcolRequests.contains("foo"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 		}
 
 		@Test
@@ -1030,7 +1028,7 @@ extension UnitTests {
 				return (mkcolResponse, nil)
 			})
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.createFolder(at: CloudPath("/foo")) }
-			#expect(client.mkcolRequests.contains("foo"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -1046,21 +1044,20 @@ extension UnitTests {
 				return (mkcolResponse, nil)
 			})
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.createFolder(at: CloudPath("/foo")) }
-			#expect(client.mkcolRequests.contains("foo"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func createFolderWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 
 			let responseURL = try #require(URL(string: "foo/", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.createFolder(at: CloudPath("/foo")) }
-			#expect(unauthorizedClient.mkcolRequests.contains("foo"))
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -1094,7 +1091,7 @@ extension UnitTests {
 				return (deleteResponse, nil)
 			})
 			try await provider.deleteFile(at: CloudPath("/Documents/About.txt"))
-			#expect(client.deleteRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["DELETE /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -1111,21 +1108,20 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/Documents/About.txt")) }
-			#expect(client.deleteRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["DELETE /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func deleteFileWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.deleteFile(at: CloudPath("/Documents/About.txt")) }
-			#expect(unauthorizedClient.deleteRequests.contains("Documents/About.txt"))
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["DELETE /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -1168,6 +1164,8 @@ extension UnitTests {
 
 		@Test
 		func testMoveFile() async throws {
+			let baseURL = try #require(URL(string: "https://example.com/cloud/remote.php/webdav/"))
+			let provider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL))
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -1179,7 +1177,17 @@ extension UnitTests {
 			})
 
 			try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))
-			#expect(client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> https://example.com/cloud/remote.php/webdav/Documents/Foobar.txt"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A name with characters that a URL path must escape reaches the server percent-encoded, in the path and in the `Destination`. Unescaped, `#` would start a fragment and `?` a query.
+		@Test
+		func moveFileWithNamesThatNeedPercentEncoding() async throws {
+			try enqueueResponse(statusCode: 201, for: #require(URL(cloudPath: CloudPath("/a #b%20.txt"), relativeTo: baseURL)))
+
+			try await provider.moveFile(from: CloudPath("/a #b%20.txt"), to: CloudPath("/c?d.txt"))
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/a%20%23b%2520.txt -> /cloud/remote.php/webdav/c%3Fd.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -1196,7 +1204,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
-			#expect(client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -1214,7 +1222,7 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
-			#expect(client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -1231,21 +1239,20 @@ extension UnitTests {
 			})
 
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
-			#expect(client.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func moveFileWithUnauthorizedError() async throws {
-			let unauthorizedClient = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolAuthenticationMock.self)
-			let unauthorizedProvider = try WebDAVCloudProvider(client: unauthorizedClient)
+			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
 			let challenge = URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse)
 			URLProtocolAuthenticationMock.authenticationChallenges.append(challenge)
 			await #expect(throws: CloudProviderError.unauthorized) { try await unauthorizedProvider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
-			#expect(unauthorizedClient.moveRequests["Documents/About.txt"] == "Documents/Foobar.txt")
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
 			#expect(URLProtocolAuthenticationMock.authenticationChallenges.isEmpty)
 		}
 
@@ -1281,12 +1288,7 @@ extension UnitTests {
 		@Test
 		func throwsCancellationErrorInCancelledTask() async {
 			await assertThrowsCancellationErrorInCancelledTask(provider)
-			#expect(client.propfindRequests.isEmpty)
-			#expect(client.getRequests.isEmpty)
-			#expect(client.putRequests.isEmpty)
-			#expect(client.mkcolRequests.isEmpty)
-			#expect(client.deleteRequests.isEmpty)
-			#expect(client.moveRequests.isEmpty)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == [])
 		}
 
 		// MARK: - Internal
@@ -1343,24 +1345,92 @@ extension UnitTests {
 	}
 }
 
-/// Holds back the client's first `PROPFIND`, before it reaches the URL protocol mock, until the test fulfills `firstPropfindReleased`.
-///
-/// `@unchecked Sendable`: restates the conformance of `WebDAVClientMock`; its own state is protected by a lock or is itself `Sendable`.
-private final class FirstPropfindGateClient: WebDAVClientMock, @unchecked Sendable {
-	let firstPropfindHeld = TestSignal("first PROPFIND held")
-	let firstPropfindReleased = TestSignal("first PROPFIND released")
-	private let isFirstPropfind = OSAllocatedUnfairLock(initialState: true)
+/// Keeps the request that `FirstRequestHoldingProtocolMock` takes unanswered until `release()`. Without a release, the test's wait for the listing or the request's timeout fails the test.
+private final class RequestHold: Sendable {
+	private struct State {
+		var loading: HeldLoading?
+		var isReleased = false
+	}
 
-	override func PROPFIND(url: URL, depth: PropfindDepth, to localURL: URL, propertyNames: [String]? = nil) async throws -> HTTPURLResponse {
-		let isFirst = isFirstPropfind.withLock { isFirst in
-			defer { isFirst = false }
-			return isFirst
+	let reached = TestSignal("held request reached the mock")
+	private let state = OSAllocatedUnfairLock(initialState: State())
+
+	func release() {
+		let loading = state.withLock { state in
+			state.isReleased = true
+			return state.loading
 		}
-		if isFirst {
-			firstPropfindHeld.fulfill()
-			await firstPropfindReleased.wait()
+		loading?.answer()
+	}
+
+	/// Keeps the loading until `release()`, and returns `false` if the hold was released already, so that the caller answers at once.
+	fileprivate func hold(_ loading: HeldLoading) -> Bool {
+		return state.withLock { state in
+			if !state.isReleased {
+				state.loading = loading
+			}
+			return !state.isReleased
 		}
-		return try await super.PROPFIND(url: url, depth: depth, to: localURL, propertyNames: propertyNames)
+	}
+}
+
+/// Holds the first request that arrives once the test armed a hold, without blocking its loading thread, so that the session's other requests still complete.
+private final class FirstRequestHoldingProtocolMock: URLProtocolMock {
+	private static let pendingHold = OSAllocatedUnfairLock<RequestHold?>(initialState: nil)
+
+	/// Set once the loading stopped, e.g. because its task was cancelled, after which it must not call back anymore. Read and written only on the loading thread.
+	fileprivate var isStopped = false
+
+	static func arm(_ hold: RequestHold) {
+		pendingHold.withLock { $0 = hold }
+	}
+
+	static func takePendingHold() -> RequestHold? {
+		return pendingHold.withLock { hold in
+			defer { hold = nil }
+			return hold
+		}
+	}
+
+	override func startLoading() {
+		guard let hold = FirstRequestHoldingProtocolMock.takePendingHold() else {
+			super.startLoading()
+			return
+		}
+		let isHeld = hold.hold(HeldLoading(protocolInstance: self, runLoop: CFRunLoopGetCurrent()))
+		hold.reached.fulfill()
+		if !isHeld {
+			answerHeldRequest()
+		}
+	}
+
+	override func stopLoading() {
+		isStopped = true
+	}
+
+	fileprivate func answerHeldRequest() {
+		if !isStopped {
+			super.startLoading()
+		}
+	}
+}
+
+/// `@unchecked Sendable`: `runLoop` is only passed to `CFRunLoopPerformBlock` and `CFRunLoopWakeUp`, which may be called from any thread. `protocolInstance` is used only inside the block posted to that run loop.
+private final class HeldLoading: @unchecked Sendable {
+	private let protocolInstance: FirstRequestHoldingProtocolMock
+	private let runLoop: CFRunLoop
+
+	init(protocolInstance: FirstRequestHoldingProtocolMock, runLoop: CFRunLoop) {
+		self.protocolInstance = protocolInstance
+		self.runLoop = runLoop
+	}
+
+	/// Answers on the loading thread.
+	func answer() {
+		CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { [protocolInstance] in
+			protocolInstance.answerHeldRequest()
+		}
+		CFRunLoopWakeUp(runLoop)
 	}
 }
 

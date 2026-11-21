@@ -13,8 +13,7 @@ enum PropfindDepth: String, Sendable {
 	case one = "1"
 }
 
-/// `@unchecked Sendable`: `baseURL` and the `Sendable` `webDAVSession` are immutable. The class is subclassed in tests.
-class WebDAVClient: @unchecked Sendable {
+final class WebDAVClient: Sendable {
 	let baseURL: URL
 	private let webDAVSession: WebDAVSession
 
@@ -37,12 +36,6 @@ class WebDAVClient: @unchecked Sendable {
 	func OPTIONS(url: URL) async throws -> (HTTPURLResponse, Data?) {
 		var request = URLRequest(url: url)
 		request.httpMethod = "OPTIONS"
-		return try await webDAVSession.performDataTask(with: request)
-	}
-
-	func HEAD(url: URL) async throws -> (HTTPURLResponse, Data?) {
-		var request = URLRequest(url: url)
-		request.httpMethod = "HEAD"
 		return try await webDAVSession.performDataTask(with: request)
 	}
 

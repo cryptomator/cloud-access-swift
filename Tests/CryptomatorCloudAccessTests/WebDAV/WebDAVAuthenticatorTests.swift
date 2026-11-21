@@ -17,12 +17,13 @@ enum WebDAVAuthenticatorTestsError: Error {
 extension UnitTests {
 	struct WebDAVAuthenticatorTests {
 		let baseURL: URL
-		let client: WebDAVClientMock
+		let client: WebDAVClient
 
 		init() throws {
 			URLProtocolMock.requestHandler = []
+			RecordingURLProtocolMock.log.reset()
 			self.baseURL = try #require(URL(string: "/cloud/remote.php/webdav/"))
-			self.client = WebDAVClientMock(baseURL: baseURL, urlProtocolMock: URLProtocolMock.self)
+			self.client = .mocked(baseURL: baseURL)
 		}
 
 		@Test
@@ -46,8 +47,7 @@ extension UnitTests {
 			})
 
 			try await WebDAVAuthenticator.verifyClient(client: client)
-			#expect(client.optionsRequests.contains(baseURL.relativePath))
-			#expect(client.propfindRequests[baseURL.relativePath] == .zero)
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["OPTIONS /cloud/remote.php/webdav/", "PROPFIND Depth 0 /cloud/remote.php/webdav/"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 

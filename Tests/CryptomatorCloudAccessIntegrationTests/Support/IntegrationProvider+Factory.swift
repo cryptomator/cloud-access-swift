@@ -15,7 +15,7 @@ enum SharedCredentials {
 	static let dropbox = Result { try DropboxCredentialMock.generateAuthorizedCredential() }
 	static let googleDrive = Result { try GoogleDriveAuthenticatorMock.generateAuthorizedCredential(withRefreshToken: IntegrationTestSecrets.googleDriveRefreshToken, tokenUID: "IntegrationTest") }
 	// Microsoft Graph doesn't like to get an access token from the refresh token frequently
-	static let microsoftGraph = Result { try MicrosoftGraphCredentialMock() }
+	static let microsoftGraph = Result { try MicrosoftGraphCredential.oneDriveIntegrationTest() }
 	static let sharePoint = MicrosoftGraphCredential.sharePointIntegrationTest()
 	static let pCloud = Result { try PCloudCredential.integrationTest() }
 }
@@ -58,9 +58,7 @@ extension IntegrationProvider {
 		case .googleDrive:
 			return try GoogleDriveCloudProvider(credential: GoogleDriveCredential(userID: "IntegrationTest-Unauthorized", tokenSource: InvalidOAuthTokenSource()))
 		case .microsoftGraph:
-			let credential = try MicrosoftGraphCredentialMock()
-			try await credential.deauthenticate()
-			return try MicrosoftGraphCloudProvider(credential: credential)
+			return try MicrosoftGraphCloudProvider(credential: .oneDriveIntegrationTestInvalid())
 		case .sharePoint:
 			return try await MicrosoftGraphCloudProvider(credential: .sharePointIntegrationTestInvalid(), driveIdentifier: SharePointTestDrive.shared.identifier())
 		case .pCloud:

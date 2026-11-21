@@ -178,7 +178,7 @@ public final class S3CloudProvider: CloudProvider {
 		try await perform("deleteFile(at: \(cloudPath.path))") {
 			_ = try await getItemMetadata(at: cloudPath)
 			try Task.checkCancellation()
-			if try await isDeletionRefused(ofKey: getKey(for: cloudPath)) {
+			if try await isDeletionRefused(client.deleteObject(key: getKey(for: cloudPath))) {
 				throw CloudProviderError.deletionIncomplete
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) finished")
@@ -191,6 +191,7 @@ public final class S3CloudProvider: CloudProvider {
 		try await perform("deleteFolder(at: \(cloudPath.path))") {
 			_ = try await getItemMetadata(at: cloudPath)
 			try await deleteFolderAfterCheck(at: cloudPath)
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) finished")
 		}
 	}
 
@@ -208,7 +209,7 @@ public final class S3CloudProvider: CloudProvider {
 			try Task.checkCancellation()
 			try await withoutCancellation {
 				try await self.copyUtility.copy(copyRequest)
-				if try await self.isDeletionRefused(ofKey: sourceKey) {
+				if try await self.isDeletionRefused(self.client.deleteObject(key: sourceKey)) {
 					throw CloudProviderError.moveCompletedWithSourceRemaining
 				}
 			}
@@ -244,10 +245,8 @@ public final class S3CloudProvider: CloudProvider {
 		let sourcePrefix = getPrefix(for: sourceCloudPath)
 		let targetPrefix = getPrefix(for: targetCloudPath)
 		var hasSourceRemaining = false
-		var nextContinuationToken: String?
-		repeat {
-			let listObjects = try await listObjects(withPrefix: sourcePrefix, recursive: true, pageToken: nextContinuationToken)
-			let copyRequests: [S3CopyRequest] = listObjects.contents.compactMap {
+		try await forEachRecursivePage(prefix: sourcePrefix) { objects in
+			let copyRequests: [S3CopyRequest] = objects.compactMap {
 				guard let name = $0.key.deletingPrefix(sourcePrefix) else {
 					return nil
 				}
@@ -255,17 +254,10 @@ public final class S3CloudProvider: CloudProvider {
 				return .init(sourceKey: $0.key, targetKey: targetKey, itemSize: $0.size ?? 0)
 			}
 			try await copyUtility.copy(copyRequests)
-
-			do {
-				if try await isDeletionRefused(ofKeys: copyRequests.map(\.sourceKey)) {
-					hasSourceRemaining = true
-				}
-			} catch let error as S3DeletionInterrupted {
-				throw error.underlying
+			if try await isDeletionRefused(client.deleteObjects(keys: copyRequests.map(\.sourceKey))) {
+				hasSourceRemaining = true
 			}
-
-			nextContinuationToken = listObjects.nextContinuationToken
-		} while nextContinuationToken != nil
+		}
 		if hasSourceRemaining {
 			throw CloudProviderError.moveCompletedWithSourceRemaining
 		}
@@ -449,73 +441,61 @@ public final class S3CloudProvider: CloudProvider {
 
 	 S3 refusing to delete objects, or a whole `DeleteObjects` request, doesn't stop the deletion, so that every page is deleted that can be.
 
-	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well, including a transport failure that ends a batch after S3 answered an earlier attempt with an error.
+	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well. An error answer to an earlier attempt of a batch counts as a refusal, so a failure without an answer that ends that batch throws it too.
 	 */
 	func deleteFolderAfterCheck(at cloudPath: CloudPath) async throws {
 		var isIncomplete = false
-		var nextContinuationToken: String?
-		repeat {
-			try Task.checkCancellation()
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) called")
-			do {
-				let listObjects = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: true, pageToken: nextContinuationToken)
-				try Task.checkCancellation()
-				if try await isDeletionRefused(ofKeys: listObjects.contents.map(\.key)) {
+		do {
+			try await forEachRecursivePage(prefix: getPrefix(for: cloudPath)) { objects in
+				let outcome = try await client.deleteObjects(keys: objects.map(\.key))
+				if case let .unknown(error, answeredBefore: true) = outcome {
+					isIncomplete = true
+					throw error
+				}
+				if try isDeletionRefused(outcome) {
 					isIncomplete = true
 				}
-				nextContinuationToken = listObjects.nextContinuationToken
-			} catch let error as S3DeletionInterrupted {
-				CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed after S3 refused to delete objects: \(error.underlying)")
-				throw CloudProviderError.deletionIncomplete
-			} catch where isIncomplete && !(error is CancellationError) {
-				CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed after S3 refused to delete objects: \(error)")
-				throw CloudProviderError.deletionIncomplete
 			}
-			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path), continuationToken: \(nextContinuationToken ?? "nil")) finished")
-		} while nextContinuationToken != nil
+		} catch where isIncomplete && !(error is CancellationError) {
+			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) failed after S3 refused to delete objects: \(error)")
+			throw CloudProviderError.deletionIncomplete
+		}
 		if isIncomplete {
 			throw CloudProviderError.deletionIncomplete
 		}
 	}
 
-	/**
-	 Deletes the objects and returns whether S3 refused to delete some of them, which it logs. An error response to the whole request refuses all of them. An object that doesn't exist counts as deleted.
-
-	 - Throws: A transport failure, after which it is unknown which objects were deleted. `S3DeletionInterrupted` if S3 had answered an earlier attempt of the batch with an error.
-	 */
-	private func isDeletionRefused(ofKeys keys: [String]) async throws -> Bool {
-		if keys.isEmpty {
-			return false
-		}
-		let refusals: [S3DeletionFailure]
-		do {
-			refusals = try await client.deleteObjects(keys: keys)
-		} catch where S3Client.isErrorResponse(error) {
-			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(keys.count) objects: \(error)")
-			return true
-		}
-		if !refusals.isEmpty {
-			let examples = refusals.prefix(10).map { "\($0.key ?? "nil") (\($0.code ?? "nil"))" }.joined(separator: ", ")
-			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(refusals.count) objects, e.g., \(examples)")
-		}
-		return !refusals.isEmpty
+	/// Passes each page of the recursive listing below the prefix to `body`. It checks for cancellation before each listing and each `body`, so a caller past its commit point runs it in `withoutCancellation`.
+	private func forEachRecursivePage(prefix: String, _ body: ([S3Object]) async throws -> Void) async throws {
+		var nextContinuationToken: String?
+		repeat {
+			try Task.checkCancellation()
+			let listObjects = try await listObjects(withPrefix: prefix, recursive: true, pageToken: nextContinuationToken)
+			try Task.checkCancellation()
+			try await body(listObjects.contents)
+			nextContinuationToken = listObjects.nextContinuationToken
+		} while nextContinuationToken != nil
 	}
 
 	/**
-	 Deletes the object and returns whether S3 refused to delete it, which it logs. An object that is gone (`NoSuchKey` or 404) counts as deleted.
+	 Returns whether S3 refused the deletion, which it logs.
 
-	 - Throws: A transport failure, after which it is unknown whether the object was deleted.
+	 - Throws: The failure of a deletion whose outcome is unknown.
 	 */
-	private func isDeletionRefused(ofKey key: String) async throws -> Bool {
-		do {
-			try await client.deleteObject(key: key)
-		} catch let error as S3Error where error.code == "NoSuchKey" || error.statusCode == 404 {
+	private func isDeletionRefused(_ outcome: S3DeletionOutcome) throws -> Bool {
+		switch outcome {
+		case .deleted:
 			return false
-		} catch where S3Client.isErrorResponse(error) {
-			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(key): \(error)")
+		case let .refused(.members(failures)):
+			let examples = failures.prefix(10).map { "\($0.key ?? "nil") (\($0.code ?? "nil"))" }.joined(separator: ", ")
+			CloudAccessDDLogDebug("S3CloudProvider: S3 refused to delete \(failures.count) objects, e.g., \(examples)")
 			return true
+		case let .refused(.request(error)):
+			CloudAccessDDLogDebug("S3CloudProvider: S3 refused the deletion request: \(error)")
+			return true
+		case let .unknown(error, _):
+			throw error
 		}
-		return false
 	}
 
 	// - MARK: Assertions

@@ -79,42 +79,66 @@ final class S3Client: Sendable {
 		try await send(request(method: "PUT", key: key, headers: ["Content-Type": contentType])) { _ in }
 	}
 
-	func deleteObject(key: String) async throws {
-		try await send(request(method: "DELETE", key: key)) { _ in }
+	/**
+	 An object that is gone (`NoSuchKey` or 404) counts as deleted, and any other error response refuses the deletion.
+
+	 - Throws: `CancellationError` only.
+	 */
+	func deleteObject(key: String) async throws -> S3DeletionOutcome {
+		let outcome = try await deletionOutcome(of: request(method: "DELETE", key: key)) { _ in .deleted }
+		if case let .refused(.request(error as S3Error)) = outcome, error.code == "NoSuchKey" || error.statusCode == 404 {
+			return .deleted
+		}
+		return outcome
 	}
 
 	/**
-	 Deletes the objects in quiet mode and returns those that S3 refused to delete. An object that doesn't exist (`NoSuchKey`) counts as deleted.
+	 Deletes the objects in quiet mode. An object that doesn't exist (`NoSuchKey`) counts as deleted, and an error response to the whole request refuses all of them. No keys send no request.
 
-	 A response whose refusals all have transient codes is retried as a transient failure, which resends the whole batch. That is harmless, because a key that an earlier attempt deleted counts as deleted. A response with any other refusal returns all of its refusals at once, because a resend can't undo the permanent one.
+	 A response whose refusals all have transient codes is retried as a transient failure, which resends the whole batch. That is harmless, because a key that an earlier attempt deleted counts as deleted. A response with any other refusal returns all of its refusals at once, because a resend can't undo the permanent one. Transient refusals that persist through the retries are returned as well.
 
-	 - Throws: The `S3Error` of a transient refusal that persists through the retries. `S3DeletionInterrupted` with the transport failure that ends a batch after S3 answered an earlier attempt with an error.
+	 - Throws: `CancellationError` only.
 	 */
-	func deleteObjects(keys: [String]) async throws -> [S3DeletionFailure] {
+	func deleteObjects(keys: [String]) async throws -> S3DeletionOutcome {
+		if keys.isEmpty {
+			return .deleted
+		}
 		let body = S3XML.deleteObjectsBody(keys: keys)
 		let contentMD5 = Data(Insecure.MD5.hash(data: body)).base64EncodedString()
 		let deleteRequest = request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)
-		var sawErrorResponse = false
-		do {
-			return try await send(deleteRequest, onRetry: { failure in
-				if S3Client.isErrorResponse(failure) {
-					sawErrorResponse = true
-				}
-			}, result: { body in
-				let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
-				guard let transientCode = refusals.first?.code, refusals.allSatisfy({ S3Error.isTransient(code: $0.code) }) else {
-					return refusals
-				}
-				throw S3Error(statusCode: 200, code: transientCode)
-			})
-		} catch where sawErrorResponse && !(S3Client.isErrorResponse(error) || error is CancellationError) {
-			throw S3DeletionInterrupted(underlying: error)
+		return try await deletionOutcome(of: deleteRequest) { body in
+			let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
+			if refusals.isEmpty {
+				return .deleted
+			}
+			if refusals.allSatisfy({ S3Error.isTransient(code: $0.code) }) {
+				throw S3TransientDeletionRefusal(failures: refusals)
+			}
+			return .refused(.members(refusals))
 		}
 	}
 
-	/// Whether S3 answered the request, with an error or with a result that can't be read. A transport failure leaves the request's outcome unknown.
-	static func isErrorResponse(_ error: Error) -> Bool {
-		return error is S3Error || error is S3ResponseError
+	/// Sends a deletion request and classifies how it ended: an error response refuses the deletion, and any other failure but cancellation leaves its outcome unknown.
+	private func deletionOutcome(of request: URLRequest, result: (Data) throws -> S3DeletionOutcome) async throws -> S3DeletionOutcome {
+		var answeredBefore = false
+		do {
+			return try await send(request, onRetry: { failure in
+				if S3Client.isErrorResponse(failure) {
+					answeredBefore = true
+				}
+			}, result: result)
+		} catch let refusal as S3TransientDeletionRefusal {
+			return .refused(.members(refusal.failures))
+		} catch where S3Client.isErrorResponse(error) {
+			return .refused(.request(error))
+		} catch where !(error is CancellationError) {
+			return .unknown(error, answeredBefore: answeredBefore)
+		}
+	}
+
+	/// Whether S3 answered the request, with an error, with transient refusals or with a result that can't be read.
+	private static func isErrorResponse(_ error: Error) -> Bool {
+		return error is S3Error || error is S3ResponseError || error is S3TransientDeletionRefusal
 	}
 
 	func copyObject(sourceKey: String, targetKey: String) async throws {
@@ -239,7 +263,7 @@ final class S3Client: Sendable {
 	/**
 	 Sends a metadata request, signing each attempt afresh, and returns the result that `result` reads from the body of a successful response.
 
-	 A failed attempt is retried up to three times if its failure is transient. A transient failure is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`). A retry waits for the response's `Retry-After`, capped at 60 seconds, or else for a random exponential delay. A request that failed because of the device's clock is retried once with the server's clock.
+	 A failed attempt is retried up to three times if its failure is transient. A transient failure is a connection that couldn't be made, dropped or timed out, including DNS and TLS failures. It is also a throttling, server or timeout status or error code; for a 2xx response, the code of its `<Error>` document counts. A 2xx response whose `<Error>` document or result can't be read is transient too (`S3ResponseError.unparseableResult`), and so is a `DeleteObjects` result whose refusals all have transient codes. A retry waits for the response's `Retry-After`, capped at 60 seconds, or else for a random exponential delay. A request that failed because of the device's clock is retried once with the server's clock.
 
 	 A cancelled task stops the request instead of retrying it, also during the wait before a retry. The first attempt is sent and a running attempt finishes either way.
 
@@ -337,10 +361,35 @@ final class S3Client: Sendable {
 			return HTTPClientSupport.isTransient(urlError)
 		case let s3Error as S3Error:
 			return transientStatusCodes.contains(s3Error.statusCode) || S3Error.isTransient(code: s3Error.code)
-		case S3ResponseError.unparseableResult:
+		case S3ResponseError.unparseableResult, is S3TransientDeletionRefusal:
 			return true
 		default:
 			return false
 		}
+	}
+}
+
+enum S3DeletionOutcome {
+	/// Every object is gone.
+	case deleted
+	/// S3 answered and refused to delete some or all of the objects.
+	case refused(S3DeletionRefusal)
+	/// The request failed without an answer, so it is unknown which objects were deleted. `answeredBefore` tells whether S3 answered an earlier attempt of it with an error.
+	case unknown(Error, answeredBefore: Bool)
+}
+
+enum S3DeletionRefusal {
+	/// The objects that a `DeleteObjects` request refused to delete.
+	case members([S3DeletionFailure])
+	/// S3 answered the whole request with an error or with a result that can't be read, which counts as refusing every object of it.
+	case request(Error)
+}
+
+/// A `DeleteObjects` response whose refusals all have transient codes, which `send` retries. Its description, which `send` logs for each attempt, holds only the count and codes rather than every refused key.
+private struct S3TransientDeletionRefusal: Error, CustomStringConvertible {
+	let failures: [S3DeletionFailure]
+
+	var description: String {
+		return "S3TransientDeletionRefusal(count: \(failures.count), codes: \(Set(failures.compactMap(\.code)).sorted()))"
 	}
 }

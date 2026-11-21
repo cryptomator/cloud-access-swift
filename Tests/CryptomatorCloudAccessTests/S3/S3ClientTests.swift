@@ -82,9 +82,9 @@ extension UnitTests {
 		func deleteObjectsReturnsRefusedKeys() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "AccessDenied")]))]
 
-			let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+			let outcome = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
 
-			#expect([S3DeletionFailure(key: "a.txt", code: "AccessDenied")] == refusals)
+			#expect([S3DeletionFailure(key: "a.txt", code: "AccessDenied")] == outcome.refusedMembers)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -93,9 +93,9 @@ extension UnitTests {
 		func deleteObjectsDropsNoSuchKey() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "NoSuchKey")]))]
 
-			let refusals = try await client.deleteObjects(keys: ["a.txt"])
+			let outcome = try await client.deleteObjects(keys: ["a.txt"])
 
-			#expect(refusals == [])
+			#expect(outcome.isDeleted)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -107,19 +107,20 @@ extension UnitTests {
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "NoSuchKey")]), onRequest: requests.record)
 			]
 
-			let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+			let outcome = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
 
-			#expect(refusals == [])
+			#expect(outcome.isDeleted)
 			#expect(requests.requests.map { S3XMLElement.parse($0.httpBody ?? Data())?.children("Object").compactMap { $0.text(of: "Key") } } == [["a.txt", "b.txt"], ["a.txt", "b.txt"]])
 			#expect(sleeps.durations.count == 1)
 		}
 
 		@Test
-		func deleteObjectsThrowsTransientErrorAfterBudget() async throws {
+		func deleteObjectsReturnsTransientRefusalAfterBudget() async throws {
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "SlowDown")])), count: 4)
 
-			let error = try await #require(throws: (any Error).self) { try await client.deleteObjects(keys: ["a.txt"]) }
-			#expect((error as? S3Error)?.code == "SlowDown")
+			let outcome = try await client.deleteObjects(keys: ["a.txt"])
+
+			#expect([S3DeletionFailure(key: "a.txt", code: "SlowDown")] == outcome.refusedMembers)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -132,56 +133,63 @@ extension UnitTests {
 					URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: []))
 				]
 
-				let refusals = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+				let outcome = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
 
-				#expect([S3DeletionFailure(key: "a.txt", code: "SlowDown"), S3DeletionFailure(key: "b.txt", code: permanentCode)] == refusals)
+				#expect([S3DeletionFailure(key: "a.txt", code: "SlowDown"), S3DeletionFailure(key: "b.txt", code: permanentCode)] == outcome.refusedMembers)
 				#expect(URLProtocolMock.requestHandler.count == 1)
 				#expect(sleeps.durations == [])
 			}
 		}
 
 		@Test
-		func deleteObjectsWithTransientRefusalThenTransportFailureThrowsInterrupted() async throws {
+		func deleteObjectsWithTransientRefusalThenTransportFailureIsUnknownAfterAnswer() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("b.txt", "SlowDown")]))] + Array(repeating: S3MockResponse.failure(.timedOut), count: 3)
 
-			let error = try await #require(throws: (any Error).self) { try await client.deleteObjects(keys: ["a.txt", "b.txt"]) }
-			#expect(((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code == .timedOut, "Unexpected error: \(error)")
+			let outcome = try await client.deleteObjects(keys: ["a.txt", "b.txt"])
+
+			#expect((outcome.unknownFailure?.error as? URLError)?.code == .timedOut, "\(outcome)")
+			#expect(outcome.unknownFailure?.answeredBefore == true)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
-		func deleteObjectsWithTransientRequestRefusalThenTransportFailureThrowsInterrupted() async throws {
+		func deleteObjectsWithTransientRequestRefusalThenTransportFailureIsUnknownAfterAnswer() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503)] + Array(repeating: S3MockResponse.failure(.timedOut), count: 3)
 
-			let error = try await #require(throws: (any Error).self) { try await client.deleteObjects(keys: ["a.txt"]) }
-			#expect(((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code == .timedOut, "Unexpected error: \(error)")
+			let outcome = try await client.deleteObjects(keys: ["a.txt"])
+
+			#expect((outcome.unknownFailure?.error as? URLError)?.code == .timedOut, "\(outcome)")
+			#expect(outcome.unknownFailure?.answeredBefore == true)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
-		func deleteObjectsWithClockSkewRefusalThenTransportFailureThrowsInterrupted() async throws {
+		func deleteObjectsWithClockSkewRefusalThenTransportFailureIsUnknownAfterAnswer() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))])] + Array(repeating: S3MockResponse.failure(.timedOut), count: 4)
 
-			let error = try await #require(throws: (any Error).self) { try await client.deleteObjects(keys: ["a.txt"]) }
-			#expect(((error as? S3DeletionInterrupted)?.underlying as? URLError)?.code == .timedOut, "Unexpected error: \(error)")
+			let outcome = try await client.deleteObjects(keys: ["a.txt"])
+
+			#expect((outcome.unknownFailure?.error as? URLError)?.code == .timedOut, "\(outcome)")
+			#expect(outcome.unknownFailure?.answeredBefore == true)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
-		/// A transport failure leaves the batch's outcome unknown, so it is thrown as it is unless S3 answered an earlier attempt.
 		@Test
-		func deleteObjectsWithTransportFailuresThrowsTransportError() async throws {
+		func deleteObjectsWithTransportFailuresIsUnknownWithoutAnswer() async throws {
 			URLProtocolMock.requestHandler = Array(repeating: S3MockResponse.failure(.timedOut), count: 4)
 
-			let error = try await #require(throws: (any Error).self) { try await client.deleteObjects(keys: ["a.txt"]) }
-			#expect((error as? URLError)?.code == .timedOut, "Unexpected error: \(error)")
+			let outcome = try await client.deleteObjects(keys: ["a.txt"])
+
+			#expect((outcome.unknownFailure?.error as? URLError)?.code == .timedOut, "\(outcome)")
+			#expect(outcome.unknownFailure?.answeredBefore == false)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
-		/// The cancellation stops the resend of a transiently refused batch, and it stays a cancellation rather than an interrupted deletion.
+		/// The cancellation stops the resend of a transiently refused batch, and it stays a cancellation rather than an unknown outcome.
 		@Test
 		func deleteObjectsCancelledAfterTransientRefusalThrowsCancellationError() async throws {
 			let client: S3Client = client
-			let canceller = TaskCanceller<[S3DeletionFailure]>()
+			let canceller = TaskCanceller<S3DeletionOutcome>()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("a.txt", "SlowDown")]), onRequest: { _ in
 					canceller.cancel()
@@ -288,8 +296,9 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 204)
 			]
 
-			try await client.deleteObject(key: "a.txt")
+			let outcome = try await client.deleteObject(key: "a.txt")
 
+			#expect(outcome.isDeleted)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -640,6 +649,29 @@ enum S3MockResponse {
 		let prefixes = commonPrefixes.map { "<CommonPrefixes><Prefix>\($0)</Prefix></CommonPrefixes>" }.joined()
 		let continuation = nextContinuationToken.map { "<IsTruncated>true</IsTruncated><NextContinuationToken>\($0)</NextContinuationToken>" } ?? "<IsTruncated>false</IsTruncated>"
 		return "<?xml version=\"1.0\" encoding=\"UTF-8\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\(continuation)\(contents)\(prefixes)</ListBucketResult>"
+	}
+}
+
+private extension S3DeletionOutcome {
+	var isDeleted: Bool {
+		if case .deleted = self {
+			return true
+		}
+		return false
+	}
+
+	var refusedMembers: [S3DeletionFailure]? {
+		if case let .refused(.members(failures)) = self {
+			return failures
+		}
+		return nil
+	}
+
+	var unknownFailure: (error: Error, answeredBefore: Bool)? {
+		if case let .unknown(error, answeredBefore) = self {
+			return (error, answeredBefore)
+		}
+		return nil
 	}
 }
 

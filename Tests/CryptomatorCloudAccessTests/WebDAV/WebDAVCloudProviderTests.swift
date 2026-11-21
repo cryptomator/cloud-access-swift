@@ -275,6 +275,16 @@ extension UnitTests {
 			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
 		}
 
+		/// The child before the oversized `href` is cached before the parsing aborts, so the empty cache shows that the failed fill was discarded.
+		@Test
+		func fetchItemListWithOversizedHrefLeavesNoRows() async throws {
+			let oversizedHref = baseURL.path + "/" + String(repeating: "b", count: WebDAVXMLLimits.maxTextLength)
+			try enqueueResponse(statusCode: 200, data: getMultistatusData(forHrefs: [baseURL.path + "/", baseURL.path + "/a.txt", oversizedHref]), for: baseURL)
+
+			await #expect(throws: WebDAVProviderError.responseTooLarge) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
+		}
+
 		@Test
 		func testDownloadFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))

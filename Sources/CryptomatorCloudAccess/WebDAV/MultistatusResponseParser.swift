@@ -25,7 +25,7 @@ enum MultistatusResponseParser {
 	/**
 	 Returns the status codes of the body's `DAV:status` elements.
 
-	 - Throws: `WebDAVError.unexpectedResponse` if the body isn't well-formed XML, holds no status, or holds a status without a status code.
+	 - Throws: `WebDAVError.unexpectedResponse` if the body isn't well-formed XML, holds no status, or holds a status without a status code. Also if a status holds more than 64 KiB of UTF-8 text since the latest status start, or if the body nests deeper than 64 levels in any namespace (`WebDAVXMLLimits`).
 	 */
 	static func statusCodes(in data: Data) throws -> [Int] {
 		let parser = XMLParser(data: data)
@@ -41,26 +41,35 @@ enum MultistatusResponseParser {
 
 private class MultistatusResponseParserDelegate: NSObject, XMLParserDelegate {
 	private(set) var statusCodes = [Int]()
-	private var xmlCharacterBuffer = ""
+	private var text = WebDAVXMLText()
+	private var nestingLevel = 0
 
 	// MARK: - XMLParserDelegate
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+		nestingLevel += 1
+		guard nestingLevel <= WebDAVXMLLimits.maxDepth else {
+			parser.abortParsing()
+			return
+		}
 		guard let namespaceURI, namespaceURI == "DAV:", elementName == "status" else {
 			return
 		}
-		xmlCharacterBuffer = ""
+		text.start()
 	}
 
 	func parser(_ parser: XMLParser, foundCharacters string: String) {
-		xmlCharacterBuffer += string
+		if !text.append(string) {
+			parser.abortParsing()
+		}
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+		nestingLevel -= 1
 		guard let namespaceURI, namespaceURI == "DAV:", elementName == "status" else {
 			return
 		}
-		guard let statusCode = httpStatusCode(ofStatusLine: xmlCharacterBuffer) else {
+		guard let statusCode = httpStatusCode(ofStatusLine: text.end()) else {
 			parser.abortParsing()
 			return
 		}

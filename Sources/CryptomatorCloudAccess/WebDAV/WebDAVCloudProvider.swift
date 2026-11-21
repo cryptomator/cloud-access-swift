@@ -11,6 +11,8 @@ import Foundation
 enum WebDAVProviderError: Error {
 	case resolvingURLFailed
 	case invalidResponse
+	/// An element's text or the nesting of a PROPFIND response exceeds what `PropfindResponseParser` holds in memory (`WebDAVXMLLimits`).
+	case responseTooLarge
 }
 
 extension CloudItemMetadata {

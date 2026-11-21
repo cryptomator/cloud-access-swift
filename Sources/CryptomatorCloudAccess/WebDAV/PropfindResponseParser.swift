@@ -45,9 +45,11 @@ private struct PropfindResponseElementProperties: Equatable {
 }
 
 /// Outside a `response`, the delegate reads only the start of the next one. Inside a `response`, it reads the `href` and the start of a `propstat`. Inside a `propstat`, it reads only that group's properties and status. A `response` or `propstat` ends at the next end tag of that name, even a nested element's.
+///
+/// It takes in text only inside the elements whose text it reads: a response's `href` and a propstat's `getlastmodified`, `getcontentlength` and `status`. More than 64 KiB of UTF-8 text since the latest start of such an element, or nesting deeper than 64 levels in any namespace, aborts the parsing with `WebDAVProviderError.responseTooLarge` (`WebDAVXMLLimits`).
 private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate {
 	private struct PropstatState {
-		var xmlCharacterBuffer = ""
+		var text = WebDAVXMLText()
 		var insideOfResourceType = false
 		var collection = false
 		var lastModified: Date?
@@ -57,7 +59,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 		mutating func didStartElement(_ elementName: String) {
 			switch elementName {
 			case "getlastmodified", "getcontentlength", "status":
-				xmlCharacterBuffer = ""
+				text.start()
 			case "resourcetype":
 				insideOfResourceType = true
 			case "collection":
@@ -70,13 +72,13 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 		mutating func didEndElement(_ elementName: String) {
 			switch elementName {
 			case "getlastmodified":
-				lastModified = Date.date(fromRFC822: xmlCharacterBuffer)
+				lastModified = Date.date(fromRFC822: text.end())
 			case "getcontentlength":
-				contentLength = Int(xmlCharacterBuffer)
+				contentLength = Int(text.end())
 			case "resourcetype":
 				insideOfResourceType = false
 			case "status":
-				statusCode = httpStatusCode(ofStatusLine: xmlCharacterBuffer)
+				statusCode = httpStatusCode(ofStatusLine: text.end())
 			default:
 				break
 			}
@@ -84,7 +86,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 	}
 
 	private struct ResponseState {
-		var xmlCharacterBuffer = ""
+		var text = WebDAVXMLText()
 		var depth: Int?
 		var url: URL?
 		var elementProperties: PropfindResponseElementProperties?
@@ -98,6 +100,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 	private let responseURL: URL
 	private let handleElement: (PropfindResponseElement) throws -> Void
 	private var response: ResponseState?
+	private var nestingLevel = 0
 	private(set) var abortError: Error?
 
 	init(responseURL: URL, handleElement: @escaping (PropfindResponseElement) throws -> Void) {
@@ -108,6 +111,11 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 	// MARK: - XMLParserDelegate
 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
+		nestingLevel += 1
+		guard nestingLevel <= WebDAVXMLLimits.maxDepth else {
+			abort(parser, with: WebDAVProviderError.responseTooLarge)
+			return
+		}
 		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
@@ -122,7 +130,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 			case "propstat":
 				response?.propstat = PropstatState()
 			case "href":
-				response?.xmlCharacterBuffer = ""
+				response?.text.start()
 			default:
 				break
 			}
@@ -130,14 +138,18 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 	}
 
 	func parser(_ parser: XMLParser, foundCharacters string: String) {
-		if response?.propstat != nil {
-			response?.propstat?.xmlCharacterBuffer += string
+		let appended = if response?.propstat != nil {
+			response?.propstat?.text.append(string)
 		} else {
-			response?.xmlCharacterBuffer += string
+			response?.text.append(string)
+		}
+		if appended == false {
+			abort(parser, with: WebDAVProviderError.responseTooLarge)
 		}
 	}
 
 	func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+		nestingLevel -= 1
 		guard let namespaceURI, namespaceURI == "DAV:" else {
 			return
 		}
@@ -171,18 +183,22 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 				do {
 					try handleElement(element)
 				} catch {
-					abortError = error
-					parser.abortParsing()
+					abort(parser, with: error)
 				}
 			}
 			response = nil
 		case "href":
-			let url = getURL(response?.xmlCharacterBuffer ?? "")
+			let url = getURL(response?.text.end() ?? "")
 			response?.url = url
 			response?.depth = getDepth(url)
 		default:
 			break
 		}
+	}
+
+	private func abort(_ parser: XMLParser, with error: Error) {
+		abortError = error
+		parser.abortParsing()
 	}
 
 	private func getURL(_ href: String) -> URL? {
@@ -212,7 +228,7 @@ final class PropfindResponseParser {
 	}
 
 	/// Passes each element to `handleElement` as its `response` ends, so that a listing is read without holding its elements.
-	/// - Throws: The error that `handleElement` threw, which aborts the parsing. Otherwise the parser's error.
+	/// - Throws: The error that `handleElement` threw, which aborts the parsing. `WebDAVProviderError.responseTooLarge` if an element's text or the nesting exceeds `WebDAVXMLLimits`. Otherwise the parser's error.
 	func parse(_ handleElement: @escaping (PropfindResponseElement) throws -> Void) throws {
 		let delegate = PropfindResponseParserDelegate(responseURL: responseURL, handleElement: handleElement)
 		parser.delegate = delegate
@@ -255,7 +271,7 @@ final class CachePropfindResponseParser {
 	}
 
 	/// A failed cache save aborts the parsing, so that a snapshot missing an element is never published. Once the task is cancelled, the parsing stops at the next element.
-	/// - Throws: The error of a failed cache save, or `CancellationError`. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. Otherwise the parser's error.
+	/// - Throws: The error of a failed cache save, or `CancellationError`. `WebDAVProviderError.invalidResponse` if the response holds a second element at the folder's depth with another path, or no usable element of the folder itself. `CloudProviderError.itemTypeMismatch` if the folder's element is no collection. `WebDAVProviderError.responseTooLarge` if an element's text or the nesting exceeds `WebDAVXMLLimits`. Otherwise the parser's error.
 	func fillCache() throws {
 		CloudAccessDDLogDebug("CachePropfindResponseParser: fillCache() for \(snapshot.folderEnumerationPath) called")
 		try parser.parse { element in

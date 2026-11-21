@@ -54,7 +54,7 @@ extension UnitTests {
 		func nestingBeyondDepthCapThrowsUnexpectedResponse() throws {
 			func data(depth: Int) -> Data {
 				let nesting = depth - 2
-				let foreign = String(repeating: "<x:n>", count: nesting) + String(repeating: "</x:n>", count: nesting)
+				let foreign = foreignNesting(count: nesting)
 				return getMultistatusData(forContent: "<d:response xmlns:x=\"urn:example\"><d:href>/folder/a.txt</d:href><d:status>HTTP/1.1 423 Locked</d:status>\(foreign)</d:response>")
 			}
 			#expect(try MultistatusResponseParser.statusCodes(in: data(depth: WebDAVXMLLimits.maxDepth)) == [423])
@@ -77,7 +77,54 @@ extension UnitTests {
 			#expect(throws: WebDAVError.unexpectedResponse) { try MultistatusResponseParser.statusCodes(in: data) }
 		}
 
+		/// The line names the cap that aborted the parsing, so that it tells the delegate's abort from the guard's refusal of the same error.
+		@Test
+		func abortLogsExceededCap() throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			let nesting = foreignNesting(count: WebDAVXMLLimits.maxDepth)
+			let cases = [
+				(response(status: "HTTP/1.1 423 " + String(repeating: "a", count: WebDAVXMLLimits.maxTextLength)), "MultistatusResponseParser: aborting, because a status's text exceeds \(WebDAVXMLLimits.maxTextLength) bytes"),
+				(getMultistatusData(forContent: "<d:response xmlns:x=\"urn:example\"><d:href>/folder/a.txt</d:href><d:status>HTTP/1.1 423 Locked</d:status>\(nesting)</d:response>"), "MultistatusResponseParser: aborting, because the nesting exceeds \(WebDAVXMLLimits.maxDepth) levels")
+			]
+			for (data, expectedLine) in cases {
+				#expect(throws: WebDAVError.unexpectedResponse) { try MultistatusResponseParser.statusCodes(in: data) }
+				#expect(logCapture.messages.filter { $0.hasPrefix("MultistatusResponseParser: aborting") }.last == expectedLine, "\(logCapture.joinedMessages)")
+			}
+		}
+
+		// MARK: - Markup Guard
+
+		/// `XMLParser` parses this body, so `unexpectedResponse` shows that the guard refused it.
+		@Test
+		func tooManyAttributesThrowsUnexpectedResponse() throws {
+			#expect(throws: WebDAVError.unexpectedResponse) { try MultistatusResponseParser.statusCodes(in: responseWithTooManyAttributes(value: "v")) }
+		}
+
+		@Test
+		func doctypeThrowsUnexpectedResponse() throws {
+			let data = Data("<!DOCTYPE d:multistatus>".utf8) + response(status: "HTTP/1.1 423 Locked")
+			#expect(throws: WebDAVError.unexpectedResponse) { try MultistatusResponseParser.statusCodes(in: data) }
+		}
+
+		@Test
+		func refusalLogsConstructWithoutContent() throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+
+			#expect(throws: WebDAVError.unexpectedResponse) { try MultistatusResponseParser.statusCodes(in: responseWithTooManyAttributes(value: "SECRET-MARKER")) }
+			expectAttributeRefusalLog(in: logCapture, prefix: "MultistatusResponseParser: refused response markup:", marker: "SECRET-MARKER")
+		}
+
 		// MARK: - Helpers
+
+		private func responseWithTooManyAttributes(value: String) -> Data {
+			return getMultistatusData(forContent: "<d:response \(attributesOverCap(value: value))><d:href>/folder/a.txt</d:href><d:status>HTTP/1.1 423 Locked</d:status></d:response>")
+		}
 
 		private func response(status: String) -> Data {
 			return getMultistatusData(forContent: "<d:response><d:href>/folder/a.txt</d:href><d:status>\(status)</d:status></d:response>")

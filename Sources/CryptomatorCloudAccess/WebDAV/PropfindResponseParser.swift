@@ -113,6 +113,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
 		nestingLevel += 1
 		guard nestingLevel <= WebDAVXMLLimits.maxDepth else {
+			CloudAccessDDLogDebug("PropfindResponseParser: aborting, because the nesting exceeds \(WebDAVXMLLimits.maxDepth) levels")
 			abort(parser, with: WebDAVProviderError.responseTooLarge)
 			return
 		}
@@ -144,6 +145,7 @@ private final class PropfindResponseParserDelegate: NSObject, XMLParserDelegate 
 			response?.text.append(string)
 		}
 		if appended == false {
+			CloudAccessDDLogDebug("PropfindResponseParser: aborting, because an element's text exceeds \(WebDAVXMLLimits.maxTextLength) bytes")
 			abort(parser, with: WebDAVProviderError.responseTooLarge)
 		}
 	}

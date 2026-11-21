@@ -285,6 +285,78 @@ extension UnitTests {
 			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
 		}
 
+		/// The line names the cap that aborted the parsing, so that it tells the delegate's abort from the guard's refusal of the same error.
+		@Test
+		func abortedListingLogsExceededCap() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			let nesting = foreignNesting(count: WebDAVXMLLimits.maxDepth)
+			let cases = [
+				(getMultistatusData(forHrefs: [baseURL.path + "/", baseURL.path + "/" + String(repeating: "b", count: WebDAVXMLLimits.maxTextLength)]), "PropfindResponseParser: aborting, because an element's text exceeds \(WebDAVXMLLimits.maxTextLength) bytes"),
+				(getMultistatusData(forContent: "<d:response xmlns:x=\"urn:example\">\(nesting)</d:response>"), "PropfindResponseParser: aborting, because the nesting exceeds \(WebDAVXMLLimits.maxDepth) levels")
+			]
+			for (data, expectedLine) in cases {
+				try enqueueResponse(statusCode: 200, data: data, for: baseURL)
+				await #expect(throws: WebDAVProviderError.responseTooLarge) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+				#expect(logCapture.messages.filter { $0.hasPrefix("PropfindResponseParser: aborting") }.last == expectedLine, "\(logCapture.joinedMessages)")
+			}
+		}
+
+		/// `XMLParser` would reject the malformed tail, so `responseTooLarge` shows that the guard refused the body before it was parsed.
+		@Test
+		func fetchItemListWithTooManyAttributesLeavesNoRows() async throws {
+			try enqueueResponse(statusCode: 200, data: listingWithTooManyAttributes(value: "v"), for: baseURL)
+
+			await #expect(throws: WebDAVProviderError.responseTooLarge) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
+		}
+
+		@Test
+		func fetchItemListWithDoctypeLeavesNoRows() async throws {
+			let data = try Data("<!DOCTYPE d:multistatus>".utf8) + getTestData(forResource: "item-list", withExtension: "xml").drop(while: { $0 != UInt8(ascii: "\n") })
+			try enqueueResponse(statusCode: 200, data: data, for: baseURL)
+
+			await #expect(throws: WebDAVProviderError.invalidResponse) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
+		}
+
+		/// libxml2 parses this listing, but `WebDAVXMLGuard` refuses UTF-16.
+		@Test
+		func fetchItemListOfUTF16ResponseLeavesNoRows() async throws {
+			let document = try #require(String(data: getTestData(forResource: "item-list", withExtension: "xml"), encoding: .utf8))
+			let data = utf16Data(document, bigEndian: false, withByteOrderMark: true)
+			try enqueueResponse(statusCode: 200, data: data, for: baseURL)
+
+			await #expect(throws: WebDAVProviderError.invalidResponse) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			try assertDirectoryContentCacheIsEmpty(provider.directoryContentCache)
+		}
+
+		@Test
+		func refusedListingLogsConstructWithoutContent() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			try enqueueResponse(statusCode: 200, data: listingWithTooManyAttributes(value: "SECRET-MARKER"), for: baseURL)
+
+			await #expect(throws: WebDAVProviderError.responseTooLarge) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
+			expectAttributeRefusalLog(in: logCapture, prefix: "WebDAVCloudProvider: refused response markup:", marker: "SECRET-MARKER")
+		}
+
+		/// The body is under the 1 MiB cap of the transport, which would refuse it first otherwise.
+		@Test
+		func fetchItemMetadataWithOversizedCommentThrowsResponseTooLarge() async throws {
+			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
+			let comment = "<!--" + String(repeating: "c", count: WebDAVXMLLimits.maxDelimitedLength + 1) + "-->"
+			let data = Data(comment.utf8) + getMultistatusData(forHrefs: [responseURL.path])
+			try enqueueResponse(statusCode: 200, data: data, for: responseURL)
+
+			await #expect(throws: WebDAVProviderError.responseTooLarge) { try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		@Test
 		func testDownloadFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
@@ -1228,6 +1300,14 @@ extension UnitTests {
 			let responseStart = try #require(document.range(of: "<d:response>", options: .backwards, range: document.startIndex ..< hrefRange.lowerBound))
 			let responseEnd = try #require(document.range(of: "</d:response>", range: hrefRange.upperBound ..< document.endIndex))
 			return Data(document.replacingCharacters(in: responseStart.lowerBound ..< responseEnd.upperBound, with: "").utf8)
+		}
+
+		/// A listing whose first element has one attribute more than the cap, followed by a malformed tail.
+		private func listingWithTooManyAttributes(value: String) throws -> Data {
+			let document = try #require(String(data: getMultistatusData(forHrefs: [baseURL.path + "/", baseURL.path + "/a.txt"]), encoding: .utf8))
+				.replacing("<d:response>", with: "<d:response \(attributesOverCap(value: value))>", maxReplacements: 1)
+				.replacing("</d:multistatus>", with: "</d:propstat></d:multistatus>")
+			return Data(document.utf8)
 		}
 
 		private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {

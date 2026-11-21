@@ -10,8 +10,9 @@ import Foundation
 
 enum WebDAVProviderError: Error {
 	case resolvingURLFailed
+	/// A PROPFIND response that the provider can't use, including one with a construct or an encoding that `WebDAVXMLGuard` doesn't support (`WebDAVXMLGuardError.unsupported`).
 	case invalidResponse
-	/// An element's text or the nesting of a PROPFIND response exceeds what `PropfindResponseParser` holds in memory (`WebDAVXMLLimits`).
+	/// A PROPFIND response exceeds a cap of `WebDAVXMLLimits`: the text of an element or the nesting, which `PropfindResponseParser` enforces, or a cap of `WebDAVXMLGuard`.
 	case responseTooLarge
 }
 
@@ -74,6 +75,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 			guard let data else {
 				throw WebDAVProviderError.invalidResponse
 			}
+			try checkMarkup { try WebDAVXMLGuard.validate(data) }
 			let parser = PropfindResponseParser(XMLParser(data: data), responseURL: response.url ?? url)
 			guard let element = try parser.getRequestedElement() else {
 				throw WebDAVProviderError.invalidResponse
@@ -113,6 +115,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 		}
 		let response = try await client.PROPFIND(url: url, depth: .one, to: tmpFileURL, propertyNames: WebDAVCloudProvider.defaultPropertyNames)
 		try Task.checkCancellation()
+		try checkMarkup { try WebDAVXMLGuard.validate(fileAt: tmpFileURL) }
 		let responseURL = response.url ?? url
 		guard let inputStream = InputStream(url: tmpFileURL) else {
 			throw WebDAVProviderError.invalidResponse
@@ -267,6 +270,20 @@ public final class WebDAVCloudProvider: CloudProvider {
 				throw CloudProviderError.quotaInsufficient
 			default:
 				throw convertStandardError(error)
+			}
+		}
+	}
+
+	private func checkMarkup(_ check: () throws -> Void) throws {
+		do {
+			try check()
+		} catch let error as WebDAVXMLGuardError {
+			CloudAccessDDLogDebug("WebDAVCloudProvider: refused response markup: \(error)")
+			switch error {
+			case .limitExceeded:
+				throw WebDAVProviderError.responseTooLarge
+			case .unsupported:
+				throw WebDAVProviderError.invalidResponse
 			}
 		}
 	}

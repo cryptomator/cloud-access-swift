@@ -25,9 +25,15 @@ enum MultistatusResponseParser {
 	/**
 	 Returns the status codes of the body's `DAV:status` elements.
 
-	 - Throws: `WebDAVError.unexpectedResponse` if the body isn't well-formed XML, holds no status, or holds a status without a status code. Also if a status holds more than 64 KiB of UTF-8 text since the latest status start, or if the body nests deeper than 64 levels in any namespace (`WebDAVXMLLimits`).
+	 - Throws: `WebDAVError.unexpectedResponse` if the body isn't well-formed XML, holds no status, or holds a status without a status code. Also if a status holds more than 64 KiB of UTF-8 text since the latest status start, or if the body nests deeper than 64 levels in any namespace (`WebDAVXMLLimits`). Also if `WebDAVXMLGuard` refuses the body.
 	 */
 	static func statusCodes(in data: Data) throws -> [Int] {
+		do {
+			try WebDAVXMLGuard.validate(data)
+		} catch {
+			CloudAccessDDLogDebug("MultistatusResponseParser: refused response markup: \(error)")
+			throw WebDAVError.unexpectedResponse
+		}
 		let parser = XMLParser(data: data)
 		parser.shouldProcessNamespaces = true
 		let delegate = MultistatusResponseParserDelegate()
@@ -49,6 +55,7 @@ private class MultistatusResponseParserDelegate: NSObject, XMLParserDelegate {
 	func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
 		nestingLevel += 1
 		guard nestingLevel <= WebDAVXMLLimits.maxDepth else {
+			CloudAccessDDLogDebug("MultistatusResponseParser: aborting, because the nesting exceeds \(WebDAVXMLLimits.maxDepth) levels")
 			parser.abortParsing()
 			return
 		}
@@ -60,6 +67,7 @@ private class MultistatusResponseParserDelegate: NSObject, XMLParserDelegate {
 
 	func parser(_ parser: XMLParser, foundCharacters string: String) {
 		if !text.append(string) {
+			CloudAccessDDLogDebug("MultistatusResponseParser: aborting, because a status's text exceeds \(WebDAVXMLLimits.maxTextLength) bytes")
 			parser.abortParsing()
 		}
 	}

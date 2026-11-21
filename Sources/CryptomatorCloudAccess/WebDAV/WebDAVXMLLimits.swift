@@ -8,10 +8,20 @@
 
 import Foundation
 
-/// Caps on what the WebDAV XML delegates hold in memory: the text of an element they read and the nesting of a body. Real responses stay below them. Nextcloud nests 6 levels deep, and the percent-encoded `href` of a 4000-character path holds at most 48,000 bytes. libxml2 itself buffers each CDATA section, attribute value and comment whole before handing it on, up to its own limits of about 10 MB, so no delegate can bound them.
+/// Caps on the WebDAV XML bodies. Real responses stay below them. Nextcloud nests 6 levels deep, and the percent-encoded `href` of a 4000-character path holds at most 48,000 bytes. The delegates enforce the text cap, on the text of an element they read, and the depth cap, which also bounds libxml2's stack of open elements. `WebDAVXMLGuard` enforces the others, which bound what libxml2 buffers before it calls a delegate or keeps for the whole parse. The delegates count UTF-8 bytes of the decoded text, and the guard counts bytes of the body.
 enum WebDAVXMLLimits {
 	static let maxTextLength = 64 * 1024
 	static let maxDepth = 64
+	/// A start or end tag, from `<` through `>`.
+	static let maxTagLength = 16 * 1024
+	static let maxAttributeCount = 64
+	/// The content between the delimiters of a comment, CDATA section or processing instruction, the XML declaration included.
+	static let maxDelimitedLength = 64 * 1024
+	/// An entity or character reference in element content, between `&` and `;`.
+	static let maxReferenceLength = 1024
+	/// The distinct element and attribute qualified names, `xmlns` values and processing instruction targets of a body, by count and by their bytes in total.
+	static let maxDistinctNames = 4096
+	static let maxDistinctNameLength = 256 * 1024
 }
 
 /// The text of the elements that a delegate reads. It takes in text only while such an element is open, and keeps the text since the latest start of one until the next start.

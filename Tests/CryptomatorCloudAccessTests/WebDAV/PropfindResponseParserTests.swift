@@ -42,6 +42,29 @@ func getMultistatusData(forContent content: String) -> Data {
 	return Data("<d:multistatus xmlns:d=\"DAV:\">\(content)</d:multistatus>".utf8)
 }
 
+/// The attributes of a start tag with one attribute more than `WebDAVXMLLimits.maxAttributeCount`, each with `value`.
+func attributesOverCap(value: String) -> String {
+	return (0 ... WebDAVXMLLimits.maxAttributeCount).map { "a\($0)=\"\(value)\"" }.joined(separator: " ")
+}
+
+/// `count` levels of foreign elements in the `x` namespace, which the caller declares.
+func foreignNesting(count: Int) -> String {
+	return String(repeating: "<x:n>", count: count) + String(repeating: "</x:n>", count: count)
+}
+
+/// `string` in UTF-16 of the given byte order, after a byte order mark if `withByteOrderMark`.
+func utf16Data(_ string: String, bigEndian: Bool, withByteOrderMark: Bool) -> Data {
+	let units = (withByteOrderMark ? [0xFEFF] : []) + Array(string.utf16)
+	return Data(units.flatMap { bigEndian ? [UInt8($0 >> 8), UInt8($0 & 0xFF)] : [UInt8($0 & 0xFF), UInt8($0 >> 8)] })
+}
+
+/// Expects one line with `prefix` that names the attribute cap and doesn't hold `marker`, which the refused body holds.
+func expectAttributeRefusalLog(in logCapture: LogCapture, prefix: String, marker: String, sourceLocation: SourceLocation = #_sourceLocation) {
+	let refusalLines = logCapture.messages.filter { $0.hasPrefix(prefix) }
+	#expect(refusalLines.count == 1, "\(logCapture.joinedMessages)", sourceLocation: sourceLocation)
+	#expect(refusalLines.allSatisfy { $0.contains("attributes") && $0.contains("\(WebDAVXMLLimits.maxAttributeCount)") && !$0.contains(marker) }, "\(refusalLines)", sourceLocation: sourceLocation)
+}
+
 /// Text of `byteCount` bytes of UTF-8 that starts with `prefix`, with its XML spelling. It is made mostly of 2-byte scalars, so that it holds fewer characters than bytes. Its `&` makes `XMLParser` report it in several parts.
 func multibyteText(prefix: String, byteCount: Int) -> (text: String, xml: String) {
 	let remaining = byteCount - prefix.utf8.count - 1
@@ -217,7 +240,7 @@ extension UnitTests {
 		func nestingBeyondDepthCapThrowsResponseTooLarge() throws {
 			func parser(depth: Int) throws -> PropfindResponseParser {
 				let nesting = depth - 4
-				let foreign = String(repeating: "<x:n>", count: nesting) + String(repeating: "</x:n>", count: nesting)
+				let foreign = foreignNesting(count: nesting)
 				return try PropfindResponseParser(getXMLParser(forMultistatusContent: "<d:response xmlns:x=\"urn:example\"><d:href>/folder/a.txt</d:href><d:propstat><d:prop><d:resourcetype/>\(foreign)</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"), responseURL: #require(URL(string: "/folder/")))
 			}
 			#expect(try parser(depth: WebDAVXMLLimits.maxDepth).getElements().map(\.url.path) == ["/folder/a.txt"])

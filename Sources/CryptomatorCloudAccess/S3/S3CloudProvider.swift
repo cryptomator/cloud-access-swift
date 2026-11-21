@@ -109,8 +109,7 @@ public final class S3CloudProvider: CloudProvider {
 			let metadata = try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 				do {
 					try await client.download(key: key, to: stagedFile, progress: phases[0], onTaskCreation: onTaskCreation)
-				} catch let error as S3Error where error.statusCode == 404 {
-					// The error body of a download may be missing or too long to read, so any 404 means that the file is gone.
+				} catch let error as S3Error where error.isObjectGone {
 					throw CloudProviderError.itemNotFound
 				}
 				return remoteMetadata
@@ -419,7 +418,7 @@ public final class S3CloudProvider: CloudProvider {
 		case "Unauthorized" where error.statusCode == 401:
 			// Cloudflare R2's code for rejected credentials. With a 403, it was reported for a CORS failure.
 			return CloudProviderError.unauthorized
-		case "NoSuchKey":
+		case S3Error.noSuchKeyCode:
 			return CloudProviderError.itemNotFound
 		case "InvalidArgument" where error.argumentName == "continuation-token":
 			return CloudProviderError.pageTokenInvalid

@@ -86,7 +86,7 @@ final class S3Client: Sendable {
 	 */
 	func deleteObject(key: String) async throws -> S3DeletionOutcome {
 		let outcome = try await deletionOutcome(of: request(method: "DELETE", key: key)) { _ in .deleted }
-		if case let .refused(.request(error as S3Error)) = outcome, error.code == "NoSuchKey" || error.statusCode == 404 {
+		if case let .refused(.request(error as S3Error)) = outcome, error.isObjectGone {
 			return .deleted
 		}
 		return outcome
@@ -107,7 +107,7 @@ final class S3Client: Sendable {
 		let contentMD5 = Data(Insecure.MD5.hash(data: body)).base64EncodedString()
 		let deleteRequest = request(method: "POST", key: "", query: [URLQueryItem(name: "delete", value: nil)], headers: ["Content-MD5": contentMD5, "Content-Type": "application/xml"], body: body)
 		return try await deletionOutcome(of: deleteRequest) { body in
-			let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != "NoSuchKey" }
+			let refusals = try S3XML.deletionFailures(in: body).filter { $0.code != S3Error.noSuchKeyCode }
 			if refusals.isEmpty {
 				return .deleted
 			}

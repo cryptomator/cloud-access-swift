@@ -24,6 +24,7 @@ struct S3Error: Error, Equatable, CustomStringConvertible {
 	let bucketRegion: String?
 
 	private static let transientCodes: Set<String> = ["InternalError", "ServiceUnavailable", "SlowDown", "RequestTimeout"]
+	static let noSuchKeyCode = "NoSuchKey"
 
 	init(statusCode: Int, code: String? = nil, message: String? = nil, argumentName: String? = nil, reason: String? = nil, bucketRegion: String? = nil) {
 		self.statusCode = statusCode
@@ -42,6 +43,11 @@ struct S3Error: Error, Equatable, CustomStringConvertible {
 	/// Whether the code is one of a server error, throttling or a request timeout.
 	static func isTransient(code: String?) -> Bool {
 		return code.map(transientCodes.contains) ?? false
+	}
+
+	/// Whether the error to a request on a single object means that the object doesn't exist: `NoSuchKey`, or any 404, because an error body may be missing or too long to read. A missing bucket (`NoSuchBucket`, also a 404) therefore counts as a missing object.
+	var isObjectGone: Bool {
+		return code == S3Error.noSuchKeyCode || statusCode == 404
 	}
 
 	/**

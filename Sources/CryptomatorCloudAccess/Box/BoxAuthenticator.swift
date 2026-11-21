@@ -7,7 +7,7 @@
 //
 
 import AuthenticationServices
-@_spi(Authentication) import CryptomatorCloudAccessCore
+import CryptomatorCloudAccessCore
 import UIKit
 
 public enum BoxAuthenticatorError: Error {

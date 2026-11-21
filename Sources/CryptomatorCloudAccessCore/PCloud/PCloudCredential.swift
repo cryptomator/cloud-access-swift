@@ -83,7 +83,7 @@ public final class PCloudCredential: Sendable {
 	 - Throws: `PCloudCredentialError.missingUserID` for an empty user ID, `URLError(.badURL)` if `apiHostName` isn't a host name of pCloud, and otherwise what the account request or saving the token throws.
 	 */
 	@concurrent
-	@_spi(Authentication) public static func completeAuthentication(accessToken: String, userID: String, apiHostName: String, setup: PCloudSetup) async throws -> PCloudCredential {
+	package static func completeAuthentication(accessToken: String, userID: String, apiHostName: String, setup: PCloudSetup) async throws -> PCloudCredential {
 		return try await completeAuthentication(accessToken: accessToken, userID: userID, apiHostName: apiHostName, makeClient: { PCloudClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth)
 		})

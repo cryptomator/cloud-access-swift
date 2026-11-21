@@ -7,7 +7,7 @@
 //
 
 @preconcurrency import AppAuth
-@_spi(Authentication) import CryptomatorCloudAccessCore
+import CryptomatorCloudAccessCore
 import Foundation
 
 public enum GoogleDriveAuthenticatorError: Error {

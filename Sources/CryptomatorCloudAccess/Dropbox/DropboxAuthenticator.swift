@@ -8,7 +8,7 @@
 
 import AuthenticationServices
 import CryptoKit
-@_spi(Authentication) import CryptomatorCloudAccessCore
+import CryptomatorCloudAccessCore
 import Foundation
 import os
 import UIKit

@@ -51,7 +51,7 @@ public final class BoxCredential: Sendable {
 	 - Throws: `BoxCredentialError.missingUserID` if Box returned no user ID, the `CloudProviderError` that the provider's operations throw for the user request's response, e.g., `unauthorized`, and otherwise what the code exchange, the user request or saving the token throws.
 	 */
 	@concurrent
-	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, setup: BoxSetup) async throws -> BoxCredential {
+	package static func completeAuthentication(authorizationCode: String, setup: BoxSetup) async throws -> BoxCredential {
 		let endpoint = BoxOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(authorizationCode: authorizationCode, endpoint: endpoint, makeClient: { BoxClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)

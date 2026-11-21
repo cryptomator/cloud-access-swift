@@ -52,7 +52,7 @@ public final class DropboxCredential: Sendable {
 	 - Throws: `DropboxCredentialError.missingUserID` if Dropbox returned no `uid`, `CloudProviderError.unauthorized` if the account request is answered with a 401 that isn't for a suspended account, and otherwise what the code exchange, the account request or saving the token throws.
 	 */
 	@concurrent
-	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, codeVerifier: String, setup: DropboxSetup) async throws -> DropboxCredential {
+	package static func completeAuthentication(authorizationCode: String, codeVerifier: String, setup: DropboxSetup) async throws -> DropboxCredential {
 		let endpoint = DropboxOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(authorizationCode: authorizationCode, codeVerifier: codeVerifier, endpoint: endpoint, makeClient: { DropboxClient.foreground(tokenSource: $0) }, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)

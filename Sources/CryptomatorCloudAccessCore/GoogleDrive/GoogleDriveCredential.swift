@@ -50,7 +50,7 @@ public final class GoogleDriveCredential: Sendable {
 	 - Throws: `GoogleDriveCredentialError.missingUserID` if the ID token can't be read or has no `sub`, and otherwise what saving the token throws.
 	 */
 	@concurrent
-	@_spi(Authentication) public static func completeAuthentication(accessToken: String, refreshToken: String, expiresAt: Date?, idToken: String, setup: GoogleDriveSetup) async throws -> GoogleDriveCredential {
+	package static func completeAuthentication(accessToken: String, refreshToken: String, expiresAt: Date?, idToken: String, setup: GoogleDriveSetup) async throws -> GoogleDriveCredential {
 		let endpoint = GoogleDriveOAuthEndpoint(setup: setup)
 		return try await completeAuthentication(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, idToken: idToken, makeTokenSource: { userID in
 			makeTokenSource(userID: userID, oauth: setup.oauth, endpoint: endpoint)

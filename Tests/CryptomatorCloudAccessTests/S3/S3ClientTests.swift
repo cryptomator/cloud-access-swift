@@ -7,6 +7,7 @@
 //
 
 import CryptoKit
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import os
 import Testing

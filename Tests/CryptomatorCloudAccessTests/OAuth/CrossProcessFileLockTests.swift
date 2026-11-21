@@ -6,6 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import Testing
 @testable import CryptomatorCloudAccessCore
@@ -25,7 +26,7 @@ extension UnitTests {
 		/// Two open file descriptions of the same file exclude each other also within one process, so a second lock object stands for another process.
 		@Test
 		func secondLockTimesOutWhileFirstIsHeld() async throws {
-			let holder = try await makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let holder = try await makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 			defer {
 				holder.release()
 			}
@@ -36,12 +37,12 @@ extension UnitTests {
 		@Test
 		func lockIsAcquiredAfterRelease() async throws {
 			let lock = makeLock()
-			let holder = try await lock.acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let holder = try await lock.acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 
 			holder.release()
 			holder.release()
 
-			let secondHolder = try await makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let secondHolder = try await makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 			secondHolder.release()
 			#expect(FileManager.default.fileExists(atPath: lock.fileURL.path), "The lock file must stay, so that all processes lock the same inode")
 		}
@@ -50,7 +51,7 @@ extension UnitTests {
 		@Test
 		func lockFileAndDirectoryAreProtectedUntilFirstUserAuthentication() async throws {
 			let lock = makeLock()
-			let holder = try await lock.acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let holder = try await lock.acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 			holder.release()
 
 			for url in [lock.fileURL, directoryURL] {

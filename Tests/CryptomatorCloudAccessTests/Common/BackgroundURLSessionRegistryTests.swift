@@ -47,7 +47,7 @@ extension UnitTests {
 			let requestGate = DispatchSemaphore(value: 0)
 			URLProtocolMock.requestHandler = [{ [url] _ in
 				requestStarted.fulfill()
-				_ = requestGate.wait(timeout: .now() + testWaitTimeout)
+				_ = requestGate.wait(timeout: testWaitDeadline())
 				return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("content".utf8))
 			}]
 			var owner: SplitURLSession? = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)

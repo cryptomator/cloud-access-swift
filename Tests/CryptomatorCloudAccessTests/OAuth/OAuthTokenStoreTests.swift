@@ -6,6 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import os
 import Testing
@@ -372,7 +373,7 @@ extension UnitTests {
 			let script = ActivityScript()
 			let contention = TestSignal("refresh waits for the lock", allowsOverFulfillment: true)
 			let store = try makeStore(refresher: refresher, script: script, lockEvents: CrossProcessFileLock.Events(contention: { contention.fulfill() }))
-			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 
 			let refresh = Task {
 				try await store.refresh(rejecting: "A")
@@ -451,7 +452,7 @@ extension UnitTests {
 				let writeGate = DispatchSemaphore(value: 0)
 				let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
 					writeStarted.fulfill()
-					_ = writeGate.wait(timeout: .now() + testWaitTimeout)
+					_ = writeGate.wait(timeout: testWaitDeadline())
 				})
 				let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
 				let operation = Task {
@@ -476,7 +477,7 @@ extension UnitTests {
 				writeGate.signal()
 				try await cancellingValue(of: operation)
 				await expiryReturned.wait()
-				let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+				let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 				otherHolder.release()
 
 				#expect((write == "save" ? OAuthTokenStoreTests.tokenC : nil) == buffer.token, "\(write)")
@@ -550,7 +551,7 @@ extension UnitTests {
 						script.expireRunningAssertion()
 					}
 				})
-				let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == "lock timeout" ? .milliseconds(100) : .seconds(testWaitTimeout))
+				let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == "lock timeout" ? .milliseconds(100) : testWaitTimeout)
 				switch failure {
 				case "assertion refused":
 					script.refusesAssertions = true
@@ -590,7 +591,7 @@ extension UnitTests {
 			buffer.store(OAuthTokenStoreTests.tokenB)
 			let refresher = RefresherMock { _ in OAuthTokenStoreTests.tokenC }
 			let store = try makeStore(refresher: refresher, lockTimeout: .milliseconds(100))
-			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 			defer {
 				otherHolder.release()
 			}
@@ -611,7 +612,7 @@ extension UnitTests {
 			let store = try makeStore(storage: storage, refresher: refresher, lockTimeout: .milliseconds(100))
 			_ = try await store.refresh(rejecting: "A")
 			storage.failsSaves = false
-			let otherHolder = try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+			let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 
 			await #expect(throws: OAuthTokenStoreError.lockTimeout) { try await store.refresh(rejecting: "B") }
 			otherHolder.release()
@@ -753,7 +754,7 @@ extension UnitTests {
 		// MARK: - Helpers
 
 		/// Starts a refresh of token A to token B whose assertion expires while the refresher waits for `refreshReleased`. Returns once another holder acquired the lock that the refresh released.
-		private func startLateRefresh(storage: MemoryTokenStorage, script: ActivityScript, lockTimeout: Duration = .seconds(testWaitTimeout)) async throws -> LateRefresh {
+		private func startLateRefresh(storage: MemoryTokenStorage, script: ActivityScript, lockTimeout: Duration = testWaitTimeout) async throws -> LateRefresh {
 			let refreshReleased = TestSignal("late refresh released")
 			let refresher = RefresherMock(wait: { await refreshReleased.wait() }, result: { _ in OAuthTokenStoreTests.tokenB })
 			let store = try makeStore(storage: storage, refresher: refresher, script: script, lockTimeout: lockTimeout, coordinator: OAuthTokenCoordinator())
@@ -764,13 +765,13 @@ extension UnitTests {
 			script.expireRunningAssertion()
 			let otherHolder = try await releasingOnError(refresh, by: refreshReleased) {
 				try await cancellingValue(of: Task {
-					try await store.makeLock().acquire(timeout: .seconds(testWaitTimeout), pollInterval: .milliseconds(10))
+					try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 				})
 			}
 			return LateRefresh(store: store, refresher: refresher, refreshReleased: refreshReleased, refresh: refresh, otherHolder: otherHolder)
 		}
 
-		private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = .seconds(testWaitTimeout), lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
+		private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = testWaitTimeout, lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
 			return try OAuthTokenStore(provider: OAuthProvider(rawValue: "test"), account: "user", persistence: .custom(storage: storage ?? MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), legacyDecoder: BoxLegacyToken.decode, refresher: { try await refresher.refresh($0) }, assertion: script.assertion, now: now, lockTimeout: lockTimeout, lockPollInterval: .milliseconds(10), lockEvents: lockEvents, coordinator: coordinator)
 		}
 	}

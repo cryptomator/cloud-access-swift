@@ -82,7 +82,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: DropboxCredentialTests.exchangeResponse),
 				URLProtocolMock.handler(body: DropboxCredentialTests.account, onRequest: { _ in
 					accountRequested.fulfill()
-					_ = release.wait(timeout: .now() + testWaitTimeout)
+					_ = release.wait(timeout: testWaitDeadline())
 				})
 			]
 			let buffer = TokenBuffer()

@@ -6,6 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import os
 import Testing
 
@@ -75,6 +76,51 @@ extension UnitTests {
 			await sleep.finishDriver(driver)
 			#expect((thrownError as? UnfinishedTaskError)?.timeout == .seconds(1))
 			_ = await task.result
+		}
+
+		@Test
+		func valueReturnsValueOfTask() async throws {
+			let task = Task { () throws -> Int in
+				return 42
+			}
+			#expect(try await value(of: task, timeout: testWaitTimeout) == 42)
+		}
+
+		@Test
+		func valueRethrowsErrorOfTask() async {
+			let task = Task { () throws -> Int in
+				throw CancellationError()
+			}
+			await #expect(throws: CancellationError.self) {
+				try await value(of: task, timeout: testWaitTimeout)
+			}
+		}
+
+		@Test
+		func valueThrowsWithoutCancellingTaskWhenTimeoutRunsOut() async throws {
+			let sleep = ManualSleep()
+			let timeout: Duration = .seconds(7)
+			let released = TestSignal("The test released the task")
+			let task = Task { () throws -> Bool in
+				await released.wait()
+				return Task.isCancelled
+			}
+			let driver = Task {
+				let requests = await sleep.requests(count: 1)
+				#expect(requests == [timeout])
+				sleep.elapse()
+			}
+			var thrownError: Error?
+			do {
+				_ = try await value(of: task, timeout: timeout, sleep: sleep.sleep)
+			} catch {
+				thrownError = error
+			}
+			await sleep.finishDriver(driver)
+			#expect((thrownError as? UnfinishedTaskError)?.timeout == timeout)
+			released.fulfill()
+			let isCancelled = try await task.value
+			#expect(!isCancelled, "The timeout cancelled the task")
 		}
 
 		@Test

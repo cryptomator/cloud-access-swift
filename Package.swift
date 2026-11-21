@@ -49,11 +49,17 @@ let package = Package(
 			dependencies: ["CryptomatorCloudAccessCore", .product(name: "AppAuth", package: "AppAuth-iOS")],
 			swiftSettings: swiftSettings
 		),
+		.target(
+			name: "CryptomatorCloudAccessTestSupport",
+			path: "Tests/CryptomatorCloudAccessTestSupport",
+			swiftSettings: swiftSettings
+		),
 		.testTarget(
 			name: "CryptomatorCloudAccessTests",
 			dependencies: [
 				"CryptomatorCloudAccess",
 				"CryptomatorCloudAccessCore",
+				"CryptomatorCloudAccessTestSupport",
 				.product(name: "AppAuth", package: "AppAuth-iOS"),
 				.product(name: "CocoaLumberjackSwift", package: "CocoaLumberjack"),
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
@@ -72,6 +78,7 @@ let package = Package(
 			name: "CryptomatorCloudAccessIntegrationTests",
 			dependencies: [
 				"CryptomatorCloudAccessCore",
+				"CryptomatorCloudAccessTestSupport",
 				.product(name: "CryptomatorCryptoLib", package: "cryptolib-swift"),
 				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc")
 			],

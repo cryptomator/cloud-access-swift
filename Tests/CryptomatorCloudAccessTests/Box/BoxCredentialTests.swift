@@ -82,7 +82,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: #"{"access_token":"NEW-ACCESS","expires_in":3600,"refresh_token":"NEW-REFRESH"}"#),
 				URLProtocolMock.handler(body: BoxMockResponse.user, onRequest: { _ in
 					userRequested.fulfill()
-					_ = release.wait(timeout: .now() + testWaitTimeout)
+					_ = release.wait(timeout: testWaitDeadline())
 				})
 			]
 			let buffer = TokenBuffer()

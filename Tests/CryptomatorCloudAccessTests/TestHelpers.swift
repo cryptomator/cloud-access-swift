@@ -6,6 +6,7 @@
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import os
 import Testing
@@ -13,27 +14,9 @@ import Testing
 
 // MARK: - Tasks
 
-/// How long a test waits for a step that it expects to happen. The CI simulator stalls for over half a minute at times, so a shorter wait fails tests that aren't broken.
-let testWaitTimeout: TimeInterval = 60
-
-struct UnfinishedTaskError: Error, CustomStringConvertible {
-	let timeout: Duration
-
-	var description: String {
-		return "Task did not finish within \(timeout)"
-	}
-}
-
-func taskSleep(for duration: Duration) async throws {
-	try await Task.sleep(for: duration)
-}
-
-/// Starts the operation in a task that is already cancelled when the operation begins.
-func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async throws -> Value) -> Task<Value, Error> {
-	return Task {
-		withUnsafeCurrentTask { $0?.cancel() }
-		return try await operation()
-	}
+/// The deadline of a `DispatchSemaphore` wait for a step that the test expects to happen.
+func testWaitDeadline() -> DispatchTime {
+	return .now() + testWaitTimeout / .seconds(1)
 }
 
 /// Cancels a task from a request handler, once the test stored the task.
@@ -51,7 +34,7 @@ final class TaskCanceller<Value: Sendable>: Sendable {
 	}
 
 	func cancel() {
-		_ = taskStored.wait(timeout: .now() + testWaitTimeout)
+		_ = taskStored.wait(timeout: testWaitDeadline())
 		task.withLock { $0 }?.cancel()
 	}
 }
@@ -61,7 +44,7 @@ final class TaskCanceller<Value: Sendable>: Sendable {
 
  If the task doesn't finish within the timeout, it is cancelled and given up to 5 seconds to finish, which makes it less likely to send requests during later tests. The test then fails instead of hanging the test run, and `UnfinishedTaskError` is thrown. Every timer of the call runs out when `sleep` returns, and never if it throws.
  */
-func cancellingValue<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration = .seconds(testWaitTimeout), sleep: @escaping @Sendable (Duration) async throws -> Void = taskSleep(for:), sourceLocation: SourceLocation = #_sourceLocation) async throws -> Value {
+func cancellingValue<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration = testWaitTimeout, sleep: @escaping @Sendable (Duration) async throws -> Void = taskSleep(for:), sourceLocation: SourceLocation = #_sourceLocation) async throws -> Value {
 	if let result = await result(of: task, timeout: timeout, sleep: sleep) {
 		return try result.get()
 	}
@@ -80,38 +63,6 @@ func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: Tes
 		release.fulfill()
 		_ = try? await cancellingValue(of: task, sourceLocation: sourceLocation)
 		throw error
-	}
-}
-
-/**
- Returns the result of a task, or `nil` once the timeout runs out first, leaving the task running.
-
- A task group can't serve as the timeout, because it only returns once all of its child tasks returned, and a child that awaits the task's result doesn't end when the group cancels it.
- */
-private func result<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration, sleep: @escaping @Sendable (Duration) async throws -> Void) async -> Result<Value, Error>? {
-	let lockedContinuation = OSAllocatedUnfairLock<CheckedContinuation<Result<Value, Error>?, Never>?>(initialState: nil)
-	let lockedTimer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
-	let resume: @Sendable (Result<Value, Error>?) -> Void = { result in
-		lockedContinuation.withLock { continuation in
-			defer { continuation = nil }
-			return continuation
-		}?.resume(returning: result)
-		lockedTimer.withLock { $0 }?.cancel()
-	}
-	return await withCheckedContinuation { continuation in
-		lockedContinuation.withLock { $0 = continuation }
-		lockedTimer.withLock { timer in
-			timer = Task {
-				guard await (try? sleep(timeout)) != nil else {
-					return
-				}
-				resume(nil)
-			}
-		}
-		Task {
-			let result = await task.result
-			resume(result)
-		}
 	}
 }
 
@@ -172,7 +123,7 @@ final class TestSignal: Sendable {
 	}
 
 	/// Returns once the signal was fulfilled the expected number of times, and fails the test if the timeout runs out first.
-	func wait(timeout: Duration = .seconds(testWaitTimeout), sourceLocation: SourceLocation = #_sourceLocation) async {
+	func wait(timeout: Duration = testWaitTimeout, sourceLocation: SourceLocation = #_sourceLocation) async {
 		let id = UUID()
 		let isFulfilled = await withCheckedContinuation { continuation in
 			let isFulfilled = state.withLock { state in

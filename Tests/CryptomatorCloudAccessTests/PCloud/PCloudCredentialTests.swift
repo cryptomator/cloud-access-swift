@@ -76,7 +76,7 @@ extension UnitTests {
 			let release = DispatchSemaphore(value: 0)
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudCredentialTests.userInfo, onRequest: { _ in
 				accountRequested.fulfill()
-				_ = release.wait(timeout: .now() + testWaitTimeout)
+				_ = release.wait(timeout: testWaitDeadline())
 			})]
 			let buffer = TokenBuffer()
 			let storage = MemoryTokenStorage(buffer: buffer)

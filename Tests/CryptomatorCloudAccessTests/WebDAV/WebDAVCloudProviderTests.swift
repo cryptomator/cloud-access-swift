@@ -787,7 +787,7 @@ extension UnitTests {
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: {
 				putStarted.fulfill()
-				_ = putGate.wait(timeout: .now() + testWaitTimeout)
+				_ = putGate.wait(timeout: testWaitDeadline())
 			})
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 
@@ -1446,7 +1446,7 @@ private final class TransferGate: Sendable {
 			}
 		}, willProcessCompletion: { [completionGate] task in
 			if TransferGate.isTransfer(task) {
-				_ = completionGate.wait(timeout: .now() + testWaitTimeout)
+				_ = completionGate.wait(timeout: testWaitDeadline())
 			}
 		})
 	}

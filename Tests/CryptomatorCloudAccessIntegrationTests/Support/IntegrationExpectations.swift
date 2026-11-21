@@ -8,7 +8,6 @@
 
 import CryptomatorCloudAccessCore
 import Foundation
-import os
 import Testing
 
 /**
@@ -63,11 +62,6 @@ func waitUntilVisible(_ cloudPath: CloudPath, through provider: CloudProvider, o
 	}
 }
 
-// MARK: - Tasks
-
-/// How long a test waits for a step to happen, generous because a loaded CI machine can stall for over half a minute.
-let testWaitTimeout: Duration = .seconds(60)
-
 /// Returns data whose 4-byte words are their offset XORed with the seed, so that its parts differ, and so does data of another seed.
 func patternedData(length: Int, seed: UInt32) -> Data {
 	let words = stride(from: 0, to: length, by: 4).map { (UInt32($0) ^ seed).littleEndian }
@@ -87,60 +81,6 @@ func expectUploadRoundTrips(ofLength length: Int, to cloudPath: CloudPath, throu
 
 		#expect(metadata.size == data.count)
 		#expect(try Data(contentsOf: downloadURL) == data, "The download differs from the upload")
-	}
-}
-
-struct UnfinishedTaskError: Error, CustomStringConvertible {
-	let timeout: Duration
-
-	var description: String {
-		return "Task did not finish within \(timeout)"
-	}
-}
-
-func taskSleep(for duration: Duration) async throws {
-	try await Task.sleep(for: duration)
-}
-
-/// Starts the operation in a task that is already cancelled when the operation begins.
-func cancelledTask<Value: Sendable>(_ operation: @escaping @Sendable () async throws -> Value) -> Task<Value, Error> {
-	return Task {
-		withUnsafeCurrentTask { $0?.cancel() }
-		return try await operation()
-	}
-}
-
-/**
- Waits for the value of a task, but at most for the timeout, after which `UnfinishedTaskError` is thrown and the task is left running.
-
- A task group can't serve as the timeout, because it only returns once all of its child tasks returned, and a running request doesn't respond to cancellation.
-
- The timeout runs out when `sleep` returns, and never if it throws.
- */
-func value<Value: Sendable>(of task: Task<Value, Error>, timeout: Duration, sleep: @escaping @Sendable (Duration) async throws -> Void = taskSleep(for:)) async throws -> Value {
-	let lockedContinuation = OSAllocatedUnfairLock<CheckedContinuation<Value, Error>?>(initialState: nil)
-	let lockedTimer = OSAllocatedUnfairLock<Task<Void, Never>?>(initialState: nil)
-	let resume: @Sendable (Result<Value, Error>) -> Void = { result in
-		lockedContinuation.withLock { continuation in
-			defer { continuation = nil }
-			return continuation
-		}?.resume(with: result)
-		lockedTimer.withLock { $0 }?.cancel()
-	}
-	return try await withCheckedThrowingContinuation { continuation in
-		lockedContinuation.withLock { $0 = continuation }
-		lockedTimer.withLock { timer in
-			timer = Task {
-				guard await (try? sleep(timeout)) != nil else {
-					return
-				}
-				resume(.failure(UnfinishedTaskError(timeout: timeout)))
-			}
-		}
-		Task {
-			let result = await task.result
-			resume(result)
-		}
 	}
 }
 

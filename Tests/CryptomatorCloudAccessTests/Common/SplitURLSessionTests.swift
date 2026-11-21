@@ -178,7 +178,7 @@ extension UnitTests {
 			let first = Task {
 				try await firstSession.download(firstRequest, route: .transfer, handler: { location, _ in
 					firstHeld.fulfill()
-					let waitResult = secondFinished.wait(timeout: .now() + testWaitTimeout)
+					let waitResult = secondFinished.wait(timeout: testWaitDeadline())
 					firstWaitResult.withLock { $0 = waitResult }
 					return try .data(Data(contentsOf: location))
 				}, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
@@ -212,7 +212,7 @@ extension UnitTests {
 			let completionGate = DispatchSemaphore(value: 0)
 			let hooks = SplitURLSession.Hooks(willProcessCompletion: { _ in
 				completionReached.fulfill()
-				_ = completionGate.wait(timeout: .now() + testWaitTimeout)
+				_ = completionGate.wait(timeout: testWaitDeadline())
 			})
 			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), hooks: hooks)
 			URLProtocolSequenceMock.steps = try [.chunkedResponse(#require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), [Data(count: 64 * 1024), Data(count: 1)])]

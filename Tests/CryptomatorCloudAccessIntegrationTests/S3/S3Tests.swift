@@ -6,6 +6,7 @@
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import Testing
 @testable import CryptomatorCloudAccessCore
@@ -97,7 +98,7 @@ extension IntegrationTests.ProviderSpecific {
 			let upload = try await uploadFileForMultiPartCopy(in: context)
 			let copyResult: Result<Void, Error>
 			do {
-				try await value(of: cancelledTask { try await copyTaskUtility.copy(upload.request) }, timeout: .seconds(60))
+				try await value(of: cancelledTask { try await copyTaskUtility.copy(upload.request) }, timeout: testWaitTimeout)
 				copyResult = .success(())
 			} catch {
 				copyResult = .failure(error)

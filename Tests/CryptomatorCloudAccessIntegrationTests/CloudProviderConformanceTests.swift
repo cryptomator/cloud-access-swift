@@ -6,6 +6,7 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import Testing
 @testable import CryptomatorCloudAccessCore
@@ -580,7 +581,7 @@ extension IntegrationTests {
 				var results = [(String, Result<Void, Error>)]()
 				for (name, operation) in operations {
 					do {
-						try await value(of: cancelledTask(operation), timeout: .seconds(60))
+						try await value(of: cancelledTask(operation), timeout: testWaitTimeout)
 						results.append((name, .success(())))
 					} catch {
 						results.append((name, .failure(error)))

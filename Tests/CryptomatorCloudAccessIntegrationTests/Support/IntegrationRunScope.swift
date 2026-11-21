@@ -7,6 +7,7 @@
 //
 
 import CryptomatorCloudAccessCore
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import Testing
 

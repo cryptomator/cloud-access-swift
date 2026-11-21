@@ -44,7 +44,7 @@ public final class TLSCertificateValidator: Sendable {
 	/**
 	 Fetches the certificate that the server at `baseURL` presents.
 
-	 - Throws: The transport error if the request failed before the server presented a certificate, e.g., because the server can't be reached. Otherwise, `TLSCertificateValidatorError.validationFailed` if no certificate was received.
+	 - Throws: `TLSCertificateValidatorError.validationFailed` if no certificate was received. If the request failed before the server presented one, e.g., because the server can't be reached, the transport error instead, without the request's URL (a `URLError` keeps only its code).
 	 */
 	public func validate() async throws -> TLSCertificate {
 		let outcome = try await session.data(URLRequest(url: baseURL), bodyLimit: 0, bodyLogging: .omitted)
@@ -54,7 +54,7 @@ public final class TLSCertificateValidator: Sendable {
 		}
 		// The handler cancels every challenge, so a cancelled request means that a challenge without a certificate was received.
 		if let error = outcome.error, !isCancellationError(error) {
-			throw error
+			throw HTTPClientSupport.sanitized(error)
 		}
 		throw TLSCertificateValidatorError.validationFailed
 	}

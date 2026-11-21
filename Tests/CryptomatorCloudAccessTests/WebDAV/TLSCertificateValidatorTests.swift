@@ -16,7 +16,9 @@ extension UnitTests {
 		func validateRethrowsConnectionError() async throws {
 			let validator = try TLSCertificateValidator(baseURL: #require(URL(string: "https://127.0.0.1:1/")))
 			let error = try await #require(throws: (any Error).self) { try await validator.validate() }
-			#expect((error as? URLError)?.code == .cannotConnectToHost)
+			let urlError = try #require(error as? URLError)
+			#expect(urlError.code == .cannotConnectToHost)
+			#expect(urlError.failingURL == nil)
 		}
 
 		@Test

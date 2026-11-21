@@ -308,12 +308,7 @@ extension UnitTests {
 
 			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
 
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 2)
-			let fractionAfterFirstAttempt = try #require(recordedFractions.first)
-			#expect(fractionAfterFirstAttempt > 0.5)
-			#expect(try abs(fractionAfterFirstAttempt / 2 - #require(fractionAtRetry.withLock { $0 })) <= 0.01)
-			#expect(try abs(fractionAfterFirstAttempt - #require(recordedFractions.last)) <= 0.01)
+			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
 
 		@Test

@@ -648,16 +648,6 @@ extension UnitTests {
 			return localURL
 		}
 
-		private func assertRetryHalvesProgress(_ fractions: [Double], fractionAtRetry: Double?, sourceLocation: SourceLocation = #_sourceLocation) throws {
-			#expect(fractions.count == 2, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
-			let fractionAfterFirstAttempt = try #require(fractions.first, sourceLocation: sourceLocation)
-			#expect(fractionAfterFirstAttempt > 0.5, sourceLocation: sourceLocation)
-			let fractionAtRetry = try #require(fractionAtRetry, sourceLocation: sourceLocation)
-			let fractionAfterLastAttempt = try #require(fractions.last, sourceLocation: sourceLocation)
-			#expect(abs(fractionAfterFirstAttempt / 2 - fractionAtRetry) <= 0.01, sourceLocation: sourceLocation)
-			#expect(abs(fractionAfterFirstAttempt - fractionAfterLastAttempt) <= 0.01, sourceLocation: sourceLocation)
-		}
-
 		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {
 			#expect(fractions.count == 1, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
 			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)

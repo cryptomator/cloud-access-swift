@@ -55,6 +55,16 @@ extension UnitTests {
 		}
 
 		@Test
+		func transportErrorOfGETIsRetried() async throws {
+			URLProtocolMock.requestHandler = [{ _ in throw URLError(.networkConnectionLost) }, URLProtocolMock.handler(body: driveItem)]
+
+			let item = try await client.item(at: address)
+
+			#expect(item.id == "1")
+			#expect(sleeps.durations.count == 1)
+		}
+
+		@Test
 		func serverErrorsAreRetriedUntilFiveAttempts() async throws {
 			URLProtocolMock.requestHandler = [500, 502, 503, 504].map { URLProtocolMock.handler(statusCode: $0) } + [URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(body: driveItem)]
 
@@ -170,12 +180,7 @@ extension UnitTests {
 
 			_ = try await client.uploadChunk(to: uploadURL, fromFile: fileURL, offset: 0, length: 5, totalLength: 5, progress: progress, onTaskCreation: nil)
 
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 2)
-			let fractionAfterFirstAttempt = try #require(recordedFractions.first)
-			#expect(fractionAfterFirstAttempt > 0.5)
-			#expect(try abs(fractionAfterFirstAttempt / 2 - #require(fractionAtRetry.withLock { $0 })) <= 0.01)
-			#expect(try abs(fractionAfterFirstAttempt - #require(recordedFractions.last)) <= 0.01)
+			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
 
 		@Test

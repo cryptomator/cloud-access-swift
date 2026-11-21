@@ -8,6 +8,7 @@
 
 import Foundation
 import os
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 extension URLProtocolMock {
@@ -59,4 +60,15 @@ extension SplitURLSession.Hooks {
 			}
 		})
 	}
+}
+
+/// Checks the fractions that `recordingTransferProgress` recorded for a transfer that was retried once. The retry starts at half of the fraction that the first attempt reached, and the transfer ends where the first attempt did.
+func assertRetryHalvesProgress(_ fractions: [Double], fractionAtRetry: Double?, sourceLocation: SourceLocation = #_sourceLocation) throws {
+	#expect(fractions.count == 2, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
+	let fractionAfterFirstAttempt = try #require(fractions.first, sourceLocation: sourceLocation)
+	#expect(fractionAfterFirstAttempt > 0.5, sourceLocation: sourceLocation)
+	let fractionAtRetry = try #require(fractionAtRetry, sourceLocation: sourceLocation)
+	let fractionAfterLastAttempt = try #require(fractions.last, sourceLocation: sourceLocation)
+	#expect(abs(fractionAfterFirstAttempt / 2 - fractionAtRetry) <= 0.01, sourceLocation: sourceLocation)
+	#expect(abs(fractionAfterFirstAttempt - fractionAfterLastAttempt) <= 0.01, sourceLocation: sourceLocation)
 }

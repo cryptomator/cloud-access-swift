@@ -11,7 +11,7 @@ URL = "https://user:{}@example.com/file?token={}".format(SENTINEL, SENTINEL)
 WITHHELD = "details withheld"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 ERROR_ENUMS = [
-    "Sources/CryptomatorCloudAccess/API/CloudProviderError.swift",
+    "Sources/CryptomatorCloudAccessCore/API/CloudProviderError.swift",
     "Tests/CryptomatorCloudAccessIntegrationTests/IntegrationTestError.swift",
 ]
 

@@ -6,9 +6,8 @@ disabled_rules:
   - type_body_length
 
 included:
-  - Sources/CryptomatorCloudAccess
-  - Tests/CryptomatorCloudAccessTests
-  - Tests/CryptomatorCloudAccessIntegrationTests
+  - Sources
+  - Tests
 
 identifier_name:
   min_length: 1
@@ -25,6 +24,6 @@ custom_rules:
     name: "@concurrent CloudProvider witness"
     message: "Mark every CloudProvider method of a provider or decorator @concurrent; the compiler doesn't flag a witness that omits it."
     included: "Sources/.*(CloudProvider|ProviderDecorator|LocalFileSystemProvider)\\.swift"
-    excluded: "Sources/CryptomatorCloudAccess/API/CloudProvider\\.swift"
+    excluded: "Sources/CryptomatorCloudAccessCore/API/CloudProvider\\.swift"
     regex: '^(?<!@concurrent\n)\t(?:(?:public|package|internal|override|final|nonisolated) )*func (?:fetchItemMetadata|fetchItemList|downloadFile|uploadFile|createFolder|deleteFile|deleteFolder|moveFile|moveFolder)\('
     severity: error

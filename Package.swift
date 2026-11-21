@@ -10,15 +10,6 @@
 
 import PackageDescription
 
-let appExtensionUnsafeSources = [
-	"Dropbox/DropboxAuthenticator.swift",
-	"GoogleDrive/GoogleDriveAuthenticator.swift",
-	"MicrosoftGraph/MicrosoftGraphAuthenticator.swift",
-	"PCloud/PCloudAuthenticator.swift",
-	"Box/BoxAuthenticator.swift",
-	"OAuth/WebAuthenticationSession.swift"
-]
-
 let swiftSettings: [SwiftSetting] = [
 	.enableUpcomingFeature("NonisolatedNonsendingByDefault")
 ]
@@ -51,14 +42,11 @@ let package = Package(
 				.product(name: "JOSESwift", package: "JOSESwift"),
 				.product(name: "MSAL", package: "microsoft-authentication-library-for-objc")
 			],
-			path: "Sources/CryptomatorCloudAccess",
-			exclude: appExtensionUnsafeSources,
 			swiftSettings: swiftSettings
 		),
 		.target(
 			name: "CryptomatorCloudAccess",
 			dependencies: ["CryptomatorCloudAccessCore", .product(name: "AppAuth", package: "AppAuth-iOS")],
-			sources: appExtensionUnsafeSources,
 			swiftSettings: swiftSettings
 		),
 		.testTarget(

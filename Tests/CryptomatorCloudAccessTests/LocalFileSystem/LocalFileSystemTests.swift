@@ -646,6 +646,10 @@ extension UnitTests {
 
 			let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
 			#expect(provider.getItemName(forItemAt: otherHiddenFolderURL) == ".Foo")
+
+			for dotsOnlyPlaceholderName in ["..icloud", "...icloud"] {
+				#expect(provider.getItemName(forItemAt: tmpDirURL.appendingPathComponent(dotsOnlyPlaceholderName)) == dotsOnlyPlaceholderName)
+			}
 		}
 
 		/// Creates the regular file `/file`.

@@ -339,7 +339,9 @@ public final class LocalFileSystemProvider: CloudProvider {
 		guard let match = regex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
 			return name
 		}
-		return String(name[matchedRange])
+		let originalName = String(name[matchedRange])
+		// A placeholder of dots alone, e.g. `..icloud`, keeps its name, because the empty stripped name would address the folder itself.
+		return originalName.isSinglePathComponent ? originalName : name
 	}
 
 	/// Doesn't check for cancellation, so that an upload can still fetch the metadata to return after its change.

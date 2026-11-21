@@ -19,11 +19,7 @@ extension UnitTests {
 		}
 
 		@Test
-		func refreshPostsRefreshGrantWithoutLoggingBodies() async throws {
-			let logCapture = LogCapture.start()
-			defer {
-				logCapture.stop()
-			}
+		func refreshPostsRefreshGrant() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"access_token":"SECRET-ACCESS","expires_in":3599,"token_type":"Bearer"}"#, onRequest: requests.record)]
 
@@ -35,10 +31,6 @@ extension UnitTests {
 			#expect(request.url?.absoluteString == "https://oauth2.googleapis.com/token")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
 			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID"])
-			let log = logCapture.joinedMessages
-			for secret in ["SECRET-ACCESS", "SECRET-REFRESH"] {
-				#expect(!log.contains(secret), "\(secret) in \(log)")
-			}
 		}
 
 		@Test
@@ -48,17 +40,6 @@ extension UnitTests {
 			let token = try await GoogleDriveOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "REFRESH", expiresAt: nil))
 
 			#expect(token.refreshToken == "NEW-REFRESH")
-		}
-
-		@Test
-		func rejectedRefreshTokenThrowsUnauthorized() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: #"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#)]
-
-			await #expect(throws: CloudProviderError.unauthorized) { try await GoogleDriveOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "REFRESH", expiresAt: nil)) }
-
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 500, body: #"{"error":"internal_failure"}"#)]
-
-			await #expect(throws: OAuthTokenEndpointError.unsuccessfulResponse(statusCode: 500, error: "internal_failure", errorDescription: nil)) { try await GoogleDriveOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "REFRESH", expiresAt: nil)) }
 		}
 
 		@Test

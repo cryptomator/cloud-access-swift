@@ -13,9 +13,28 @@ import Testing
 
 extension UnitTests {
 	struct CiphertextDirectoryDeletionTests {
-		/// The items admitted before the stop finish resolving their dir IDs but walk no subdirectory, and the items after them never start.
 		@Test(arguments: [CloudProviderError.unauthorized, .noInternetConnection])
 		func stoppingFailureAdmitsNoFurtherItem(failure: CloudProviderError) async throws {
+			try await expectNoFurtherItemAdmitted(after: failure)
+		}
+
+		@Test
+		func suspendedDropboxAccountAdmitsNoFurtherItem() async throws {
+			try await expectNoFurtherItemAdmitted(after: DropboxError.apiError(statusCode: 401, summary: "user_suspended/.."))
+		}
+
+		@Test
+		func stoppingFailureFetchesNoFurtherPage() async throws {
+			try await expectNoFurtherPageFetched(after: CloudProviderError.unauthorized)
+		}
+
+		@Test
+		func suspendedDropboxAccountFetchesNoFurtherPage() async throws {
+			try await expectNoFurtherPageFetched(after: DropboxError.apiError(statusCode: 401, summary: "user_suspended/.."))
+		}
+
+		/// The items admitted before the stop finish resolving their dir IDs but walk no subdirectory, and the items after them never start.
+		private func expectNoFurtherItemAdmitted(after failure: some Error & Equatable) async throws {
 			let itemNames = (0 ..< vaultItemConcurrencyLimit + 2).map { String(format: "item%02d", $0) }
 			let provider = CloudProviderMock(folders: ["dirs", "dirs/top"], files: Dictionary(uniqueKeysWithValues: itemNames.map { ("dirs/top/\($0)", Data()) }))
 			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
@@ -50,16 +69,15 @@ extension UnitTests {
 			#expect(provider.deleted == [])
 		}
 
-		@Test
-		func stoppingFailureFetchesNoFurtherPage() async throws {
+		private func expectNoFurtherPageFetched(after failure: some Error & Equatable) async throws {
 			let provider = CloudProviderMock(folders: ["dirs", "dirs/top"], files: ["dirs/top/a": Data(), "dirs/top/b": Data()], maxPageSize: 1)
 			let listedPages = OSAllocatedUnfairLock(initialState: [String]())
 			provider.listingHook = { cloudPath, pageToken in
 				listedPages.withLock { $0.append("\(cloudPath.path)#\(pageToken ?? "")") }
 			}
-			await #expect(throws: CloudProviderError.unauthorized) {
+			await #expect(throws: failure) {
 				try await deleteDirectory(of: provider, stop: CiphertextDirectoryDeletionStop()) { _ in
-					throw CloudProviderError.unauthorized
+					throw failure
 				}
 			}
 			#expect(listedPages.withLock { $0 } == ["dirs/top#"])

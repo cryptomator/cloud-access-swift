@@ -47,6 +47,16 @@ extension UnitTests {
 			#expect(throws: DropboxError.unexpectedContent) { try untaggedFile.cloudItemType(untaggedAs: nil) }
 			#expect(throws: DropboxError.unexpectedContent) { try deleted.cloudItemType(untaggedAs: .file) }
 		}
+
+		/// Only a 401 for a suspension keeps its summary when the details aren't an object, so that no other decision changes for such a body.
+		@Test
+		func onlySuspensionSummaryIsKeptIfDetailsAreNoObject() {
+			#expect(DropboxErrorResponse.summary(of: Data(#"{"error_summary":"user_suspended/..","error":"user_suspended"}"#.utf8), statusCode: 401) == "user_suspended/..")
+			#expect(DropboxErrorResponse.summary(of: Data(#"{"error_summary":"invalid_access_token/..","error":"invalid_access_token"}"#.utf8), statusCode: 401) == nil)
+			#expect(DropboxErrorResponse.summary(of: Data(#"{"error_summary":"too_many_write_operations/..","error":"too_many_write_operations"}"#.utf8), statusCode: 409) == nil)
+			#expect(DropboxErrorResponse.summary(of: Data(#"{"error_summary":"user_suspended/..","error":"user_suspended"}"#.utf8), statusCode: 403) == nil)
+			#expect(DropboxErrorResponse.decode(from: Data(#"{"error_summary":"user_suspended/..","error":"user_suspended"}"#.utf8)) == nil)
+		}
 	}
 }
 

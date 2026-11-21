@@ -15,33 +15,20 @@ import Foundation
 
  An upload logs its session URL, which is a credential, only as origin or with its query redacted. Thrown errors never contain a request URL.
  */
-final class GoogleDriveClient: Sendable {
+final class GoogleDriveClient: SplitSessionClient, Sendable {
+	typealias TokenSource = any BearerTokenSource
+
 	private static let logLabel = "GoogleDriveClient"
 	private static let uploadFields = "id,name,modifiedTime,size,mimeType"
 
-	private let tokenSource: any OAuthTokenSource
-	private let session: SplitURLSession
-	private let sender: BearerRequestSender
+	private let tokenSource: any BearerTokenSource
+	private let transport: BearerHTTPTransport
 	private let sleep: @Sendable (Duration) async throws -> Void
 
-	init(tokenSource: any OAuthTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+	init(tokenSource: any BearerTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
 		self.tokenSource = tokenSource
-		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
-		self.sender = BearerRequestSender(tokenSource: tokenSource, logLabel: GoogleDriveClient.logLabel, sleep: sleep)
+		self.transport = BearerHTTPTransport(tokenSource: tokenSource, logLabel: GoogleDriveClient.logLabel, configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry, sleep: sleep)
 		self.sleep = sleep
-	}
-
-	static func foreground(tokenSource: any OAuthTokenSource) -> GoogleDriveClient {
-		return GoogleDriveClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
-	}
-
-	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> GoogleDriveClient {
-		return GoogleDriveClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	// MARK: - Operations
@@ -109,9 +96,7 @@ final class GoogleDriveClient: Sendable {
 	func download(fileID: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws {
 		let request = try HTTPClientSupport.request("GET", GoogleDriveClient.url(path: "/download/drive/v3/files/\(HTTPClientSupport.pathComponent(fileID))", parameters: [("alt", "media"), ("supportsAllDrives", "true")]))
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
-		let (response, outcome) = try await send(request, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
-		}
+		let (response, outcome) = try await transport.download(request, bodyLogging: .omitted, handler: handler, policy: GoogleDriveClient.policy(for: request), progress: progress, onTaskCreation: onTaskCreation)
 		_ = try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
 		guard case .file = outcome.body else {
 			throw GoogleDriveError.unexpectedContent
@@ -152,7 +137,7 @@ final class GoogleDriveClient: Sendable {
 		// The session is of no use without an attempt left for its `PUT`.
 		try upload.startAttempt(reserving: 1)
 		let request = upload.sessionRequest
-		let outcome = try await session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
+		let outcome = try await transport.session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
 		if let response = try await handleOutcome(outcome, of: request, reserving: 1, in: &upload) {
 			upload.step = try .put(HTTPClientSupport.uploadSessionURL(response.value(forHTTPHeaderField: "Location"), onDomain: "googleapis.com", orThrow: GoogleDriveError.unexpectedContent))
 		}
@@ -169,7 +154,7 @@ final class GoogleDriveClient: Sendable {
 		upload.hasSentFile = true
 		var request = HTTPClientSupport.request("PUT", sessionURL)
 		request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-		let outcome = try await session.upload(upload.authorized(request), fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: taskHook)
+		let outcome = try await transport.session.upload(upload.authorized(request), fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: taskHook)
 		guard let response = try await handleOutcome(outcome, of: request, reserving: 0, in: &upload) else {
 			upload.step = .queryStatus(sessionURL)
 			return nil
@@ -188,7 +173,7 @@ final class GoogleDriveClient: Sendable {
 		var request = HTTPClientSupport.request("PUT", sessionURL)
 		request.setValue("bytes */\(fileSize)", forHTTPHeaderField: "Content-Range")
 		request.httpBody = Data()
-		let outcome = try await session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
+		let outcome = try await transport.session.data(upload.authorized(request), bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged)
 		guard let response = try await handleOutcome(outcome, of: request, reserving: 0, in: &upload) else {
 			return nil
 		}
@@ -202,7 +187,7 @@ final class GoogleDriveClient: Sendable {
 		case 308:
 			// Part of the file arrived, which this upload can't continue, because it sends the whole file in one `PUT`.
 			GoogleDriveClient.logFailure(of: request, with: "a partial upload")
-			throw GoogleDriveClient.converted(upload.lastFailure ?? GoogleDriveError.unexpectedContent)
+			throw convertingNetworkConnectionError(upload.lastFailure ?? GoogleDriveError.unexpectedContent)
 		default:
 			throw GoogleDriveClient.uploadError(of: response, outcome, for: request)
 		}
@@ -221,7 +206,7 @@ final class GoogleDriveClient: Sendable {
 		} catch {
 			GoogleDriveClient.logFailure(of: request, with: error)
 			guard GoogleDriveClient.isTransient(error) else {
-				throw GoogleDriveClient.converted(error)
+				throw convertingNetworkConnectionError(error)
 			}
 			upload.lastFailure = error
 			try upload.checkAttemptLeft(reserving: reservedAttemptCount)
@@ -256,15 +241,12 @@ final class GoogleDriveClient: Sendable {
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
 	private func data(_ request: URLRequest, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, outcome) = try await send(request) { request, _ in
-			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: bodyLogging)
-		}
+		let (response, outcome) = try await transport.data(request, bodyLogging: bodyLogging, policy: GoogleDriveClient.policy(for: request))
 		return try GoogleDriveClient.successfulBody(of: response, outcome, for: request)
 	}
 
-	private func send(_ request: URLRequest, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		let policy = RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome, for: request) })
-		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
+	private static func policy(for request: URLRequest) -> RetryPolicy {
+		return RetryPolicy(retriesTransportErrors: request.httpMethod == "GET", isRetryable: GoogleDriveClient.isRetryable(_:_:), failure: { response, outcome in GoogleDriveClient.apiError(of: response, outcome, for: request) })
 	}
 
 	private static func isRetryable(_ response: HTTPURLResponse, _ outcome: SplitURLSession.Outcome) -> Bool {
@@ -274,10 +256,6 @@ final class GoogleDriveClient: Sendable {
 
 	private static func isTransient(_ error: Error) -> Bool {
 		return (error as? URLError).map(HTTPClientSupport.isTransient) ?? false
-	}
-
-	fileprivate static func converted(_ error: Error) -> Error {
-		return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
 	}
 
 	private static func uploadSessionRequest(name: String, parentID: String, existingFileID: String?, fileSize: Int64) throws -> URLRequest {
@@ -367,7 +345,7 @@ private struct ResumableUpload {
 	 */
 	func checkAttemptLeft(reserving reservedAttemptCount: Int = 0) throws {
 		guard attemptCount + 1 + reservedAttemptCount <= BearerRequestSender.maxAttemptCount else {
-			throw lastFailure.map(GoogleDriveClient.converted) ?? GoogleDriveError.unexpectedContent
+			throw lastFailure.map(convertingNetworkConnectionError) ?? GoogleDriveError.unexpectedContent
 		}
 	}
 

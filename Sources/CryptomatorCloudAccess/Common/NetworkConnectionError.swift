@@ -14,6 +14,11 @@ func isNetworkConnectionError(_ error: Error) -> Bool {
 	return urlError?.code.isNetworkConnectionErrorCode ?? false
 }
 
+/// Returns `CloudProviderError.noInternetConnection` for a network connection error, and the error itself otherwise.
+func convertingNetworkConnectionError(_ error: Error) -> Error {
+	return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
+}
+
 private extension URLError.Code {
 	var isNetworkConnectionErrorCode: Bool {
 		switch self {

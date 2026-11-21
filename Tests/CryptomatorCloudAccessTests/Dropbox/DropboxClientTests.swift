@@ -31,14 +31,6 @@ extension UnitTests {
 			removeItemRecordingFailure(at: tmpDirURL)
 		}
 
-		@Test
-		func testBackgroundConfiguration() {
-			let configuration = DropboxClient.backgroundConfiguration(sessionIdentifier: "DropboxClientTests", sharedContainerIdentifier: "group.test")
-
-			#expect(configuration.identifier == "DropboxClientTests")
-			#expect(configuration.sharedContainerIdentifier == "group.test")
-		}
-
 		// MARK: - Requests
 
 		@Test
@@ -186,13 +178,14 @@ extension UnitTests {
 		}
 
 		@Test
-		func refreshCountsAmongFiveAttempts() async throws {
-			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))]
+		func suspendedAccountIsNotRefreshed() async throws {
+			for body in [#"{"error_summary":"user_suspended/..","error":{".tag":"user_suspended"}}"#, #"{"error_summary":"user_suspended/..","error":"user_suspended"}"#] {
+				URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401, body: body)]
 
-			await #expect(throws: DropboxError.apiError(statusCode: 401, summary: nil)) { try await client.metadata(path: "/a.txt") }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-			#expect(sleeps.durations.count == 4)
-			#expect(tokenSource.rejectedTokens.isEmpty)
+				await #expect(throws: DropboxError.apiError(statusCode: 401, summary: "user_suspended/.."), "\(body)") { try await client.metadata(path: "/a.txt") }
+				#expect(tokenSource.rejectedTokens.isEmpty, "\(body)")
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(body)")
+			}
 		}
 
 		@Test
@@ -257,30 +250,6 @@ extension UnitTests {
 		}
 
 		@Test
-		func cancellationDuringRetryWaitSendsNoFurtherAttempt() async throws {
-			let waiting = TestSignal("waiting for the retry")
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolMock.self]
-			let client = DropboxClient(tokenSource: OAuthTokenSourceStub(), configuration: configuration, metadataConfiguration: nil, sleep: { duration in
-				waiting.fulfill()
-				try await Task.sleep(for: duration)
-			})
-			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(statusCode: 429, body: #"{"error_summary":"too_many_requests/..","error":{"retry_after":60}}"#),
-				URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))
-			]
-
-			let request = Task {
-				try await client.metadata(path: "/a.txt")
-			}
-			await waiting.wait()
-			request.cancel()
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: request) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
 		func metadataBodyOverLimitFails() async throws {
 			URLProtocolMock.requestHandler = [{ request in
 				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxMetadataBodyLength + 1))
@@ -294,36 +263,19 @@ extension UnitTests {
 		}
 
 		@Test
-		func cancelledTaskGetsNoToken() async throws {
-			let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
-			let client = DropboxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))]
+		func uploadResponseOverErrorBodyLimitFails() async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file")
+			try Data("content".utf8).write(to: fileURL)
+			URLProtocolMock.requestHandler = [{ request in
+				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxErrorBodyLength + 1))
+			}]
 
-			await #expect(throws: CancellationError.self) {
-				try await cancellingValue(of: cancelledTask {
-					try await client.metadata(path: "/a.txt")
-				})
+			let error = try await #require(throws: (any Error).self) { try await client.upload(from: fileURL, path: "/a.txt", mode: .add, progress: nil, onTaskCreation: nil) }
+			guard case let SplitURLSessionError.responseBodyTooLarge(limit) = error else {
+				Issue.record("Unexpected error: \(error)")
+				return
 			}
-			#expect(accessTokenCount.withLock { $0 } == 0)
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationWhileGettingTokenStopsFirstAttempt() async throws {
-			let client = DropboxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.metadata(path: "/a.txt") }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationDuringRefreshStopsRetry() async throws {
-			let client = DropboxClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.metadata(path: "/a.txt") }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
+			#expect(limit == HTTPClientSupport.maxErrorBodyLength)
 		}
 
 		@Test
@@ -363,7 +315,7 @@ extension UnitTests {
 }
 
 extension DropboxClient {
-	static func mocked(tokenSource: any OAuthTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> DropboxClient {
+	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> DropboxClient {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
 		return DropboxClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })

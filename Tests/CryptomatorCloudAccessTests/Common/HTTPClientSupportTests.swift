@@ -45,10 +45,7 @@ extension UnitTests {
 		@Test
 		func hardenedConfigurationsCacheNothing() {
 			for configuration in [HTTPClientSupport.hardened(.default), HTTPClientSupport.hardenedBackground(identifier: "test", sharedContainerIdentifier: nil)] {
-				#expect(configuration.urlCache == nil)
-				#expect(configuration.urlCredentialStorage == nil)
-				#expect(configuration.httpCookieStorage != nil)
-				#expect(!(configuration.httpCookieStorage === HTTPCookieStorage.shared))
+				expectHardened(configuration)
 			}
 		}
 

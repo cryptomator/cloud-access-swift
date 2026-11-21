@@ -74,7 +74,7 @@ enum OAuthTokenEndpoint {
 			return outcome.data ?? Data()
 		} catch {
 			CloudAccessDDLogDebug("OAuthTokenEndpoint: POST \(host)\(path) failed with \(error)")
-			throw isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
+			throw convertingNetworkConnectionError(error)
 		}
 	}
 }

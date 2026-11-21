@@ -118,6 +118,9 @@ struct DropboxErrorResponse: Decodable, Sendable {
 		if let errorSummary = decode(from: body)?.errorSummary {
 			return errorSummary
 		}
+		if statusCode == 401, let errorSummary = suspensionSummary(of: body) {
+			return errorSummary
+		}
 		guard statusCode == 400, let body, let text = String(data: body, encoding: .utf8), let firstLine = text.split(whereSeparator: \.isNewline).first else {
 			return nil
 		}
@@ -127,6 +130,25 @@ struct DropboxErrorResponse: Decodable, Sendable {
 	/// Splits an `error_summary` into its tags, e.g., `path/not_found/..` into `["path", "not_found"]`.
 	static func tags(of summary: String?) -> [String] {
 		return (summary ?? "").split(separator: "/").map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ". ")) }.filter { !$0.isEmpty }
+	}
+
+	/// Returns the `error_summary` of a suspension. The caller reaches it only after the full body failed to decode, e.g., because `error` is a void tag written as a bare string. Any other summary of such a body is left out, so that it changes no other decision.
+	private static func suspensionSummary(of body: Data?) -> String? {
+		let errorSummary = body.flatMap { try? JSONDecoder().decode(ErrorSummary.self, from: $0) }?.errorSummary
+		return isUserSuspended(summary: errorSummary) ? errorSummary : nil
+	}
+
+	/// Whether an `error_summary` says that the account is suspended, which signing in again can't lift.
+	static func isUserSuspended(summary: String?) -> Bool {
+		return tags(of: summary).first == "user_suspended"
+	}
+}
+
+private struct ErrorSummary: Decodable {
+	let errorSummary: String?
+
+	private enum CodingKeys: String, CodingKey {
+		case errorSummary = "error_summary"
 	}
 }
 

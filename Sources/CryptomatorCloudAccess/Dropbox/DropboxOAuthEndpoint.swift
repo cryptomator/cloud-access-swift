@@ -95,7 +95,7 @@ struct DropboxOAuthEndpoint: Sendable {
 			}
 		} catch {
 			CloudAccessDDLogDebug("DropboxOAuthEndpoint: POST \(request.url?.path ?? "") failed with \(error)")
-			throw isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
+			throw convertingNetworkConnectionError(error)
 		}
 	}
 }

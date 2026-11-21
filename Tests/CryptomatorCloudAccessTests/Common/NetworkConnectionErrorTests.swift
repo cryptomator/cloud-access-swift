@@ -133,5 +133,13 @@ extension UnitTests {
 			let error = CocoaError(.fileReadNoSuchFile)
 			#expect(!isNetworkConnectionError(error))
 		}
+
+		// MARK: - Conversion
+
+		@Test
+		func networkConnectionErrorIsConvertedToNoInternetConnection() {
+			#expect(convertingNetworkConnectionError(URLError(.notConnectedToInternet)) as? CloudProviderError == .noInternetConnection)
+			#expect(convertingNetworkConnectionError(CloudProviderError.itemNotFound) as? CloudProviderError == .itemNotFound)
+		}
 	}
 }

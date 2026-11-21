@@ -264,6 +264,14 @@ func removeItemRecordingFailure(at url: URL, sourceLocation: SourceLocation = #_
 
 // MARK: - Library
 
+/// Expects the settings that `HTTPClientSupport.hardened` and `hardenedBackground` give a configuration: no cache, no credential storage and no shared cookies.
+func expectHardened(_ configuration: URLSessionConfiguration, sourceLocation: SourceLocation = #_sourceLocation) {
+	#expect(configuration.urlCache == nil, sourceLocation: sourceLocation)
+	#expect(configuration.urlCredentialStorage == nil, sourceLocation: sourceLocation)
+	#expect(configuration.httpCookieStorage != nil, sourceLocation: sourceLocation)
+	#expect(!(configuration.httpCookieStorage === HTTPCookieStorage.shared), sourceLocation: sourceLocation)
+}
+
 /// The files with a UUID name in the process's temporary folder, like the temporary files of the parts of an upload. It leaves out the folders of the library's objects, which lie there too.
 func uuidNamedTemporaryFiles() throws -> Set<String> {
 	let urls = try FileManager.default.contentsOfDirectory(at: ProcessTemporaryDirectory.shared.directoryURL(), includingPropertiesForKeys: [.isRegularFileKey])

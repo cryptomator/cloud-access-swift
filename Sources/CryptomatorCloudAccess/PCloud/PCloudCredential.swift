@@ -97,10 +97,7 @@ public final class PCloudCredential: Sendable {
 			throw URLError(.badURL)
 		}
 		let email = try await makeClient(StaticOAuthTokenSource(token: accessToken, apiHost: apiHost)).userInfoEmail()
-		// An account request that was under way when the task was cancelled still completes.
-		try Task.checkCancellation()
-		let tokenSource = makeTokenSource(userID)
-		try await tokenSource.replace(with: OAuthToken(accessToken: accessToken, refreshToken: nil, expiresAt: nil, username: email, apiHost: apiHost))
+		let tokenSource = try await OAuthLogin.store(OAuthToken(accessToken: accessToken, refreshToken: nil, expiresAt: nil, username: email, apiHost: apiHost), userID: userID, makeTokenSource: makeTokenSource)
 		return PCloudCredential(userID: userID, tokenSource: tokenSource)
 	}
 

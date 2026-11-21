@@ -15,7 +15,9 @@ import Foundation
 
  The `Dropbox-API-Arg` and `Dropbox-API-Result` headers are logged, because they hold paths and metadata but no credentials. Thrown errors never contain a request URL.
  */
-final class DropboxClient: Sendable {
+final class DropboxClient: SplitSessionClient, Sendable {
+	typealias TokenSource = any BearerTokenSource
+
 	enum WriteMode: String, Encodable, Sendable {
 		case add
 		case overwrite
@@ -23,25 +25,10 @@ final class DropboxClient: Sendable {
 
 	private static let logLabel = "DropboxClient"
 
-	private let session: SplitURLSession
-	private let sender: BearerRequestSender
+	private let transport: BearerHTTPTransport
 
-	init(tokenSource: any OAuthTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
-		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
-		self.sender = BearerRequestSender(tokenSource: tokenSource, logLabel: DropboxClient.logLabel, sleep: sleep)
-	}
-
-	static func foreground(tokenSource: any OAuthTokenSource) -> DropboxClient {
-		return DropboxClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
-	}
-
-	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any OAuthTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> DropboxClient {
-		return DropboxClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+	init(tokenSource: any BearerTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+		self.transport = BearerHTTPTransport(tokenSource: tokenSource, logLabel: DropboxClient.logLabel, configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry, sleep: sleep)
 	}
 
 	// MARK: - Operations
@@ -93,9 +80,7 @@ final class DropboxClient: Sendable {
 	func download(path: String, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> DropboxMetadata {
 		let request = try DropboxClient.contentRequest("files/download", argument: PathArgument(path: path), hasBody: false)
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
-		let (response, outcome) = try await send(request, repeatable: true, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
-		}
+		let (response, outcome) = try await transport.download(request, bodyLogging: .logged, handler: handler, policy: DropboxClient.policy(repeatable: true), progress: progress, onTaskCreation: onTaskCreation)
 		_ = try DropboxClient.successfulBody(of: response, outcome, for: request)
 		guard case .file = outcome.body, let result = response.value(forHTTPHeaderField: "Dropbox-API-Result") else {
 			throw DropboxError.unexpectedContent
@@ -106,9 +91,7 @@ final class DropboxClient: Sendable {
 	/// Uploads the file in a single request, which Dropbox accepts for files below 150 MiB.
 	func upload(from fileURL: URL, path: String, mode: WriteMode, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> DropboxMetadata {
 		let request = try DropboxClient.contentRequest("files/upload", argument: CommitArgument(path: path, mode: mode), hasBody: true)
-		let (response, outcome) = try await send(request, repeatable: false, progress: progress) { request, isFirstAttempt in
-			try await self.session.upload(request, fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
-		}
+		let (response, outcome) = try await transport.upload(request, fromFile: fileURL, bodyLogging: .logged, policy: DropboxClient.policy(repeatable: false), progress: progress, onTaskCreation: onTaskCreation)
 		return try DropboxJSON.decode(DropboxMetadata.self, from: DropboxClient.successfulBody(of: response, outcome, for: request))
 	}
 
@@ -128,9 +111,7 @@ final class DropboxClient: Sendable {
 	 */
 	func appendToUploadSession(sessionID: String, offset: Int64, from chunkFileURL: URL, progress: Progress?) async throws -> Int64? {
 		let request = try DropboxClient.contentRequest("files/upload_session/append_v2", argument: AppendArgument(cursor: CursorPosition(sessionId: sessionID, offset: offset), close: false), hasBody: true)
-		let (response, outcome) = try await send(request, repeatable: true, progress: progress) { request, _ in
-			try await self.session.upload(request, fromFile: chunkFileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .logged, urlLogging: .redacted, progress: progress, cancelsBeforeResume: true, onTaskCreation: nil)
-		}
+		let (response, outcome) = try await transport.upload(request, fromFile: chunkFileURL, bodyLogging: .logged, policy: DropboxClient.policy(repeatable: true), progress: progress, onTaskCreation: nil)
 		if response.statusCode == 409, let errorResponse = DropboxErrorResponse.decode(from: outcome.data), DropboxErrorResponse.tags(of: errorResponse.errorSummary).first == "incorrect_offset", let correctOffset = errorResponse.error?.correctOffset {
 			return correctOffset
 		}
@@ -149,18 +130,17 @@ final class DropboxClient: Sendable {
 
 	/// Sends a request on the metadata session and returns the body of its successful response.
 	private func data(_ request: URLRequest, repeatable: Bool, bodyLogging: HTTPDebugLogger.BodyLogging = .logged) async throws -> Data {
-		let (response, outcome) = try await send(request, repeatable: repeatable) { request, _ in
-			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: bodyLogging)
-		}
+		let (response, outcome) = try await transport.data(request, bodyLogging: bodyLogging, policy: DropboxClient.policy(repeatable: repeatable))
 		return try DropboxClient.successfulBody(of: response, outcome, for: request)
 	}
 
 	/// - Parameter repeatable: Whether the request is sent again after a transient transport error.
-	private func send(_ request: URLRequest, repeatable: Bool, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
-		let policy = RetryPolicy(retriesTransportErrors: repeatable, isRetryable: { response, outcome in
+	private static func policy(repeatable: Bool) -> RetryPolicy {
+		return RetryPolicy(retriesTransportErrors: repeatable, isRetryable: { response, outcome in
 			DropboxError.isRetryable(statusCode: response.statusCode, summary: DropboxErrorResponse.decode(from: outcome.data)?.errorSummary)
-		}, failure: DropboxClient.apiError(of:_:), retryDelay: DropboxClient.retryDelay(for:_:attempt:))
-		return try await sender.send(request, urlLogging: .redacted, policy: policy, progress: progress, attempt: attempt)
+		}, failure: DropboxClient.apiError(of:_:), retryDelay: DropboxClient.retryDelay(for:_:attempt:), refreshesUnauthorized: { response, outcome in
+			!DropboxErrorResponse.isUserSuspended(summary: DropboxErrorResponse.summary(of: outcome.data, statusCode: response.statusCode))
+		})
 	}
 
 	/// Returns the `retry_after` of a 429's body, or else the delay of `Retry-After` or of the attempt, capped at 60 seconds.

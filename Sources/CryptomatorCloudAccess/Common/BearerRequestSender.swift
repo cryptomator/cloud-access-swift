@@ -24,22 +24,26 @@ struct RetryPolicy {
 	/// The wait before retrying a response, given the number of the attempt that got it.
 	let retryDelay: (HTTPURLResponse, SplitURLSession.Outcome, _ attempt: Int) -> Duration
 
-	init(retriesTransportErrors: Bool, isRetryable: @escaping (HTTPURLResponse, SplitURLSession.Outcome) -> Bool, failure: @escaping (HTTPURLResponse, SplitURLSession.Outcome) -> Error, retryDelay: @escaping (HTTPURLResponse, SplitURLSession.Outcome, _ attempt: Int) -> Duration = { response, _, attempt in HTTPClientSupport.retryDelay(for: response, attempt: attempt, now: Date()) }) {
+	/// Whether the first 401 refreshes the token and retries. If not, that 401 is returned as the final response.
+	let refreshesUnauthorized: (HTTPURLResponse, SplitURLSession.Outcome) -> Bool
+
+	init(retriesTransportErrors: Bool, isRetryable: @escaping (HTTPURLResponse, SplitURLSession.Outcome) -> Bool, failure: @escaping (HTTPURLResponse, SplitURLSession.Outcome) -> Error, retryDelay: @escaping (HTTPURLResponse, SplitURLSession.Outcome, _ attempt: Int) -> Duration = { response, _, attempt in HTTPClientSupport.retryDelay(for: response, attempt: attempt, now: Date()) }, refreshesUnauthorized: @escaping (HTTPURLResponse, SplitURLSession.Outcome) -> Bool = { _, _ in true }) {
 		self.retriesTransportErrors = retriesTransportErrors
 		self.isRetryable = isRetryable
 		self.failure = failure
 		self.retryDelay = retryDelay
+		self.refreshesUnauthorized = refreshesUnauthorized
 	}
 }
 
 /**
  Makes the attempts of a request that carries the bearer token of a token source, until one is final.
 
- A 401 refreshes the token and retries once. A request makes at most `maxAttemptCount` attempts, counting the one after a refresh. The last attempt's response is returned whatever its status, even a 401. A cancelled task stops a request before each attempt, before a refresh and before each wait. A running attempt finishes either way.
+ A 401 refreshes the token and retries once, unless the policy vetoes the refresh, which returns the 401 at once. A request makes at most `maxAttemptCount` attempts, counting the one after a refresh. The last attempt's response is returned whatever its status, even a 401. A cancelled task stops a request before each attempt, at its first 401 (before the refresh or the veto) and before each wait. A running attempt finishes either way.
  */
 struct BearerRequestSender: Sendable {
 	enum Authorization {
-		/// The request carries the token, and a 401 refreshes it once.
+		/// The request carries the token. A 401 refreshes it once, unless the policy's `refreshesUnauthorized` vetoes the refresh.
 		case bearer
 		/// The request is sent to a pre-authenticated URL, which must not receive the token. A 401 is final.
 		case none
@@ -90,12 +94,7 @@ struct BearerRequestSender: Sendable {
 			do {
 				response = try HTTPClientSupport.httpResponse(of: outcome)
 			} catch {
-				HTTPClientSupport.logFailure(of: request, urlLogging: urlLogging, with: error, label: logLabel)
-				guard policy.retriesTransportErrors, attemptCount < BearerRequestSender.maxAttemptCount, (error as? URLError).map(HTTPClientSupport.isTransient) ?? false else {
-					throw isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
-				}
-				try Task.checkCancellation()
-				try await sleep(.seconds(HTTPClientSupport.retryDelay(forRetry: attemptCount)))
+				try await waitForRetry(afterTransportError: error, of: request, urlLogging: urlLogging, policy: policy, attemptCount: attemptCount)
 				continue
 			}
 			guard attemptCount < BearerRequestSender.maxAttemptCount else {
@@ -104,6 +103,9 @@ struct BearerRequestSender: Sendable {
 			if response.statusCode == 401, let rejectedAccessToken = accessToken, !hasRefreshed {
 				hasRefreshed = true
 				try Task.checkCancellation()
+				guard policy.refreshesUnauthorized(response, outcome) else {
+					return (response, outcome)
+				}
 				accessToken = try await tokenSource.refresh(rejecting: rejectedAccessToken)
 				continue
 			}
@@ -114,5 +116,15 @@ struct BearerRequestSender: Sendable {
 			try Task.checkCancellation()
 			try await sleep(policy.retryDelay(response, outcome, attemptCount))
 		}
+	}
+
+	/// Logs the transport error of an attempt and waits before the retry. Throws the error, mapped by `convertingNetworkConnectionError`, if the policy doesn't retry transport errors, the error isn't transient or no attempt is left.
+	private func waitForRetry(afterTransportError error: Error, of request: URLRequest, urlLogging: HTTPDebugLogger.URLLogging, policy: RetryPolicy, attemptCount: Int) async throws {
+		HTTPClientSupport.logFailure(of: request, urlLogging: urlLogging, with: error, label: logLabel)
+		guard policy.retriesTransportErrors, attemptCount < BearerRequestSender.maxAttemptCount, (error as? URLError).map(HTTPClientSupport.isTransient) ?? false else {
+			throw convertingNetworkConnectionError(error)
+		}
+		try Task.checkCancellation()
+		try await sleep(.seconds(HTTPClientSupport.retryDelay(forRetry: attemptCount)))
 	}
 }

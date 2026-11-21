@@ -137,6 +137,14 @@ extension UnitTests {
 		}
 
 		@Test
+		func suspendedAccountIsNotUnauthorized() async throws {
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401, body: DropboxMockResponse.error("user_suspended/.."))]
+
+			await #expect(throws: DropboxError.apiError(statusCode: 401, summary: "user_suspended/..")) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
 		func missingParentFolderThrowsWithoutWriting() async throws {
 			let localURL = try makeLocalFile(content: "content")
 			let operations: [(name: String, operation: @Sendable (DropboxCloudProvider) async throws -> Void)] = [

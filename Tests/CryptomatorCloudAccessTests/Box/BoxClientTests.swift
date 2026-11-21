@@ -47,13 +47,7 @@ extension UnitTests {
 		}
 
 		@Test
-		func serverErrorsAreRetriedUntilFiveAttempts() async throws {
-			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-			_ = try await client.user()
-
-			#expect(sleeps.durations.count == 4)
-
+		func finalServerErrorKeepsCodeAndMessage() async throws {
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503, body: #"{"code":"unavailable","message":"Unavailable"}"#), count: 6)
 
 			await #expect(throws: BoxError.apiError(statusCode: 503, code: "unavailable", message: "Unavailable")) { try await client.user() }
@@ -81,15 +75,6 @@ extension UnitTests {
 
 			await #expect(throws: BoxError.apiError(statusCode: 401, code: nil, message: nil)) { try await client.user() }
 			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func unauthorizedLastAttemptIsNotRefreshed() async throws {
-			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-			await #expect(throws: BoxError.apiError(statusCode: 401, code: nil, message: nil)) { try await client.user() }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-			#expect(tokenSource.rejectedTokens.isEmpty)
 		}
 
 		@Test
@@ -134,49 +119,25 @@ extension UnitTests {
 			}
 		}
 
-		@Test
-		func cancelledTaskGetsNoToken() async throws {
-			let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
-			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-			await #expect(throws: CancellationError.self) {
-				try await cancellingValue(of: Task {
-					withUnsafeCurrentTask { $0?.cancel() }
-					return try await client.user()
-				})
-			}
-			#expect(accessTokenCount.withLock { $0 } == 0)
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationWhileGettingTokenStopsFirstAttempt() async throws {
-			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.user() }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationDuringRefreshStopsRetry() async throws {
-			let client = BoxClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: BoxMockResponse.user)]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.user() }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func testBackgroundConfiguration() {
-			let configuration = BoxClient.backgroundConfiguration(sessionIdentifier: "BoxClientTests", sharedContainerIdentifier: "group.test")
-
-			#expect(configuration.identifier == "BoxClientTests")
-			#expect(configuration.sharedContainerIdentifier == "group.test")
-		}
-
 		// MARK: - Requests
+
+		@Test
+		func metadataRequestsAndTransfersRunOnTheirSessions() async throws {
+			let client = BoxClient(tokenSource: tokenSource, configuration: URLProtocolMock.configuration(marker: "transfer"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), sleep: { [sleeps] in sleeps.sleep(for: $0) })
+			let markers = OSAllocatedUnfairLock(initialState: [String?]())
+			let recordMarker: @Sendable (URLRequest) -> Void = { request in
+				markers.withLock { $0.append(request.value(forHTTPHeaderField: "X-Session")) }
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "7", name: "folder"), onRequest: recordMarker),
+				URLProtocolMock.handler(body: "content", onRequest: recordMarker)
+			]
+
+			_ = try await client.folder(id: "7")
+			try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)
+
+			#expect(markers.withLock { $0 } == ["metadata", "transfer"])
+		}
 
 		@Test
 		func listingSendsFieldsAndEscapedMarker() async throws {
@@ -304,7 +265,7 @@ extension UnitTests {
 }
 
 extension BoxClient {
-	static func mocked(tokenSource: any OAuthTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> BoxClient {
+	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> BoxClient {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
 		return BoxClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })

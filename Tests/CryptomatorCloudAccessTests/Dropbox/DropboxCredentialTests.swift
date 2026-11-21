@@ -116,6 +116,22 @@ extension UnitTests {
 			#expect(DropboxCredentialTests.previousLogin == buffer.token)
 		}
 
+		/// Signing in again can't lift a suspension, so the login neither refreshes nor maps it to `unauthorized`.
+		@Test
+		func suspendedAccountLoginThrowsRawErrorAndStoresNothing() async throws {
+			let accountRequests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: DropboxCredentialTests.exchangeResponse),
+				URLProtocolMock.handler(statusCode: 401, body: DropboxMockResponse.error("user_suspended/.."), onRequest: accountRequests.record)
+			]
+			let buffer = TokenBuffer()
+			buffer.store(DropboxCredentialTests.previousLogin)
+
+			await #expect(throws: DropboxError.apiError(statusCode: 401, summary: "user_suspended/..")) { try await completeAuthentication(storage: MemoryTokenStorage(buffer: buffer)) }
+			#expect(accountRequests.requests.count == 1)
+			#expect(DropboxCredentialTests.previousLogin == buffer.token)
+		}
+
 		/// The account request has no route errors, so a 409 isn't mapped like a provider operation's, whose `reset` would be `pageTokenInvalid`.
 		@Test
 		func conflictingAccountRequestStoresNothingAndThrowsRawError() async throws {
@@ -162,7 +178,8 @@ extension UnitTests {
 
 		@Test(arguments: [
 			DropboxAccountFailure(statusCode: 400, body: "Error in call to API function", expectedSummary: "Error in call to API function"),
-			DropboxAccountFailure(statusCode: 409, body: DropboxMockResponse.error("reset/.."), expectedSummary: "reset/..")
+			DropboxAccountFailure(statusCode: 409, body: DropboxMockResponse.error("reset/.."), expectedSummary: "reset/.."),
+			DropboxAccountFailure(statusCode: 401, body: DropboxMockResponse.error("user_suspended/.."), expectedSummary: "user_suspended/..")
 		])
 		func getUsernameKeepsOtherFailuresRaw(_ failure: DropboxAccountFailure) async {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: failure.statusCode, body: failure.body)]

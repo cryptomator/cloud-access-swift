@@ -61,9 +61,7 @@ public final class GoogleDriveCredential: Sendable {
 		guard let token = OIDIDToken(idTokenString: idToken), !token.subject.isEmpty else {
 			throw GoogleDriveCredentialError.missingUserID
 		}
-		try Task.checkCancellation()
-		let tokenSource = makeTokenSource(token.subject)
-		try await tokenSource.replace(with: OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: token.claims["email"] as? String))
+		let tokenSource = try await OAuthLogin.store(OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: token.claims["email"] as? String), userID: token.subject, makeTokenSource: makeTokenSource)
 		return GoogleDriveCredential(userID: token.subject, tokenSource: tokenSource)
 	}
 

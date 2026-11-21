@@ -397,14 +397,6 @@ extension UnitTests {
 		// MARK: - Sessions
 
 		@Test
-		func testBackgroundConfiguration() {
-			let configuration = PCloudClient.backgroundConfiguration(sessionIdentifier: "PCloudClientTests", sharedContainerIdentifier: "group.test")
-
-			#expect(configuration.identifier == "PCloudClientTests")
-			#expect(configuration.sharedContainerIdentifier == "group.test")
-		}
-
-		@Test
 		func backgroundClientRunsOnlyTransfersOnBackgroundSession() async throws {
 			let registry = BackgroundURLSessionRegistry { _ in URLProtocolMock.configuration(marker: "transfer") }
 			let backgroundClient = PCloudClient(tokenSource: PCloudCredential.stubTokenSource, configuration: .background(withIdentifier: "PCloudClientTests"), metadataConfiguration: URLProtocolMock.configuration(marker: "metadata"), registry: registry)

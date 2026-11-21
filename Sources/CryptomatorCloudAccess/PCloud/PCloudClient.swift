@@ -15,7 +15,9 @@ import Foundation
 
  Log lines omit request and response bodies, which carry the access token, the file-link path and the download tag. They show a file-link URL only as its origin. Thrown errors never contain a request URL.
  */
-final class PCloudClient: Sendable {
+final class PCloudClient: SplitSessionClient, Sendable {
+	typealias TokenSource = any PCloudTokenSource
+
 	private static let maxRetryCount = 3
 	private static let formatParameters = [("iconformat", "id"), ("timeformat", "timestamp")]
 
@@ -27,19 +29,6 @@ final class PCloudClient: Sendable {
 		self.tokenSource = tokenSource
 		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
 		self.sleep = sleep
-	}
-
-	static func foreground(tokenSource: any PCloudTokenSource) -> PCloudClient {
-		return PCloudClient(tokenSource: tokenSource, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
-	}
-
-	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any PCloudTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> PCloudClient {
-		return PCloudClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
 	}
 
 	// MARK: - Operations
@@ -249,7 +238,7 @@ final class PCloudClient: Sendable {
 		if case let PCloudError.apiError(code, _) = error, PCloudClient.authenticationCodes.contains(code) {
 			return CloudProviderError.unauthorized
 		}
-		return isNetworkConnectionError(error) ? CloudProviderError.noInternetConnection : error
+		return convertingNetworkConnectionError(error)
 	}
 
 	private static func logFailure(of command: String, with error: Error, describe: (Error) -> String = { "\($0)" }) {

@@ -10,7 +10,7 @@ import Foundation
 import os
 
 /**
- Stops a vault folder delete at every level once any of its requests failed with `CloudProviderError.unauthorized` or `CloudProviderError.noInternetConnection`. The delete takes them for an account-wide or offline failure, after which the provider already spent its retries and further requests would most likely fail too. Some providers also report a refusal of a single item as `unauthorized` (S3, when a policy denies reading or listing a key), so a sibling that could have succeeded is left to a later delete.
+ Stops a vault folder delete at every level once any of its requests failed with `CloudProviderError.unauthorized`, `CloudProviderError.noInternetConnection` or a Dropbox 401 for a suspended account. The delete takes them for an account-wide or offline failure, after which further requests would most likely fail too. Some providers also report a refusal of a single item as `unauthorized` (S3, when a policy denies reading or listing a key), so a sibling that could have succeeded is left to a later delete.
 
  One stop serves a whole delete, because a level returns only its highest-ranked failure, which can hide a stopping error of a nested level. An item that was admitted before the stop still finishes resolving its dir IDs.
  */
@@ -217,6 +217,8 @@ private func isStoppingFailure(_ failure: Error) -> Bool {
 	switch failure {
 	case CloudProviderError.unauthorized, CloudProviderError.noInternetConnection:
 		return true
+	case let DropboxError.apiError(statusCode: 401, summary):
+		return DropboxErrorResponse.isUserSuspended(summary: summary)
 	default:
 		return false
 	}

@@ -58,16 +58,13 @@ public final class BoxCredential: Sendable {
 		})
 	}
 
-	static func completeAuthentication(authorizationCode: String, endpoint: BoxOAuthEndpoint, makeClient: (any OAuthTokenSource) -> BoxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> BoxCredential {
+	static func completeAuthentication(authorizationCode: String, endpoint: BoxOAuthEndpoint, makeClient: (any BearerTokenSource) -> BoxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> BoxCredential {
 		let token = try await endpoint.exchange(authorizationCode: authorizationCode)
 		let user = try await requestUser(of: makeClient(StaticOAuthTokenSource(token: token.accessToken)))
 		guard !user.id.isEmpty else {
 			throw BoxCredentialError.missingUserID
 		}
-		// A user request that was under way when the task was cancelled still completes.
-		try Task.checkCancellation()
-		let tokenSource = makeTokenSource(user.id)
-		try await tokenSource.replace(with: OAuthToken(accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt, username: user.name))
+		let tokenSource = try await OAuthLogin.store(token.replacingUsername(with: user.name), userID: user.id, makeTokenSource: makeTokenSource)
 		return BoxCredential(userID: user.id, tokenSource: tokenSource)
 	}
 

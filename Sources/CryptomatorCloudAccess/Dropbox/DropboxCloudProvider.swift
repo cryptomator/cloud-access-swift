@@ -278,8 +278,9 @@ public final class DropboxCloudProvider: CloudProvider {
 		return try CloudItemMetadata(name: metadata.name, cloudPath: cloudPath, itemType: .file, lastModifiedDate: metadata.lastModifiedDate, size: Int(size))
 	}
 
+	/// Maps a 401 to `unauthorized`, except one for a suspended account, which signing in again can't lift.
 	static func convertUnauthorizedError(_ error: Error) -> Error {
-		guard case DropboxError.apiError(statusCode: 401, _) = error else {
+		guard case let DropboxError.apiError(statusCode: 401, summary) = error, !DropboxErrorResponse.isUserSuspended(summary: summary) else {
 			return error
 		}
 		return CloudProviderError.unauthorized

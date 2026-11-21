@@ -17,35 +17,18 @@ import Foundation
 
  The bodies of downloads aren't logged, because a content host's error body may echo the URL. Neither are those of metadata responses and uploads, because their items carry pre-authenticated download URLs and the accounts' emails. Thrown errors never contain a request URL.
  */
-final class MicrosoftGraphHTTPClient: Sendable {
+final class MicrosoftGraphHTTPClient: SplitSessionClient, Sendable {
+	typealias TokenSource = any BearerTokenSource
+
 	private static let logLabel = "MicrosoftGraphHTTPClient"
 	private static let retriedStatusCodes: Set<Int> = [429, 503, 504]
 	/// Statuses after which Graph may have applied the request.
 	private static let retriedServerErrorStatusCodes: Set<Int> = [500, 502]
 
-	private let session: SplitURLSession
-	private let sender: BearerRequestSender
+	private let transport: BearerHTTPTransport
 
 	init(tokenSource: any BearerTokenSource, configuration: URLSessionConfiguration, metadataConfiguration: URLSessionConfiguration?, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), registry: BackgroundURLSessionRegistry = .shared, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
-		self.session = SplitURLSession(configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry)
-		self.sender = BearerRequestSender(tokenSource: tokenSource, logLabel: MicrosoftGraphHTTPClient.logLabel, sleep: sleep)
-	}
-
-	static func foreground(tokenSource: any BearerTokenSource) -> MicrosoftGraphHTTPClient {
-		return MicrosoftGraphHTTPClient(tokenSource: tokenSource, configuration: foregroundConfiguration(), metadataConfiguration: nil)
-	}
-
-	/// Creates a client whose downloads and uploads run on the background URL session of `sessionIdentifier`, and whose other requests run on a foreground URL session.
-	static func background(tokenSource: any BearerTokenSource, sessionIdentifier: String, sharedContainerIdentifier: String?) -> MicrosoftGraphHTTPClient {
-		return MicrosoftGraphHTTPClient(tokenSource: tokenSource, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: foregroundConfiguration())
-	}
-
-	static func foregroundConfiguration() -> URLSessionConfiguration {
-		return HTTPClientSupport.hardened(.default)
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+		self.transport = BearerHTTPTransport(tokenSource: tokenSource, logLabel: MicrosoftGraphHTTPClient.logLabel, configuration: configuration, metadataConfiguration: metadataConfiguration, hooks: hooks, registry: registry, sleep: sleep)
 	}
 
 	// MARK: - Operations
@@ -146,12 +129,12 @@ final class MicrosoftGraphHTTPClient: Sendable {
 		var request = URLRequest(url: uploadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60.0)
 		request.httpMethod = "PUT"
 		request.setValue("bytes \(offset)-\(offset + length - 1)/\(totalLength)", forHTTPHeaderField: "Content-Range")
-		let (response, data) = try await upload(request, fromFile: chunkFileURL, progress: progress, onTaskCreation: onTaskCreation)
+		let (response, outcome) = try await transport.upload(request, fromFile: chunkFileURL, authorization: .none, bodyLogging: .omitted, policy: MicrosoftGraphHTTPClient.policy(for: request, authorization: .none), progress: progress, onTaskCreation: onTaskCreation)
 		switch response.statusCode {
 		case 202:
 			return nil
 		case 200, 201:
-			return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: data)
+			return try MicrosoftGraphAPI.decode(MicrosoftGraphAPI.DriveItem.self, from: outcome.data ?? Data())
 		case 401, 404:
 			throw MicrosoftGraphError.unexpectedHTTPStatusCode(code: response.statusCode)
 		default:
@@ -184,7 +167,7 @@ final class MicrosoftGraphHTTPClient: Sendable {
 
 	 - Throws: The error of `error(forStatusCode:)` for any other status.
 	 */
-	func dataExpectingOK(_ request: URLRequest) async throws -> Data {
+	private func dataExpectingOK(_ request: URLRequest) async throws -> Data {
 		let (response, data) = try await data(request)
 		guard response.statusCode == 200 else {
 			throw MicrosoftGraphHTTPClient.error(forStatusCode: response.statusCode)
@@ -193,44 +176,30 @@ final class MicrosoftGraphHTTPClient: Sendable {
 	}
 
 	/// Sends a request on the metadata session and returns its response, whatever its status.
-	func data(_ request: URLRequest) async throws -> (HTTPURLResponse, Data) {
-		let (response, outcome) = try await send(request, urlLogging: .redacted) { request, _ in
-			try await self.session.data(request, bodyLimit: HTTPClientSupport.maxMetadataBodyLength, bodyLogging: .omitted)
-		}
+	private func data(_ request: URLRequest) async throws -> (HTTPURLResponse, Data) {
+		let (response, outcome) = try await transport.data(request, bodyLogging: .omitted, policy: MicrosoftGraphHTTPClient.policy(for: request, authorization: .bearer))
 		return (response, outcome.data ?? Data())
 	}
 
 	/**
 	 Moves the body of a 2xx response to `stagingURL`, at which no item may exist, and returns the response, whatever its status.
 
-	 - Parameter authorization: `.none` for the pre-authenticated download URL of an item, which is a credential as a whole and therefore logged by its origin only.
+	 - Parameter authorization: `.none` for the pre-authenticated download URL of an item, which must not receive the token.
 	 */
-	func download(_ request: URLRequest, authorization: BearerRequestSender.Authorization = .bearer, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
+	private func download(_ request: URLRequest, authorization: BearerRequestSender.Authorization = .bearer, to stagingURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> HTTPURLResponse {
 		let handler = HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: HTTPClientSupport.maxErrorBodyLength)
-		let urlLogging: HTTPDebugLogger.URLLogging = authorization == .none ? .originOnly : .redacted
-		let (response, _) = try await send(request, authorization: authorization, urlLogging: urlLogging, progress: progress) { request, isFirstAttempt in
-			try await self.session.download(request, route: .transfer, handler: handler, bodyLogging: .omitted, urlLogging: urlLogging, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
-		}
+		let (response, _) = try await transport.download(request, authorization: authorization, bodyLogging: .omitted, handler: handler, policy: MicrosoftGraphHTTPClient.policy(for: request, authorization: authorization), progress: progress, onTaskCreation: onTaskCreation)
 		return response
 	}
 
-	/// Sends a request to the upload URL of an upload session, without an `Authorization` header, and returns its response, whatever its status.
-	func upload(_ request: URLRequest, fromFile fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> (HTTPURLResponse, Data) {
-		let (response, outcome) = try await send(request, authorization: .none, urlLogging: .originOnly, progress: progress) { request, isFirstAttempt in
-			try await self.session.upload(request, fromFile: fileURL, bodyLimit: HTTPClientSupport.maxErrorBodyLength, bodyLogging: .omitted, urlLogging: .originOnly, progress: progress, cancelsBeforeResume: true, onTaskCreation: isFirstAttempt ? onTaskCreation : nil)
-		}
-		return (response, outcome.data ?? Data())
-	}
-
-	private func send(_ request: URLRequest, authorization: BearerRequestSender.Authorization = .bearer, urlLogging: HTTPDebugLogger.URLLogging, progress: Progress? = nil, attempt: (URLRequest, _ isFirstAttempt: Bool) async throws -> SplitURLSession.Outcome) async throws -> (HTTPURLResponse, SplitURLSession.Outcome) {
+	private static func policy(for request: URLRequest, authorization: BearerRequestSender.Authorization) -> RetryPolicy {
 		let isGET = (request.httpMethod ?? "GET") == "GET"
 		let retriesServerErrors = isGET || authorization == .none
-		let policy = RetryPolicy(retriesTransportErrors: isGET, isRetryable: { response, _ in
+		return RetryPolicy(retriesTransportErrors: isGET, isRetryable: { response, _ in
 			MicrosoftGraphHTTPClient.retriedStatusCodes.contains(response.statusCode) || retriesServerErrors && MicrosoftGraphHTTPClient.retriedServerErrorStatusCodes.contains(response.statusCode)
 		}, failure: { response, _ in
 			MicrosoftGraphError.unexpectedHTTPStatusCode(code: response.statusCode)
 		})
-		return try await sender.send(request, authorization: authorization, urlLogging: urlLogging, policy: policy, progress: progress, attempt: attempt)
 	}
 
 	private static func apiURL(_ path: String, parameters: [(String, String)] = []) throws -> URL {

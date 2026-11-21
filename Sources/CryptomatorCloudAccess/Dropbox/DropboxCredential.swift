@@ -49,7 +49,7 @@ public final class DropboxCredential: Sendable {
 	 Nothing is stored if the exchange or the account request fails, or the task was cancelled meanwhile.
 
 	 - Parameter codeVerifier: The PKCE code verifier of the login's authorize request.
-	 - Throws: `DropboxCredentialError.missingUserID` if Dropbox returned no `uid`, `CloudProviderError.unauthorized` if the account request is answered with 401, and otherwise what the code exchange, the account request or saving the token throws.
+	 - Throws: `DropboxCredentialError.missingUserID` if Dropbox returned no `uid`, `CloudProviderError.unauthorized` if the account request is answered with a 401 that isn't for a suspended account, and otherwise what the code exchange, the account request or saving the token throws.
 	 */
 	@concurrent
 	@_spi(Authentication) public static func completeAuthentication(authorizationCode: String, codeVerifier: String, setup: DropboxSetup) async throws -> DropboxCredential {
@@ -59,13 +59,10 @@ public final class DropboxCredential: Sendable {
 		})
 	}
 
-	static func completeAuthentication(authorizationCode: String, codeVerifier: String, endpoint: DropboxOAuthEndpoint, makeClient: (any OAuthTokenSource) -> DropboxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> DropboxCredential {
+	static func completeAuthentication(authorizationCode: String, codeVerifier: String, endpoint: DropboxOAuthEndpoint, makeClient: (any BearerTokenSource) -> DropboxClient, makeTokenSource: (_ userID: String) -> StoredOAuthTokenSource) async throws -> DropboxCredential {
 		let (token, userID) = try await endpoint.exchange(code: authorizationCode, codeVerifier: codeVerifier)
 		let account = try await currentAccount(of: makeClient(StaticOAuthTokenSource(token: token.accessToken)))
-		// An account request that was under way when the task was cancelled still completes.
-		try Task.checkCancellation()
-		let tokenSource = makeTokenSource(userID)
-		try await tokenSource.replace(with: OAuthToken(accessToken: token.accessToken, refreshToken: token.refreshToken, expiresAt: token.expiresAt, username: account.email))
+		let tokenSource = try await OAuthLogin.store(token.replacingUsername(with: account.email), userID: userID, makeTokenSource: makeTokenSource)
 		return DropboxCredential(userID: userID, tokenSource: tokenSource)
 	}
 
@@ -86,7 +83,7 @@ public final class DropboxCredential: Sendable {
 	/**
 	 Asks Dropbox for the account's email, and stores it with the login if it changed.
 
-	 - Throws: `DropboxCredentialError.noUsername` if Dropbox returned no email, `CloudProviderError.unauthorized` if the request is answered with 401, and otherwise what the request throws.
+	 - Throws: `DropboxCredentialError.noUsername` if Dropbox returned no email, `CloudProviderError.unauthorized` if the request is answered with a 401 that isn't for a suspended account, and otherwise what the request throws.
 	 */
 	@concurrent
 	public func getUsername() async throws -> String {
@@ -101,7 +98,7 @@ public final class DropboxCredential: Sendable {
 		return email
 	}
 
-	/// Maps only a 401, because the account request has no route errors for the provider's 409 mapping to read.
+	/// Maps only a 401, through `DropboxCloudProvider.convertUnauthorizedError`, because the account request has no route errors for the provider's 409 mapping to read.
 	private static func currentAccount(of client: DropboxClient) async throws -> DropboxAccount {
 		do {
 			return try await client.currentAccount()

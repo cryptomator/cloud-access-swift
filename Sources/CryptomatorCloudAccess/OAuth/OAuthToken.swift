@@ -49,7 +49,7 @@ struct OAuthToken: Sendable, Equatable {
 		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: other.username, apiHost: apiHost ?? other.apiHost)
 	}
 
-	func replacingUsername(with username: String) -> OAuthToken {
+	func replacingUsername(with username: String?) -> OAuthToken {
 		return OAuthToken(accessToken: accessToken, refreshToken: refreshToken, expiresAt: expiresAt, username: username, apiHost: apiHost)
 	}
 }

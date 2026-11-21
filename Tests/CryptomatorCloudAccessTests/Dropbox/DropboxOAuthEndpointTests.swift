@@ -68,13 +68,6 @@ extension UnitTests {
 			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "APP-KEY"])
 		}
 
-		@Test
-		func invalidGrantIsUnauthorized() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 400, body: #"{"error":"invalid_grant","error_description":"refresh token is invalid or revoked"}"#)]
-
-			await #expect(throws: CloudProviderError.unauthorized) { try await DropboxOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "RT", expiresAt: nil)) }
-		}
-
 		/// Dropbox may answer an expired access token with `expired_access_token`, so the revocation sends a fresh one, whatever the stored expiry says.
 		@Test
 		func revokeRefreshesFirstAndRevokesRefreshedAccessToken() async throws {

@@ -339,9 +339,6 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		if isCancellationError(error) {
 			return CancellationError()
 		}
-		if isNetworkConnectionError(error) {
-			return CloudProviderError.noInternetConnection
-		}
-		return error
+		return convertingNetworkConnectionError(error)
 	}
 }

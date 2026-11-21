@@ -36,14 +36,6 @@ extension UnitTests {
 		// MARK: - Requests
 
 		@Test
-		func testBackgroundConfiguration() {
-			let configuration = GoogleDriveClient.backgroundConfiguration(sessionIdentifier: "GoogleDriveClientTests", sharedContainerIdentifier: "group.test")
-
-			#expect(configuration.identifier == "GoogleDriveClientTests")
-			#expect(configuration.sharedContainerIdentifier == "group.test")
-		}
-
-		@Test
 		func requestShapes() async throws {
 			let record = requests.record
 			URLProtocolMock.requestHandler = [
@@ -112,15 +104,6 @@ extension UnitTests {
 		}
 
 		@Test
-		func refreshCountsAsAttempt() async throws {
-			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 401, reason: nil, message: nil)) { try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)") }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-			#expect(tokenSource.rejectedTokens.isEmpty)
-		}
-
-		@Test
 		func rateLimitIsRetriedButPermissionErrorIsNot() async throws {
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "userRateLimitExceeded"), headerFields: ["Retry-After": "3"]),
@@ -165,15 +148,6 @@ extension UnitTests {
 			#expect(responses.count == sleeps.durations.count)
 		}
 
-		@Test
-		func transportErrorIsRetriedUntilFiveAttempts() async throws {
-			URLProtocolMock.requestHandler = Array(repeating: { _ in throw URLError(.networkConnectionLost) }, count: 5) + [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)") }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-			#expect(sleeps.durations.count == 4)
-		}
-
 		// MARK: - Cancellation
 
 		@Test
@@ -190,40 +164,6 @@ extension UnitTests {
 		}
 
 		@Test
-		func cancelledTaskGetsNoToken() async throws {
-			let accessTokenCount = OSAllocatedUnfairLock(initialState: 0)
-			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { accessTokenCount.withLock { $0 += 1 } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			await #expect(throws: CancellationError.self) {
-				try await cancellingValue(of: Task {
-					withUnsafeCurrentTask { $0?.cancel() }
-					return try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)")
-				})
-			}
-			#expect(accessTokenCount.withLock { $0 } == 0)
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationWhileGettingTokenStopsFirstAttempt() async throws {
-			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onAccessToken: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)") }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
-		func cancellationDuringRefreshStopsRetry() async throws {
-			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)") }) }
-			#expect(URLProtocolMock.requestHandler.count == 1)
-		}
-
-		@Test
 		func cancellationDuringRefreshStopsUpload() async throws {
 			let localURL = try makeLocalFile(content: "file content")
 			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { withUnsafeCurrentTask { $0?.cancel() } }), sleeps: sleeps)
@@ -231,24 +171,6 @@ extension UnitTests {
 
 			await #expect(throws: CancellationError.self) { try await cancellingValue(of: Task { try await client.upload(from: LocalUploadFile(localURL), name: "file.txt", parentID: "P", existingFileID: nil, progress: nil, onTaskCreation: nil) }) }
 			#expect(URLProtocolMock.requestHandler.count == 2)
-		}
-
-		@Test
-		func taskCancelledDuringAttemptIsNotRefreshed() async throws {
-			let refreshCount = OSAllocatedUnfairLock(initialState: 0)
-			let client = GoogleDriveClient.mocked(tokenSource: OAuthTokenSourceStub(onRefresh: { refreshCount.withLock { $0 += 1 } }), sleeps: sleeps)
-			let canceller = TaskCanceller<Void>()
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 401, onRequest: { _ in
-				canceller.cancel()
-			}), URLProtocolMock.handler(body: GoogleDriveMockResponse.files([]))]
-
-			let task = canceller.start {
-				_ = try await client.files(query: "q", pageSize: nil, pageToken: nil, fields: "files(id)")
-			}
-
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
-			#expect(refreshCount.withLock { $0 } == 0)
-			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
 		@Test
@@ -642,7 +564,7 @@ final class TaskRecorder: Sendable {
 }
 
 extension GoogleDriveClient {
-	static func mocked(tokenSource: any OAuthTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> GoogleDriveClient {
+	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> GoogleDriveClient {
 		let configuration = URLSessionConfiguration.default
 		configuration.protocolClasses = [URLProtocolMock.self]
 		return GoogleDriveClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })

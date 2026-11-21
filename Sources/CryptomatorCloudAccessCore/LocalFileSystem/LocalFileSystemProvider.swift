@@ -29,6 +29,11 @@ private extension FileManager {
  Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
  */
 public final class LocalFileSystemProvider: CloudProvider {
+	// iCloud Drive offloads an item as `.<name>.icloud`, but with two leading dots if its name starts with `_`, so the pattern accepts any number of them.
+	// See: https://github.com/cryptomator/cloud-access-swift/issues/19
+	// swiftlint:disable:next force_try
+	private static let iCloudPlaceholderRegex = try! NSRegularExpression(pattern: #"^\.+(.*)\.icloud$"#, options: [])
+
 	private let rootURL: URL
 	private let queue = OperationQueue()
 	private let shouldStopAccessingRootURL: Bool
@@ -115,7 +120,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 					continue
 				}
 				let iCloudCompatibleChildURL = url.appending(component: getItemName(forItemAt: childURL))
-				guard iCloudCompatibleChildURL.lastPathComponent.prefix(1) != "." else {
+				guard iCloudCompatibleChildURL.lastPathComponent.removingASCIIPrefix(".") == nil else {
 					continue
 				}
 				do {
@@ -331,12 +336,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 	func getItemName(forItemAt url: URL) -> String {
 		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemName(forItemAt: \(url)) called")
 		let name = url.lastPathComponent
-		// Workaround for files with a `_` prefix. Usually, the pattern for iCloud Drive placeholder files is `.<name>.icloud` but files with a `_` prefix in their original name have two dots in the beginning when they are offloaded.
-		// See: https://github.com/cryptomator/cloud-access-swift/issues/19
-		// swiftlint:disable:next force_try
-		let regex = try! NSRegularExpression(pattern: #"^\.+(.*)\.icloud$"#, options: [])
 		let range = NSRange(name.startIndex ..< name.endIndex, in: name)
-		guard let match = regex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
+		guard let match = LocalFileSystemProvider.iCloudPlaceholderRegex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
 			return name
 		}
 		let originalName = String(name[matchedRange])

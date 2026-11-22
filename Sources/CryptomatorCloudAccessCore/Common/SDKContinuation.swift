@@ -10,18 +10,18 @@ import Foundation
 import os
 
 /// Resumes the suspended SDK call at most once. Any further resume is ignored and logged.
-struct Resumer<T>: Sendable {
+package struct Resumer<T>: Sendable {
 	private let continuation: OSAllocatedUnfairLock<CheckedContinuation<T, any Error>?>
 
 	fileprivate init(_ continuation: CheckedContinuation<T, any Error>) {
 		self.continuation = OSAllocatedUnfairLock(initialState: continuation)
 	}
 
-	func resume(returning value: sending T) {
+	package func resume(returning value: sending T) {
 		takeContinuation()?.resume(returning: value)
 	}
 
-	func resume(throwing error: any Error) {
+	package func resume(throwing error: any Error) {
 		takeContinuation()?.resume(throwing: error)
 	}
 
@@ -37,12 +37,6 @@ struct Resumer<T>: Sendable {
 	}
 }
 
-extension Resumer where T == Void {
-	func resume() {
-		resume(returning: ())
-	}
-}
-
 /**
  Suspends until the completion handler of an SDK call resumes the given `Resumer`.
 
@@ -50,7 +44,7 @@ extension Resumer where T == Void {
 
  - Parameter start: Issues the SDK call in the caller's isolation and hands the `Resumer` to its completion handler. If the caller is isolated to an actor, a completion handler written inside `start` inherits that isolation and traps when the SDK calls it on another thread, unless it is marked `@Sendable`.
  */
-func withSDKContinuation<T>(_ start: (Resumer<T>) -> Void) async throws -> sending T {
+package func withSDKContinuation<T>(_ start: (Resumer<T>) -> Void) async throws -> sending T {
 	return try await withCheckedThrowingContinuation { continuation in
 		start(Resumer(continuation))
 	}

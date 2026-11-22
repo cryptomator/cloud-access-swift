@@ -67,15 +67,15 @@ public enum GoogleDriveAuthenticator {
 
 	private static func createAuthorizationServiceForGoogle() async throws -> OIDServiceConfiguration {
 		let issuer = URL(string: "https://accounts.google.com")!
-		return try await withCheckedThrowingContinuation { continuation in
+		return try await withSDKContinuation { resumer in
 			OIDAuthorizationService.discoverConfiguration(forIssuer: issuer) { @Sendable configuration, error in
-				if error != nil {
-					return continuation.resume(throwing: error!)
+				if let error {
+					return resumer.resume(throwing: error)
 				}
 				guard let configuration else {
-					return continuation.resume(throwing: GoogleDriveAuthenticatorError.authenticationFailed)
+					return resumer.resume(throwing: GoogleDriveAuthenticatorError.authenticationFailed)
 				}
-				continuation.resume(returning: configuration)
+				resumer.resume(returning: configuration)
 			}
 		}
 	}

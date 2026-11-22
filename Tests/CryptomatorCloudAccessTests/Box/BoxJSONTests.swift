@@ -38,6 +38,17 @@ extension UnitTests {
 			#expect(items.nextMarker == "M")
 		}
 
+		/// A file object as Box documents it, with the fields that a replacing upload's confirmation requests.
+		@Test
+		func fileEntryDecodesParentAndItemStatus() throws {
+			let body = #"{"type":"file","id":"12345","etag":"1","name":"Contract.pdf","parent":{"type":"folder","id":"12345","sequence_id":"3","etag":"1","name":"Contracts"},"item_status":"active"}"#
+
+			let entry = try BoxJSON.decode(BoxEntry.self, from: Data(body.utf8))
+
+			#expect(entry.parent?.id == "12345")
+			#expect(entry.itemStatus == "active")
+		}
+
 		@Test
 		func entryWithoutIdentifierThrows() {
 			#expect(throws: BoxError.unexpectedContent) { try BoxJSON.decode(BoxItems.self, from: Data(BoxMockResponse.items([#"{"type":"file","name":"file.txt"}"#]).utf8)) }

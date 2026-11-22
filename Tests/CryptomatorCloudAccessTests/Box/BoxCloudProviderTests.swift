@@ -212,6 +212,148 @@ extension UnitTests {
 			}
 		}
 
+		@Test
+		func mutationGuardsSendNoRequestBeyondResolution() async throws {
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot))
+
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try BoxCloudProvider(client: .mocked(), maxPageSize: .max) }
+		}
+
+		/// A listing of the target's folder that answers 404 shows that the folder is gone.
+		@Test
+		func targetLookupInMissingFolderThrowsParentFolderDoesNotExist() async throws {
+			let localURL = try makeLocalFile(content: "content")
+			let operations: [(name: String, run: @Sendable (BoxCloudProvider) async throws -> Void)] = [
+				("upload", { _ = try await $0.uploadFile(from: localURL, to: CloudPath("/folder/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil) }),
+				("createFolder", { try await $0.createFolder(at: CloudPath("/folder/sub")) })
+			]
+			for (name, run) in operations {
+				let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max)
+				URLProtocolMock.requestHandler = [
+					URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder),
+					URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found"))
+				]
+
+				await #expect(throws: CloudProviderError.parentFolderDoesNotExist, "\(name)") { try await run(provider) }
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(name)")
+			}
+		}
+
+		// MARK: - Replacing Uploads
+
+		/// A replacing upload of a cached file confirms the file with one request by its identifier instead of listing the folder.
+		@Test
+		func replacingUploadConfirmsCachedFileWithoutListing() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = downloadPreparation() + [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "0", status: "active"), onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 12)]), onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+
+			let sent = requests.requests
+			try #require(sent.count == 2)
+			#expect([sent[0].httpMethod, sent[0].url?.path] == ["GET", "/2.0/files/5"])
+			#expect(URLProtocolMock.queryParameter("fields", of: sent[0]) == "type,id,name,parent,item_status")
+			#expect([sent[1].httpMethod, sent[1].url?.absoluteString] == ["POST", "https://upload.box.com/api/2.0/files/5/content"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A cached file that Box reports elsewhere, renamed, trashed or gone is looked up in the folder, which decides between a new version and a new file.
+		@Test
+		func unconfirmedCachedFileIsLookedUpInFolder() async throws {
+			let cases: [(name: String, confirmation: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?))] = [
+				("other parent", URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "9", status: "active"))),
+				("other name", URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "renamed.txt", parentID: "0", status: "active"))),
+				("trashed", URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "0", status: "trashed"))),
+				("gone", URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found")))
+			]
+			let localURL = try makeLocalFile(content: "file content")
+			for (name, confirmation) in cases {
+				for (listing, expectedUploadURL) in [(BoxMockResponse.items([BoxMockResponse.fileEntry(id: "6", name: "file.txt")]), "https://upload.box.com/api/2.0/files/6/content"), (BoxCloudProviderTests.emptyRoot, "https://upload.box.com/api/2.0/files/content")] {
+					let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max)
+					let uploadURL = OSAllocatedUnfairLock<String?>(initialState: nil)
+					URLProtocolMock.requestHandler = downloadPreparation() + [
+						confirmation,
+						URLProtocolMock.handler(body: listing),
+						URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "6", name: "file.txt", size: 12)]), onRequest: { request in
+							uploadURL.withLock { $0 = request.url?.absoluteString }
+						})
+					]
+					_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+					_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+
+					#expect(uploadURL.withLock { $0 } == expectedUploadURL, "\(name)")
+					#expect(URLProtocolMock.requestHandler.isEmpty, "\(name)")
+				}
+			}
+		}
+
+		@Test
+		func cancellationDuringConfirmationStopsUploadBeforeListing() async throws {
+			let provider = provider
+			let localURL = try makeLocalFile(content: "file content")
+			let canceller = TaskCanceller<CloudItemMetadata>()
+			URLProtocolMock.requestHandler = downloadPreparation() + [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "9", status: "active"), onRequest: { _ in
+					canceller.cancel()
+				}),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			let task = canceller.start {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			}
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
+			#expect(URLProtocolMock.requestHandler.count == 1)
+		}
+
+		@Test
+		func uploadedFileIsDeletedWithoutLookup() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "8", name: "file.txt", size: 12)])),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			try await provider.deleteFile(at: CloudPath("/file.txt"))
+
+			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["DELETE", "/2.0/files/8"]])
+		}
+
+		/// The folder that the upload wrote into is replaced at its path before the upload finishes, so the uploaded file isn't cached below the replacement.
+		@Test
+		func uploadIntoReplacedFolderCachesNothing() async throws {
+			let provider = provider
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
+				URLProtocolMock.handler(statusCode: 204),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.folderEntry(id: "4", name: "folder")),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "8", name: "file.txt", size: 12)])),
+				URLProtocolMock.handler(body: BoxMockResponse.items([BoxMockResponse.fileEntry(id: "9", name: "file.txt")]), onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+				try? await provider.deleteFolder(at: CloudPath("/folder"))
+				try? await provider.createFolder(at: CloudPath("/folder"))
+			})
+			try await provider.deleteFile(at: CloudPath("/folder/file.txt"))
+
+			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["GET", "/2.0/folders/4/items"], ["DELETE", "/2.0/files/9"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Downloads
 
 		@Test
@@ -480,6 +622,11 @@ extension UnitTests {
 		}
 
 		// MARK: - Helpers
+
+		/// The response of a request for a file's type, identifier, name, parent and status.
+		private static func confirmation(name: String, parentID: String, status: String) -> String {
+			return #"{"type":"file","id":"5","etag":"1","name":"\#(name)","parent":{"type":"folder","id":"\#(parentID)","name":"Folder"},"item_status":"\#(status)"}"#
+		}
 
 		private static func digest(of string: String) -> String {
 			return "sha=\(Data(Insecure.SHA1.hash(data: Data(string.utf8))).base64EncodedString())"

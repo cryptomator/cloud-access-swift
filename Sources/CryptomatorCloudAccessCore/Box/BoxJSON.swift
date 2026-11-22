@@ -15,6 +15,10 @@ struct BoxEntry: Decodable, Sendable {
 	let name: String?
 	let size: Int64?
 	let modifiedAt: String?
+	/// The folder that holds the item. A response whose request names `fields` carries it only if they include `parent`.
+	let parent: BoxParentReference?
+	/// `active`, `trashed` or `deleted`. A response whose request names `fields` carries it only if they include `item_status`.
+	let itemStatus: String?
 
 	private enum CodingKeys: String, CodingKey {
 		case type
@@ -22,6 +26,8 @@ struct BoxEntry: Decodable, Sendable {
 		case name
 		case size
 		case modifiedAt = "modified_at"
+		case parent
+		case itemStatus = "item_status"
 	}
 
 	/// The type of a file or a folder entry, or `nil` for any other entry, e.g., a web link.
@@ -102,7 +108,7 @@ struct BoxErrorResponse: Decodable, Sendable {
 	let message: String?
 }
 
-struct BoxParentReference: Encodable, Sendable {
+struct BoxParentReference: Codable, Sendable {
 	let id: String
 }
 

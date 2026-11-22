@@ -72,18 +72,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let localFile = try LocalUploadFile(localURL)
+		let upload = try await preflight.prepareUpload(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
 		let phases = Progress.phases(of: progress, 999)
-		do {
-			let metadata = try await fetchItemMetadata(at: cloudPath)
-			if !replaceExisting || metadata.itemType == .folder {
-				throw CloudProviderError.itemAlreadyExists
-			}
-		} catch CloudProviderError.itemNotFound {
-			// no-op
-		}
-		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localFile, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: upload.parent, from: upload.file, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -91,52 +82,36 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		if try await checkForItemExistence(at: cloudPath) {
-			throw CloudProviderError.itemAlreadyExists
-		}
-		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		try Task.checkCancellation()
+		let parentItem = try await preflight.prepareCreateFolder(at: cloudPath)
 		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 	}
 
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
+		let item = try await preflight.resolveSource(at: cloudPath, type: .file, operation: "deleteFile")
+		try await deleteItem(for: item)
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
-	}
-
-	private func deleteItem(at cloudPath: CloudPath) async throws {
-		let item = try await resolvePath(forItemAt: cloudPath)
-		try Task.checkCancellation()
+		let item = try await preflight.resolveSource(at: cloudPath, type: .folder, operation: "deleteFolder")
 		try await deleteItem(for: item)
 	}
 
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .file, operation: "moveFile")
+		try await moveItem(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		if try await checkForItemExistence(at: targetCloudPath) {
-			throw CloudProviderError.itemAlreadyExists
-		}
-		let item = try await resolvePath(forItemAt: sourceCloudPath)
-		let targetParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
-		try Task.checkCancellation()
-		try await moveItem(from: item, toParent: targetParentItem, targetCloudPath: targetCloudPath)
+		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .folder, operation: "moveFolder")
+		try await moveItem(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
 	}
 
 	// MARK: - Operations
@@ -148,7 +123,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	}
 
 	private func fetchItemList(for item: MicrosoftGraphItem, pageToken: String?) async throws -> CloudItemList {
-		guard item.itemType == .folder else {
+		guard item.effectiveItemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		if let pageToken {
@@ -196,7 +171,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	}
 
 	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		guard item.itemType == .file else {
+		guard item.effectiveItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let itemAddress = address(of: item)
@@ -237,7 +212,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		let uploadURL = try await perform { try await client.createUploadSession(named: cloudPath.lastPathComponent, in: address(of: parentItem)) }
 		let driveItem = try await uploadFileChunks(from: localFile.url, to: uploadURL, totalFileSize: Int(localFile.size), progress: progress, onTaskCreation: onTaskCreation)
 		let item = MicrosoftGraphItem(cloudPath: cloudPath, driveItem: driveItem)
-		try identifierCache.addOrUpdate(item)
+		try identifierCache.addOrUpdate(item, ifStillBelow: parentItem)
 		return try convertToCloudItemMetadata(driveItem, at: cloudPath)
 	}
 
@@ -269,20 +244,35 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	}
 
 	private func createFolder(for parentItem: MicrosoftGraphItem, with name: String) async throws {
-		let driveItem = try await perform { try await client.createFolder(named: name, in: address(of: parentItem)) }
+		let parentAddress = address(of: parentItem)
+		let driveItem = try await perform {
+			try await withoutCancellation {
+				try await self.client.createFolder(named: name, in: parentAddress)
+			}
+		}
 		let item = MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
-		try identifierCache.addOrUpdate(item)
+		try identifierCache.addOrUpdate(item, ifStillBelow: parentItem)
 	}
 
 	private func deleteItem(for item: MicrosoftGraphItem) async throws {
-		try await perform { try await client.delete(address(of: item)) }
+		let itemAddress = address(of: item)
+		try await perform {
+			try await withoutCancellation {
+				try await self.client.delete(itemAddress)
+			}
+		}
 		try identifierCache.invalidate(item)
 	}
 
 	private func moveItem(from sourceItem: MicrosoftGraphItem, toParent targetParentItem: MicrosoftGraphItem, targetCloudPath: CloudPath) async throws {
+		let sourceAddress = address(of: sourceItem)
 		let driveItem: MicrosoftGraphAPI.DriveItem
 		do {
-			driveItem = try await perform { try await client.move(address(of: sourceItem), named: targetCloudPath.lastPathComponent, toParentID: targetParentItem.identifier, parentDriveID: targetParentItem.driveIdentifier) }
+			driveItem = try await perform {
+				try await withoutCancellation {
+					try await self.client.move(sourceAddress, named: targetCloudPath.lastPathComponent, toParentID: targetParentItem.identifier, parentDriveID: targetParentItem.driveIdentifier)
+				}
+			}
 		} catch let error as DecodingError {
 			// Graph accepted the move, so the source's cached item is stale.
 			try identifierCache.invalidate(sourceItem)
@@ -290,7 +280,7 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		}
 		try identifierCache.invalidate(sourceItem)
 		let targetItem = MicrosoftGraphItem(cloudPath: targetCloudPath, driveItem: driveItem)
-		try identifierCache.addOrUpdate(targetItem)
+		try identifierCache.addOrUpdate(targetItem, ifStillBelow: targetParentItem)
 	}
 
 	// MARK: - Execution
@@ -306,17 +296,22 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	// MARK: - Resolve Path
 
+	private var preflight: IdentifierAddressedPreflight<MicrosoftGraphItem> {
+		return IdentifierAddressedPreflight(cache: identifierCache, providerName: "MicrosoftGraphCloudProvider", lookUp: getMicrosoftGraphItem(for:withParentItem:))
+	}
+
 	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
-		return try await identifierCache.resolvePath(forItemAt: cloudPath, lookUpChild: getMicrosoftGraphItem(for:withParentItem:))
+		return try await preflight.resolve(at: cloudPath)
 	}
 
-	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> MicrosoftGraphItem {
-		return try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getMicrosoftGraphItem(for:withParentItem:))
-	}
-
-	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem {
-		let driveItem = try await perform { try await client.child(named: name, in: address(of: parentItem)) }
-		return MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
+	/// Returns the item of the name in the folder, or `nil` if Graph finds none. Graph answers 404 for a missing folder too, so a missing folder returns `nil` as well.
+	private func getMicrosoftGraphItem(for name: String, withParentItem parentItem: MicrosoftGraphItem) async throws -> MicrosoftGraphItem? {
+		do {
+			let driveItem = try await perform { try await client.child(named: name, in: address(of: parentItem)) }
+			return MicrosoftGraphItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), driveItem: driveItem)
+		} catch CloudProviderError.itemNotFound {
+			return nil
+		}
 	}
 
 	// MARK: - Helpers

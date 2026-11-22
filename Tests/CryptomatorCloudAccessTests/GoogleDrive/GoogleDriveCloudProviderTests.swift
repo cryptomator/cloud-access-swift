@@ -357,8 +357,8 @@ extension UnitTests {
 		@Test
 		func movedFileCanBeDownloaded() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 				{ request in
 					// Answers with the requested fields only, as Drive does.
 					let fields = URLProtocolMock.queryParameter("fields", of: request) ?? ""
@@ -373,6 +373,179 @@ extension UnitTests {
 			let metadata = try await provider.downloadFile(from: CloudPath("/renamed.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.size == 7)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The folder's cached row is replaced while the source is looked up, so the source is found in the new folder while the target's folder is the old one. The move fails before its request, rather than moving the file into the folder that left the path, and its retry renames the file in place.
+		@Test
+		func moveAfterFolderRowChangedFailsBeforeRequest() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "P1", name: "p")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "P1", name: "p")),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "P2", name: "p")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A1", name: "a")]), onRequest: requests.record),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A2", name: "a")]), onRequest: requests.record),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "A2", name: "b"), onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/p"))
+			tokenSource.setHook(atCall: 3) {
+				_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			}
+
+			await #expect(throws: GoogleDriveError.inconsistentCache) { try await provider.moveFile(from: CloudPath("/p/a"), to: CloudPath("/p/b")) }
+			#expect(requests.requests.count == 2)
+			try await provider.moveFile(from: CloudPath("/p/a"), to: CloudPath("/p/b"))
+
+			let sent = requests.requests
+			try #require(sent.count == 4)
+			#expect(sent.prefix(3).map { URLProtocolMock.queryParameter("q", of: $0) } == ["'P1' in parents and name contains 'a' and trashed = false", "'P2' in parents and name contains 'a' and trashed = false", "'P2' in parents and name contains 'b' and trashed = false"])
+			#expect([sent[3].httpMethod, sent[3].url?.path, URLProtocolMock.queryParameter("addParents", of: sent[3]), URLProtocolMock.queryParameter("removeParents", of: sent[3])] == ["PATCH", "/drive/v3/files/A2", nil, nil])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The folder that a folder creation or a move writes into is replaced at its path before the request is sent, so the new item isn't cached below the replacement, and the next request on its path looks it up there.
+		@Test(arguments: ["createFolder", "moveFile"])
+		func mutationIntoReplacedFolderCachesNothing(operation: String) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			let resolution = operation == "createFolder" ? [GoogleDriveCloudProviderTests.emptyFolder] : [GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A", name: "a")]), GoogleDriveCloudProviderTests.emptyFolder]
+			let response = operation == "createFolder" ? GoogleDriveMockResponse.folder(id: "N", name: "new") : GoogleDriveMockResponse.file(id: "A", name: "new")
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "P1", name: "p")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "P1", name: "p"))
+			] + resolution.map { URLProtocolMock.handler(body: $0) } + [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "P2", name: "p")])),
+				URLProtocolMock.handler(body: response),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "M", name: "new")]), onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/p"))
+			tokenSource.setHook(atCall: 3 + resolution.count) {
+				_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			}
+
+			if operation == "createFolder" {
+				try await provider.createFolder(at: CloudPath("/p/new"))
+			} else {
+				try await provider.moveFile(from: CloudPath("/p/a"), to: CloudPath("/p/new"))
+			}
+			try await provider.deleteFolder(at: CloudPath("/p/new"))
+
+			let sent = requests.requests
+			try #require(sent.count == 2)
+			#expect(URLProtocolMock.queryParameter("q", of: sent[0]) == "'P2' in parents and name contains 'new' and trashed = false")
+			#expect([sent[1].httpMethod, sent[1].url?.path] == ["DELETE", "/drive/v3/files/M"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A shortcut to the folder that holds the item leads to the same folder, so the move only renames the item.
+		@Test
+		func moveThroughShortcutToSameFolderIsRename() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "alias", targetID: "R", targetMimeType: GoogleDriveJSON.folderMimeType), GoogleDriveMockResponse.folder(id: "R", name: "real")])),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "R", name: "real")),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A", name: "a")])),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "A", name: "b"), onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			try await provider.moveFile(from: CloudPath("/alias/a"), to: CloudPath("/real/b"))
+
+			let request = try #require(requests.requests.first)
+			#expect([request.httpMethod, request.url?.path] == ["PATCH", "/drive/v3/files/A"])
+			#expect(URLProtocolMock.queryParameter("addParents", of: request) == nil)
+			#expect(URLProtocolMock.queryParameter("removeParents", of: request) == nil)
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		// MARK: - Mutation Guards
+
+		@Test
+		func mutationGuardsSendNoRequestBeyondResolution() async throws {
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder))
+
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try GoogleDriveCloudProvider(client: .mocked()) }
+		}
+
+		/// A shortcut without its target's type is a symbolic link, which is deleted as a file and never replaced.
+		@Test
+		func shortcutWithoutTargetTypeIsDeletedAsFile() async throws {
+			let requests = RequestRecorder()
+			let link = GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "link", targetID: "T", targetMimeType: nil)])
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: link),
+				URLProtocolMock.handler(body: link),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFolder(at: CloudPath("/link")) }
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(content: "content"), to: CloudPath("/link"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			try await provider.deleteFile(at: CloudPath("/link"))
+
+			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["DELETE", "/drive/v3/files/S"]])
+		}
+
+		/// An item without a MIME type is neither a file nor a folder, even with shortcut details.
+		@Test
+		func itemWithoutMIMETypeIsDeletedAsNeither() async throws {
+			let items = [#"{"id":"X","name":"x"}"#, #"{"id":"Y","name":"y","shortcutDetails":{"targetId":"T","targetMimeType":"application/vnd.google-apps.folder"}}"#, #"{"id":"Z","name":"z","shortcutDetails":{"targetId":"U","targetMimeType":"text/plain"}}"#]
+			URLProtocolMock.requestHandler = items.map { URLProtocolMock.handler(body: GoogleDriveMockResponse.files([$0])) }
+
+			for name in ["x", "y"] {
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(name)") { try await provider.deleteFile(at: CloudPath("/\(name)")) }
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(name)") { try await provider.deleteFolder(at: CloudPath("/\(name)")) }
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(name)") { try await provider.fetchItemList(forFolderAt: CloudPath("/\(name)"), withPageToken: nil) }
+			}
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/z"), to: tmpDirURL.appendingPathComponent("z"), progress: nil, onTaskCreation: nil) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func shortcutToFolderIsDeletedAsFolder() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "link", targetID: "T", targetMimeType: GoogleDriveJSON.folderMimeType)])),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFile(at: CloudPath("/link")) }
+			try await provider.deleteFolder(at: CloudPath("/link"))
+
+			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["DELETE", "/drive/v3/files/S"]])
+		}
+
+		// MARK: - Replacing Uploads
+
+		/// The cached file was moved away or trashed, so the folder's lookup finds no file, and the upload creates a new one.
+		@Test
+		func replacingUploadOfMovedFileCreatesNewFile() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = downloadPreparation() + [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				GoogleDriveMockResponse.session(onRequest: requests.record),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "N", name: "file.txt", size: 12))
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+
+			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["POST", "/upload/drive/v3/files"]])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func uploadWithoutReplacingOntoOtherFileThrowsItemAlreadyExists() async throws {
+			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "G", name: "file.txt")]))]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -558,10 +731,10 @@ extension UnitTests {
 				GoogleDriveMutationCase(name: "delete folder", preparation: [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder)], success: URLProtocolMock.handler(statusCode: 204)) { provider in
 					try await provider.deleteFolder(at: CloudPath("/folder"))
 				},
-				GoogleDriveMutationCase(name: "move file", preparation: [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder), URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile)], success: URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "renamed.txt"))) { provider in
+				GoogleDriveMutationCase(name: "move file", preparation: [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile), URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder)], success: URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "renamed.txt"))) { provider in
 					try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
 				},
-				GoogleDriveMutationCase(name: "move folder", preparation: [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder), URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder)], success: URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "D", name: "renamed"))) { provider in
+				GoogleDriveMutationCase(name: "move folder", preparation: [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder), URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder)], success: URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "D", name: "renamed"))) { provider in
 					try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/renamed"))
 				}
 			]
@@ -607,34 +780,6 @@ extension UnitTests {
 			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
 		}
 
-		// MARK: - Paths
-
-		@Test
-		func onlyItemNameChangedWorksWithFolders() {
-			let oldCloudPath = CloudPath("/AAAAAA/BBBBBBB")
-			let newCloudPathOnlyFolderNameChanged = CloudPath("/AAAAAA/CCCCCCC")
-			#expect(provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathOnlyFolderNameChanged))
-
-			let newCloudPathWithParentFolderChanged = CloudPath("/DDDDDDD/BBBBBBB")
-			#expect(!provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathWithParentFolderChanged))
-
-			let newCloudPathParentFolderAndFolderNameChanged = CloudPath("/DDDDDDD/CCCCCCC")
-			#expect(!provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathParentFolderAndFolderNameChanged))
-		}
-
-		@Test
-		func onlyItemNameChangedWorksWithFiles() {
-			let oldCloudPath = CloudPath("/AAAAAA/test.txt")
-			let newCloudPathOnlyFileNameChanged = CloudPath("/AAAAAA/renamedTest.txt")
-			#expect(provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathOnlyFileNameChanged))
-
-			let newCloudPathWithChangedPath = CloudPath("/DDDDDDD/BBBBBBB/test.txt")
-			#expect(!provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathWithChangedPath))
-
-			let newCloudPathWithPathAndFileNameChanged = CloudPath("/DDDDDDD/CCCCCCC/renamedAgainTest.txt")
-			#expect(!provider.onlyItemNameChangedBetween(oldCloudPath, and: newCloudPathWithPathAndFileNameChanged))
-		}
-
 		// MARK: - Helpers
 
 		/// The responses of the name lookup and the metadata request of `/file.txt`, before its download.
@@ -653,6 +798,28 @@ extension UnitTests {
 			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)
 			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
 		}
+	}
+}
+
+/// Hands out a fixed token and runs a hook before handing out the token of one call, i.e., before that request is sent.
+private final class HookedTokenSource: BearerTokenSource {
+	private let state = OSAllocatedUnfairLock<(callCount: Int, hooks: [Int: @Sendable () async throws -> Void])>(initialState: (0, [:]))
+
+	func setHook(atCall call: Int, _ hook: @escaping @Sendable () async throws -> Void) {
+		state.withLock { $0.hooks[call] = hook }
+	}
+
+	func accessToken() async throws -> String {
+		let hook = state.withLock { state in
+			state.callCount += 1
+			return state.hooks.removeValue(forKey: state.callCount)
+		}
+		try await hook?()
+		return "TOKEN"
+	}
+
+	func refresh(rejecting accessToken: String) async throws -> String {
+		return "TOKEN"
 	}
 }
 

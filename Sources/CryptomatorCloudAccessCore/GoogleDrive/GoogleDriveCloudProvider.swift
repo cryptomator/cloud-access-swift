@@ -71,10 +71,9 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let localFile = try LocalUploadFile(localURL)
+		let upload = try await preflight.prepareUpload(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
 		let phases = Progress.phases(of: progress, 999)
-		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		let metadata = try await uploadFile(for: parentItem, from: localFile, to: cloudPath, replaceExisting: replaceExisting, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(for: upload.parent, replacing: upload.existing, from: upload.file, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -82,50 +81,36 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		if try await checkForItemExistence(at: cloudPath) {
-			throw CloudProviderError.itemAlreadyExists
-		}
-		let parentItem = try await resolveParentPath(forItemAt: cloudPath)
-		try Task.checkCancellation()
+		let parentItem = try await preflight.prepareCreateFolder(at: cloudPath)
 		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
 	}
 
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
+		let item = try await preflight.resolveSource(at: cloudPath, type: .file, operation: "deleteFile")
+		try await deleteItem(for: item)
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
-	}
-
-	private func deleteItem(at cloudPath: CloudPath) async throws {
-		let item = try await resolvePath(forItemAt: cloudPath)
-		try Task.checkCancellation()
+		let item = try await preflight.resolveSource(at: cloudPath, type: .folder, operation: "deleteFolder")
 		try await deleteItem(for: item)
 	}
 
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .file, operation: "moveFile")
+		try await moveItem(for: move.source, from: move.sourceParent, toParent: move.targetParent, targetCloudPath: targetCloudPath)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
-	}
-
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		if try await checkForItemExistence(at: targetCloudPath) {
-			throw CloudProviderError.itemAlreadyExists
-		}
-		let item = try await resolvePath(forItemAt: sourceCloudPath)
-		try await moveItem(for: item, from: sourceCloudPath, to: targetCloudPath)
+		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .folder, operation: "moveFolder")
+		try await moveItem(for: move.source, from: move.sourceParent, toParent: move.targetParent, targetCloudPath: targetCloudPath)
 	}
 
 	// MARK: - Operations
@@ -139,7 +124,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func fetchItemList(for item: GoogleDriveItem, pageToken: String?) async throws -> CloudItemList {
-		guard item.resolvedItemType == .folder else {
+		guard item.effectiveItemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		return try await perform("fetchItemList(for: \(item.identifier), pageToken: \(pageToken ?? "nil"))") {
@@ -182,7 +167,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		guard item.resolvedItemType == .file else {
+		guard item.effectiveItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: isReachedThroughShortcut(item))
@@ -196,22 +181,11 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	// swiftlint:disable:next function_parameter_count
-	private func uploadFile(for parentItem: GoogleDriveItem, from localFile: LocalUploadFile, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		let existingItem: GoogleDriveItem?
-		do {
-			let item = try await resolvePath(forItemAt: cloudPath)
-			if !replaceExisting || item.resolvedItemType == .folder {
-				throw CloudProviderError.itemAlreadyExists
-			}
-			existingItem = item
-		} catch CloudProviderError.itemNotFound {
-			existingItem = nil
-		}
-		try Task.checkCancellation()
+	private func uploadFile(for parentItem: GoogleDriveItem, replacing existingItem: GoogleDriveItem?, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		return try await perform("uploadFile(for: \(parentItem.identifier), from: \(localFile.url), to: \(cloudPath.path))") {
 			let file = try await client.upload(from: localFile, name: cloudPath.lastPathComponent, parentID: parentItem.resolvedIdentifier, existingFileID: existingItem?.resolvedIdentifier, progress: progress, onTaskCreation: onTaskCreation)
 			// The cache keeps a replaced shortcut at its path, so that deleting the path deletes the shortcut, not the target that received the content.
-			try identifierCache.addOrUpdate(existingItem ?? GoogleDriveItem(cloudPath: cloudPath, file: file))
+			try identifierCache.addOrUpdate(existingItem ?? GoogleDriveItem(cloudPath: cloudPath, file: file), ifStillBelow: parentItem)
 			return try convertToCloudItemMetadata(file, at: cloudPath)
 		}
 	}
@@ -221,7 +195,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 			let folder = try await withoutCancellation {
 				try await self.client.createFolder(name: name, parentID: parentItem.resolvedIdentifier)
 			}
-			try identifierCache.addOrUpdate(GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: folder))
+			try identifierCache.addOrUpdate(GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: folder), ifStillBelow: parentItem)
 		}
 	}
 
@@ -235,38 +209,36 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		}
 	}
 
-	/// Moves a shortcut itself, not its target, and moves out of and into the target of a shortcut to a folder.
-	private func moveItem(for sourceItem: GoogleDriveItem, from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
-		var addParents: String?
-		var removeParents: String?
-		if !onlyItemNameChangedBetween(sourceCloudPath, and: targetCloudPath) {
-			let oldParentItem = try await resolveParentPath(forItemAt: sourceCloudPath)
-			let newParentItem = try await resolveParentPath(forItemAt: targetCloudPath)
-			addParents = newParentItem.resolvedIdentifier
-			removeParents = oldParentItem.resolvedIdentifier
-		}
-		try Task.checkCancellation()
-		try await perform("moveItem(for: \(sourceItem.identifier), from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") { [addParents, removeParents] in
+	/**
+	 Moves a shortcut itself, not its target, and moves out of and into the target of a shortcut to a folder.
+
+	 It sends no parent change if the source's folder and the target's folder resolve to the same identifier, so that a move through a shortcut to the folder that holds the item is a rename too.
+	 */
+	private func moveItem(for sourceItem: GoogleDriveItem, from sourceParentItem: GoogleDriveItem, toParent targetParentItem: GoogleDriveItem, targetCloudPath: CloudPath) async throws {
+		let isRename = sourceParentItem.resolvedIdentifier == targetParentItem.resolvedIdentifier
+		let addParents = isRename ? nil : targetParentItem.resolvedIdentifier
+		let removeParents = isRename ? nil : sourceParentItem.resolvedIdentifier
+		try await perform("moveItem(for: \(sourceItem.identifier), from: \(sourceItem.cloudPath.path), to: \(targetCloudPath.path))") {
 			let file = try await withoutCancellation {
 				try await self.client.update(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, addParents: addParents, removeParents: removeParents, fields: GoogleDriveCloudProvider.moveFields)
 			}
 			try identifierCache.invalidate(sourceItem)
-			try identifierCache.addOrUpdate(GoogleDriveItem(cloudPath: targetCloudPath, file: file))
+			try identifierCache.addOrUpdate(GoogleDriveItem(cloudPath: targetCloudPath, file: file), ifStillBelow: targetParentItem)
 		}
 	}
 
 	// MARK: - Resolve Path
 
-	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> GoogleDriveItem {
-		return try await identifierCache.resolvePath(forItemAt: cloudPath, lookUpChild: getGoogleDriveItem(name:parentItem:))
+	private var preflight: IdentifierAddressedPreflight<GoogleDriveItem> {
+		return IdentifierAddressedPreflight(cache: identifierCache, providerName: "GoogleDriveCloudProvider", lookUp: getGoogleDriveItem(name:parentItem:))
 	}
 
-	private func resolveParentPath(forItemAt cloudPath: CloudPath) async throws -> GoogleDriveItem {
-		return try await identifierCache.resolveParentPath(forItemAt: cloudPath, lookUpChild: getGoogleDriveItem(name:parentItem:))
+	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> GoogleDriveItem {
+		return try await preflight.resolve(at: cloudPath)
 	}
 
 	/**
-	 Searches the folder belonging to `parentItem.identifier` for an item with the same `name`.
+	 Searches the folder that `parentItem` leads to (`resolvedIdentifier`) for an item named `name`, and returns `nil` if it holds none.
 
 	 This is necessary because Google Drive does not use normal paths, but only works with (parent-)identifiers.
 
@@ -276,7 +248,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 
 	 Workaround for cyrillic names: https://stackoverflow.com/a/47282129/1759462
 	 */
-	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) async throws -> GoogleDriveItem {
+	private func getGoogleDriveItem(name: String, parentItem: GoogleDriveItem) async throws -> GoogleDriveItem? {
 		let query = GoogleDriveClient.query(inFolder: parentItem.resolvedIdentifier, named: name)
 		var pageToken: String?
 		while true {
@@ -287,7 +259,7 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 				return try GoogleDriveItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), file: file)
 			}
 			guard let nextPageToken = fileList.nextPageToken else {
-				throw CloudProviderError.itemNotFound
+				return nil
 			}
 			try Task.checkCancellation()
 			pageToken = nextPageToken
@@ -349,11 +321,5 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		default:
 			return error
 		}
-	}
-
-	func onlyItemNameChangedBetween(_ lhs: CloudPath, and rhs: CloudPath) -> Bool {
-		let lhsWithoutItemName = lhs.deletingLastPathComponent()
-		let rhsWithoutItemName = rhs.deletingLastPathComponent()
-		return lhsWithoutItemName == rhsWithoutItemName
 	}
 }

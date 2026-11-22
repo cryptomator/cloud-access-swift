@@ -317,6 +317,115 @@ extension UnitTests {
 			#expect(lookupCount == 2)
 			#expect(cache.get(CloudPath("/foo/bar")) == nil)
 		}
+
+		/// Removing the last component of such a path never reaches the root, so it throws before any lookup instead of resolving to an item it doesn't name.
+		@Test(arguments: ["/../x", "/..", "a/b", "x"])
+		func resolvePathOfPathThatNeverReachesRootThrowsWithoutLookup(path: String) async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			var lookupCount = 0
+
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				try await cache.resolvePath(forItemAt: CloudPath(path)) { name, parentItem in
+					lookupCount += 1
+					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .folder)
+				}
+			}
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) {
+				try await cache.resolveParentPath(forItemAt: CloudPath(path).appendingPathComponent("y")) { name, parentItem in
+					lookupCount += 1
+					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .folder)
+				}
+			}
+			#expect(lookupCount == 0)
+		}
+
+		/// An item left below an empty slot by a write without the parent check wasn't cached below the item now saved there.
+		@Test
+		func saveIntoEmptySlotRemovesItemsLeftBelowIt() throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo/bar"), identifier: "B", itemType: .file))
+
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+
+			#expect(cache.get(CloudPath("/foo/bar")) == nil)
+		}
+
+		/// A write without the parent check can cache a folder after the item of its ancestor was removed, so the folder and the items below it may belong to a folder that moved elsewhere.
+		@Test
+		func itemsBelowMissingAncestorAreNeitherConnectedNorStartingPoint() async throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let orphan = BoxItem(cloudPath: CloudPath("/gone/sub"), identifier: "S", itemType: .folder)
+			try cache.addOrUpdate(orphan)
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/gone/sub/x"), identifier: "S/x", itemType: .file))
+			var lookups: [String] = []
+
+			#expect(cache.isConnected(BoxItem.rootItem))
+			#expect(!cache.isConnected(orphan))
+			#expect(cache.itemWithParent(at: CloudPath("/gone/sub/x")) == nil)
+			#expect(try !cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/gone/sub/y"), identifier: "S/y", itemType: .file), ifStillBelow: orphan))
+			#expect(cache.get(CloudPath("/gone/sub/y")) == nil)
+			let item = try await cache.resolvePath(forItemAt: CloudPath("/gone/sub/x")) { name, parentItem in
+				lookups.append("\(parentItem.identifier)/\(name)")
+				return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: "\(parentItem.identifier)/\(name)", itemType: name == "x" ? .file : .folder)
+			}
+
+			#expect(lookups == ["0/gone", "0/gone/sub", "0/gone/sub/x"])
+			#expect(item.identifier == "0/gone/sub/x")
+			#expect(cache.itemWithParent(at: item.cloudPath)?.parent.identifier == "0/gone/sub")
+		}
+
+		/// The pair is read only if every item from the root to the path is cached, so a shorter connected part of the path is never taken for the item and its folder.
+		@Test
+		func itemWithParentNeedsEveryItemOnPath() throws {
+			let cache = try IdentifierCache<BoxItem>()
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder))
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo/gone/x"), identifier: "X", itemType: .file))
+
+			#expect(cache.itemWithParent(at: CloudPath("/foo/gone/x")) == nil)
+			#expect(cache.itemWithParent(at: CloudPath("/foo"))?.parent == BoxItem.rootItem)
+		}
+
+		/// A file has no items below it, so an item cached below one, e.g., by a listing that is still running when another client replaces the folder with a file, wasn't found there.
+		@Test
+		func itemsBelowItemThatIsNoFolderAreNotConnected() throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let subfolder = BoxItem(cloudPath: CloudPath("/file/sub"), identifier: "S", itemType: .folder)
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/file"), identifier: "F", itemType: .file))
+			try cache.addOrUpdate(subfolder)
+
+			#expect(!cache.isConnected(subfolder))
+			#expect(cache.itemWithParent(at: subfolder.cloudPath) == nil)
+			#expect(try !cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/file/sub/x"), identifier: "S/x", itemType: .file), ifStillBelow: subfolder))
+		}
+
+		/// An item that another write replaced at its path is no longer connected, although an item is cached there.
+		@Test
+		func replacedItemIsNotConnected() throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let folder = BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder)
+			try cache.addOrUpdate(folder)
+
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "G", itemType: .folder))
+
+			#expect(!cache.isConnected(folder))
+		}
+
+		@Test
+		func conditionalAddWritesOnlyBelowStillCachedParent() throws {
+			let cache = try IdentifierCache<BoxItem>()
+			let parentItem = BoxItem(cloudPath: CloudPath("/foo"), identifier: "F", itemType: .folder)
+			try cache.addOrUpdate(parentItem)
+			let firstChild = BoxItem(cloudPath: CloudPath("/foo/a"), identifier: "A", itemType: .file)
+			let secondChild = BoxItem(cloudPath: CloudPath("/foo/b"), identifier: "B", itemType: .file)
+
+			let wroteFirstChild = try cache.addOrUpdate(firstChild, ifStillBelow: parentItem)
+			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/foo"), identifier: "G", itemType: .folder))
+			let wroteSecondChild = try cache.addOrUpdate(secondChild, ifStillBelow: parentItem)
+
+			#expect(wroteFirstChild)
+			#expect(!wroteSecondChild)
+			#expect(cache.get(secondChild.cloudPath) == nil)
+		}
 	}
 
 	struct IdentifierCacheDatabaseTests {

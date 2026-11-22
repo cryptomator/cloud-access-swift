@@ -14,6 +14,7 @@ import Testing
 extension UnitTests {
 	final class MicrosoftGraphCloudProviderTests {
 		private static let fileItem = #"{"id":"F","name":"file.txt","size":7,"file":{}}"#
+		private static let folderItem = #"{"id":"D","name":"folder","folder":{}}"#
 		private static let remoteFolderItem = #"{"id":"shortcut","name":"shared","remoteItem":{"id":"remote","folder":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let remoteFileItem = #"{"id":"fileShortcut","name":"shared.txt","remoteItem":{"id":"remoteFile","file":{},"parentReference":{"driveId":"remoteDrive"}}}"#
 		private static let downloadURL = "https://content.example.com/dl/SECRET%2FPATH?tempauth=SECRET%3D"
@@ -786,7 +787,7 @@ extension UnitTests {
 
 			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/Folder/renamed.txt"))
 
-			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/Folder:", "/v1.0/drives/D2/items/P:/renamed.txt:", "/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/Folder:", "/v1.0/me/drive/items/root:/file.txt:", "/v1.0/drives/D2/items/P:/renamed.txt:", "/v1.0/me/drive/items/F"])
 			let request = try #require(requests.requests.last)
 			#expect(request.httpMethod == "PATCH")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
@@ -805,7 +806,7 @@ extension UnitTests {
 
 			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/Folder/renamed.txt"))
 
-			#expect(requests.requests.map(\.url?.path) == ["/v1.0/drives/D/items/root:/Folder:", "/v1.0/drives/D/items/P:/renamed.txt:", "/v1.0/drives/D/items/root:/file.txt:", "/v1.0/drives/D/items/F"])
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/drives/D/items/root:/Folder:", "/v1.0/drives/D/items/root:/file.txt:", "/v1.0/drives/D/items/P:/renamed.txt:", "/v1.0/drives/D/items/F"])
 			let request = try #require(requests.requests.last)
 			#expect(try (["@odata.type": "#microsoft.graph.driveItem", "name": "renamed.txt", "parentReference": ["id": "P"]] as NSDictionary) == MicrosoftGraphCloudProviderTests.jsonBody(of: request))
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -828,6 +829,95 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		// MARK: - Mutation Guards
+
+		@Test
+		func mutationGuardsSendNoRequestBeyondResolution() async throws {
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem), folder: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem), missing: URLProtocolMock.handler(statusCode: 404))
+
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try MicrosoftGraphCloudProvider(client: .mocked()) }
+		}
+
+		/// The target is looked up in its folder, so an item that replaced the cached one is found there without a request by the cached identifier.
+		@Test
+		func createFolderJudgesTargetByLookupNotCachedItem() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem),
+				URLProtocolMock.handler(body: #"{"id":"X","name":"folder","folder":{}}"#, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.createFolder(at: CloudPath("/folder")) }
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/folder:"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		// MARK: - Cancellation
+
+		/// A mutation's request is its commit point, so it runs with its retries also if the task is cancelled during the first attempt.
+		@Test
+		func cancelledMutationsStillFinishTheirRequests() async throws {
+			let file = URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem)
+			let folder = URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem)
+			let notFound = URLProtocolMock.handler(statusCode: 404)
+			let cases = [
+				MicrosoftGraphMutationCase(name: "create folder", preparation: [notFound], success: URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.folderItem)) { try await $0.createFolder(at: CloudPath("/folder")) },
+				MicrosoftGraphMutationCase(name: "delete file", preparation: [file], success: URLProtocolMock.handler(statusCode: 204)) { try await $0.deleteFile(at: CloudPath("/file.txt")) },
+				MicrosoftGraphMutationCase(name: "delete folder", preparation: [folder], success: URLProtocolMock.handler(statusCode: 204)) { try await $0.deleteFolder(at: CloudPath("/folder")) },
+				MicrosoftGraphMutationCase(name: "move file", preparation: [file, notFound], success: URLProtocolMock.handler(body: #"{"id":"F","name":"renamed.txt","file":{}}"#)) { try await $0.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt")) },
+				MicrosoftGraphMutationCase(name: "move folder", preparation: [folder, notFound], success: URLProtocolMock.handler(body: #"{"id":"D","name":"renamed","folder":{}}"#)) { try await $0.moveFolder(from: CloudPath("/folder"), to: CloudPath("/renamed")) }
+			]
+			for mutationCase in cases {
+				let provider = try MicrosoftGraphCloudProvider(client: .mocked())
+				let canceller = TaskCanceller<Void>()
+				URLProtocolMock.requestHandler = mutationCase.preparation + [
+					URLProtocolMock.handler(statusCode: 503, onRequest: { _ in
+						canceller.cancel()
+					}),
+					mutationCase.success
+				]
+
+				let task = canceller.start {
+					try await mutationCase.operation(provider)
+				}
+
+				try await cancellingValue(of: task)
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(mutationCase.name)")
+			}
+		}
+
+		/// A cancellation that arrives with the last lookup's response stops the mutation before its request.
+		@Test
+		func cancellationDuringLastLookupStopsMutationBeforeRequest() async throws {
+			let cases = [
+				MicrosoftGraphLookupCase(name: "createFolder", lookupPath: "/v1.0/me/drive/items/root:/subFolder:", response: URLProtocolMock.handler(statusCode: 404)) { try await $0.createFolder(at: CloudPath("/subFolder")) },
+				MicrosoftGraphLookupCase(name: "deleteFile", lookupPath: "/v1.0/me/drive/items/root:/file.txt:", response: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem)) { try await $0.deleteFile(at: CloudPath("/file.txt")) }
+			]
+			for testCase in cases {
+				let provider = try MicrosoftGraphCloudProvider(client: .mocked())
+				let canceller = TaskCanceller<Void>()
+				let requests = RequestRecorder()
+				URLProtocolMock.requestHandler = [
+					{ request in
+						requests.record(request)
+						canceller.cancel()
+						return try testCase.response(request)
+					},
+					URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.folderItem)
+				]
+
+				let task = canceller.start {
+					try await testCase.operation(provider)
+				}
+
+				await #expect(throws: CancellationError.self, "\(testCase.name)") { try await cancellingValue(of: task) }
+				#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["GET", testCase.lookupPath]], "\(testCase.name)")
+				#expect(URLProtocolMock.requestHandler.count == 1, "\(testCase.name)")
+			}
+		}
+
 		// MARK: - Helpers
 
 		/// The responses of the path lookup and the metadata request of `/file.txt`, before its download.
@@ -845,12 +935,12 @@ extension UnitTests {
 			return [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(body: #"{"uploadUrl":"https://upload.example.com/up/TOKEN"}"#)]
 		}
 
-		/// The responses of the lookups before a move of `/file.txt` to `/Folder/renamed.txt` with an empty cache: of the folder, of the target, which isn't found, and of the source.
+		/// The responses of the lookups before a move of `/file.txt` to `/Folder/renamed.txt` with an empty cache: of the folder, of the source, and of the target, which isn't found.
 		private func movePreparation(folderItem: String, onRequest: @escaping @Sendable (URLRequest) -> Void) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
 			return [
 				URLProtocolMock.handler(body: folderItem, onRequest: onRequest),
-				URLProtocolMock.handler(statusCode: 404, onRequest: onRequest),
-				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: onRequest)
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: onRequest),
+				URLProtocolMock.handler(statusCode: 404, onRequest: onRequest)
 			]
 		}
 
@@ -870,4 +960,21 @@ extension UnitTests {
 			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
 		}
 	}
+}
+
+private struct MicrosoftGraphLookupCase {
+	let name: String
+	/// The path of the lookup that precedes the mutation's request.
+	let lookupPath: String
+	let response: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
+	let operation: @Sendable (MicrosoftGraphCloudProvider) async throws -> Void
+}
+
+private struct MicrosoftGraphMutationCase {
+	let name: String
+	/// The responses to the requests before the mutation's request.
+	let preparation: [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)]
+	/// The response to the retry of the mutation's request.
+	let success: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)
+	let operation: @Sendable (MicrosoftGraphCloudProvider) async throws -> Void
 }

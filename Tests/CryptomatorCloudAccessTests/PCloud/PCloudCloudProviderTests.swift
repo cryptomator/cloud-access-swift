@@ -282,24 +282,59 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
-		/// pCloud numbers files and folders separately, so a file's identifier must never be sent as a folder's, or the reverse.
+		/// pCloud numbers files and folders separately, so a file's identifier sent as a folder's, or the reverse, would name another item. Its lookups list the whole folder, so the missing source's listing holds the existing target.
 		@Test
-		func neverSendsAnIdentifierAsOneOfTheOtherType() async throws {
-			let localURL = try makeLocalFile()
-			let rootWithFolder = PCloudProviderTestResponse.rootWithFolder
+		func mutationGuardsSendNoRequestBeyondResolution() async throws {
 			let rootWithFile = PCloudProviderTestResponse.rootWithFile
-			let cases = [
-				ProviderCase(name: "deleteFile of a folder", responses: [rootWithFolder], operation: { try await $0.deleteFile(at: CloudPath("/folder")) }, expected: CloudProviderError.itemTypeMismatch),
-				ProviderCase(name: "deleteFolder of a file", responses: [rootWithFile], operation: { try await $0.deleteFolder(at: CloudPath("/file.txt")) }, expected: CloudProviderError.itemTypeMismatch),
-				ProviderCase(name: "moveFile of a folder", responses: [rootWithFolder], operation: { try await $0.moveFile(from: CloudPath("/folder"), to: CloudPath("/renamed")) }, expected: CloudProviderError.itemTypeMismatch),
-				ProviderCase(name: "moveFolder of a file", responses: [rootWithFile], operation: { try await $0.moveFolder(from: CloudPath("/file.txt"), to: CloudPath("/renamed")) }, expected: CloudProviderError.itemTypeMismatch),
-				ProviderCase(name: "lookup below a file", responses: [rootWithFile], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.itemNotFound),
-				ProviderCase(name: "createFolder in a file", responses: [rootWithFile], operation: { try await $0.createFolder(at: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.parentFolderDoesNotExist),
-				ProviderCase(name: "uploadFile into a file", responses: [rootWithFile], operation: { _ = try await $0.uploadFile(from: localURL, to: CloudPath("/file.txt/sub"), replaceExisting: false, progress: nil, onTaskCreation: nil) }, expected: CloudProviderError.parentFolderDoesNotExist),
-				ProviderCase(name: "move into a file", responses: [rootWithFile], operation: { try await $0.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.parentFolderDoesNotExist)
-			]
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(), file: URLProtocolMock.handler(body: rootWithFile), folder: URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder), missing: URLProtocolMock.handler(body: rootWithFile))
 
-			try await expectErrorsConsumingAllResponses(cases)
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try PCloudCloudProvider(client: .mocked()) }
+			try await expectErrorsConsumingAllResponses([
+				ProviderCase(name: "lookup below a file", responses: [rootWithFile], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt/sub")) }, expected: CloudProviderError.itemNotFound)
+			])
+		}
+
+		/// The folder lookup prefers the folder of the name even though the cache holds the file of that name.
+		@Test
+		func replacingUploadOntoCachedFileWithFolderOfSameNameThrowsItemAlreadyExists() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "x")])),
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFileAndFolderNamedX(fileFirst: true))
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { _ = try await provider.uploadFile(from: makeLocalFile(), to: CloudPath("/x"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A mutation's request is its commit point, so it runs outside the task, whose cancellation it doesn't see.
+		@Test
+		func cancelledMutationsSendTheirRequestsOutsideCancelledTask() async throws {
+			let rootWithFile = PCloudProviderTestResponse.rootWithFile
+			let rootWithFolder = PCloudProviderTestResponse.rootWithFolder
+			let cases = [
+				MutationRequestCase(name: "createFolder", responses: [PCloudMockResponse.folder(id: 0), PCloudMockResponse.folder(id: 3)], operation: { try await $0.createFolder(at: CloudPath("/folder")) }),
+				MutationRequestCase(name: "deleteFile", responses: [rootWithFile, #"{"result":0}"#], operation: { try await $0.deleteFile(at: CloudPath("/file.txt")) }),
+				MutationRequestCase(name: "deleteFolder", responses: [rootWithFolder, #"{"result":0}"#], operation: { try await $0.deleteFolder(at: CloudPath("/folder")) }),
+				MutationRequestCase(name: "moveFile", responses: [rootWithFile, rootWithFile, PCloudMockResponse.file(id: 5, name: "renamed.txt")], operation: { try await $0.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt")) }),
+				MutationRequestCase(name: "moveFolder", responses: [rootWithFolder, rootWithFolder, PCloudMockResponse.folder(id: 3, name: "renamed")], operation: { try await $0.moveFolder(from: CloudPath("/folder"), to: CloudPath("/renamed")) })
+			]
+			for testCase in cases {
+				let tokenSource = PausingTokenSource(pausedCall: testCase.responses.count)
+				let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+				URLProtocolMock.requestHandler = testCase.responses.map { URLProtocolMock.handler(body: $0) }
+
+				let task = Task {
+					try await testCase.operation(provider)
+				}
+				await tokenSource.entered.wait()
+				task.cancel()
+				tokenSource.resume()
+
+				try await cancellingValue(of: task)
+				#expect(tokenSource.wasCancelled == false, "\(testCase.name)")
+				#expect(URLProtocolMock.requestHandler.isEmpty, "\(testCase.name)")
+			}
 		}
 
 		// MARK: - Paging
@@ -475,7 +510,7 @@ extension UnitTests {
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFile(at: CloudPath("/folder")) }
 
-			#expect(logCapture.messages.filter { $0.hasPrefix("PCloudCloudProvider: deleteFile(for: 3) failed with error:") }.count == 1)
+			#expect(logCapture.messages.filter { $0.hasPrefix("PCloudCloudProvider: deleteFile(at: /folder) failed with error:") }.count == 1)
 		}
 
 		// MARK: - Transfers
@@ -622,6 +657,13 @@ extension UnitTests {
 	}
 }
 
+/// A mutation whose request is the last of `responses`.
+private struct MutationRequestCase: Sendable {
+	let name: String
+	let responses: [String]
+	let operation: @Sendable (PCloudCloudProvider) async throws -> Void
+}
+
 private struct ProviderCase<Expected: Error & Equatable>: Sendable {
 	let name: String
 	let responses: [String]
@@ -663,6 +705,43 @@ private enum PCloudProviderTestResponse {
 		#expect(itemType == metadata.itemType, sourceLocation: sourceLocation)
 		#expect(Date(timeIntervalSince1970: 1_792_056_600) == metadata.lastModifiedDate, sourceLocation: sourceLocation)
 		#expect(size == metadata.size, sourceLocation: sourceLocation)
+	}
+}
+
+/// Hands out the stub login, and pauses the request of one call until the test resumes it, recording whether that request's task was cancelled then. A pCloud request reads its login inside its task.
+private final class PausingTokenSource: PCloudTokenSource {
+	let entered = TestSignal("login of the paused request")
+	private let pausedCall: Int
+	private let release = DispatchSemaphore(value: 0)
+	private let state = OSAllocatedUnfairLock<(callCount: Int, wasCancelled: Bool?)>(initialState: (0, nil))
+
+	init(pausedCall: Int) {
+		self.pausedCall = pausedCall
+	}
+
+	var wasCancelled: Bool? {
+		return state.withLock { $0.wasCancelled }
+	}
+
+	func resume() {
+		release.signal()
+	}
+
+	func login() throws -> PCloudLogin {
+		let call = state.withLock { state in
+			state.callCount += 1
+			return state.callCount
+		}
+		if call == pausedCall {
+			entered.fulfill()
+			if release.wait(timeout: testWaitDeadline()) == .timedOut {
+				Issue.record("The paused request was never resumed")
+			} else {
+				let isCancelled = Task.isCancelled
+				state.withLock { $0.wasCancelled = isCancelled }
+			}
+		}
+		return try PCloudCredential.stubTokenSource.login()
 	}
 }
 

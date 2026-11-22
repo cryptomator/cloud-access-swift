@@ -31,8 +31,10 @@ final class BoxClient: SplitSessionClient, Sendable {
 
 	// MARK: - Operations
 
-	func file(id: String) async throws -> BoxEntry {
-		return try await BoxJSON.decode(BoxEntry.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))"))))
+	/// - Parameter fields: The fields that the response carries besides `type`, `id` and `etag`, or `nil` for Box's standard fields.
+	func file(id: String, fields: String? = nil) async throws -> BoxEntry {
+		let parameters = fields.map { [("fields", $0)] } ?? []
+		return try await BoxJSON.decode(BoxEntry.self, from: data(HTTPClientSupport.request("GET", BoxClient.apiURL("/files/\(HTTPClientSupport.pathComponent(id))", parameters: parameters))))
 	}
 
 	func folder(id: String) async throws -> BoxEntry {

@@ -29,8 +29,9 @@ extension GoogleDriveItem {
 		return shortcut?.targetIdentifier ?? identifier
 	}
 
-	var resolvedItemType: CloudItemType {
-		return shortcut?.targetItemType ?? itemType
+	/// A shortcut's target's type, `.symlink` for a shortcut without a target type, and otherwise the item's own type. An item without a MIME type stays `.unknown`, even with shortcut details.
+	var effectiveItemType: CloudItemType {
+		return itemType == .unknown ? .unknown : (shortcut?.targetItemType ?? itemType)
 	}
 
 	init(cloudPath: CloudPath, file: GoogleDriveFile) throws {

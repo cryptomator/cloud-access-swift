@@ -42,6 +42,12 @@ extension UnitTests {
 			}
 		}
 
+		/// `SplitURLSession` records this error for a refused HTTPS→HTTP redirect, which a retry would only repeat.
+		@Test
+		func refusedDowngradeIsNotTransient() {
+			#expect(!HTTPClientSupport.isTransient(URLError(.appTransportSecurityRequiresSecureConnection)))
+		}
+
 		@Test
 		func hardenedConfigurationsCacheNothing() {
 			for configuration in [HTTPClientSupport.hardened(.default), HTTPClientSupport.hardenedBackground(identifier: "test", sharedContainerIdentifier: nil)] {
@@ -84,12 +90,13 @@ extension UnitTests {
 		func sanitizedErrorDropsFailingURLsOfNestedErrors() throws {
 			let url = try #require(URL(string: "https://www.example.com/exampleBucket/file.txt?X-Amz-Signature=0123abcd"))
 			let underlyingError = NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut, userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString])
-			let error = NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue), userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString, NSUnderlyingErrorKey: underlyingError])
+			let error = NSError(domain: kCFErrorDomainCFNetwork as String, code: Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue), userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString, NSURLErrorFailingURLPeerTrustErrorKey: "peer trust", NSUnderlyingErrorKey: underlyingError])
 
 			let sanitizedError = HTTPClientSupport.sanitized(error) as NSError
 
 			#expect((kCFErrorDomainCFNetwork as String) == sanitizedError.domain)
 			#expect(Int(CFNetworkErrors.cfErrorHTTPParseFailure.rawValue) == sanitizedError.code)
+			#expect(sanitizedError.userInfo[NSURLErrorFailingURLPeerTrustErrorKey] == nil)
 			#expect((sanitizedError.userInfo[NSUnderlyingErrorKey] as? URLError)?.code == .timedOut)
 			#expect(!String(describing: sanitizedError).contains("0123abcd"), "\(sanitizedError)")
 		}

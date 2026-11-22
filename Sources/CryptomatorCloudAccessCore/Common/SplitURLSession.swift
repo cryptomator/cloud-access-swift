@@ -27,10 +27,10 @@ private struct TaskRecord {
 	var recordedFailure: Error?
 
 	var body: SplitURLSession.Outcome.Body {
-		if downloadHandler != nil {
-			return downloadedBody
+		guard recordedFailure == nil else {
+			return .none
 		}
-		return recordedFailure == nil ? .data(accumulatedData) : .none
+		return downloadHandler == nil ? .data(accumulatedData) : downloadedBody
 	}
 
 	/// Returns whether the data exceeded the body limit, in which case the body is discarded and the task has to be cancelled.
@@ -59,7 +59,7 @@ private struct TaskRecord {
 				HTTPDebugLogger.logResponse(response, requestURL: requestURL, with: nil, or: nil, bodyLogging: bodyLogging, urlLogging: urlLogging)
 			}
 		}
-		resumer.resume(returning: SplitURLSession.Outcome(response: response, body: body, error: error, recordedFailure: recordedFailure))
+		resumer.resume(returning: SplitURLSession.Outcome(response: response, body: body, error: error.map(HTTPClientSupport.sanitized), recordedFailure: recordedFailure.map(HTTPClientSupport.sanitized)))
 	}
 }
 
@@ -108,8 +108,18 @@ final class SplitURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessio
 		hooks.didApplyChallengeDecision(task, decision)
 	}
 
-	/// Removes the `Authorization` header when a redirect changes the scheme, host or port, e.g., to a pre-signed download URL. Only foreground sessions call this. A background session follows redirects on its own.
+	/// Refuses a redirect from `https` to `http`, which would send the request and WebDAV's answer to the next challenge unencrypted. It records `URLError(.appTransportSecurityRequiresSecureConnection)`, the error that App Transport Security raises for such a redirect, and cancels the task. Otherwise it removes the `Authorization` header when a redirect changes the scheme, host or port, e.g., to a pre-signed download URL. Only foreground sessions call this. A background session follows every redirect on its own, downgrades included.
 	func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+		if response.url?.scheme?.lowercased() == "https", request.url?.scheme?.lowercased() == "http" {
+			records.withLock {
+				$0[task]?.recordedFailure = URLError(.appTransportSecurityRequiresSecureConnection)
+			}
+			CloudAccessDDLogDebug("SplitURLSessionDelegate: refused a redirect from HTTPS to \(HTTPDebugLogger.redactedURLString(request.url, urlLogging: .originOnly))")
+			completionHandler(nil)
+			// Ends the task without waiting for the body of the redirect.
+			task.cancel()
+			return
+		}
 		var request = request
 		if request.url?.hasSameOrigin(as: task.currentRequest?.url) != true {
 			request.setValue(nil, forHTTPHeaderField: "Authorization")
@@ -134,8 +144,15 @@ final class SplitURLSessionDelegate: NSObject, URLSessionDataDelegate, URLSessio
 
 	// MARK: - URLSessionDownloadDelegate
 
+	/// Skips the handler of a task with a recorded failure, e.g., a refused redirect, whose cancellation can arrive after the body of the redirect.
 	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-		guard let downloadHandler = records.withLock({ $0[downloadTask]?.downloadHandler }) else {
+		let downloadHandler = records.withLock { records -> SplitURLSession.DownloadHandler? in
+			guard let record = records[downloadTask], record.recordedFailure == nil else {
+				return nil
+			}
+			return record.downloadHandler
+		}
+		guard let downloadHandler else {
 			return
 		}
 		do {
@@ -163,7 +180,7 @@ private extension URLSessionTask {
 
  Downloads and uploads run on a transfer session with the given configuration, as download and upload tasks. Uploads are sent from a file, which is the only kind of upload a background session supports. Other requests run as data tasks on a foreground metadata session, because a background session doesn't support them. A download can also run on the metadata session. Background sessions are shared per identifier through `BackgroundURLSessionRegistry` and live for the process.
 
- Each call makes one attempt and returns its raw outcome, whatever its status code. Authentication, retries and the mapping of statuses to errors are up to the caller.
+ Each call makes one attempt and returns its raw outcome, whatever its status code. Its errors carry no failing URLs, because a URL can be a credential, e.g., a presigned URL. Authentication, retries and the mapping of statuses to errors are up to the caller. A foreground session refuses a redirect from `https` to `http`.
 
  Task cancellation is not forwarded to a running request, so a request returns only after its `URLSessionTask` has terminated. With `cancelsBeforeResume`, a cancellation that arrives before the task is resumed cancels the task instead.
  */
@@ -183,8 +200,9 @@ final class SplitURLSession: Sendable {
 
 		let response: URLResponse?
 		let body: Body
+		/// The transport error, without failing URLs.
 		let error: Error?
-		/// What a challenge handler, the body limit or a download handler recorded as the end of the task while it was running, usually a failure. It takes precedence over `error`, which may be the cancellation that it caused.
+		/// What a challenge handler, the body limit, a download handler or a refused HTTPS→HTTP redirect recorded as the end of the task while it was running, usually a failure. Like `error`, it carries no failing URLs. It takes precedence over `error`, which may be the cancellation that it caused. A task with a recorded failure has no body.
 		let recordedFailure: Error?
 
 		var data: Data? {

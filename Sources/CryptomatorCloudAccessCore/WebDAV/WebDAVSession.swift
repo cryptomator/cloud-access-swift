@@ -15,17 +15,28 @@ public enum WebDAVError: Error, Equatable {
 	case unexpectedResponse
 }
 
-/// Answers the per-task challenges of a WebDAV server, e.g., Basic or Digest, with the credential, and trusts the server certificate that the credential allows. The other session-level challenges, e.g., NTLM or a client certificate, get default handling.
+/// Answers the per-task challenges of a WebDAV server, e.g., Basic or Digest, with the credential, and trusts the server certificate that the credential allows. It refuses a password challenge from an `http` server to a task that started on `https`. The other session-level challenges, e.g., NTLM or a client certificate, get default handling.
 struct WebDAVChallengeHandler: SplitURLSession.ChallengeHandler {
 	private static let sessionWideAuthenticationMethods = [NSURLAuthenticationMethodServerTrust, NSURLAuthenticationMethodClientCertificate, NSURLAuthenticationMethodNTLM, NSURLAuthenticationMethodNegotiate]
 
 	let credential: WebDAVCredential
 
 	func decision(for challenge: URLAuthenticationChallenge, task: URLSessionTask) -> SplitURLSession.ChallengeDecision {
-		return WebDAVChallengeHandler.decision(authenticationMethod: challenge.protectionSpace.authenticationMethod, previousFailureCount: challenge.previousFailureCount, serverTrust: challenge.protectionSpace.serverTrust, credential: credential)
+		let protectionSpace = challenge.protectionSpace
+		let decision = WebDAVChallengeHandler.decision(authenticationMethod: protectionSpace.authenticationMethod, previousFailureCount: challenge.previousFailureCount, serverTrust: protectionSpace.serverTrust, isDowngrade: WebDAVChallengeHandler.isDowngrade(of: protectionSpace, originalURL: task.originalRequest?.url), credential: credential)
+		if (decision.failure as? URLError)?.code == .appTransportSecurityRequiresSecureConnection {
+			CloudAccessDDLogDebug("WebDAVChallengeHandler: refused the password challenge of \(HTTPDebugLogger.redactedURLString(task.currentRequest?.url, urlLogging: .originOnly)) for a task that started on HTTPS")
+		}
+		return decision
 	}
 
-	static func decision(authenticationMethod: String, previousFailureCount: Int, serverTrust: SecTrust?, credential: WebDAVCredential) -> SplitURLSession.ChallengeDecision {
+	/// Whether a server reached over `http` asks for the credential of a task that started on `https`. A background session follows a redirect from `https` to `http` without asking `SplitURLSessionDelegate`, which refuses it for a foreground session. A proxy doesn't count, because an HTTP proxy's protection space reads `http` for an `https` task too.
+	static func isDowngrade(of protectionSpace: URLProtectionSpace, originalURL: URL?) -> Bool {
+		return !protectionSpace.isProxy() && protectionSpace.protocol == NSURLProtectionSpaceHTTP && originalURL?.scheme?.lowercased() == "https"
+	}
+
+	/// - Parameter isDowngrade: Whether the challenge comes from a downgrade (`isDowngrade(of:originalURL:)`). A credential challenge from one is cancelled with `URLError(.appTransportSecurityRequiresSecureConnection)`, so that the password doesn't go out unencrypted.
+	static func decision(authenticationMethod: String, previousFailureCount: Int, serverTrust: SecTrust?, isDowngrade: Bool, credential: WebDAVCredential) -> SplitURLSession.ChallengeDecision {
 		if sessionWideAuthenticationMethods.contains(authenticationMethod) {
 			guard previousFailureCount < 1 else {
 				return SplitURLSession.ChallengeDecision(disposition: .cancelAuthenticationChallenge, credential: nil, failure: nil)
@@ -35,6 +46,9 @@ struct WebDAVChallengeHandler: SplitURLSession.ChallengeHandler {
 			}
 			return SplitURLSession.ChallengeDecision(disposition: .performDefaultHandling, credential: nil, failure: nil)
 		} else {
+			guard !isDowngrade else {
+				return SplitURLSession.ChallengeDecision(disposition: .cancelAuthenticationChallenge, credential: nil, failure: URLError(.appTransportSecurityRequiresSecureConnection))
+			}
 			guard previousFailureCount < 1 else {
 				return SplitURLSession.ChallengeDecision(disposition: .cancelAuthenticationChallenge, credential: nil, failure: WebDAVError.httpError(statusCode: 401))
 			}
@@ -58,19 +72,11 @@ final class WebDAVSession: Sendable {
 	 Creates a WebDAV session whose file downloads and uploads run on a background URL session, and whose other requests, including streamed folder listings, run on a foreground URL session.
 	 */
 	static func createBackgroundSession(credential: WebDAVCredential, sessionIdentifier: String, sharedContainerIdentifier: String?) -> WebDAVSession {
-		return WebDAVSession(credential: credential, configuration: backgroundConfiguration(sessionIdentifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: foregroundConfiguration())
+		return WebDAVSession(credential: credential, configuration: HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier), metadataConfiguration: HTTPClientSupport.hardened(.default))
 	}
 
 	convenience init(credential: WebDAVCredential) {
-		self.init(credential: credential, configuration: WebDAVSession.foregroundConfiguration(), metadataConfiguration: nil)
-	}
-
-	static func foregroundConfiguration() -> URLSessionConfiguration {
-		return HTTPClientSupport.hardened(.default)
-	}
-
-	static func backgroundConfiguration(sessionIdentifier: String, sharedContainerIdentifier: String?) -> URLSessionConfiguration {
-		return HTTPClientSupport.hardenedBackground(identifier: sessionIdentifier, sharedContainerIdentifier: sharedContainerIdentifier)
+		self.init(credential: credential, configuration: HTTPClientSupport.hardened(.default), metadataConfiguration: nil)
 	}
 
 	// MARK: - Requests
@@ -112,7 +118,7 @@ final class WebDAVSession: Sendable {
 	/**
 	 Returns the 2xx response of an attempt.
 
-	 - Throws: In this order: `WebDAVError.unexpectedResponse` for a body over the limit, the attempt's other recorded failure (e.g., of a challenge or a download handler), `CancellationError` if the attempt was cancelled, `WebDAVError.httpError` for a non-2xx status even with a transport error, the transport error without its URL, and `WebDAVError.unexpectedResponse` if there is no HTTP response.
+	 - Throws: In this order: `WebDAVError.unexpectedResponse` for a body over the limit, the attempt's other recorded failure (e.g., of a challenge or a download handler), `CancellationError` if the attempt was cancelled, `WebDAVError.httpError` for a non-2xx status even with a transport error, the transport error, and `WebDAVError.unexpectedResponse` if there is no HTTP response.
 	 */
 	static func successfulResponse(of outcome: SplitURLSession.Outcome) throws -> HTTPURLResponse {
 		if case let SplitURLSessionError.responseBodyTooLarge(limit)? = outcome.recordedFailure {
@@ -128,7 +134,7 @@ final class WebDAVSession: Sendable {
 		case let (httpResponse as HTTPURLResponse, _) where !(200 ... 299).contains(httpResponse.statusCode):
 			throw WebDAVError.httpError(statusCode: httpResponse.statusCode)
 		case let (_, .some(error)):
-			throw HTTPClientSupport.sanitized(error)
+			throw error
 		case let (httpResponse as HTTPURLResponse, nil):
 			return httpResponse
 		default:

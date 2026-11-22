@@ -41,24 +41,6 @@ extension UnitTests {
 			#expect(URL(string: "/cloud/remote.php/webdav/") == client.baseURL)
 		}
 
-		@Test
-		func testBackgroundConfiguration() {
-			let configuration = WebDAVSession.backgroundConfiguration(sessionIdentifier: "WebDAVClientTests", sharedContainerIdentifier: "group.test")
-
-			#expect(configuration.identifier == "WebDAVClientTests")
-			#expect(configuration.sharedContainerIdentifier == "group.test")
-		}
-
-		@Test
-		func configurationsAreHardened() {
-			for configuration in [WebDAVSession.foregroundConfiguration(), WebDAVSession.backgroundConfiguration(sessionIdentifier: "WebDAVClientTests", sharedContainerIdentifier: nil)] {
-				#expect(configuration.urlCache == nil)
-				#expect(configuration.urlCredentialStorage == nil)
-				#expect(configuration.httpCookieStorage != nil)
-				#expect(!(configuration.httpCookieStorage === HTTPCookieStorage.shared))
-			}
-		}
-
 		// MARK: - Routing
 
 		@Test
@@ -127,9 +109,9 @@ extension UnitTests {
 		}
 
 		@Test
-		func transportErrorWithSuccessfulResponseIsThrownWithoutURL() throws {
+		func transportErrorWithSuccessfulResponseIsThrown() throws {
 			let response = try #require(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: nil, headerFields: nil))
-			let outcome = SplitURLSession.Outcome(response: response, body: .none, error: URLError(.networkConnectionLost, userInfo: [NSURLErrorFailingURLErrorKey: baseURL]), recordedFailure: nil)
+			let outcome = SplitURLSession.Outcome(response: response, body: .none, error: URLError(.networkConnectionLost), recordedFailure: nil)
 
 			let error = try #require(throws: (any Error).self) { try WebDAVSession.successfulResponse(of: outcome) }
 			#expect(URLError(.networkConnectionLost) == (error as? URLError))

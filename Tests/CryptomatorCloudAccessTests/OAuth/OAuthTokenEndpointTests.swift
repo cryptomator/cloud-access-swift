@@ -62,7 +62,7 @@ extension UnitTests {
 			#expect(error.failingURL == nil)
 		}
 
-		/// A challenge handler records its failure as it is, so this error reaches the sanitization with its user info and underlying error.
+		/// `SplitURLSession` strips the URLs from a challenge handler's recorded failure but keeps the rest of its user info and its underlying error.
 		@Test
 		func otherErrorKeepsItsDetailsWithoutURLs() async throws {
 			let failingURL = try #require(URL(string: "https://auth.example.com/SENTINEL"))
@@ -129,12 +129,4 @@ private struct TokenErrorCase {
 	let statusCode: Int
 	let body: String
 	let expectedError: OAuthTokenEndpointError
-}
-
-private struct FailingChallengeHandler: SplitURLSession.ChallengeHandler {
-	let failure: any Error
-
-	func decision(for challenge: URLAuthenticationChallenge, task: URLSessionTask) -> SplitURLSession.ChallengeDecision {
-		return SplitURLSession.ChallengeDecision(disposition: .cancelAuthenticationChallenge, credential: nil, failure: failure)
-	}
 }

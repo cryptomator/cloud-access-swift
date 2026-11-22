@@ -54,7 +54,7 @@ public final class TLSCertificateValidator: Sendable {
 		}
 		// The handler cancels every challenge, so a cancelled request means that a challenge without a certificate was received.
 		if let error = outcome.error, !isCancellationError(error) {
-			throw HTTPClientSupport.sanitized(error)
+			throw error
 		}
 		throw TLSCertificateValidatorError.validationFailed
 	}

@@ -13,12 +13,6 @@ import Testing
 
 private struct ChallengeFailure: Error {}
 
-private struct RejectingChallengeHandler: SplitURLSession.ChallengeHandler {
-	func decision(for challenge: URLAuthenticationChallenge, task: URLSessionTask) -> SplitURLSession.ChallengeDecision {
-		return SplitURLSession.ChallengeDecision(disposition: .cancelAuthenticationChallenge, credential: nil, failure: ChallengeFailure())
-	}
-}
-
 extension UnitTests {
 	final class SplitURLSessionTests {
 		private let url = URL(string: "https://api.example.com/files/1/content")!
@@ -239,7 +233,7 @@ extension UnitTests {
 
 		@Test
 		func rejectedChallengeRecordsItsFailure() async throws {
-			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), challengeHandler: RejectingChallengeHandler())
+			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), challengeHandler: FailingChallengeHandler(failure: ChallengeFailure()))
 			let failureResponse = try #require(HTTPURLResponse(url: url, statusCode: 401, httpVersion: nil, headerFields: nil))
 			URLProtocolSequenceMock.steps = [.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 0, failureResponse: failureResponse))]
 
@@ -247,6 +241,42 @@ extension UnitTests {
 
 			#expect(outcome.recordedFailure is ChallengeFailure)
 			#expect(try isCancellationError(#require(outcome.error)))
+		}
+
+		// MARK: - Sanitizing
+
+		@Test
+		func transportErrorIsRecordedWithoutURL() async throws {
+			let failingURL = try #require(URL(string: "https://api.example.com/SENTINEL"))
+			URLProtocolMock.requestHandler = [{ _ in throw URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: failingURL]) }]
+
+			let outcome = try await session.data(URLRequest(url: url), bodyLimit: nil, bodyLogging: .logged)
+
+			let error = try #require(outcome.error as? URLError)
+			#expect(error.code == .timedOut)
+			#expect(error.failingURL == nil)
+			#expect(!"\(error.userInfo)".contains("SENTINEL"), "\(error.userInfo)")
+		}
+
+		@Test
+		func rejectedChallengeRecordsItsFailureWithoutURL() async throws {
+			let failingURL = try #require(URL(string: "https://api.example.com/SENTINEL"))
+			let underlyingError = URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: failingURL])
+			let failure = NSError(domain: "SplitURLSessionTests", code: 42, userInfo: ["Detail": "kept", NSURLErrorFailingURLErrorKey: failingURL, NSUnderlyingErrorKey: underlyingError])
+			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), challengeHandler: FailingChallengeHandler(failure: failure))
+			let failureResponse = try #require(HTTPURLResponse(url: url, statusCode: 401, httpVersion: nil, headerFields: nil))
+			URLProtocolSequenceMock.steps = [.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 0, failureResponse: failureResponse))]
+
+			let outcome = try await sequenceSession.data(URLRequest(url: url), bodyLimit: nil, bodyLogging: .logged)
+
+			let recordedFailure = try #require(outcome.recordedFailure) as NSError
+			#expect(recordedFailure.domain == "SplitURLSessionTests")
+			#expect(recordedFailure.code == 42)
+			#expect(recordedFailure.userInfo["Detail"] as? String == "kept")
+			#expect(recordedFailure.userInfo[NSURLErrorFailingURLErrorKey] == nil)
+			let sanitizedUnderlyingError = try #require(recordedFailure.userInfo[NSUnderlyingErrorKey] as? URLError)
+			#expect(sanitizedUnderlyingError.code == .timedOut)
+			#expect(sanitizedUnderlyingError.failingURL == nil)
 		}
 
 		// MARK: - Downloads
@@ -307,10 +337,112 @@ extension UnitTests {
 			#expect(authorizationHeaders == ["Bearer token", "Bearer token"])
 		}
 
+		@Test(arguments: ["http://download.example.com/files/1", "HTTP://download.example.com/files/1"])
+		func downgradeRedirectIsRefused(location: String) async throws {
+			let outcome = try await outcomeOfRedirect(from: url, to: location)
+
+			#expect(URLProtocolMock.requestHandler.count == 1, "The redirect was followed")
+			try expectRefusedDowngrade(outcome)
+		}
+
+		@Test
+		func downgradeRedirectOfADownloadIsRefused() async throws {
+			let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "http://download.example.com/files/1"]),
+				URLProtocolMock.handler(body: "content")
+			]
+
+			let outcome = try await download(to: stagingURL)
+
+			#expect(URLProtocolMock.requestHandler.count == 1, "The redirect was followed")
+			try expectRefusedDowngrade(outcome)
+			#expect(!FileManager.default.fileExists(atPath: stagingURL.path))
+		}
+
+		@Test
+		func refusedRedirectLogsOnlyTheOriginOfItsTarget() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+
+			_ = try await outcomeOfRedirect(from: url, to: "http://download.example.com/SECRET-PATH/file.txt?X-Amz-Signature=SECRET")
+
+			#expect(logCapture.joinedMessages.contains("refused a redirect from HTTPS to http://download.example.com/<redacted>"), "\(logCapture.joinedMessages)")
+			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
+		}
+
+		@Test
+		func plainHTTPRedirectIsFollowed() async throws {
+			let outcome = try await outcomeOfRedirect(from: #require(URL(string: "http://api.example.com/files/1/content")), to: "http://download.example.com/files/1")
+
+			#expect(try HTTPClientSupport.httpResponse(of: outcome).statusCode == 200)
+			#expect(Data("content".utf8) == outcome.data)
+		}
+
+		@Test
+		func upgradeRedirectIsFollowed() async throws {
+			let outcome = try await outcomeOfRedirect(from: #require(URL(string: "http://api.example.com/files/1/content")), to: "https://api.example.com/files/1/content")
+
+			#expect(try HTTPClientSupport.httpResponse(of: outcome).statusCode == 200)
+			#expect(Data("content".utf8) == outcome.data)
+		}
+
+		@Test
+		func downgradeAfterUpgradeIsRefusedAtItsHop() async throws {
+			let authorizationHeaders = OSAllocatedUnfairLock(initialState: [String?]())
+			let recordAuthorization: @Sendable (URLRequest) -> Void = { request in
+				authorizationHeaders.withLock { $0.append(request.value(forHTTPHeaderField: "Authorization")) }
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "HTTPS://api.example.com/b"], onRequest: recordAuthorization),
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "http://api.example.com/c"], onRequest: recordAuthorization),
+				URLProtocolMock.handler(body: "content", onRequest: recordAuthorization)
+			]
+			var request = try URLRequest(url: #require(URL(string: "http://api.example.com/a")))
+			request.setValue("Bearer token", forHTTPHeaderField: "Authorization")
+
+			let outcome = try await dataOutcome(of: request)
+
+			#expect(authorizationHeaders.withLock { $0 } == ["Bearer token", nil])
+			try expectRefusedDowngrade(outcome)
+		}
+
 		// MARK: - Helpers
 
+		/// Runs the download in a task, so that a download that never completes fails the test instead of hanging the run.
 		private func download(to stagingURL: URL) async throws -> SplitURLSession.Outcome {
-			return try await session.download(URLRequest(url: url), route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: 1024), bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+			let session = session
+			let request = URLRequest(url: url)
+			return try await cancellingValue(of: Task {
+				try await session.download(request, route: .transfer, handler: HTTPClientSupport.downloadHandler(movingTo: stagingURL, maxErrorBodyLength: 1024), bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
+			})
+		}
+
+		/// Runs the data request in a task, so that a request that never completes fails the test instead of hanging the run.
+		private func dataOutcome(of request: URLRequest) async throws -> SplitURLSession.Outcome {
+			let session = session
+			return try await cancellingValue(of: Task {
+				try await session.data(request, bodyLimit: nil, bodyLogging: .logged)
+			})
+		}
+
+		private func outcomeOfRedirect(from requestURL: URL, to location: String) async throws -> SplitURLSession.Outcome {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": location]),
+				URLProtocolMock.handler(body: "content")
+			]
+			return try await dataOutcome(of: URLRequest(url: requestURL))
+		}
+
+		private func expectRefusedDowngrade(_ outcome: SplitURLSession.Outcome, sourceLocation: SourceLocation = #_sourceLocation) throws {
+			#expect((outcome.recordedFailure as? URLError)?.code == .appTransportSecurityRequiresSecureConnection, sourceLocation: sourceLocation)
+			#expect((outcome.error as? URLError)?.code == .cancelled, sourceLocation: sourceLocation)
+			#expect(outcome.response == nil, sourceLocation: sourceLocation)
+			#expect(SplitURLSession.Outcome.Body.none == outcome.body, sourceLocation: sourceLocation)
+			let error = try #require(throws: URLError.self, sourceLocation: sourceLocation) { try HTTPClientSupport.httpResponse(of: outcome) }
+			#expect(error.code == .appTransportSecurityRequiresSecureConnection, sourceLocation: sourceLocation)
 		}
 
 		/// Returns a session whose transfer session the test registry backs with `URLProtocolMock`, because the hostless test bundle can't create background sessions.

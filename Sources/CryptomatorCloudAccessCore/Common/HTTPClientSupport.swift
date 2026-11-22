@@ -208,13 +208,13 @@ enum HTTPClientSupport {
 		CloudAccessDDLogDebug("\(label): \(request.httpMethod ?? "GET") \(HTTPDebugLogger.redactedURLString(request.url, urlLogging: urlLogging)) failed with \(failure)")
 	}
 
-	/// Returns the HTTP response of an attempt. Otherwise it throws the attempt's recorded failure, or else its transport error, sanitized. A cancellation throws `CancellationError`.
+	/// Returns the HTTP response of an attempt. Otherwise it throws the attempt's recorded failure, or else its transport error. A cancellation throws `CancellationError`.
 	static func httpResponse(of outcome: SplitURLSession.Outcome) throws -> HTTPURLResponse {
 		if let recordedFailure = outcome.recordedFailure {
-			throw sanitized(recordedFailure)
+			throw recordedFailure
 		}
 		if let error = outcome.error {
-			throw isCancellationError(error) ? CancellationError() : sanitized(error)
+			throw isCancellationError(error) ? CancellationError() : error
 		}
 		guard let httpResponse = outcome.response as? HTTPURLResponse else {
 			throw URLError(.badServerResponse)

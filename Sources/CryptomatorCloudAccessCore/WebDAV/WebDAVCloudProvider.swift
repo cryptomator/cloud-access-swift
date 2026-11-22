@@ -296,10 +296,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 		case WebDAVError.httpError(statusCode: 404):
 			return CloudProviderError.itemNotFound
 		default:
-			if isNetworkConnectionError(error) {
-				return CloudProviderError.noInternetConnection
-			}
-			return error
+			return convertingNetworkConnectionError(error)
 		}
 	}
 }

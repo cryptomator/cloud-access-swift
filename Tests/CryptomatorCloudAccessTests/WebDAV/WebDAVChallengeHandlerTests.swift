@@ -18,7 +18,7 @@ extension UnitTests {
 		@Test
 		func credentialMethodsGetCredentialOnFirstAttempt() {
 			for authenticationMethod in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodDefault] {
-				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 0, serverTrust: nil, credential: makeCredential(allowedCertificate: nil))
+				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 0, serverTrust: nil, isDowngrade: false, credential: makeCredential(allowedCertificate: nil))
 				#expect(decision.disposition == .useCredential, "\(authenticationMethod)")
 				#expect(decision.credential?.user == "user", "\(authenticationMethod)")
 				#expect(decision.credential?.password == "password", "\(authenticationMethod)")
@@ -29,16 +29,46 @@ extension UnitTests {
 		@Test
 		func credentialMethodsRecordUnauthorizedOnRetry() {
 			for authenticationMethod in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodDefault] {
-				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 1, serverTrust: nil, credential: makeCredential(allowedCertificate: nil))
+				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 1, serverTrust: nil, isDowngrade: false, credential: makeCredential(allowedCertificate: nil))
 				#expect(decision.disposition == .cancelAuthenticationChallenge, "\(authenticationMethod)")
 				#expect((decision.failure as? WebDAVError) == .httpError(statusCode: 401), "\(authenticationMethod)")
 			}
 		}
 
+		/// No password authentication runs over a downgraded connection, Digest included, which sends a response derived from the password.
+		@Test
+		func credentialMethodsAreRefusedAfterDowngrade() {
+			for authenticationMethod in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodDefault, NSURLAuthenticationMethodHTMLForm] {
+				for previousFailureCount in [0, 1] {
+					let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: previousFailureCount, serverTrust: nil, isDowngrade: true, credential: makeCredential(allowedCertificate: nil))
+					#expect(decision.disposition == .cancelAuthenticationChallenge, "\(authenticationMethod) \(previousFailureCount)")
+					#expect(decision.credential == nil, "\(authenticationMethod) \(previousFailureCount)")
+					#expect((decision.failure as? URLError)?.code == .appTransportSecurityRequiresSecureConnection, "\(authenticationMethod) \(previousFailureCount)")
+				}
+			}
+		}
+
+		@Test
+		func onlyAnHTTPServerOfAnHTTPSTaskIsADowngrade() throws {
+			let httpsURL = try #require(URL(string: "https://webdav.example.com/file.txt"))
+			let uppercaseHTTPSURL = try #require(URL(string: "HTTPS://webdav.example.com/file.txt"))
+			let httpURL = try #require(URL(string: "http://webdav.example.com/file.txt"))
+			let httpSpace = URLProtectionSpace(host: "webdav.example.com", port: 80, protocol: NSURLProtectionSpaceHTTP, realm: nil, authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+			let httpsSpace = URLProtectionSpace(host: "webdav.example.com", port: 443, protocol: NSURLProtectionSpaceHTTPS, realm: nil, authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+			let proxySpace = URLProtectionSpace(proxyHost: "proxy.example.com", port: 8080, type: NSURLProtectionSpaceHTTPProxy, realm: nil, authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+
+			#expect(WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: httpsURL))
+			#expect(WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: uppercaseHTTPSURL))
+			#expect(!WebDAVChallengeHandler.isDowngrade(of: httpsSpace, originalURL: httpsURL))
+			#expect(!WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: httpURL))
+			#expect(!WebDAVChallengeHandler.isDowngrade(of: proxySpace, originalURL: httpsURL))
+			#expect(!WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: nil))
+		}
+
 		@Test
 		func sessionWideMethodsGetDefaultHandling() {
 			for authenticationMethod in [NSURLAuthenticationMethodNTLM, NSURLAuthenticationMethodNegotiate, NSURLAuthenticationMethodClientCertificate] {
-				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 0, serverTrust: nil, credential: makeCredential(allowedCertificate: certificateData))
+				let decision = WebDAVChallengeHandler.decision(authenticationMethod: authenticationMethod, previousFailureCount: 0, serverTrust: nil, isDowngrade: false, credential: makeCredential(allowedCertificate: certificateData))
 				#expect(decision.disposition == .performDefaultHandling, "\(authenticationMethod)")
 				#expect(decision.credential == nil, "\(authenticationMethod)")
 				#expect(decision.failure == nil, "\(authenticationMethod)")
@@ -47,7 +77,7 @@ extension UnitTests {
 
 		@Test
 		func serverTrustWithAllowedCertificateIsTrusted() throws {
-			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 0, serverTrust: makeTrust(), credential: makeCredential(allowedCertificate: certificateData))
+			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 0, serverTrust: makeTrust(), isDowngrade: false, credential: makeCredential(allowedCertificate: certificateData))
 			#expect(decision.disposition == .useCredential)
 			#expect(decision.credential != nil)
 			#expect(decision.failure == nil)
@@ -55,7 +85,7 @@ extension UnitTests {
 
 		@Test
 		func serverTrustWithOtherCertificateGetsDefaultHandling() throws {
-			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 0, serverTrust: makeTrust(), credential: makeCredential(allowedCertificate: Data("other".utf8)))
+			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 0, serverTrust: makeTrust(), isDowngrade: false, credential: makeCredential(allowedCertificate: Data("other".utf8)))
 			#expect(decision.disposition == .performDefaultHandling)
 			#expect(decision.credential == nil)
 			#expect(decision.failure == nil)
@@ -63,7 +93,7 @@ extension UnitTests {
 
 		@Test
 		func serverTrustRetryIsCancelledWithoutFailure() throws {
-			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 1, serverTrust: makeTrust(), credential: makeCredential(allowedCertificate: certificateData))
+			let decision = try WebDAVChallengeHandler.decision(authenticationMethod: NSURLAuthenticationMethodServerTrust, previousFailureCount: 1, serverTrust: makeTrust(), isDowngrade: false, credential: makeCredential(allowedCertificate: certificateData))
 			#expect(decision.disposition == .cancelAuthenticationChallenge)
 			#expect(decision.credential == nil)
 			#expect(decision.failure == nil)

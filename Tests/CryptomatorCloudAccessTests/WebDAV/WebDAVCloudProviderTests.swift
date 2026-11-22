@@ -1285,6 +1285,45 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// Following the redirect would answer the `http` server's password challenge unencrypted.
+		@Test
+		func downgradeRedirectIsRefused() async throws {
+			let httpsProvider = try WebDAVCloudProvider(client: .mocked(baseURL: #require(URL(string: "https://webdav.example.com/remote.php/webdav/"))))
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "http://webdav.example.com/remote.php/webdav/Documents/About.txt"]),
+				URLProtocolMock.handler(statusCode: 207)
+			]
+
+			await #expect(throws: URLError(.appTransportSecurityRequiresSecureConnection)) {
+				try await cancellingValue(of: Task { try await httpsProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) })
+			}
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /remote.php/webdav/Documents/About.txt"])
+		}
+
+		/// A background session follows a redirect from `https` to `http` without asking, so the `http` server's password challenge reaches the challenge handler.
+		@Test
+		func passwordChallengeOverHTTPIsRefusedForAnHTTPSTask() async throws {
+			let httpsProvider = try makeHTTPSProviderChallengedOverHTTP()
+
+			await #expect(throws: URLError(.appTransportSecurityRequiresSecureConnection)) { try await httpsProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) }
+			#expect(RecordingURLProtocolAuthenticationMock.log.wireSummaries == ["PROPFIND Depth 0 /remote.php/webdav/Documents/About.txt"])
+		}
+
+		@Test
+		func refusedPasswordChallengeLogsOnlyTheOriginOfItsServer() async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			let httpsProvider = try makeHTTPSProviderChallengedOverHTTP()
+
+			_ = try? await httpsProvider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
+
+			let refusal = try #require(logCapture.messages.first { $0.contains("refused the password challenge") }, "\(logCapture.joinedMessages)")
+			#expect(refusal.contains("https://webdav.example.com/<redacted>"), "\(refusal)")
+			#expect(!refusal.contains("About.txt"), "\(refusal)")
+		}
+
 		@Test
 		func throwsCancellationErrorInCancelledTask() async {
 			await assertThrowsCancellationErrorInCancelledTask(provider)
@@ -1292,6 +1331,14 @@ extension UnitTests {
 		}
 
 		// MARK: - Internal
+
+		/// Returns a provider with an `https` base URL whose next request gets a password challenge. Every challenge of `URLProtocolAuthenticationMock` reads protocol `http`, because the mock passes no protocol. The challenge counts as a repeated one, so that a handler that answers it records a 401 instead of leaving the mock waiting.
+		private func makeHTTPSProviderChallengedOverHTTP() throws -> WebDAVCloudProvider {
+			let httpsBaseURL = try #require(URL(string: "https://webdav.example.com/remote.php/webdav/"))
+			let failureResponse = try #require(HTTPURLResponse(url: httpsBaseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
+			URLProtocolAuthenticationMock.authenticationChallenges.append(URLAuthenticationChallengeMock(previousFailureCount: 1, failureResponse: failureResponse))
+			return try WebDAVCloudProvider(client: .mocked(baseURL: httpsBaseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
+		}
 
 		/// The names of the children in `item-list.xml`.
 		private static let itemListNames = ["Documents", "Nextcloud Manual.pdf", "Nextcloud intro.mp4", "Nextcloud.png", "Photos"].sorted()

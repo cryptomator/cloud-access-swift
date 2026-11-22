@@ -53,13 +53,6 @@ extension IdentifierCacheItem {
 	}
 }
 
-extension CloudPath {
-	/// Whether the path is the root or absolute with every component below the root naming one item, i.e., not empty, `.` or `..`. Only such a path reaches the root by removing its last component and resolves to the item it names. A decoded path keeps its spelling, unlike one built with `init(_:)`.
-	var isResolvable: Bool {
-		return self == .root || isAbsolute && pathComponents.dropFirst().allSatisfy(\.isSinglePathComponent)
-	}
-}
-
 /// Matches a cloud path and its descendants, comparing the paths literally and case-sensitively, so that no character of a path acts as a wildcard.
 enum CloudPathSubtree {
 	static func condition(_ column: Column, path: String) -> SQLExpression {

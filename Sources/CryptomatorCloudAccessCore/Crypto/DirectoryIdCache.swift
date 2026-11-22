@@ -68,13 +68,12 @@ final class DirectoryIdCache: Sendable {
 	 - Throws: `CloudProviderError.parentFolderDoesNotExist` if reading an ancestor's dir file throws `CloudProviderError.itemNotFound`. `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path isn't absolute or doesn't name a folder below the root (e.g., `/` or `/..`). The other errors of a read unchanged.
 	 */
 	func verifiedDirectory(_ cleartextPath: CloudPath, readDirId: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data, treatingAsMissing isMissing: (Error) -> Bool) async throws -> VerifiedDirectory {
-		let components = cleartextPath.pathComponents.dropFirst()
-		guard cleartextPath.isAbsolute, !components.isEmpty, components.allSatisfy(\.isSinglePathComponent) else {
+		guard cleartextPath.isResolvable, cleartextPath != .root else {
 			throw VaultFormatError.invalidDirectoryReference
 		}
 		var containingDirIds = [Data()]
 		var ancestorPath = CloudPath.root
-		for component in components.dropLast() {
+		for component in cleartextPath.pathComponents.dropFirst().dropLast() {
 			ancestorPath = ancestorPath.appendingPathComponent(component)
 			let dirId: Data
 			do {

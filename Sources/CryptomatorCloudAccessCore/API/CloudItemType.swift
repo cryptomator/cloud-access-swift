@@ -15,3 +15,10 @@ public enum CloudItemType: String, Codable, DatabaseValueConvertible, Sendable {
 	case symlink
 	case unknown
 }
+
+extension CloudItemType {
+	/// Whether an operation on items of `type` accepts an item of this type. A folder operation accepts a folder, and a file operation a file or a symbolic link, so an `unknown` item fits neither.
+	func isTaken(byOperationOn type: CloudItemType) -> Bool {
+		return type == .folder ? self == .folder : self == .file || self == .symlink
+	}
+}

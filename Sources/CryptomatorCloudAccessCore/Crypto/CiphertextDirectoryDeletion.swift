@@ -91,7 +91,7 @@ struct CiphertextDirectoryDeletion: Sendable {
 	 Deletes the ciphertext directory of a dir ID and those of its subdirectories. Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 
 	 - Parameter containingDirIds: The dir IDs of the vault root and of the ancestors of the folder that the dir ID belongs to.
-	 - Throws: The highest-ranked failure that was observed in the subdirectories and in a directory's own listing and delete, the first one on a tie. A skipped item or page counts as the stopping error. `CloudProviderError.deletionIncomplete` ranks highest, if the cloud refused to delete something, then `CloudProviderError.itemNotFound`, if a directory exists but can't be listed. A subdirectory's `CloudProviderError.itemTypeMismatch` counts as the latter.
+	 - Throws: The highest-ranked failure that was observed in the subdirectories and in a directory's own listing and delete, the first one on a tie. A skipped item or page counts as the stopping error. `CloudProviderError.deletionIncomplete` ranks highest, if the cloud refused to delete something, then `CloudProviderError.itemNotFound`, if a directory exists but can't be listed. `CloudProviderError.itemTypeMismatch` of a subdirectory or of a directory's own delete counts as the latter.
 	 */
 	func deleteDirectory(of dirId: Data, containingDirIds: Set<Data>) async throws {
 		try await deleteDirectory(at: directoryPath(dirId), visitedDirIds: containingDirIds.union([dirId]))
@@ -136,6 +136,9 @@ struct CiphertextDirectoryDeletion: Sendable {
 				try await provider.deleteFolder(at: dirPath)
 			} catch CloudProviderError.itemNotFound {
 				// The directory disappeared after it was listed, or the provider listed a missing folder as empty. Either way it counts as deleted.
+			} catch CloudProviderError.itemTypeMismatch {
+				// Another client put a file there. It still exists, and a raw `itemTypeMismatch` would read as the deleted folder being no folder.
+				throw CloudProviderError.itemNotFound
 			}
 		}
 	}
@@ -168,9 +171,9 @@ struct CiphertextDirectoryDeletion: Sendable {
 	/**
 	 Deletes the file at the path of a ciphertext directory, which nothing but a broken sync or another app puts there.
 
-	 The metadata read and the delete aren't atomic. A provider whose `deleteFile` also deletes a folder (e.g., the local file system, WebDAV and Dropbox) would therefore delete a folder that another writer creates at the path in between, which no Cryptomator client does.
+	 The metadata read and the delete aren't atomic. A provider whose `deleteFile` also deletes a folder (WebDAV and Dropbox, and the local file system when the other writer doesn't use file coordination) would therefore delete a folder that another writer creates at the path in between, which no Cryptomator client does.
 
-	 - Throws: `CloudProviderError.itemNotFound` if the path holds something other than a file, or still exists after the delete, e.g., on S3, where a prefix can hold objects beside an object of the same name.
+	 - Throws: `CloudProviderError.itemNotFound` if the path holds something other than a file, also when the provider refuses the delete because a folder appeared there. It also throws it if the path still exists after the delete, e.g., on S3, where a prefix can hold objects beside an object of the same name.
 	 */
 	private func deleteStrayFile(at dirPath: CloudPath) async throws {
 		let metadata: CloudItemMetadata
@@ -186,6 +189,9 @@ struct CiphertextDirectoryDeletion: Sendable {
 			try await provider.deleteFile(at: dirPath)
 		} catch CloudProviderError.itemNotFound {
 			// Another client deleted it.
+		} catch CloudProviderError.itemTypeMismatch {
+			// Another client put a folder there.
+			throw CloudProviderError.itemNotFound
 		}
 		if try await provider.checkForItemExistence(at: dirPath) {
 			throw CloudProviderError.itemNotFound

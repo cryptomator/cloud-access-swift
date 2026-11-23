@@ -381,6 +381,87 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/foo"), to: CloudPath(path)) }
 		}
 
+		@Test(arguments: ["/file/child", "/file/child/grandchild"])
+		func moveFolderWithTargetBelowFile(path: String) async throws {
+			try makeFile()
+			let sourceURL = tmpDirURL.appendingPathComponent("foo", isDirectory: true)
+			try FileManager.default.createDirectory(at: sourceURL, withIntermediateDirectories: false, attributes: nil)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFolder(from: CloudPath("/foo"), to: CloudPath(path)) }
+			#expect(FileManager.default.fileExists(atPath: sourceURL.path))
+		}
+
+		@Test(arguments: [MutationGuardCase.Kind.deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile])
+		func wrongTypeMutationIsRefused(kind: MutationGuardCase.Kind) async throws {
+			let fileURL = tmpDirURL.appendingPathComponent("file.txt", isDirectory: false)
+			let childURL = tmpDirURL.appendingPathComponent("folder/child", isDirectory: false)
+			try FileManager.default.createDirectory(at: childURL.deletingLastPathComponent(), withIntermediateDirectories: false, attributes: nil)
+			try "hello world".write(to: fileURL, atomically: true, encoding: .utf8)
+			try "hello world".write(to: childURL, atomically: true, encoding: .utf8)
+			let operation = kind.operation(localURL: fileURL)
+
+			await #expect(throws: kind.expected) { try await operation(provider) }
+
+			#expect(FileManager.default.fileExists(atPath: fileURL.path))
+			#expect(FileManager.default.fileExists(atPath: childURL.path))
+			#expect(!FileManager.default.fileExists(atPath: tmpDirURL.appendingPathComponent("renamed").path))
+		}
+
+		/// A file operation acts on a symbolic link itself, also on one to a folder or one whose target is missing, and never on its target.
+		@Test(arguments: [false, true], [false, true])
+		func fileOperationOnSymbolicLinkActsOnLink(isDangling: Bool, moves: Bool) async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			let childURL = dirURL.appendingPathComponent("child", isDirectory: false)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			try "hello world".write(to: childURL, atomically: true, encoding: .utf8)
+			let destinationURL = isDangling ? tmpDirURL.appendingPathComponent("missing", isDirectory: false) : dirURL
+			let linkURL = tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			let movedURL = tmpDirURL.appendingPathComponent("moved", isDirectory: false)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: destinationURL)
+
+			if moves {
+				try await provider.moveFile(from: CloudPath("/link"), to: CloudPath("/moved"))
+			} else {
+				try await provider.deleteFile(at: CloudPath("/link"))
+			}
+
+			#expect((try? FileManager.default.destinationOfSymbolicLink(atPath: linkURL.path)) == nil)
+			#expect((try? FileManager.default.destinationOfSymbolicLink(atPath: movedURL.path)) == (moves ? destinationURL.path : nil))
+			#expect(FileManager.default.fileExists(atPath: childURL.path))
+		}
+
+		@Test
+		func deleteFolderOfSymbolicLinkToFolderThrowsItemTypeMismatch() async throws {
+			let dirURL = tmpDirURL.appendingPathComponent("dir", isDirectory: true)
+			let childURL = dirURL.appendingPathComponent("child", isDirectory: false)
+			try FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: false, attributes: nil)
+			try "hello world".write(to: childURL, atomically: true, encoding: .utf8)
+			let linkURL = tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: dirURL)
+
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFolder(at: CloudPath("/link")) }
+
+			#expect(try FileManager.default.destinationOfSymbolicLink(atPath: linkURL.path) == dirURL.path)
+			#expect(FileManager.default.fileExists(atPath: childURL.path))
+		}
+
+		/// A source whose type can't be read is left as it is, and the system's error passes through.
+		@Test(arguments: [false, true])
+		func mutationWithUnreadableSourceTypeChangesNothing(moves: Bool) async throws {
+			try makeLockedFolder()
+			let error = try await #require(throws: (any Error).self) {
+				if moves {
+					try await provider.moveFile(from: CloudPath("/locked/file"), to: CloudPath("/moved"))
+				} else {
+					try await provider.deleteFile(at: CloudPath("/locked/file"))
+				}
+			}
+			try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmpDirURL.appendingPathComponent("locked").path)
+
+			#expect((error as? CocoaError)?.code == .fileReadNoPermission, "\(error)")
+			#expect(FileManager.default.fileExists(atPath: tmpDirURL.appendingPathComponent("locked/file").path))
+			#expect(!FileManager.default.fileExists(atPath: tmpDirURL.appendingPathComponent("moved").path))
+		}
+
 		/// A local folder that the system refuses to read can't be fixed by signing in, so the system's error passes through.
 		@Test
 		func fetchItemMetadataWithReadPermissionError() async throws {

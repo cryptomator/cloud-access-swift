@@ -164,6 +164,33 @@ extension UnitTests {
 			}
 		}
 
+		/// Dropbox deletes and moves either type, so the wrong-type cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
+		@Test
+		func mutationChecksFollowTheSharedContract() async throws {
+			let localURL = try makeLocalFile(content: "content")
+			let fileParent = DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt", body: DropboxMockResponse.file(name: "file.txt"))
+			let cases = MutationGuardCases.make(localURL: localURL) { kind in
+				switch kind {
+				case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile:
+					return nil
+				case .createFolderInFile, .uploadFileIntoFile, .moveFileIntoFile, .moveFolderIntoFile:
+					return [fileParent]
+				case .createFolderBelowFileMidPath:
+					return [DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt/x", statusCode: 409, body: DropboxMockResponse.error("path/not_found/.."))]
+				case .missingSourceOntoExistingTarget:
+					return [DropboxCloudProviderTests.response(to: "/2/files/move_v2", statusCode: 409, body: DropboxMockResponse.error("from_lookup/not_found/.."))]
+				case .missingSourceIntoMissingParent:
+					return [DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/missing", statusCode: 409, body: DropboxMockResponse.error("path/not_found/.."))]
+				case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot:
+					return []
+				}
+			}
+			let notFolderCases = MutationGuardCases.make(localURL: localURL) { kind in
+				kind == .createFolderBelowFileMidPath ? [DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt/x", statusCode: 409, body: DropboxMockResponse.error("path/not_folder/.."))] : nil
+			}
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases + notFolderCases) { DropboxCloudProvider(client: .mocked(), maxPageSize: .max) }
+		}
+
 		@Test
 		func cancelledMutationsStillFinishTheirRequests() async throws {
 			let operations: [(name: String, operation: @Sendable (DropboxCloudProvider) async throws -> Void)] = [
@@ -573,6 +600,18 @@ extension UnitTests {
 
 		private static func incorrectOffset(_ correctOffset: Int) -> String {
 			return #"{"error_summary":"incorrect_offset/..","error":{".tag":"incorrect_offset","correct_offset":\#(correctOffset)}}"#
+		}
+
+		/// Answers a request to the route, with the path as its JSON argument's `path` if one is given, and fails any other request, so that a lookup of another path fails the test.
+		private static func response(to route: String, path: String? = nil, statusCode: Int = 200, body: String) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			let response = URLProtocolMock.handler(statusCode: statusCode, body: body)
+			return { request in
+				let argument = try? JSONSerialization.jsonObject(with: URLProtocolMock.body(of: request)) as? [String: Any]
+				guard request.url?.path == route, path == nil || argument?["path"] as? String == path else {
+					throw URLProtocolMockError.unexpectedRequest
+				}
+				return try response(request)
+			}
 		}
 
 		private static func argument(of request: URLRequest) -> [String: Any]? {

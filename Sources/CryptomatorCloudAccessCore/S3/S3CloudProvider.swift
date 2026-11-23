@@ -59,12 +59,7 @@ public final class S3CloudProvider: CloudProvider {
 			if let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) {
 				return item
 			}
-			guard cloudPath != .root, output.nextContinuationToken != nil else {
-				throw CloudProviderError.itemNotFound
-			}
-			try Task.checkCancellation()
-			let folderOutput = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
-			guard !folderOutput.contents.isEmpty || !folderOutput.commonPrefixes.isEmpty else {
+			guard cloudPath != .root, output.nextContinuationToken != nil, try await folderExists(at: cloudPath) else {
 				throw CloudProviderError.itemNotFound
 			}
 			return CloudItemMetadata(name: cloudPath.lastPathComponent, cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil)
@@ -127,6 +122,7 @@ public final class S3CloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		return try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting))") {
 			let localFile = try LocalUploadFile(localURL)
+			try S3CloudProvider.checkTargetPath(cloudPath)
 			let fileSize = Int(localFile.size)
 			let partSize = try multipartUploadPartSize(forFileSize: fileSize)
 			let key = getKey(for: cloudPath)
@@ -160,13 +156,17 @@ public final class S3CloudProvider: CloudProvider {
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("createFolder(at: \(cloudPath.path))") {
+			try S3CloudProvider.checkTargetPath(cloudPath)
 			if try await checkForItemExistence(at: cloudPath) {
 				throw CloudProviderError.itemAlreadyExists
 			}
 			try await assertParentFolderExists(for: cloudPath)
 			try Task.checkCancellation()
 			// S3 has no folders, so a folder is a 0-byte object whose key is the folder path with a trailing slash.
-			try await client.putEmptyObject(key: getKey(for: cloudPath) + S3CloudProvider.delimiter, contentType: S3CloudProvider.folderContentType)
+			let key = getKey(for: cloudPath) + S3CloudProvider.delimiter
+			try await withoutCancellation {
+				try await self.client.putEmptyObject(key: key, contentType: S3CloudProvider.folderContentType)
+			}
 			CloudAccessDDLogDebug("S3CloudProvider: createFolder(at: \(cloudPath.path)) finished")
 		}
 	}
@@ -175,32 +175,41 @@ public final class S3CloudProvider: CloudProvider {
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("deleteFile(at: \(cloudPath.path))") {
-			_ = try await getItemMetadata(at: cloudPath)
+			try S3CloudProvider.checkSourcePath(cloudPath)
+			_ = try await requireFile(at: cloudPath)
 			try Task.checkCancellation()
-			if try await isDeletionRefused(client.deleteObject(key: getKey(for: cloudPath))) {
-				throw CloudProviderError.deletionIncomplete
+			let key = getKey(for: cloudPath)
+			try await withoutCancellation {
+				if try await self.isDeletionRefused(self.client.deleteObject(key: key)) {
+					throw CloudProviderError.deletionIncomplete
+				}
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFile(at: \(cloudPath.path)) finished")
 		}
 	}
 
+	/// Stays cancellable between the pages of the folder, because a partly deleted folder can be deleted again.
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("deleteFolder(at: \(cloudPath.path))") {
-			_ = try await getItemMetadata(at: cloudPath)
-			try await deleteFolderAfterCheck(at: cloudPath)
+			try S3CloudProvider.checkSourcePath(cloudPath)
+			let firstPage = try await requireFolder(at: cloudPath)
+			try await deleteFolderAfterCheck(at: cloudPath, firstPage: firstPage)
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) finished")
 		}
 	}
 
+	/// Checks the target's parent, then the source, then the target, so that a missing source throws `parentFolderDoesNotExist` into a missing parent and `itemNotFound` onto an existing target.
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
-			let metadata = try await getItemMetadata(at: sourceCloudPath)
-			try await assertItemDoesNotExist(at: targetCloudPath)
+			try S3CloudProvider.checkSourcePath(sourceCloudPath)
+			try S3CloudProvider.checkTargetPath(targetCloudPath)
 			try await assertParentFolderExists(for: targetCloudPath)
+			let metadata = try await requireFile(at: sourceCloudPath)
+			try await assertItemDoesNotExist(at: targetCloudPath)
 			let itemSize = metadata.size ?? 0
 			let sourceKey = getKey(for: sourceCloudPath)
 			let targetKey = getKey(for: targetCloudPath)
@@ -216,16 +225,19 @@ public final class S3CloudProvider: CloudProvider {
 		}
 	}
 
+	/// Checks the target's parent, then the source, then the target, so that a missing source throws `parentFolderDoesNotExist` into a missing parent and `itemNotFound` onto an existing target.
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
-			try await assertItemDoesExist(at: sourceCloudPath)
-			try await assertItemDoesNotExist(at: targetCloudPath)
+			try S3CloudProvider.checkSourcePath(sourceCloudPath)
+			try S3CloudProvider.checkTargetPath(targetCloudPath)
 			try await assertParentFolderExists(for: targetCloudPath)
+			let firstPage = try await requireFolder(at: sourceCloudPath)
+			try await assertItemDoesNotExist(at: targetCloudPath)
 			try Task.checkCancellation()
 			try await withoutCancellation {
-				try await self.moveFolderAfterCheck(from: sourceCloudPath, to: targetCloudPath)
+				try await self.moveFolderAfterCheck(from: sourceCloudPath, to: targetCloudPath, firstPage: firstPage)
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path)) finished")
 		}
@@ -238,13 +250,14 @@ public final class S3CloudProvider: CloudProvider {
 
 	 S3 refusing to delete source objects, or a whole `DeleteObjects` request, doesn't stop the move, so that every page is copied.
 
+	 - Parameter firstPage: The page of the recursive listing of the source to start with, which isn't listed again.
 	 - Throws: `CloudProviderError.moveCompletedWithSourceRemaining` after copying every page if S3 refused to delete source objects. A failed listing or copy, or a transport failure of a `DeleteObjects` request, is thrown at once.
 	 */
-	func moveFolderAfterCheck(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+	func moveFolderAfterCheck(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, firstPage: S3ListObjectsResult) async throws {
 		let sourcePrefix = getPrefix(for: sourceCloudPath)
 		let targetPrefix = getPrefix(for: targetCloudPath)
 		var hasSourceRemaining = false
-		try await forEachRecursivePage(prefix: sourcePrefix) { objects in
+		try await forEachRecursivePage(prefix: sourcePrefix, firstPage: firstPage) { objects in
 			let copyRequests: [S3CopyRequest] = objects.compactMap {
 				guard let name = $0.key.deletingPrefix(sourcePrefix) else {
 					return nil
@@ -441,11 +454,13 @@ public final class S3CloudProvider: CloudProvider {
 	 S3 refusing to delete objects, or a whole `DeleteObjects` request, doesn't stop the deletion, so that every page is deleted that can be.
 
 	 - Throws: `CloudProviderError.deletionIncomplete` after every page if S3 refused to delete objects. Once S3 refused, any later failure but cancellation throws it as well. An error answer to an earlier attempt of a batch counts as a refusal, so a failure without an answer that ends that batch throws it too.
+
+	 - Parameter firstPage: The page of the recursive listing of the folder to start with, which isn't listed again.
 	 */
-	func deleteFolderAfterCheck(at cloudPath: CloudPath) async throws {
+	func deleteFolderAfterCheck(at cloudPath: CloudPath, firstPage: S3ListObjectsResult) async throws {
 		var isIncomplete = false
 		do {
-			try await forEachRecursivePage(prefix: getPrefix(for: cloudPath)) { objects in
+			try await forEachRecursivePage(prefix: getPrefix(for: cloudPath), firstPage: firstPage) { objects in
 				let outcome = try await client.deleteObjects(keys: objects.map(\.key))
 				if case let .unknown(error, answeredBefore: true) = outcome {
 					isIncomplete = true
@@ -464,16 +479,35 @@ public final class S3CloudProvider: CloudProvider {
 		}
 	}
 
-	/// Passes each page of the recursive listing below the prefix to `body`. It checks for cancellation before each listing and each `body`, so a caller past its commit point runs it in `withoutCancellation`.
-	private func forEachRecursivePage(prefix: String, _ body: ([S3Object]) async throws -> Void) async throws {
-		var nextContinuationToken: String?
-		repeat {
+	/**
+	 Passes each page of the recursive listing below the prefix to `body`. It checks for cancellation before each listing and each `body`, so a caller past its commit point runs it in `withoutCancellation`.
+
+	 - Parameter firstPage: The page to start with, which isn't listed again.
+	 */
+	private func forEachRecursivePage(prefix: String, firstPage: S3ListObjectsResult, _ body: ([S3Object]) async throws -> Void) async throws {
+		var page = firstPage
+		while true {
 			try Task.checkCancellation()
-			let listObjects = try await listObjects(withPrefix: prefix, recursive: true, pageToken: nextContinuationToken)
-			try Task.checkCancellation()
-			try await body(listObjects.contents)
-			nextContinuationToken = listObjects.nextContinuationToken
-		} while nextContinuationToken != nil
+			try await body(page.contents)
+			guard let nextContinuationToken = page.nextContinuationToken else {
+				return
+			}
+			page = try await recursivePage(prefix: prefix, pageToken: nextContinuationToken)
+		}
+	}
+
+	/// Lists the recursive pages below the prefix up to the first one that holds objects, or up to the last one. `listObjects` drops keys outside the prefix, so a server that ignores the prefix can return pages without objects before the last.
+	private func firstRecursivePageWithObjects(prefix: String) async throws -> S3ListObjectsResult {
+		var page = try await recursivePage(prefix: prefix, pageToken: nil)
+		while page.contents.isEmpty, let nextContinuationToken = page.nextContinuationToken {
+			page = try await recursivePage(prefix: prefix, pageToken: nextContinuationToken)
+		}
+		return page
+	}
+
+	private func recursivePage(prefix: String, pageToken: String?) async throws -> S3ListObjectsResult {
+		try Task.checkCancellation()
+		return try await listObjects(withPrefix: prefix, recursive: true, pageToken: pageToken)
 	}
 
 	/**
@@ -499,18 +533,73 @@ public final class S3CloudProvider: CloudProvider {
 
 	// - MARK: Assertions
 
+	/// Throws `CloudProviderError.itemAlreadyExists` for the root, which always exists, and `CloudProviderError.parentFolderDoesNotExist` for a path that never reaches the root, without a request.
+	private static func checkTargetPath(_ cloudPath: CloudPath) throws {
+		guard cloudPath != .root else {
+			throw CloudProviderError.itemAlreadyExists
+		}
+		guard cloudPath.isResolvable else {
+			throw CloudProviderError.parentFolderDoesNotExist
+		}
+	}
+
+	/// Throws, without a request, `CloudProviderError.itemTypeMismatch` for the root and `CloudProviderError.itemNotFound` for a path that never reaches the root. No file operation takes the root, and a folder operation on it would act on the whole bucket.
+	private static func checkSourcePath(_ cloudPath: CloudPath) throws {
+		guard cloudPath != .root else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		guard cloudPath.isResolvable else {
+			throw CloudProviderError.itemNotFound
+		}
+	}
+
+	/// Returns the metadata of the file at the path, judged by its key, so that a folder of the same name beside it doesn't count. Throws `CloudProviderError.itemTypeMismatch` if only a folder is there.
+	private func requireFile(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
+		try Task.checkCancellation()
+		// ListObjectsV2 lists keys in ascending UTF-8 order, so an object `a` comes before the folder `a/`.
+		let metadata = try await getItemMetadata(at: cloudPath)
+		guard metadata.itemType.isTaken(byOperationOn: .file) else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		return metadata
+	}
+
+	/**
+	 Returns the first page of the folder's recursive listing that holds objects, which proves that a folder is at the path. The folder is judged by its prefix, so that a file of the same name beside it doesn't count.
+
+	 If the prefix holds nothing but the key's lookup finds a folder, the prefix is listed again instead of throwing `itemNotFound`, because a vault folder delete takes `itemNotFound` for a folder that is gone.
+
+	 - Throws: `CloudProviderError.itemTypeMismatch` if only a file is at the path, and `CloudProviderError.itemNotFound` if nothing is, also once a folder that appeared is gone again.
+	 */
+	private func requireFolder(at cloudPath: CloudPath) async throws -> S3ListObjectsResult {
+		let prefix = getPrefix(for: cloudPath)
+		let firstPage = try await firstRecursivePageWithObjects(prefix: prefix)
+		if !firstPage.contents.isEmpty {
+			return firstPage
+		}
+		try await assertFolderExists(at: cloudPath)
+		let page = try await firstRecursivePageWithObjects(prefix: prefix)
+		guard !page.contents.isEmpty else {
+			throw CloudProviderError.itemNotFound
+		}
+		return page
+	}
+
+	/// Whether any key starts with the folder's prefix, the folder's marker included.
+	private func folderExists(at cloudPath: CloudPath) async throws -> Bool {
+		try Task.checkCancellation()
+		let output = try await listObjects(withPrefix: getPrefix(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
+		return !output.contents.isEmpty || !output.commonPrefixes.isEmpty
+	}
+
+	/// Judges the parent folder by its prefix, so that a file of the same name beside it doesn't count.
 	func assertParentFolderExists(for cloudPath: CloudPath) async throws {
 		CloudAccessDDLogDebug("S3CloudProvider: assertParentFolderExists(for: \(cloudPath.path)) called")
 		let parentPath = cloudPath.deletingLastPathComponent()
 		if parentPath == .root {
 			return
 		}
-		do {
-			let metadata = try await fetchItemMetadata(at: parentPath)
-			guard metadata.itemType == .folder else {
-				throw CloudProviderError.itemTypeMismatch
-			}
-		} catch CloudProviderError.itemNotFound {
+		guard try await folderExists(at: parentPath) else {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}
@@ -526,13 +615,6 @@ public final class S3CloudProvider: CloudProvider {
 		let metadata = try await fetchItemMetadata(at: cloudPath)
 		guard metadata.itemType == .folder else {
 			throw CloudProviderError.itemTypeMismatch
-		}
-	}
-
-	func assertItemDoesExist(at cloudPath: CloudPath) async throws {
-		CloudAccessDDLogDebug("S3CloudProvider: assertItemDoesExist(at: \(cloudPath.path)) called")
-		guard try await checkForItemExistence(at: cloudPath) else {
-			throw CloudProviderError.itemNotFound
 		}
 	}
 }

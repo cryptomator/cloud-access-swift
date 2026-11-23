@@ -200,16 +200,16 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
+		try await deleteItem(at: cloudPath, type: .file)
 	}
 
 	@concurrent
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await deleteItem(at: cloudPath)
+		try await deleteItem(at: cloudPath, type: .folder)
 	}
 
-	private func deleteItem(at cloudPath: CloudPath) async throws {
+	private func deleteItem(at cloudPath: CloudPath, type: CloudItemType) async throws {
 		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "deleteItem(at: \(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
@@ -222,6 +222,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 					return error
 				}
 			}, body: { coordinatedURL in
+				try self.checkSourceType(at: coordinatedURL, type: type)
 				try FileManager.default.removeItem(at: coordinatedURL)
 				CloudAccessDDLogDebug("LocalFileSystemProvider: \(operation) finished")
 			})
@@ -231,16 +232,16 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath, type: .file)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		try await moveItem(from: sourceCloudPath, to: targetCloudPath)
+		try await moveItem(from: sourceCloudPath, to: targetCloudPath, type: .folder)
 	}
 
-	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, type: CloudItemType) async throws {
 		let sourceURL = rootURL.appending(cloudPath: sourceCloudPath)
 		let targetURL = rootURL.appending(cloudPath: targetCloudPath)
 		let operation = "moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))"
@@ -260,6 +261,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 					return error
 				}
 			}, body: { coordinatedURL in
+				try self.checkSourceType(at: coordinatedURL, type: type)
 				try FileManager.default.moveItem(at: coordinatedURL, to: targetURL)
 				CloudAccessDDLogDebug("LocalFileSystemProvider: \(operation) finished")
 			})
@@ -331,6 +333,28 @@ public final class LocalFileSystemProvider: CloudProvider {
 
 	private func validateItemType(at url: URL, with itemType: CloudItemType) throws -> Bool {
 		return try getItemType(from: url) == itemType
+	}
+
+	/**
+	 Checks that an operation on items of `type` accepts the item at the URL, which must be the URL of a coordinated delete or move. The item's own type counts, so a symbolic link to a folder is no folder. It is read as a promised item, whose content need not be on disk, e.g., an evicted iCloud file.
+
+	 A missing item, or one below a file, is left to the delete or move, whose error mapping reports it. The check and the delete or move are separate calls, so only file coordination keeps another writer from changing the item in between.
+
+	 - Throws: `CloudProviderError.itemTypeMismatch` if the operation doesn't accept the item, or the error of reading its type for any other reason.
+	 */
+	private func checkSourceType(at url: URL, type: CloudItemType) throws {
+		let resourceType: URLFileResourceType?
+		do {
+			resourceType = try url.promisedItemResourceValues(forKeys: [.fileResourceTypeKey]).fileResourceType
+		} catch CocoaError.fileReadNoSuchFile {
+			return
+		} catch where isNotDirectoryError(error) {
+			return
+		}
+		let itemType = resourceType == .symbolicLink ? CloudItemType.symlink : getItemType(from: resourceType)
+		guard itemType.isTaken(byOperationOn: type) else {
+			throw CloudProviderError.itemTypeMismatch
+		}
 	}
 
 	func getItemName(forItemAt url: URL) -> String {

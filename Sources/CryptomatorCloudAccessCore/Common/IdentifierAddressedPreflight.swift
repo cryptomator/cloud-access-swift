@@ -151,8 +151,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	}
 
 	private func checkType(of item: Item, at cloudPath: CloudPath, type: CloudItemType, operation: String) throws {
-		let acceptedTypes: [CloudItemType] = type == .folder ? [.folder] : [.file, .symlink]
-		guard acceptedTypes.contains(item.effectiveItemType) else {
+		guard item.effectiveItemType.isTaken(byOperationOn: type) else {
 			throw typeMismatch(at: cloudPath, operation: operation)
 		}
 	}

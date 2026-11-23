@@ -470,6 +470,78 @@ extension IntegrationTests {
 			}
 		}
 
+		// MARK: - Wrong Type Tests
+
+		/// Dropbox and WebDAV delete either type, so they are left out.
+		@Test(arguments: IntegrationBackend.selectedPlain.filter { ![.dropbox, .webDAV].contains($0.kind) })
+		func deleteOfWrongTypeWithTypeMismatchError(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let sandbox = try await context.makeSandbox()
+				let fileCloudPath = sandbox.appendingPathComponent("FileForItemTypeMismatch")
+				let folderCloudPath = sandbox.appendingPathComponent("FolderForItemTypeMismatch")
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: fileCloudPath)
+				try await context.createPrerequisiteFolder(at: folderCloudPath)
+				try await expectCloudProviderError(.itemTypeMismatch) { try await context.provider.deleteFile(at: folderCloudPath) }
+				try await expectCloudProviderError(.itemTypeMismatch) { try await context.provider.deleteFolder(at: fileCloudPath) }
+				let fileExists = try await context.provider.checkForItemExistence(at: fileCloudPath)
+				let folderExists = try await context.provider.checkForItemExistence(at: folderCloudPath)
+				#expect(fileExists, "The file of the refused deleteFolder is gone")
+				#expect(folderExists, "The folder of the refused deleteFile is gone")
+			}
+		}
+
+		// MARK: - Parent That Is a File Tests
+
+		@Test(arguments: IntegrationBackend.selectedPlain)
+		func uploadFileIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let localURL = context.tmpDirURL.appendingPathComponent("sub", isDirectory: false)
+				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
+				let parentCloudPath = try await context.makeSandbox().appendingPathComponent("parent.txt")
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
+				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.uploadFile(from: localURL, to: parentCloudPath.appendingPathComponent("sub"), replaceExisting: false) }
+			}
+		}
+
+		/// The second folder's parent `x` lies below the file, so Dropbox looks up a path below a file.
+		@Test(arguments: IntegrationBackend.selectedPlain)
+		func createFolderIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let parentCloudPath = try await context.makeSandbox().appendingPathComponent("parent.txt")
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
+				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.createFolder(at: parentCloudPath.appendingPathComponent("sub")) }
+				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.createFolder(at: parentCloudPath.appendingPathComponent("x/new")) }
+			}
+		}
+
+		@Test(arguments: IntegrationBackend.selectedPlain)
+		func moveFileIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let sandbox = try await context.makeSandbox()
+				let parentCloudPath = sandbox.appendingPathComponent("parent.txt")
+				let sourceCloudPath = sandbox.appendingPathComponent("FileToMoveIntoFile")
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: sourceCloudPath)
+				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.moveFile(from: sourceCloudPath, to: parentCloudPath.appendingPathComponent("sub")) }
+				let sourceExists = try await context.provider.checkForItemExistence(at: sourceCloudPath)
+				#expect(sourceExists, "The source of the refused move is gone")
+			}
+		}
+
+		@Test(arguments: IntegrationBackend.selectedPlain)
+		func moveFolderIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let sandbox = try await context.makeSandbox()
+				let parentCloudPath = sandbox.appendingPathComponent("parent.txt")
+				let sourceCloudPath = sandbox.appendingPathComponent("FolderToMoveIntoFile")
+				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
+				try await context.createPrerequisiteFolder(at: sourceCloudPath)
+				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.moveFolder(from: sourceCloudPath, to: parentCloudPath.appendingPathComponent("sub")) }
+				let sourceExists = try await context.provider.checkForItemExistence(at: sourceCloudPath)
+				#expect(sourceExists, "The source of the refused move is gone")
+			}
+		}
+
 		// MARK: - Unauthorized Tests
 
 		@Test(arguments: IntegrationBackend.selectedPlainRemote)

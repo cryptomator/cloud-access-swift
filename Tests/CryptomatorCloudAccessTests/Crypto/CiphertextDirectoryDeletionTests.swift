@@ -355,6 +355,30 @@ extension UnitTests {
 			#expect(provider.deleted == ["dirs/x"])
 		}
 
+		/// A folder that another writer created at the path after the metadata read makes the provider refuse the file delete. At the deleted folder's own directory, a raw `itemTypeMismatch` would reach the caller, which would take it for the folder being no folder.
+		@Test
+		func strayFileReplacedByFolderAtTopLevelThrowsItemNotFound() async throws {
+			let provider = makeProvider(directories: [])
+			provider.listingHook = failingListing(of: "dirs/top", with: CloudProviderError.itemTypeMismatch)
+			provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: "dirs/top")
+			provider.afterMutationHook = CloudProviderMock.failing("deleteFile", with: CloudProviderError.itemTypeMismatch)
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories([:]))
+			}
+			#expect(provider.calls.last == "deleteFile")
+		}
+
+		/// A file that another writer put at the path after the listing makes the provider refuse the directory's delete, which the caller would take for the deleted folder being no folder.
+		@Test
+		func directoryReplacedByFileBeforeItsDeleteThrowsItemNotFound() async throws {
+			let provider = makeProvider(directories: [])
+			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.itemTypeMismatch, at: ["dirs/top"])
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories([:]))
+			}
+			#expect(provider.calls.last == "deleteFolder")
+		}
+
 		@Test
 		func failedMetadataReadAtDirectoryPathKeepsParent() async throws {
 			let provider = makeProvider(directories: [], files: ["dirs/top/a", "dirs/x"])

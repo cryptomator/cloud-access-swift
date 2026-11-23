@@ -262,7 +262,8 @@ public final class WebDAVCloudProvider: CloudProvider {
 			case let memberFailure as WebDAVMemberFailure:
 				// The target isn't known to be complete, so this isn't `moveCompletedWithSourceRemaining`.
 				throw WebDAVError.httpError(statusCode: memberFailure.statusCode)
-			case WebDAVError.httpError(statusCode: 409):
+			case WebDAVError.httpError(statusCode: 409), WebDAVError.httpError(statusCode: 415):
+				// SabreDAV answers a destination whose parent is missing with 409, and one whose parent is no collection with 415.
 				throw CloudProviderError.parentFolderDoesNotExist
 			case WebDAVError.httpError(statusCode: 412):
 				throw CloudProviderError.itemAlreadyExists

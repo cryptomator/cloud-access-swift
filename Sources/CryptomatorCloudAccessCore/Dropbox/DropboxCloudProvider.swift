@@ -101,7 +101,7 @@ public final class DropboxCloudProvider: CloudProvider {
 		let phases = Progress.phases(of: progress, 999)
 		let mode: DropboxClient.WriteMode = replaceExisting ? .overwrite : .add
 		let metadata = try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), mode: \(mode), fileSize: \(localFile.size))") {
-			try await ensureParentFolderExists(for: cloudPath)
+			try await checkTarget(at: cloudPath)
 			try Task.checkCancellation()
 			let file = if localFile.size >= uploadSessionThreshold {
 				try await uploadLargeFile(from: localFile.url, to: cloudPath, mode: mode, fileSize: localFile.size, progress: phases[0])
@@ -121,7 +121,7 @@ public final class DropboxCloudProvider: CloudProvider {
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("createFolder(at: \(cloudPath.path))") {
-			try await ensureParentFolderExists(for: cloudPath)
+			try await checkTarget(at: cloudPath)
 			try Task.checkCancellation()
 			try await withoutCancellation {
 				try await self.client.createFolder(path: cloudPath.path)
@@ -171,7 +171,7 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try await perform("moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
-			try await ensureParentFolderExists(for: targetCloudPath)
+			try await checkTarget(at: targetCloudPath)
 			try Task.checkCancellation()
 			try await withoutCancellation {
 				try await self.client.move(from: sourceCloudPath.path, to: targetCloudPath.path)
@@ -257,12 +257,20 @@ public final class DropboxCloudProvider: CloudProvider {
 		try await performLogged(operation, by: "DropboxCloudProvider", convert: convertStandardError, body)
 	}
 
-	func ensureParentFolderExists(for cloudPath: CloudPath) async throws {
+	/// Throws `CloudProviderError.itemAlreadyExists` for the root as the target, which always exists, and `CloudProviderError.parentFolderDoesNotExist` if the target's parent is missing or no folder. Dropbox would otherwise create missing parent folders, and it reports a file parent as a conflict, which reads as `itemAlreadyExists`.
+	func checkTarget(at cloudPath: CloudPath) async throws {
+		guard cloudPath != .root else {
+			throw CloudProviderError.itemAlreadyExists
+		}
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
 		if parentCloudPath == .root {
 			return
 		}
-		guard try await checkForItemExistence(at: parentCloudPath) else {
+		do {
+			guard try await fetchItemMetadata(at: parentCloudPath).itemType == .folder else {
+				throw CloudProviderError.parentFolderDoesNotExist
+			}
+		} catch CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}
 	}

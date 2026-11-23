@@ -1243,6 +1243,24 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// SabreDAV answers a MOVE into an item that is no collection with 415.
+		@Test
+		func moveFileIntoFileThrowsParentFolderDoesNotExist() async throws {
+			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
+
+			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 415, httpVersion: "HTTP/1.1", headerFields: nil))
+			URLProtocolMock.requestHandler.append({ request in
+				guard let url = request.url, url.path == responseURL.path else {
+					throw URLProtocolMockError.unexpectedRequest
+				}
+				return (moveResponse, nil)
+			})
+
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt/About.txt")) }
+			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt/About.txt"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		@Test
 		func moveFileWithUnauthorizedError() async throws {
 			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))

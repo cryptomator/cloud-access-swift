@@ -59,6 +59,10 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	@concurrent
 	func fetchItemMetadata(at cleartextCloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
+		if cleartextCloudPath == .root {
+			return try await fetchRootMetadata()
+		}
+		try cleartextCloudPath.checkAsSource()
 		let parentDirId = try await parentDirId(of: cleartextCloudPath)
 		let ciphertextMetadata = try await layout.fetchCiphertextMetadata(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		return try cleartextMetadata(ciphertextMetadata, cleartextParentPath: cleartextCloudPath.deletingLastPathComponent(), parentDirId: parentDirId)
@@ -78,6 +82,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	func downloadFile(from cleartextCloudPath: CloudPath, to cleartextLocalURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(cleartextLocalURL.isFileURL)
 		try Task.checkCancellation()
+		try cleartextCloudPath.checkAsSource()
 		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
@@ -100,6 +105,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		precondition(cleartextLocalURL.isFileURL)
 		try Task.checkCancellation()
 		let cleartextFile = try LocalUploadFile(cleartextLocalURL)
+		try cleartextCloudPath.checkAsTarget()
 		let phases = Progress.phases(of: progress, 799, 200)
 		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		defer {
@@ -125,6 +131,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	@concurrent
 	func createFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		try cleartextCloudPath.checkAsTarget()
 		let dirId = UUID().uuidString.data(using: .utf8)!
 		let dirIdFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		let preparedFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
@@ -151,6 +158,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	@concurrent
 	func deleteFile(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		try cleartextCloudPath.checkAsSource()
 		let parentDirId = try await parentDirId(of: cleartextCloudPath)
 		let ciphertextCloudPath = try layout.fileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		try Task.checkCancellation()
@@ -161,10 +169,15 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	 Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path. Throws `VaultFormatError.invalidDirectoryReference` before deleting anything if a download reaches one of these dir files through an alias, or if one of them names the root or an ancestor.
 
 	 The folder's directory and those of its subfolders are deleted before its reference, see `CiphertextDirectoryDeletion`. The delete lists the directories below any shortening decorator, and the layout resolves each listed item to the dir IDs it refers to.
+
+	 A path that isn't `isResolvable` also throws `VaultFormatError.invalidDirectoryReference`. With `CloudProviderError.itemNotFound`, `deleteFolderIfExisting` would report success although the folder that the path spells may exist.
 	 */
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		guard cleartextCloudPath != .root else {
+			throw CloudProviderError.itemTypeMismatch
+		}
 		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.layout.readDirId($0, parentDirId: $1, refusingAlias: true, in: self) }, treatingAsMissing: layout.isMissingDirFile)
 		let referencePath = try layout.folderReferencePath(cleartextCloudPath, parentDirId: directory.parentDirId, in: self)
 		try await layout.checkReferenceBeforeDelete(at: referencePath, dirId: directory.dirId, in: self)
@@ -180,6 +193,8 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	@concurrent
 	func moveFile(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		try cleartextSourceCloudPath.checkAsSource()
+		try cleartextTargetCloudPath.checkAsTarget()
 		let sourceParentDirId = try await parentDirId(of: cleartextSourceCloudPath)
 		let ciphertextSourceCloudPath = try layout.fileCiphertextPath(cleartextSourceCloudPath, parentDirId: sourceParentDirId, in: self)
 		let targetParentDirId = try await parentDirId(of: cleartextTargetCloudPath)
@@ -191,6 +206,8 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	@concurrent
 	func moveFolder(from cleartextSourceCloudPath: CloudPath, to cleartextTargetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		try cleartextSourceCloudPath.checkAsSource()
+		try cleartextTargetCloudPath.checkAsTarget()
 		let sourceParentDirId = try await parentDirId(of: cleartextSourceCloudPath)
 		let sourceReferencePath = try layout.folderReferencePath(cleartextSourceCloudPath, parentDirId: sourceParentDirId, in: self)
 		let targetParentDirId = try await parentDirId(of: cleartextTargetCloudPath)
@@ -258,6 +275,16 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	}
 
 	// MARK: - Convenience
+
+	/// The root has no encrypted name to decrypt, so its metadata comes from its ciphertext directory. If that directory is gone, the root counts as missing.
+	private func fetchRootMetadata() async throws -> CloudItemMetadata {
+		let rootDirPath = try await dirPath(of: dirId(of: .root))
+		let metadata = try await delegate.fetchItemMetadata(at: rootDirPath)
+		guard metadata.itemType == .folder else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		return CloudItemMetadata(name: CloudPath.root.lastPathComponent, cloudPath: .root, itemType: .folder, lastModifiedDate: metadata.lastModifiedDate, size: nil)
+	}
 
 	/// Must run inside `withoutCancellation`, because stopping halfway leaves folders whose directory is missing.
 	private func deleteCiphertextDirectory(of dirId: Data, containingDirIds: Set<Data>) async throws {

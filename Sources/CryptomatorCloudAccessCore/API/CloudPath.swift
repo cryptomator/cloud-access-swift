@@ -194,4 +194,24 @@ extension CloudPath {
 	var isResolvable: Bool {
 		return self == .root || isAbsolute && pathComponents.dropFirst().allSatisfy(\.isSinglePathComponent)
 	}
+
+	/// Throws `CloudProviderError.itemAlreadyExists` for the root, which no operation creates or replaces, and `CloudProviderError.parentFolderDoesNotExist` for any other path that isn't `isResolvable`.
+	func checkAsTarget() throws {
+		guard self != .root else {
+			throw CloudProviderError.itemAlreadyExists
+		}
+		guard isResolvable else {
+			throw CloudProviderError.parentFolderDoesNotExist
+		}
+	}
+
+	/// Throws `CloudProviderError.itemTypeMismatch` for the root and `CloudProviderError.itemNotFound` for any other path that isn't `isResolvable`. No file operation takes the root, and a folder operation on it would act on everything below it.
+	func checkAsSource() throws {
+		guard self != .root else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		guard isResolvable else {
+			throw CloudProviderError.itemNotFound
+		}
+	}
 }

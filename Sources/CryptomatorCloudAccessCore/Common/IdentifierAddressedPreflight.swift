@@ -119,9 +119,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 
 	/// Resolves the path's parent folder. The root has none, so it throws `CloudProviderError.itemAlreadyExists` as the target that exists.
 	private func resolveTargetParent(of cloudPath: CloudPath) async throws -> Item {
-		guard cloudPath != .root else {
-			throw CloudProviderError.itemAlreadyExists
-		}
+		try cloudPath.checkAsTarget()
 		let parentItem = try await cache.resolveParentPath(forItemAt: cloudPath, lookUpChild: lookUpChild(named:in:))
 		guard parentItem.effectiveItemType == .folder else {
 			throw CloudProviderError.parentFolderDoesNotExist

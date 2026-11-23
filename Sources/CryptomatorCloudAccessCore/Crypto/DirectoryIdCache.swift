@@ -53,6 +53,9 @@ final class DirectoryIdCache: Sendable {
 		if let cached = try get(cleartextPath) {
 			return cached
 		}
+		guard cleartextPath.isResolvable else {
+			throw CloudProviderError.itemNotFound
+		}
 		let parentDirId = try await get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss)
 		let dirId = try await onMiss(cleartextPath, parentDirId)
 		try addOrUpdate(cleartextPath, dirId: dirId)

@@ -200,6 +200,62 @@ enum PathDerivingOperation: CaseIterable, CustomTestStringConvertible {
 	}
 }
 
+/// An operation that takes the given path as its source or target, with a valid path in any other role.
+enum PathCheckingOperation: CaseIterable, CustomTestStringConvertible {
+	case downloadFile
+	case deleteFile
+	case moveFileFrom
+	case moveFolderFrom
+	case uploadFile
+	case createFolder
+	case moveFileTo
+	case moveFolderTo
+
+	var testDescription: String {
+		return "\(self)"
+	}
+
+	private var takesPathAsSource: Bool {
+		switch self {
+		case .downloadFile, .deleteFile, .moveFileFrom, .moveFolderFrom:
+			return true
+		case .uploadFile, .createFolder, .moveFileTo, .moveFolderTo:
+			return false
+		}
+	}
+
+	var rootError: CloudProviderError {
+		return takesPathAsSource ? .itemTypeMismatch : .itemAlreadyExists
+	}
+
+	var unresolvablePathError: CloudProviderError {
+		return takesPathAsSource ? .itemNotFound : .parentFolderDoesNotExist
+	}
+
+	func run(on provider: CloudProvider, at cloudPath: CloudPath, localDirectoryURL: URL) async throws {
+		let localURL = localDirectoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		switch self {
+		case .downloadFile:
+			_ = try await provider.downloadFile(from: cloudPath, to: localURL)
+		case .deleteFile:
+			try await provider.deleteFile(at: cloudPath)
+		case .moveFileFrom:
+			try await provider.moveFile(from: cloudPath, to: CloudPath("/Moved"))
+		case .moveFolderFrom:
+			try await provider.moveFolder(from: cloudPath, to: CloudPath("/Moved"))
+		case .uploadFile:
+			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
+			_ = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: true)
+		case .createFolder:
+			try await provider.createFolder(at: cloudPath)
+		case .moveFileTo:
+			try await provider.moveFile(from: CloudPath("/File 1"), to: cloudPath)
+		case .moveFolderTo:
+			try await provider.moveFolder(from: CloudPath("/Directory 1"), to: cloudPath)
+		}
+	}
+}
+
 extension UnitTests {
 	final class VaultProviderDecoratorTests {
 		let tmpDirURL: URL
@@ -232,6 +288,23 @@ extension UnitTests {
 			#expect(metadata.name == "File 3")
 			#expect(metadata.itemType == .file)
 			#expect(metadata.cloudPath.path == "/Directory 1/File 3")
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func fetchItemMetadataOfRootReadsItsDirectory(format: VaultTestFormat, stacking: Stacking) async throws {
+			let fixture = try format.makeFixture(stacking: stacking)
+			let requests = fixture.provider.recordingRequests()
+			let metadata = try await fixture.decorator.fetchItemMetadata(at: .root)
+			#expect(metadata == CloudItemMetadata(name: "/", cloudPath: .root, itemType: .folder, lastModifiedDate: fixture.provider.lastModifiedDate, size: nil))
+			#expect(requests() == RecordedRequests(calls: ["fetchItemMetadata"], metadataReads: [VaultTestFormat.rootDirectory]))
+		}
+
+		@Test(arguments: VaultTestFormat.allCases)
+		func fetchItemMetadataOfRootWithoutFolderAtItsDirectoryThrows(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .plain)
+			fixture.provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: VaultTestFormat.rootDirectory)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.fetchItemMetadata(at: .root) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemMetadata(at: .root) }
 		}
 
 		/// Only the shortening decorator restores the long names.
@@ -689,6 +762,69 @@ extension UnitTests {
 			let fixture = try format.makeFixture(stacking: stacking)
 			await assertThrowsCancellationErrorInCancelledTask(fixture.decorator)
 			#expect(fixture.provider.calls == [])
+		}
+
+		// MARK: - Root and Unresolvable Paths
+
+		@Test(arguments: VaultTestFormat.allCases, PathCheckingOperation.allCases)
+		func operationAtRootThrowsWithoutRequest(format: VaultTestFormat, operation: PathCheckingOperation) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			await #expect(throws: operation.rootError) {
+				try await operation.run(on: fixture.decorator, at: .root, localDirectoryURL: tmpDirURL)
+			}
+			#expect(fixture.provider.calls == [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, PathCheckingOperation.allCases)
+		func operationAtUnresolvablePathThrowsWithoutRequest(format: VaultTestFormat, operation: PathCheckingOperation) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
+				await #expect(throws: operation.unresolvablePathError, "\(cloudPath.path)") {
+					try await operation.run(on: fixture.decorator, at: cloudPath, localDirectoryURL: tmpDirURL)
+				}
+			}
+			#expect(fixture.provider.calls == [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases)
+		func readOfUnresolvablePathThrowsItemNotFoundWithoutRequest(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
+				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemMetadata(at: cloudPath) }
+				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemList(forFolderAt: cloudPath, withPageToken: nil) }
+			}
+			#expect(fixture.provider.calls == [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases)
+		func moveOfRootOntoRootThrowsItemTypeMismatch(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.moveFile(from: .root, to: .root) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.moveFolder(from: .root, to: .root) }
+			#expect(fixture.provider.calls == [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases)
+		func deleteFolderAtRootThrowsItemTypeMismatchWithoutRequest(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.deleteFolder(at: .root) }
+			#expect(fixture.provider.calls == [])
+		}
+
+		/// `deleteFolderIfExisting` would report `itemNotFound` as success, although the folder that the path spells may exist.
+		@Test(arguments: VaultTestFormat.allCases)
+		func deleteFolderIfExistingAtUnresolvablePathThrowsWithoutRequest(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
+				await #expect(throws: VaultFormatError.invalidDirectoryReference, "\(cloudPath.path)") { try await fixture.decorator.deleteFolderIfExisting(at: cloudPath) }
+			}
+			#expect(fixture.provider.calls == [])
+		}
+
+		/// `init(_:)` removes a `..` that follows a named component, so only a decoded path can keep one.
+		private static func unresolvablePaths() throws -> [CloudPath] {
+			let decodedPath = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/Directory 1/../File 1"}"#.utf8))
+			return [CloudPath("/.."), CloudPath("Directory 1/File 3"), decodedPath]
 		}
 
 		// MARK: - Requests

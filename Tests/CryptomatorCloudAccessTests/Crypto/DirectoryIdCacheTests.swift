@@ -36,6 +36,18 @@ extension UnitTests {
 			#expect(try dirId == cache.get(path))
 		}
 
+		@Test(arguments: ["/..", "one/two"])
+		func getOfPathThatNeverReachesRootThrowsItemNotFoundWithoutLookup(path: String) async throws {
+			let lookups = OSAllocatedUnfairLock(initialState: 0)
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				_ = try await cache.get(CloudPath(path), onMiss: { _, _ in
+					lookups.withLock { $0 += 1 }
+					return Data("ID".utf8)
+				})
+			}
+			#expect(lookups.withLock { $0 } == 0)
+		}
+
 		@Test
 		func testInvalidate() throws {
 			let path = CloudPath("/foo")

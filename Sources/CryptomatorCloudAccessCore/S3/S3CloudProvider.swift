@@ -122,7 +122,7 @@ public final class S3CloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		return try await perform("uploadFile(from: \(localURL), to: \(cloudPath.path), replaceExisting: \(replaceExisting))") {
 			let localFile = try LocalUploadFile(localURL)
-			try S3CloudProvider.checkTargetPath(cloudPath)
+			try cloudPath.checkAsTarget()
 			let fileSize = Int(localFile.size)
 			let partSize = try multipartUploadPartSize(forFileSize: fileSize)
 			let key = getKey(for: cloudPath)
@@ -156,7 +156,7 @@ public final class S3CloudProvider: CloudProvider {
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("createFolder(at: \(cloudPath.path))") {
-			try S3CloudProvider.checkTargetPath(cloudPath)
+			try cloudPath.checkAsTarget()
 			if try await checkForItemExistence(at: cloudPath) {
 				throw CloudProviderError.itemAlreadyExists
 			}
@@ -175,7 +175,7 @@ public final class S3CloudProvider: CloudProvider {
 	public func deleteFile(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("deleteFile(at: \(cloudPath.path))") {
-			try S3CloudProvider.checkSourcePath(cloudPath)
+			try cloudPath.checkAsSource()
 			_ = try await requireFile(at: cloudPath)
 			try Task.checkCancellation()
 			let key = getKey(for: cloudPath)
@@ -193,7 +193,7 @@ public final class S3CloudProvider: CloudProvider {
 	public func deleteFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("deleteFolder(at: \(cloudPath.path))") {
-			try S3CloudProvider.checkSourcePath(cloudPath)
+			try cloudPath.checkAsSource()
 			let firstPage = try await requireFolder(at: cloudPath)
 			try await deleteFolderAfterCheck(at: cloudPath, firstPage: firstPage)
 			CloudAccessDDLogDebug("S3CloudProvider: deleteFolder(at: \(cloudPath.path)) finished")
@@ -205,8 +205,8 @@ public final class S3CloudProvider: CloudProvider {
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("moveFile(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
-			try S3CloudProvider.checkSourcePath(sourceCloudPath)
-			try S3CloudProvider.checkTargetPath(targetCloudPath)
+			try sourceCloudPath.checkAsSource()
+			try targetCloudPath.checkAsTarget()
 			try await assertParentFolderExists(for: targetCloudPath)
 			let metadata = try await requireFile(at: sourceCloudPath)
 			try await assertItemDoesNotExist(at: targetCloudPath)
@@ -230,8 +230,8 @@ public final class S3CloudProvider: CloudProvider {
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		try await perform("moveFolder(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
-			try S3CloudProvider.checkSourcePath(sourceCloudPath)
-			try S3CloudProvider.checkTargetPath(targetCloudPath)
+			try sourceCloudPath.checkAsSource()
+			try targetCloudPath.checkAsTarget()
 			try await assertParentFolderExists(for: targetCloudPath)
 			let firstPage = try await requireFolder(at: sourceCloudPath)
 			try await assertItemDoesNotExist(at: targetCloudPath)
@@ -525,26 +525,6 @@ public final class S3CloudProvider: CloudProvider {
 	}
 
 	// - MARK: Assertions
-
-	/// Throws `CloudProviderError.itemAlreadyExists` for the root, which always exists, and `CloudProviderError.parentFolderDoesNotExist` for a path that never reaches the root, without a request.
-	private static func checkTargetPath(_ cloudPath: CloudPath) throws {
-		guard cloudPath != .root else {
-			throw CloudProviderError.itemAlreadyExists
-		}
-		guard cloudPath.isResolvable else {
-			throw CloudProviderError.parentFolderDoesNotExist
-		}
-	}
-
-	/// Throws, without a request, `CloudProviderError.itemTypeMismatch` for the root and `CloudProviderError.itemNotFound` for a path that never reaches the root. No file operation takes the root, and a folder operation on it would act on the whole bucket.
-	private static func checkSourcePath(_ cloudPath: CloudPath) throws {
-		guard cloudPath != .root else {
-			throw CloudProviderError.itemTypeMismatch
-		}
-		guard cloudPath.isResolvable else {
-			throw CloudProviderError.itemNotFound
-		}
-	}
 
 	/// Returns the metadata of the file at the path, judged by its key, so that a folder of the same name beside it doesn't count. Throws `CloudProviderError.itemTypeMismatch` if only a folder is there.
 	private func requireFile(at cloudPath: CloudPath) async throws -> CloudItemMetadata {

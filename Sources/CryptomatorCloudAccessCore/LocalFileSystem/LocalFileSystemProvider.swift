@@ -120,7 +120,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 					continue
 				}
 				let iCloudCompatibleChildURL = url.appending(component: getItemName(forItemAt: childURL))
-				guard iCloudCompatibleChildURL.lastPathComponent.removingASCIIPrefix(".") == nil else {
+				guard iCloudCompatibleChildURL.lastPathComponent.removingUTF8Prefix(".") == nil else {
 					continue
 				}
 				do {

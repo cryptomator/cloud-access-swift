@@ -14,9 +14,9 @@ typealias VaultFormat6ProviderDecorator = VaultProviderDecorator<VaultFormat6Lay
 
 /// Splits a listed vault format 6 ciphertext name into the encrypted name and the item type that its prefix marks: `0` for a folder's dir file, `1S` for a symlink, none for a file.
 func parseVaultFormat6CiphertextName(_ ciphertextName: String) -> (baseName: String, itemType: CloudItemType) {
-	if let baseName = ciphertextName.removingASCIIPrefix("0") {
+	if let baseName = ciphertextName.removingUTF8Prefix("0") {
 		return (baseName, .folder)
-	} else if let baseName = ciphertextName.removingASCIIPrefix("1S") {
+	} else if let baseName = ciphertextName.removingUTF8Prefix("1S") {
 		return (baseName, .symlink)
 	} else {
 		return (ciphertextName, .file)
@@ -148,7 +148,7 @@ struct VaultFormat6Layout: VaultLayout {
 			// The library never addresses such an item. Its directory stays without a reference, as after Desktop's directory delete, whose health check reports it as an orphan.
 			return []
 		}
-		guard originalName.removingASCIIPrefix("0") != nil else {
+		guard parseVaultFormat6CiphertextName(originalName).itemType == .folder else {
 			return []
 		}
 		return try await [decorator.physicalProvider.downloadDirFile(at: item.cloudPath, refusingAlias: true)]

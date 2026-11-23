@@ -906,7 +906,7 @@ extension UnitTests {
 			let cases = try MutationGuardCases.make(localURL: makeLocalFile()) { kind in
 				switch kind {
 				case .deleteFileOfFolder, .moveFileOfFolder:
-					return [S3CloudProviderTests.listing(of: "folder", keys: ["folder/"])]
+					return [S3CloudProviderTests.listing(of: "folder", commonPrefixes: ["folder/"])]
 				case .deleteFolderOfFile, .moveFolderOfFile:
 					return [S3CloudProviderTests.listing(of: "file.txt/"), S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"])]
 				case .createFolderInFile, .uploadFileIntoFile:
@@ -1112,7 +1112,7 @@ extension UnitTests {
 					[S3CloudProviderTests.listing(of: "a.txt", keys: ["a.txt"], onRequest: { _ in canceller.cancel() }), URLProtocolMock.handler(statusCode: 204)]
 				}, operation: { try await $0.deleteFile(at: CloudPath("/a.txt")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "deleteFolder after the empty prefix", responses: { canceller in
-					[S3CloudProviderTests.listing(of: "x/", onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x", keys: ["x/"])]
+					[S3CloudProviderTests.listing(of: "x/", onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"])]
 				}, operation: { try await $0.deleteFolder(at: CloudPath("/x")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "deleteFolder after the key lookup that follows the empty prefix", responses: { canceller in
 					[S3CloudProviderTests.listing(of: "x/"), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"], onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x/", keys: ["x/a.txt"])]
@@ -1423,7 +1423,7 @@ extension UnitTests {
 			}
 		}
 
-		/// Answers a listing of the prefix with the keys, and fails any other request, so that a check of another path fails the test.
+		/// Answers a `GET` with this `prefix` parameter with the keys and common prefixes, and fails any other request, so that a check of another path fails the test. It ignores the delimiter.
 		private static func listing(of prefix: String, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
 			let response = URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
 			return { request in

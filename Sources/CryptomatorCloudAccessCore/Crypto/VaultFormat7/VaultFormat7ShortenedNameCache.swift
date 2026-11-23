@@ -105,7 +105,7 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 			return shortenedPath
 		}
 		let shortenedName = shortenedPath.pathComponents[ciphertextNameCompIdx]
-		if shortenedName.removingASCIISuffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil {
+		if shortenedName.removingUTF8Suffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil {
 			let cutOff = shortenedPath.pathComponents.count - ciphertextNameCompIdx - 1
 			let c9sDirPath = shortenedPath.deletingLastPathComponents(cutOff)
 			// `getShortenedPath` maps the inflated path back to this `.c9s` only if the name is longer than the threshold and hashes to the `.c9s` name.
@@ -119,7 +119,7 @@ final class VaultFormat7ShortenedNameCache: Sendable {
 	/// Whether the path is a `.c9s` directory itself, as opposed to an item in one or an unshortened item.
 	func isC9SDirectory(_ cloudPath: CloudPath) -> Bool {
 		let pathComponents = cloudPath.pathComponents
-		return pathComponents.count == ciphertextNameCompIdx + 1 && pathComponents[ciphertextNameCompIdx].removingASCIISuffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil
+		return pathComponents.count == ciphertextNameCompIdx + 1 && pathComponents[ciphertextNameCompIdx].removingUTF8Suffix(VaultFormat7ShortenedNameCache.c9sSuffix) != nil
 	}
 
 	// MARK: - Internal

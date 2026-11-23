@@ -64,7 +64,7 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 			return shortenedPath
 		}
 		let shortenedName = shortenedPath.lastPathComponent
-		if let hash = shortenedName.removingASCIISuffix(VaultFormat6ShortenedNameCache.lngSuffix) {
+		if let hash = shortenedName.removingUTF8Suffix(VaultFormat6ShortenedNameCache.lngSuffix) {
 			guard VaultFormat6ShortenedNameCache.isDeflatedHash(hash) else {
 				throw VaultFormatError.invalidNameFile
 			}

@@ -112,7 +112,7 @@ extension C9RVaultLayout {
 	}
 
 	func ciphertextItem(named ciphertextName: String, itemType: CloudItemType) throws -> (baseName: String, itemType: CloudItemType) {
-		guard let ciphertextBaseName = ciphertextName.removingASCIISuffix(".c9r") else {
+		guard let ciphertextBaseName = ciphertextName.removingUTF8Suffix(".c9r") else {
 			throw VaultFormatError.encounteredUnrelatedFile
 		}
 		return (ciphertextBaseName, itemType)
@@ -123,7 +123,7 @@ extension C9RVaultLayout {
 	}
 
 	func subdirectoryIds(of item: CloudItemMetadata, in decorator: VaultProviderDecorator<Self>) async throws -> [Data] {
-		guard item.itemType == .folder, item.name.removingASCIISuffix(".c9r") != nil || item.name.removingASCIISuffix(".c9s") != nil else {
+		guard item.itemType == .folder, item.name.removingUTF8Suffix(".c9r") != nil || item.name.removingUTF8Suffix(".c9s") != nil else {
 			return []
 		}
 		var dirIds = [Data]()

@@ -80,8 +80,8 @@ public final class S3CloudProvider: CloudProvider {
 			}
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil")) received output: \(output)")
 			let itemList = CloudItemList(listObjects: output, listedPrefix: prefix)
-			// Any key with the prefix, also one that the item list leaves out, proves that the folder exists, although the page may hold no item. Without one, the folder may also be missing or a file.
-			let hasKeyWithPrefix = output.contents.contains(where: { $0.key.deletingPrefix(prefix) != nil }) || output.commonPrefixes.contains(where: { $0.deletingPrefix(prefix) != nil })
+			// Any listed key, also one that the item list leaves out, proves that the folder exists, although the page may hold no item. Without one, the folder may also be missing or a file.
+			let hasKeyWithPrefix = !output.contents.isEmpty || !output.commonPrefixes.isEmpty
 			if !hasKeyWithPrefix, cloudPath != .root {
 				try await assertFolderExists(at: cloudPath)
 			}
@@ -259,7 +259,7 @@ public final class S3CloudProvider: CloudProvider {
 		var hasSourceRemaining = false
 		try await forEachRecursivePage(prefix: sourcePrefix, firstPage: firstPage) { objects in
 			let copyRequests: [S3CopyRequest] = objects.compactMap {
-				guard let name = $0.key.deletingPrefix(sourcePrefix) else {
+				guard let name = $0.key.removingUTF8Prefix(sourcePrefix) else {
 					return nil
 				}
 				let targetKey = targetPrefix + name
@@ -371,7 +371,7 @@ public final class S3CloudProvider: CloudProvider {
 	private func listObjects(withPrefix prefix: String, recursive: Bool, pageToken: String?, maxKeys: Int = S3CloudProvider.s3MaxPageSize) async throws -> S3ListObjectsResult {
 		let result = try await client.listObjectsV2(prefix: prefix, delimiter: recursive ? nil : S3CloudProvider.delimiter, continuationToken: pageToken, maxKeys: maxKeys)
 		let hasPrefix: (String) -> Bool = { key in
-			guard key.deletingPrefix(prefix) != nil else {
+			guard key.removingUTF8Prefix(prefix) != nil else {
 				CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(prefix)")
 				return false
 			}
@@ -381,14 +381,7 @@ public final class S3CloudProvider: CloudProvider {
 	}
 
 	func getKey(for cloudPath: CloudPath) -> String {
-		if cloudPath == .root {
-			return ""
-		}
-		var path = cloudPath.path
-		if path.unicodeScalars.first == "/" {
-			path.unicodeScalars.removeFirst()
-		}
-		return path
+		return cloudPath.path.removingUTF8Prefix("/") ?? cloudPath.path
 	}
 
 	func getPrefix(for cloudPath: CloudPath) -> String {
@@ -652,7 +645,7 @@ extension CloudItemList {
 		guard let listedPrefix else {
 			return true
 		}
-		guard let remainder = key.deletingPrefix(listedPrefix) else {
+		guard let remainder = key.removingUTF8Prefix(listedPrefix) else {
 			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(listedPrefix)")
 			return false
 		}
@@ -666,15 +659,5 @@ extension CloudItemList {
 			return false
 		}
 		return true
-	}
-}
-
-private extension String {
-	/// Compares bytes, as S3 does, because a `Character` can span the end of the prefix.
-	func deletingPrefix(_ prefix: String) -> String? {
-		guard utf8.starts(with: prefix.utf8) else {
-			return nil
-		}
-		return String(Substring(utf8.dropFirst(prefix.utf8.count)))
 	}
 }

@@ -185,7 +185,13 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 			if let dirId = directory.dirId {
 				try await self.deleteCiphertextDirectory(of: dirId, containingDirIds: directory.containingDirIds)
 			}
-			try await self.layout.deleteReference(at: referencePath, in: self)
+			do {
+				try await self.layout.deleteReference(at: referencePath, in: self)
+			} catch {
+				// The folder's directory is gone by now, and the provider may have deleted the reference although it threw, so the path may not keep its cached dir ID. A failed invalidation must not replace the delete's error.
+				try? self.dirIdCache.invalidate(cleartextCloudPath)
+				throw error
+			}
 			try self.dirIdCache.invalidate(cleartextCloudPath)
 		}
 	}
@@ -214,7 +220,14 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		let targetReferencePath = try layout.folderReferencePath(cleartextTargetCloudPath, parentDirId: targetParentDirId, in: self)
 		try Task.checkCancellation()
 		try await completingMove {
-			try await layout.moveReference(from: sourceReferencePath, to: targetReferencePath, in: self)
+			do {
+				try await layout.moveReference(from: sourceReferencePath, to: targetReferencePath, in: self)
+			} catch let error where error as? CloudProviderError != .moveCompletedWithSourceRemaining {
+				// The provider may have applied the move although it threw, so neither path may keep a cached dir ID. A failed invalidation must not replace the move's error.
+				try? dirIdCache.invalidate(cleartextSourceCloudPath)
+				try? dirIdCache.invalidate(cleartextTargetCloudPath)
+				throw error
+			}
 		} finalize: {
 			if let dirId = try dirIdCache.get(cleartextSourceCloudPath) {
 				try dirIdCache.addOrUpdate(cleartextTargetCloudPath, dirId: dirId)

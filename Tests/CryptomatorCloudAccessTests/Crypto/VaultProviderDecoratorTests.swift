@@ -49,6 +49,16 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 		}
 	}
 
+	/// The delegate call that deletes a folder's reference.
+	var referenceDeleteCall: String {
+		switch self {
+		case .vf6:
+			return "deleteFile"
+		case .vf7:
+			return "deleteFolder"
+		}
+	}
+
 	func makeCryptor() -> CryptorMock {
 		switch self {
 		case .vf6:
@@ -671,6 +681,15 @@ extension UnitTests {
 			#expect(try Data("dir1-id".utf8) == fixture.dirIdCache.get(CloudPath("/Directory 1")))
 		}
 
+		/// The folder's directory is deleted before its reference, and the provider may have deleted the reference although it threw, so the cache no longer maps the path.
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func deleteFolderWithFailedReferenceDeleteDropsCachedDirId(format: VaultTestFormat, stacking: Stacking) async throws {
+			let fixture = try format.makeFixture(stacking: stacking)
+			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceDeleteCall, with: URLError(.timedOut), at: [format.referencePath("dir1", in: VaultTestFormat.rootDirectory)])
+			await #expect(throws: URLError(.timedOut)) { try await fixture.decorator.deleteFolder(at: CloudPath("/Directory 1")) }
+			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
+		}
+
 		/// On Google Drive, a shortcut can share a genuine dir file's name, and a read of that path can reach the shortcut's target. The walk refuses it, so the directory of `Directory 2` is neither listed nor deleted.
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderKeepsFolderWhoseDirFileDownloadsThroughAlias(format: VaultTestFormat) async throws {
@@ -746,15 +765,16 @@ extension UnitTests {
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
 		}
 
-		/// A move that failed otherwise left no usable target, so the cache must not map one.
+		/// The provider may have applied a move that threw an error other than `moveCompletedWithSourceRemaining`, so the cache maps neither path.
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
-		func moveFolderWithOtherMoveErrorSkipsCacheUpdate(format: VaultTestFormat, stacking: Stacking) async throws {
+		func moveFolderWithOtherMoveErrorDropsCachedDirIds(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			try fixture.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
-			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceMoveCall, with: CloudProviderError.itemAlreadyExists)
-			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await fixture.decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }
+			try fixture.dirIdCache.addOrUpdate(CloudPath("/Directory 2"), dirId: Data("dir2-id".utf8))
+			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceMoveCall, with: URLError(.timedOut))
+			await #expect(throws: URLError(.timedOut)) { try await fixture.decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }
+			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 2")) == nil)
-			#expect(try Data("dir1-id".utf8) == fixture.dirIdCache.get(CloudPath("/Directory 1")))
 		}
 
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)

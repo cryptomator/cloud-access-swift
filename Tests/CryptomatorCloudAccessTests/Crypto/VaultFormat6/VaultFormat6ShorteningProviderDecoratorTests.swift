@@ -389,6 +389,14 @@ extension UnitTests {
 		}
 
 		@Test
+		func uploadFileWithLongNameOverExistingFileWithoutReplaceExistingThrowsItemAlreadyExists() async throws {
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try "cleartext5".write(to: localURL, atomically: true, encoding: .utf8)
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false) }
+			#expect(provider.createdFiles["\(VaultTestFormat.rootDirectory)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"] == nil)
+		}
+
+		@Test
 		func createFolderWithLongName() async throws {
 			let (provider, decorator) = try makeDecoratorOverVaultWithoutNameFiles()
 			try await decorator.createFolder(at: CloudPath("/Directory 4 (Long)"))

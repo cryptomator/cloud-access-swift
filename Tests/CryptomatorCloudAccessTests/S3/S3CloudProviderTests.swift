@@ -809,9 +809,9 @@ extension UnitTests {
 				requests.withLock { $0.append((request, body)) }
 			}
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: recordRequest),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next", onRequest: recordRequest),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: recordRequest),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: recordRequest),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest)
 			]
 
@@ -831,7 +831,7 @@ extension UnitTests {
 		func deleteFolderLeavesKeysOutsideFolder() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt", "folder2/b.txt"])),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt", "folder2/b.txt"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -844,11 +844,11 @@ extension UnitTests {
 		@Test
 		func moveFolderCopiesAndDeletesEveryPage() async throws {
 			let requests = RequestRecorder()
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next", onRequest: requests.record) + [
 				S3CloudProviderTests.copyObject(requests),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/sub/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/sub/b.txt"], onRequest: requests.record),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
@@ -870,7 +870,7 @@ extension UnitTests {
 		func moveFolderLeavesKeysOutsideFolderAndCopiesKeyWithoutSize() async throws {
 			let requests = RequestRecorder()
 			let contents = "<Contents><Key>folder/a.txt</Key><Size>7</Size></Contents><Contents><Key>folder2/b.txt</Key><Size>7</Size></Contents><Contents><Key>folder/c.txt</Key></Contents>"
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated>\(contents)</ListBucketResult>", onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPageBody: "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><IsTruncated>false</IsTruncated>\(contents)</ListBucketResult>", onRequest: requests.record) + [
 				S3CloudProviderTests.copyObject(requests),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
@@ -888,7 +888,7 @@ extension UnitTests {
 		@Test
 		func moveFolderWithFailedCopyDeletesNothing() async throws {
 			let requests = RequestRecorder()
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"]), onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], onRequest: requests.record) + [
 				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record)
 			]
 
@@ -1185,9 +1185,9 @@ extension UnitTests {
 		func deleteFolderWithRefusedKeysDeletesEveryPageAndThrowsDeletionIncomplete() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next")),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next"),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -1201,9 +1201,9 @@ extension UnitTests {
 		func deleteFolderWithFailedDeleteRequestOnFirstPageDeletesEveryPage() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], nextContinuationToken: "next"),
 				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -1216,7 +1216,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderWithRefusalThenListingFailureThrowsDeletionIncomplete() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], nextContinuationToken: "next"),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
 				URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidArgument</Code></Error>")
 			]
@@ -1228,7 +1228,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderWithTransportFailureDuringBatchResendThrowsDeletionIncomplete() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"])),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"]),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
 			] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3)
 
@@ -1241,9 +1241,9 @@ extension UnitTests {
 		func deleteFolderWithUnreadableDeleteResultOnFirstPageDeletesEveryPage() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], nextContinuationToken: "next")
 			] + Array(repeating: URLProtocolMock.handler(body: S3MockResponse.copyObjectResult), count: 4) + [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"])),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -1258,9 +1258,9 @@ extension UnitTests {
 			let provider: S3CloudProvider = provider
 			let canceller = TaskCanceller<Void>()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next")),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], nextContinuationToken: "next"),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: { _ in
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: { _ in
 					canceller.cancel()
 				}),
 				URLProtocolMock.handler(body: "<DeleteResult/>")
@@ -1277,10 +1277,10 @@ extension UnitTests {
 		@Test
 		func moveFolderWithRefusedKeysCopiesEveryPageAndThrowsMoveCompleted() async throws {
 			let requests = RequestRecorder()
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], nextContinuationToken: "next", onRequest: requests.record) + [
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: requests.record),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
@@ -1295,10 +1295,10 @@ extension UnitTests {
 		@Test
 		func moveFolderWithFailedDeleteRequestCopiesEveryPageAndThrowsMoveCompleted() async throws {
 			let requests = RequestRecorder()
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], nextContinuationToken: "next", onRequest: requests.record) + [
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>", onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: requests.record),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
@@ -1312,10 +1312,10 @@ extension UnitTests {
 		@Test
 		func moveFolderWithRefusalThenCopyFailureThrowsCopyError() async throws {
 			let requests = RequestRecorder()
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"), onRequest: requests.record)) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], nextContinuationToken: "next", onRequest: requests.record) + [
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")]), onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: requests.record),
 				URLProtocolMock.handler(statusCode: 400, body: "<Error><Code>InvalidRequest</Code></Error>", onRequest: requests.record)
 			]
 
@@ -1328,11 +1328,11 @@ extension UnitTests {
 		/// Whether the batch was deleted is unknown after a transport failure, so the move stops before the next page.
 		@Test
 		func moveFolderWithTransportFailureDuringBatchResendThrowsAtOnce() async throws {
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], nextContinuationToken: "next") + [
 				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "SlowDown")]))
 			] + Array(repeating: S3MockResponse.failure(.networkConnectionLost), count: 3) + [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"]))
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"])
 			]
 
 			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
@@ -1341,13 +1341,13 @@ extension UnitTests {
 
 		@Test
 		func moveFolderWithTransportFailureOnDeleteRequestThrowsAtOnce() async throws {
-			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(firstPage: URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/a.txt"], nextContinuationToken: "next"))) + [
+			URLProtocolMock.requestHandler = S3CloudProviderTests.folderMoveChecks(keys: ["folder/a.txt"], nextContinuationToken: "next") + [
 				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
 				URLProtocolMock.handler(body: S3MockResponse.deleteResult(errors: [("folder/a.txt", "AccessDenied")])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/b.txt"], nextContinuationToken: "next2")),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], nextContinuationToken: "next2"),
 				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult),
 				S3MockResponse.failure(.notConnectedToInternet),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/c.txt"]))
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/c.txt"])
 			]
 
 			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }
@@ -1419,9 +1419,14 @@ extension UnitTests {
 			}
 		}
 
-		/// Answers a `GET` with this `prefix` parameter and the listing's `delimiter` (none if `recursive`, `/` otherwise) with the keys and common prefixes. It fails any other request, so that a check of another path or a listing of the other kind fails the test.
+		/// Answers like `listing(of:recursive:body:onRequest:)` with a `ListBucketResult` of the keys, common prefixes and continuation token.
 		private static func listing(of prefix: String, recursive: Bool = false, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-			let response = URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
+			return listing(of: prefix, recursive: recursive, body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
+		}
+
+		/// Answers a `GET` with this `prefix` parameter and the listing's `delimiter` (none if `recursive`, `/` otherwise) with the body. It fails any other request, so that a check of another path or a listing of the other kind fails the test.
+		private static func listing(of prefix: String, recursive: Bool = false, body: String, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			let response = URLProtocolMock.handler(body: body, onRequest: onRequest)
 			return { request in
 				let parameters = queryParameters(of: request)
 				let expectedDelimiter: String? = recursive ? nil : "/"
@@ -1438,8 +1443,13 @@ extension UnitTests {
 		}
 
 		/// The responses to the checks of a folder move from `/folder` to `/target`: the first page of the source's recursive listing, which shows that it is a folder, and the target's lookup, which finds nothing.
-		private static func folderMoveChecks(firstPage: @escaping @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
-			return [firstPage, URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))]
+		private static func folderMoveChecks(keys: [String], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return folderMoveChecks(firstPageBody: S3MockResponse.listBucketResult(keys: keys, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
+		}
+
+		/// The checks of `folderMoveChecks(keys:nextContinuationToken:onRequest:)`, with the body of the source's first page as it is.
+		private static func folderMoveChecks(firstPageBody: String, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
+			return [listing(of: "folder/", recursive: true, body: firstPageBody, onRequest: onRequest), listing(of: "target")]
 		}
 
 		private static func copyObject(_ requests: RequestRecorder) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {

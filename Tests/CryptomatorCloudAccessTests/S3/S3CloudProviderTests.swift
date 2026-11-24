@@ -138,7 +138,7 @@ extension UnitTests {
 			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
 			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
 				URLProtocolMock.handler(body: "content", onRequest: { _ in
 					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 				})
@@ -167,11 +167,11 @@ extension UnitTests {
 			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
 			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.txt"),
 				URLProtocolMock.handler(onRequest: { _ in
 					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
 				}),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]), onRequest: { _ in
+				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"], onRequest: { _ in
 					#expect(progress.fractionCompleted > 0.5, "The progress of the upload task isn't part of the upload's progress")
 					#expect(progress.fractionCompleted < 1, "The progress completed before the upload returned")
 				})
@@ -196,7 +196,7 @@ extension UnitTests {
 			let provider: S3CloudProvider = provider
 			let localURL = tmpDirURL.appendingPathComponent("file.txt")
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
 				URLProtocolMock.handler(body: "content")
 			]
 
@@ -216,7 +216,7 @@ extension UnitTests {
 			let provider: S3CloudProvider = provider
 			let localURL = try makeLocalFile()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.txt"),
 				URLProtocolMock.handler()
 			]
 
@@ -235,7 +235,7 @@ extension UnitTests {
 		func downloadFileOfMissingFileThrowsItemNotFound() async throws {
 			let localURL = tmpDirURL.appendingPathComponent("file.txt")
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"])),
+				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
 				URLProtocolMock.handler(statusCode: 404)
 			]
 
@@ -250,12 +250,12 @@ extension UnitTests {
 			let localURL = try makeLocalFile()
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.txt"),
 				URLProtocolMock.handler(onRequest: { _ in
 					canceller.cancel()
 				}),
 				URLProtocolMock.handler(statusCode: 503),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.txt"]))
+				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"])
 			]
 
 			let uploadTask = canceller.start {
@@ -279,13 +279,13 @@ extension UnitTests {
 			let requests = RequestRecorder()
 			let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "file.bin", onRequest: requests.record),
 				S3CloudProviderTests.initiateMultipartUpload(requests),
 				S3CloudProviderTests.part(1, requests),
 				S3CloudProviderTests.part(2, requests),
 				S3CloudProviderTests.part(3, requests),
 				S3CloudProviderTests.completeMultipartUpload(requests),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
 			]
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: progress, onTaskCreation: { _ in
@@ -324,9 +324,9 @@ extension UnitTests {
 			let requests = RequestRecorder()
 			let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "file.bin", onRequest: requests.record),
 				URLProtocolMock.handler(onRequest: requests.record),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
 			]
 
 			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
@@ -348,13 +348,13 @@ extension UnitTests {
 			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "0123456789"))
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				S3CloudProviderTests.part(1, requests),
 				S3CloudProviderTests.part(2, requests),
 				S3CloudProviderTests.part(3, requests),
 				S3CloudProviderTests.completeMultipartUpload(),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10))
+				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10))
 			]
 
 			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
@@ -370,7 +370,7 @@ extension UnitTests {
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>"),
 				S3CloudProviderTests.abortMultipartUpload(requests)
@@ -388,7 +388,7 @@ extension UnitTests {
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				S3CloudProviderTests.part(1),
 				S3CloudProviderTests.part(2),
@@ -410,7 +410,7 @@ extension UnitTests {
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				S3CloudProviderTests.part(1),
 				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-2\""], onRequest: { _ in
@@ -431,7 +431,7 @@ extension UnitTests {
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: { _ in
 					try? FileManager.default.removeItem(at: localURL)
 				}),
@@ -452,7 +452,7 @@ extension UnitTests {
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""], onRequest: { _ in
 					canceller.cancel()
@@ -469,7 +469,7 @@ extension UnitTests {
 			try assertAborted(requests, attempts: 2, temporaryFiles: temporaryFiles)
 		}
 
-		/// The last part leaves no check in the loop, so the check before the completion stops the upload.
+		/// The last part leaves no cancellation check in the loop, so the one before the completion stops the upload.
 		@Test
 		func cancellationDuringLastPartAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
@@ -478,7 +478,7 @@ extension UnitTests {
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				S3CloudProviderTests.part(1),
 				S3CloudProviderTests.part(2),
@@ -504,7 +504,7 @@ extension UnitTests {
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "file.bin"),
 				S3CloudProviderTests.initiateMultipartUpload(),
 				S3CloudProviderTests.part(1),
 				S3CloudProviderTests.part(2),
@@ -514,7 +514,7 @@ extension UnitTests {
 					canceller.cancel()
 				}),
 				S3CloudProviderTests.completeMultipartUpload(requests),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
 			]
 
 			let metadata = try await cancellingValue(of: canceller.start {
@@ -776,7 +776,7 @@ extension UnitTests {
 		func createFolderPutsFolderMarker() async throws {
 			let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				S3CloudProviderTests.listing(of: "folder"),
 				URLProtocolMock.handler(onRequest: { request in
 					markerRequest.withLock { $0 = request }
 				})

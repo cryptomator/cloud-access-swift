@@ -66,7 +66,7 @@ final class DirectoryIdCache: Sendable {
 	 Cancellation is checked after each read, so that a call cancelled during a read throws without changing the cache, even if the read succeeded, and a caller can commit right after it returns.
 
 	 - Parameter isMissing: Whether an error of reading the folder's own dir file means that the folder has none, e.g., because it's gone.
-	 - Throws: `CloudProviderError.parentFolderDoesNotExist` if reading an ancestor's dir file throws `CloudProviderError.itemNotFound`. `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path is the root. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). The other errors of a read unchanged.
+	 - Throws: `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path is the root. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). Any other error of a read unchanged, e.g., `CloudProviderError.itemNotFound` for a missing ancestor's dir file.
 	 */
 	func verifiedDirectory(_ cleartextPath: CloudPath, readDirId: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data, treatingAsMissing isMissing: (Error) -> Bool) async throws -> VerifiedDirectory {
 		try cleartextPath.checkResolvable()
@@ -77,12 +77,7 @@ final class DirectoryIdCache: Sendable {
 		var ancestorPath = CloudPath.root
 		for component in cleartextPath.pathComponents.dropFirst().dropLast() {
 			ancestorPath = ancestorPath.appendingPathComponent(component)
-			let dirId: Data
-			do {
-				dirId = try await readDirId(ancestorPath, containingDirIds[containingDirIds.count - 1])
-			} catch CloudProviderError.itemNotFound {
-				throw CloudProviderError.parentFolderDoesNotExist
-			}
+			let dirId = try await readDirId(ancestorPath, containingDirIds[containingDirIds.count - 1])
 			try addVerified(ancestorPath, dirId: dirId, containingDirIds: containingDirIds)
 			containingDirIds.append(dirId)
 		}

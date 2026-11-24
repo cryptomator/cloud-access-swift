@@ -111,7 +111,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		defer {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
-		let parentDirId = try await parentDirId(of: cleartextCloudPath)
+		let parentDirId = try await parentDirId(ofTarget: cleartextCloudPath)
 		try await layout.checkUploadTarget(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		let ciphertextCloudPath = try layout.fileCiphertextPath(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		do {
@@ -142,7 +142,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		try dirId.write(to: dirIdFileURL)
 		try await layout.prepareFolderCreation(dirIdFileURL: dirIdFileURL, preparedFileURL: preparedFileURL, in: self)
 		let dirPath = try dirPath(of: dirId)
-		let parentDirId = try await parentDirId(of: cleartextCloudPath)
+		let parentDirId = try await parentDirId(ofTarget: cleartextCloudPath)
 		try await layout.checkFolderCreationTarget(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		let referencePath = try layout.folderReferencePath(cleartextCloudPath, parentDirId: parentDirId, in: self)
 		try Task.checkCancellation()
@@ -197,10 +197,11 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		try Task.checkCancellation()
 		try cleartextSourceCloudPath.checkAsSource()
 		try cleartextTargetCloudPath.checkAsTarget()
+		// The target's parent first, so that a missing source parent can't hide a missing target parent.
+		let targetParentDirId = try await parentDirId(ofTarget: cleartextTargetCloudPath)
+		let ciphertextTargetCloudPath = try layout.fileCiphertextPath(cleartextTargetCloudPath, parentDirId: targetParentDirId, in: self)
 		let sourceParentDirId = try await parentDirId(of: cleartextSourceCloudPath)
 		let ciphertextSourceCloudPath = try layout.fileCiphertextPath(cleartextSourceCloudPath, parentDirId: sourceParentDirId, in: self)
-		let targetParentDirId = try await parentDirId(of: cleartextTargetCloudPath)
-		let ciphertextTargetCloudPath = try layout.fileCiphertextPath(cleartextTargetCloudPath, parentDirId: targetParentDirId, in: self)
 		try Task.checkCancellation()
 		try await delegate.moveFile(from: ciphertextSourceCloudPath, to: ciphertextTargetCloudPath)
 	}
@@ -210,10 +211,11 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		try Task.checkCancellation()
 		try cleartextSourceCloudPath.checkAsSource()
 		try cleartextTargetCloudPath.checkAsTarget()
+		// The target's parent first, so that a missing source parent can't hide a missing target parent.
+		let targetParentDirId = try await parentDirId(ofTarget: cleartextTargetCloudPath)
+		let targetReferencePath = try layout.folderReferencePath(cleartextTargetCloudPath, parentDirId: targetParentDirId, in: self)
 		let sourceParentDirId = try await parentDirId(of: cleartextSourceCloudPath)
 		let sourceReferencePath = try layout.folderReferencePath(cleartextSourceCloudPath, parentDirId: sourceParentDirId, in: self)
-		let targetParentDirId = try await parentDirId(of: cleartextTargetCloudPath)
-		let targetReferencePath = try layout.folderReferencePath(cleartextTargetCloudPath, parentDirId: targetParentDirId, in: self)
 		try Task.checkCancellation()
 		try await completingMove {
 			do {
@@ -239,8 +241,12 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	}
 
 	func parentDirId(of cleartextPath: CloudPath) async throws -> Data {
+		return try await dirId(of: cleartextPath.deletingLastPathComponent())
+	}
+
+	func parentDirId(ofTarget cleartextPath: CloudPath) async throws -> Data {
 		do {
-			return try await dirId(of: cleartextPath.deletingLastPathComponent())
+			return try await parentDirId(of: cleartextPath)
 		} catch CloudProviderError.itemNotFound {
 			throw CloudProviderError.parentFolderDoesNotExist
 		}

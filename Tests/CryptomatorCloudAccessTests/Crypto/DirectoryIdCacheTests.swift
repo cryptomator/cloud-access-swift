@@ -146,8 +146,8 @@ extension UnitTests {
 		}
 
 		@Test
-		func verifiedDirectoryWithMissingAncestorDirFileThrowsParentFolderDoesNotExist() async throws {
-			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) {
+		func verifiedDirectoryWithMissingAncestorDirFileThrowsItemNotFound() async throws {
+			await #expect(throws: CloudProviderError.itemNotFound) {
 				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { _, _ in
 					throw CloudProviderError.itemNotFound
 				}, treatingAsMissing: { _ in true })

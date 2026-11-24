@@ -229,6 +229,10 @@ enum PathCheckingOperation: CaseIterable, CustomTestStringConvertible {
 		return takesPathAsSource ? .itemTypeMismatch : .itemAlreadyExists
 	}
 
+	var missingParentError: CloudProviderError {
+		return takesPathAsSource ? .itemNotFound : .parentFolderDoesNotExist
+	}
+
 	func run(on provider: CloudProvider, at cloudPath: CloudPath, localDirectoryURL: URL) async throws {
 		let localURL = localDirectoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		switch self {
@@ -237,9 +241,9 @@ enum PathCheckingOperation: CaseIterable, CustomTestStringConvertible {
 		case .deleteFile:
 			try await provider.deleteFile(at: cloudPath)
 		case .moveFileFrom:
-			try await provider.moveFile(from: cloudPath, to: CloudPath("/Moved"))
+			try await provider.moveFile(from: cloudPath, to: CloudPath("/File 3"))
 		case .moveFolderFrom:
-			try await provider.moveFolder(from: cloudPath, to: CloudPath("/Moved"))
+			try await provider.moveFolder(from: cloudPath, to: CloudPath("/Directory 2"))
 		case .uploadFile:
 			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
 			_ = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: true)
@@ -825,6 +829,35 @@ extension UnitTests {
 		private static func unresolvablePaths() throws -> [CloudPath] {
 			let decodedPath = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/Directory 1/../File 1"}"#.utf8))
 			return [CloudPath("/.."), CloudPath("Directory 1/File 3"), decodedPath]
+		}
+
+		// MARK: - Missing Parent Folders
+
+		@Test(arguments: VaultTestFormat.allCases, PathCheckingOperation.allCases)
+		func operationBelowMissingFolderThrows(format: VaultTestFormat, operation: PathCheckingOperation) async throws {
+			for stacking in Stacking.allCases {
+				let fixture = try format.makeFixture(stacking: stacking)
+				await #expect(throws: operation.missingParentError, "\(stacking)") {
+					try await operation.run(on: fixture.decorator, at: CloudPath("/Directory 2/File 1"), localDirectoryURL: tmpDirURL)
+				}
+			}
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func readsAndDeletesBelowMissingFolderReportAbsence(format: VaultTestFormat, stacking: Stacking) async throws {
+			let fixture = try format.makeFixture(stacking: stacking)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemMetadata(at: CloudPath("/Directory 2/File 1")) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.deleteFolder(at: CloudPath("/Directory 2/Directory 1")) }
+			try await fixture.decorator.deleteFolderIfExisting(at: CloudPath("/Directory 2/Directory 1"))
+			#expect(fixture.provider.deleted == [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func moveFromMissingFolderIntoMissingFolderThrowsParentFolderDoesNotExist(format: VaultTestFormat, stacking: Stacking) async throws {
+			let fixture = try format.makeFixture(stacking: stacking)
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await fixture.decorator.moveFile(from: CloudPath("/Directory 2/File 1"), to: CloudPath("/File 3/File 1")) }
+			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await fixture.decorator.moveFolder(from: CloudPath("/Directory 2/Directory 1"), to: CloudPath("/File 3/Directory 1")) }
+			#expect(fixture.provider.moved == [:])
 		}
 
 		// MARK: - Requests

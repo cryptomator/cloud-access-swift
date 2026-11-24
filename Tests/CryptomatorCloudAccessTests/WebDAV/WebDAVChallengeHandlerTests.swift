@@ -15,6 +15,10 @@ extension UnitTests {
 		/// A self-signed certificate for webdav.example.com.
 		private let certificateData = Data(base64Encoded: "MIIBcDCCARagAwIBAgIULilZzK/EVqdYPl1QZan6gkotHE0wCgYIKoZIzj0EAwIwHTEbMBkGA1UEAwwSd2ViZGF2LmV4YW1wbGUuY29tMCAXDTI2MTAxODE1MjEzOFoYDzIxMjYwOTI0MTUyMTM4WjAdMRswGQYDVQQDDBJ3ZWJkYXYuZXhhbXBsZS5jb20wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATPxiqoa1MNI0ZQ+uhxaj+bm81b7JLkExFkmPda/7F50QILMZmczaou6oGfJybc9hke4YthQShAYiKU4ax0yrTBozIwMDAdBgNVHQ4EFgQUUhdtBneMCq+1EABG5bsY/3xIk18wDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNIADBFAiBwDWHRS73jFGIzaIsiQ5b+U+7uv88uT2HasToghSNZBwIhAPP8O6V5HvrO4HdGwL6lR/cCuzp/aQL18SVmagKYgDI3")!
 
+		init() {
+			URLProtocolMock.requestHandler = []
+		}
+
 		@Test
 		func credentialMethodsGetCredentialOnFirstAttempt() {
 			for authenticationMethod in [NSURLAuthenticationMethodHTTPBasic, NSURLAuthenticationMethodHTTPDigest, NSURLAuthenticationMethodDefault] {
@@ -63,6 +67,37 @@ extension UnitTests {
 			#expect(!WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: httpURL))
 			#expect(!WebDAVChallengeHandler.isDowngrade(of: proxySpace, originalURL: httpsURL))
 			#expect(!WebDAVChallengeHandler.isDowngrade(of: httpSpace, originalURL: nil))
+		}
+
+		/// A session without a delegate follows the redirect from `https` to `http` as a background session does, so only the task's original request still shows that it started on `https`.
+		@Test
+		func passwordChallengeIsRefusedForATaskThatStartedOnHTTPS() async throws {
+			let configuration = URLSessionConfiguration.default
+			configuration.protocolClasses = [URLProtocolMock.self]
+			let session = URLSession(configuration: configuration)
+			defer {
+				session.invalidateAndCancel()
+			}
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "http://webdav.example.com/file.txt"]),
+				URLProtocolMock.handler()
+			]
+			let completed = TestSignal("task completed")
+			let task = try session.dataTask(with: #require(URL(string: "https://webdav.example.com/file.txt"))) { _, _, _ in
+				completed.fulfill()
+			}
+			task.resume()
+			await completed.wait()
+			try #require(task.originalRequest?.url?.scheme == "https")
+			try #require(task.currentRequest?.url?.scheme == "http")
+			let protectionSpace = URLProtectionSpace(host: "webdav.example.com", port: 80, protocol: NSURLProtectionSpaceHTTP, realm: nil, authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+			let challenge = URLAuthenticationChallenge(protectionSpace: protectionSpace, proposedCredential: nil, previousFailureCount: 0, failureResponse: nil, error: nil, sender: URLAuthenticationChallengeSenderMock())
+
+			let decision = WebDAVChallengeHandler(credential: makeCredential(allowedCertificate: nil)).decision(for: challenge, task: task)
+
+			#expect(decision.disposition == .cancelAuthenticationChallenge)
+			#expect(decision.credential == nil)
+			#expect((decision.failure as? URLError)?.code == .appTransportSecurityRequiresSecureConnection)
 		}
 
 		@Test

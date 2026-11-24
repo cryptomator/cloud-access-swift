@@ -1,5 +1,5 @@
 //
-//  VaultFormat6CloudProviderMock.swift
+//  CloudProviderMock+VaultFormat6.swift
 //  CryptomatorCloudAccessTests
 //
 //  Created by Tobias Hagemann on 26.08.20.
@@ -8,32 +8,29 @@
 
 import Foundation
 
-/**
- ```
- pathToVault
- ├─ Directory 1
- │  ├─ Directory 2
- │  └─ File 3
- ├─ Directory 3 (Long)
- │  ├─ Directory 4 (Long)
- │  └─ File 6 (Long)
- ├─ File 1
- ├─ File 2
- ├─ File 4 (Long)
- └─ File 5 (Long)
- ```
-
- `@unchecked Sendable`: restates the conformance of `CloudProviderMock`; this subclass adds no state.
- */
-public class VaultFormat6CloudProviderMock: CloudProviderMock, @unchecked Sendable {
-	convenience init() {
+extension CloudProviderMock {
+	/**
+	 A vault of format 6, whose names `CryptorMock.vaultFormat6()` encrypts:
+	 ```
+	 pathToVault
+	 ├─ Directory 1
+	 │  ├─ Directory 2
+	 │  └─ File 3
+	 ├─ Directory 3 (Long)
+	 │  ├─ Directory 4 (Long)
+	 │  └─ File 6 (Long)
+	 ├─ File 1
+	 ├─ File 2
+	 ├─ File 4 (Long)
+	 └─ File 5 (Long)
+	 ```
+	 */
+	static func vaultFormat6() -> CloudProviderMock {
+		let root = VaultTestFormat.rootDirectory
 		let folders: Set = [
-			"pathToVault",
-			"pathToVault/d",
-			"pathToVault/d/00",
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-			"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+			root,
+			VaultTestFormat.directory1,
+			VaultTestFormat.directory2,
 			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
 			"pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
 		]
@@ -54,14 +51,14 @@ public class VaultFormat6CloudProviderMock: CloudProviderMock, @unchecked Sendab
 		let file5NameData = Data(String(repeating: "file5", count: 26).utf8)
 		let file6NameData = Data(String(repeating: "file6", count: 26).utf8)
 		let files = [
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": dir1IdData,
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": dir3IdData,
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file1": file1CiphertextData,
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/file2": file2CiphertextData,
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": file4CiphertextData,
-			"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": file5CiphertextData,
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": dir2IdData,
-			"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3": file3CiphertextData,
+			"\(root)/0dir1": dir1IdData,
+			"\(root)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": dir3IdData,
+			"\(root)/file1": file1CiphertextData,
+			"\(root)/file2": file2CiphertextData,
+			"\(root)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": file4CiphertextData,
+			"\(root)/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": file5CiphertextData,
+			"\(VaultTestFormat.directory1)/0dir2": dir2IdData,
+			"\(VaultTestFormat.directory1)/file3": file3CiphertextData,
 			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/5ZIVSZELKKXO66ALXML6ORP32HF3OLAL.lng": dir4IdData,
 			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng": file6CiphertextData,
 			"pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": dir3NameData,
@@ -70,6 +67,6 @@ public class VaultFormat6CloudProviderMock: CloudProviderMock, @unchecked Sendab
 			"pathToVault/m/CI/VV/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": file5NameData,
 			"pathToVault/m/LT/GF/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng": file6NameData
 		]
-		self.init(folders: folders, files: files)
+		return CloudProviderMock(folders: folders, files: files)
 	}
 }

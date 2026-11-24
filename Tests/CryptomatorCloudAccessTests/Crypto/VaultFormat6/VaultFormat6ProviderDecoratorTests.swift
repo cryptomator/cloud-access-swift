@@ -13,11 +13,11 @@ import Testing
 
 /// The decorator of a test, stacked onto a fresh vault mock directly or through the shortening decorator.
 struct VaultFormat6Fixture {
-	let provider = VaultFormat6CloudProviderMock()
+	let provider = CloudProviderMock.vaultFormat6()
 	let shorteningDecorator: VaultFormat6ShorteningProviderDecorator?
 	let decorator: VaultFormat6ProviderDecorator
 
-	init(stacking: Stacking, vaultPath: CloudPath, cryptor: VaultFormat6CryptorMock) throws {
+	init(stacking: Stacking, vaultPath: CloudPath, cryptor: CryptorMock) throws {
 		switch stacking {
 		case .plain:
 			self.shorteningDecorator = nil
@@ -33,7 +33,7 @@ struct VaultFormat6Fixture {
 extension UnitTests {
 	final class VaultFormat6ProviderDecoratorTests {
 		let vaultPath = CloudPath("pathToVault")
-		let cryptor = VaultFormat6CryptorMock()
+		let cryptor = CryptorMock.vaultFormat6()
 		let tmpDirURL: URL
 
 		init() throws {
@@ -154,9 +154,9 @@ extension UnitTests {
 		/// A prefix forms one `Character` with a combining mark after it, but the listing still classifies the item by it.
 		@Test
 		func fetchItemListClassifiesPrefixInCombinedCharacter() async throws {
-			let dirPath = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+			let dirPath = VaultTestFormat.rootDirectory
 			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/0\u{301}X": Data(), "\(dirPath)/1S\u{301}Y": Data()])
-			let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["\u{301}X": "Folder", "\u{301}Y": "Link"], contents: [:])
+			let cryptor = CryptorMock(dirIds: ["": VaultTestFormat.encryptedRootDirId], fileNames: ["\u{301}X": "Folder", "\u{301}Y": "Link"], contents: [:])
 			let decorator = try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			#expect(itemList.items.map(\.name).sorted() == ["Folder", "Link"])
@@ -174,7 +174,7 @@ extension UnitTests {
 				"pathToVault",
 				"pathToVault/d",
 				"pathToVault/d/00",
-				"pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+				VaultTestFormat.rootDirectory,
 				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
 				"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
 			]
@@ -183,7 +183,7 @@ extension UnitTests {
 				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3": Data("ciphertext3".utf8)
 			]
 
-			let provider = VaultFormat6CloudProviderMock(folders: folders, files: files)
+			let provider = CloudProviderMock(folders: folders, files: files)
 			let decorator = try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
 			#expect(!provider.calls.contains("deleteFile"))
@@ -210,7 +210,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0dir3".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// Old Cryptomator versions shortened names of 129 characters, which a listing moves to their original name.
@@ -219,7 +219,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": "dir3-id"], files: ["pathToVault/m/NY/7A/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": Data("0\(String(repeating: "dir3", count: 32))".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
 			#expect(!provider.calls.contains("moveFile"))
 		}
 
@@ -229,7 +229,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0\u{301}dir2": "dir2-id"])
 			let decorator = stacking == .plain ? try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor) : try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// The `.lng` suffix forms one `Character` with a prepended mark before it, but it still marks a shortened name. This one isn't a valid one, so the delete ignores it and its directory stays.
@@ -238,7 +238,7 @@ extension UnitTests {
 			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir3\u{600}.lng": "dir3-id"])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// A shortcut named like a dir file downloads its target, which can name a directory outside the deleted folder. A shortened one is skipped before its `.lng` name file is read.
@@ -250,8 +250,8 @@ extension UnitTests {
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
-			#expect(transferredFiles.withLock { $0 } == ["pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"])
+			#expect(transferredFiles.withLock { $0 } == ["\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		// MARK: - Internal
@@ -259,7 +259,7 @@ extension UnitTests {
 		/// Returns a provider that holds `Directory 1`, the given dir files (by path below `pathToVault/d` and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
 		func makeNestedProvider(dirFiles: [String: String], files: [String: Data] = [:], aliases: Set<String> = [], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
 			let folders = Set(["pathToVault", "pathToVault/d"] + VaultTestFormat.nestedDirectories.map { "pathToVault/d/\($0)" })
-			let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1": "dir1-id"].merging(dirFiles) { $1 }
+			let references = ["\(VaultTestFormat.nestedDirectories[0])/0dir1": "dir1-id"].merging(dirFiles) { $1 }
 			return CloudProviderMock(folders: folders, files: Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)", Data($0.value.utf8)) }).merging(files) { $1 }, aliases: aliases, aliasedDownloads: aliasedDownloads)
 		}
 

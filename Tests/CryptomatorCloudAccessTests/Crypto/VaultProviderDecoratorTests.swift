@@ -17,15 +17,6 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 	case vf6
 	case vf7
 
-	static let vaultPath = CloudPath("pathToVault")
-	static let rootDirectory = "pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	static let directory1 = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-	static let directory2 = "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
-	/// The directory of every folder that a test creates, because the cryptor mock maps every unknown dir ID to it.
-	static let newDirectory = "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
-	/// The directories of the root and of `dir1-id` to `dir4-id`, by path below `pathToVault/d`, which a provider of nested references holds.
-	static let nestedDirectories = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"]
-
 	var testDescription: String {
 		return "\(self)"
 	}
@@ -62,9 +53,9 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 	func makeCryptor() -> CryptorMock {
 		switch self {
 		case .vf6:
-			return VaultFormat6CryptorMock()
+			return CryptorMock.vaultFormat6()
 		case .vf7:
-			return VaultFormat7CryptorMock()
+			return CryptorMock.vaultFormat7()
 		}
 	}
 
@@ -72,11 +63,11 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 	func makeFixture(stacking: Stacking) throws -> VaultTestFixture {
 		switch self {
 		case .vf6:
-			let cryptor = VaultFormat6CryptorMock()
+			let cryptor = CryptorMock.vaultFormat6()
 			let fixture = try VaultFormat6Fixture(stacking: stacking, vaultPath: Self.vaultPath, cryptor: cryptor)
 			return VaultTestFixture(provider: fixture.provider, cryptor: cryptor, decorator: fixture.decorator, dirIdCache: fixture.decorator.dirIdCache, tmpDirURL: fixture.decorator.tmpDirURL, shorteningTmpDirURL: fixture.shorteningDecorator?.tmpDirURL)
 		case .vf7:
-			let cryptor = VaultFormat7CryptorMock()
+			let cryptor = CryptorMock.vaultFormat7()
 			let fixture = try VaultFormat7Fixture(stacking: stacking, vaultPath: Self.vaultPath, cryptor: cryptor)
 			return VaultTestFixture(provider: fixture.provider, cryptor: cryptor, decorator: fixture.decorator, dirIdCache: fixture.decorator.dirIdCache, tmpDirURL: fixture.decorator.tmpDirURL, shorteningTmpDirURL: fixture.shorteningDecorator?.tmpDirURL)
 		}
@@ -103,7 +94,7 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 
 	/// Returns a provider that holds the given folder references and, unless one replaces it, that of `Directory 1`. A key is the directory below `pathToVault/d` and the encrypted folder name (e.g. `11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2`), a value the dir ID. The directories of the root and of `dir1-id` to `dir4-id` exist. A download of a file at a path of `aliasedDownloads` reports an alias.
 	func makeNestedProvider(references: [String: String], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
-		let references = ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1": "dir1-id"].merging(references) { $1 }
+		let references = ["\(VaultTestFormat.nestedDirectories[0])/dir1": "dir1-id"].merging(references) { $1 }
 		let referenceLocations = references.keys.map { CloudPath("pathToVault/d/\($0)") }.map { (name: $0.lastPathComponent, directory: $0.deletingLastPathComponent().path) }
 		let referenceFolders = self == .vf7 ? referenceLocations.map { referencePath($0.name, in: $0.directory) } : []
 		let folders = Set(["pathToVault", "pathToVault/d"] + Self.nestedDirectories.map { "pathToVault/d/\($0)" } + referenceFolders)
@@ -307,10 +298,12 @@ extension UnitTests {
 
 		@Test(arguments: VaultTestFormat.allCases)
 		func fetchItemMetadataOfRootWithoutFolderAtItsDirectoryThrows(format: VaultTestFormat) async throws {
-			let fixture = try format.makeFixture(stacking: .plain)
-			fixture.provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: VaultTestFormat.rootDirectory)
-			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.fetchItemMetadata(at: .root) }
-			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemMetadata(at: .root) }
+			let fileProvider = CloudProviderMock(folders: [], files: [VaultTestFormat.rootDirectory: Data()])
+			let fileDecorator = try format.makeDecorator(provider: fileProvider, cryptor: format.makeCryptor())
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fileDecorator.fetchItemMetadata(at: .root) }
+			let emptyProvider = CloudProviderMock(folders: [VaultTestFormat.vaultPath.path], files: [:])
+			let emptyDecorator = try format.makeDecorator(provider: emptyProvider, cryptor: format.makeCryptor())
+			await #expect(throws: CloudProviderError.itemNotFound) { try await emptyDecorator.fetchItemMetadata(at: .root) }
 		}
 
 		/// Only the shortening decorator restores the long names.
@@ -345,7 +338,7 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let files = Dictionary(uniqueKeysWithValues: ["nested", "parent", "file1"].map { (format.filePath($0, in: dirPath), Data()) })
 			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: files)
-			let cryptor = CryptorMock(dirIds: ["": "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"], fileNames: ["nested": "a/b", "parent": "..", "file1": "File 1"], contents: [:])
+			let cryptor = CryptorMock(dirIds: ["": VaultTestFormat.encryptedRootDirId], fileNames: ["nested": "a/b", "parent": "..", "file1": "File 1"], contents: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: cryptor)
 			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			#expect([CloudPath("/File 1")] == itemList.items.map(\.cloudPath))
@@ -353,7 +346,7 @@ extension UnitTests {
 
 		@Test(arguments: VaultTestFormat.allCases)
 		func fetchItemListWithTooLargeDirFileThrowsInvalidDirectoryReference(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1": String(repeating: "a", count: vaultDirFileMaxLength + 1)])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.nestedDirectories[0])/dir1": String(repeating: "a", count: vaultDirFileMaxLength + 1)])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.fetchItemList(forFolderAt: CloudPath("/Directory 1"), withPageToken: nil) }
 		}
@@ -469,9 +462,10 @@ extension UnitTests {
 			let cloudPath = CloudPath("/File")
 			let cleartextURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			try Data(count: 1024 * 1024).write(to: cleartextURL)
-			let uploadProvider = CloudProviderMock(folders: [], files: [:])
-			_ = try await format.makeDecorator(provider: uploadProvider, cryptor: cryptor).uploadFile(from: cleartextURL, to: cloudPath, replaceExisting: false)
-			let decorator = try format.makeDecorator(provider: CloudProviderMock(folders: [], files: uploadProvider.createdFiles), cryptor: cryptor)
+			let rootDirId = try cryptor.encryptDirId(Data())
+			let provider = CloudProviderMock(folders: ["pathToVault/d/\(rootDirId.prefix(2))/\(rootDirId.dropFirst(2))"], files: [:])
+			let decorator = try format.makeDecorator(provider: provider, cryptor: cryptor)
+			_ = try await decorator.uploadFile(from: cleartextURL, to: cloudPath, replaceExisting: false)
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 			let progress = Progress(totalUnitCount: 1)
 			// The transfer makes up the first 79.9 % of the progress, the decryption the following 20 %.
@@ -502,7 +496,7 @@ extension UnitTests {
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
 			let upload = Task {
-				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 3"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 			}
 			await transfer.suspended.wait()
 			#expect(progress.fractionCompleted > 0)
@@ -510,10 +504,10 @@ extension UnitTests {
 			transfer.resume()
 			let metadata = try await cancellingValue(of: upload)
 			#expect(progress.fractionCompleted == 1)
-			#expect(fixture.provider.createdFiles == [format.filePath("file1", in: VaultTestFormat.rootDirectory): Data("ciphertext1".utf8)])
-			#expect(metadata.name == "File 1")
+			#expect(fixture.provider.createdFiles == [format.filePath("file3", in: VaultTestFormat.rootDirectory): Data("ciphertext1".utf8)])
+			#expect(metadata.name == "File 3")
 			#expect(metadata.itemType == .file)
-			#expect(metadata.cloudPath.path == "/File 1")
+			#expect(metadata.cloudPath.path == "/File 3")
 			#expect(try FileManager.default.contentsOfDirectory(atPath: fixture.tmpDirURL.path) == [])
 		}
 
@@ -527,7 +521,7 @@ extension UnitTests {
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
 			let upload = Task {
-				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 1"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 3"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 			}
 			await transfer.suspended.wait()
 			transfer.resume(with: .failure(CloudProviderError.quotaInsufficient))
@@ -589,7 +583,7 @@ extension UnitTests {
 			fixture.cryptor.encryptContentHook = { cleartextURL, _ in
 				encryptedURLs.withLock { $0.append(cleartextURL) }
 			}
-			_ = try await fixture.decorator.uploadFile(from: linkURL, to: CloudPath("/File 1"), replaceExisting: false)
+			_ = try await fixture.decorator.uploadFile(from: linkURL, to: CloudPath("/File 3"), replaceExisting: false)
 			#expect(encryptedURLs.withLock { $0 }.map(\.lastPathComponent) == ["target"])
 		}
 
@@ -630,12 +624,12 @@ extension UnitTests {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
 			try await valueCancelledAfterFirstRemoteChange(of: fixture.provider) {
-				try await decorator.createFolder(at: CloudPath("/Directory 1"))
+				try await decorator.createFolder(at: CloudPath("/Directory 2"))
 			}
-			let referenceFolders = format == .vf7 ? [format.referencePath("dir1", in: VaultTestFormat.rootDirectory)] : []
+			let referenceFolders = format == .vf7 ? [format.referencePath("dir2", in: VaultTestFormat.rootDirectory)] : []
 			#expect(fixture.provider.createdFolders.sorted() == (referenceFolders + ["pathToVault/d/99", VaultTestFormat.newDirectory]).sorted())
-			#expect(Array(fixture.provider.createdFiles.keys) == [format.dirFilePath("dir1", in: VaultTestFormat.rootDirectory)])
-			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) != nil)
+			#expect(Array(fixture.provider.createdFiles.keys) == [format.dirFilePath("dir2", in: VaultTestFormat.rootDirectory)])
+			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 2")) != nil)
 		}
 
 		// MARK: - Deletion
@@ -671,7 +665,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
 		func deleteFolderWithDeletionIncompleteKeepsReference(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
-			fixture.provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: [VaultTestFormat.directory1])
+			fixture.provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: [VaultTestFormat.directory1])
 			await #expect(throws: CloudProviderError.deletionIncomplete) { try await fixture.decorator.deleteFolder(at: CloudPath("/Directory 1")) }
 			#expect(!fixture.provider.deleted.contains(format.referencePath("dir1", in: VaultTestFormat.rootDirectory)))
 			#expect(try Data("dir1-id".utf8) == fixture.dirIdCache.get(CloudPath("/Directory 1")))
@@ -681,7 +675,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
 		func deleteFolderWithFailedReferenceDeleteDropsCachedDirId(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
-			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceDeleteCall, with: URLError(.timedOut), at: [format.referencePath("dir1", in: VaultTestFormat.rootDirectory)])
+			fixture.provider.mutationFailure = CloudProviderMock.failing(format.referenceDeleteCall, with: URLError(.timedOut), at: [format.referencePath("dir1", in: VaultTestFormat.rootDirectory)])
 			await #expect(throws: URLError(.timedOut)) { try await fixture.decorator.deleteFolder(at: CloudPath("/Directory 1")) }
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
 		}
@@ -740,7 +734,7 @@ extension UnitTests {
 		/// The dir file of `Directory 1` is empty, which is the dir ID of the root, so `Directory 2` would resolve to the root's `Directory 2`.
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderBelowFolderWhoseDirFileNamesRootReadsNoFurtherDirFile(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir1": "", "00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/dir2": "dir2-id"])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.nestedDirectories[0])/dir1": "", "\(VaultTestFormat.nestedDirectories[0])/dir2": "dir2-id"])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
@@ -755,7 +749,7 @@ extension UnitTests {
 		func moveFolderWithMoveCompletedUpdatesCacheAndRethrows(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			try fixture.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
-			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceMoveCall, with: CloudProviderError.moveCompletedWithSourceRemaining)
+			fixture.provider.mutationFailure = CloudProviderMock.failing(format.referenceMoveCall, with: CloudProviderError.moveCompletedWithSourceRemaining)
 			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await fixture.decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }
 			#expect(try Data("dir1-id".utf8) == fixture.dirIdCache.get(CloudPath("/Directory 2")))
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
@@ -767,7 +761,7 @@ extension UnitTests {
 			let fixture = try format.makeFixture(stacking: stacking)
 			try fixture.dirIdCache.addOrUpdate(CloudPath("/Directory 1"), dirId: Data("dir1-id".utf8))
 			try fixture.dirIdCache.addOrUpdate(CloudPath("/Directory 2"), dirId: Data("dir2-id".utf8))
-			fixture.provider.afterMutationHook = CloudProviderMock.failing(format.referenceMoveCall, with: URLError(.timedOut))
+			fixture.provider.mutationFailure = CloudProviderMock.failing(format.referenceMoveCall, with: URLError(.timedOut))
 			await #expect(throws: URLError(.timedOut)) { try await fixture.decorator.moveFolder(from: CloudPath("/Directory 1"), to: CloudPath("/Directory 2")) }
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 1")) == nil)
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 2")) == nil)

@@ -21,8 +21,8 @@ enum CryptorMockError: Error {
 	case notMocked
 }
 
-/// `@unchecked Sendable`: `dirIds`, `fileNames`, `contents` and `fileHeaderSize` are immutable, everything else is protected by `hooks`. The class is subclassed by the vault format mocks.
-public class CryptorMock: VaultCryptor, @unchecked Sendable {
+/// `@unchecked Sendable`: `dirIds`, `fileNames`, `contents` and `fileHeaderSize` are immutable, everything else is protected by `hooks`.
+public final class CryptorMock: VaultCryptor, @unchecked Sendable {
 	private struct Hooks {
 		var decryptFileNameError: Error?
 		var encryptContentHook: (@Sendable (_ cleartextURL: URL, _ ciphertextURL: URL) throws -> Void)?

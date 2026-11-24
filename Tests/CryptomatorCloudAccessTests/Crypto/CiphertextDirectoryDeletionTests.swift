@@ -87,7 +87,7 @@ extension UnitTests {
 		@Test
 		func stoppingFailureBehindRefusalFetchesNoFurtherPage() async throws {
 			let provider = CloudProviderMock(folders: ["dirs", "dirs/top", "dirs/x", "dirs/y1"], files: ["dirs/top/a": Data(), "dirs/top/b": Data(), "dirs/x/p": Data(), "dirs/x/q": Data()], maxPageSize: 1)
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/y1"])
+			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/y1"])
 			let listedPages = OSAllocatedUnfairLock(initialState: [String]())
 			provider.listingHook = { cloudPath, pageToken in
 				listedPages.withLock { $0.append("\(cloudPath.path)#\(pageToken ?? "")") }
@@ -122,14 +122,14 @@ extension UnitTests {
 		@Test
 		func refusalOutranksOtherFailureOfSamePage() async throws {
 			let provider = makeProvider(directories: ["x", "y", "z"], files: ["dirs/top/a", "dirs/top/b", "dirs/top/c"])
-			provider.afterMutationHook = { call, cloudPath in
+			provider.mutationFailure = { call, cloudPath in
 				guard call == "deleteFolder" else {
-					return
+					return nil
 				}
 				switch cloudPath.path {
-				case "dirs/x": throw CloudProviderError.deletionIncomplete
-				case "dirs/y": throw CloudProviderError.quotaInsufficient
-				default: break
+				case "dirs/x": return CloudProviderError.deletionIncomplete
+				case "dirs/y": return CloudProviderError.quotaInsufficient
+				default: return nil
 				}
 			}
 			await #expect(throws: CloudProviderError.deletionIncomplete) {
@@ -141,7 +141,7 @@ extension UnitTests {
 		@Test
 		func refusalOutranksLaterPageListingFailure() async throws {
 			let provider = makeProvider(directories: ["x"], files: ["dirs/top/a", "dirs/top/b"], maxPageSize: 1)
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/x"])
+			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/x"])
 			provider.listingHook = failingListing(of: "dirs/top", with: CloudProviderError.unauthorized, laterPagesOnly: true)
 			await #expect(throws: CloudProviderError.deletionIncomplete) {
 				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x"]))
@@ -236,7 +236,7 @@ extension UnitTests {
 		@Test
 		func refusedNestedSubdirectoryKeepsAncestors() async throws {
 			let provider = makeProvider(directories: ["x", "y", "z"], files: ["dirs/top/a", "dirs/top/b", "dirs/x/c"])
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/z"])
+			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["dirs/z"])
 			await #expect(throws: CloudProviderError.deletionIncomplete) {
 				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x", "b": "y", "c": "z"]))
 			}
@@ -245,12 +245,16 @@ extension UnitTests {
 
 		// MARK: - Missing Directories
 
-		/// The mock lists a missing folder as empty, so the hook fails its listing as a real provider does.
+		/// The delete checks a directory's existence only after its listing threw `itemNotFound`. The metadata reads show that path, because a delete of the missing directory would also count as deleted.
 		@Test
 		func missingSubdirectoryCountsAsDeleted() async throws {
 			let provider = makeProvider(directories: [], files: ["dirs/top/a"])
-			provider.listingHook = failingListing(of: "dirs/x", with: CloudProviderError.itemNotFound)
+			let metadataReads = OSAllocatedUnfairLock(initialState: [String]())
+			provider.metadataHook = { cloudPath in
+				metadataReads.withLock { $0.append(cloudPath.path) }
+			}
 			try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x"]))
+			#expect(metadataReads.withLock { $0 } == ["dirs/x"])
 			#expect(provider.deleted == ["dirs/top"])
 		}
 
@@ -265,12 +269,19 @@ extension UnitTests {
 			#expect(provider.deleted == [])
 		}
 
-		/// The directory disappeared after it was listed.
+		/// Another client deletes the directory after it was listed, so only that client's delete of it takes effect.
 		@Test
 		func finalDeleteOfMissingDirectoryCountsAsDeleted() async throws {
-			let provider = makeProvider(directories: ["x"], files: ["dirs/top/a"])
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.itemNotFound, at: ["dirs/x"])
-			try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x"]))
+			let provider = makeProvider(directories: ["x"], files: ["dirs/top/a", "dirs/x/p"])
+			let resolve = subdirectories(["a": "x"])
+			try await deleteDirectory(of: provider) { item in
+				if item.name == "p" {
+					try await provider.deleteFolder(at: CloudPath("dirs/x"))
+				}
+				return try await resolve(item)
+			}
+			// The other client's delete, the walk's delete of the already deleted `dirs/x`, and its delete of `dirs/top`.
+			#expect(provider.calls.filter { $0 == "deleteFolder" }.count == 3)
 			#expect(provider.deleted == ["dirs/x", "dirs/top"])
 		}
 
@@ -306,7 +317,6 @@ extension UnitTests {
 		@Test
 		func strayFileAtDirectoryPathIsDeleted() async throws {
 			let provider = makeProvider(directories: [], files: ["dirs/top/a", "dirs/x"])
-			provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: "dirs/x")
 			try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x"]))
 			#expect(provider.deleted == ["dirs/x", "dirs/top"])
 		}
@@ -347,8 +357,7 @@ extension UnitTests {
 		@Test
 		func refusedStrayFileDeleteKeepsParent() async throws {
 			let provider = makeProvider(directories: [], files: ["dirs/top/a", "dirs/x"])
-			provider.metadataOverride = CloudProviderMock.reading([.file], at: "dirs/x")
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFile", with: CloudProviderError.deletionIncomplete)
+			provider.mutationFailure = CloudProviderMock.failing("deleteFile", with: CloudProviderError.deletionIncomplete)
 			await #expect(throws: CloudProviderError.deletionIncomplete) {
 				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories(["a": "x"]))
 			}
@@ -360,8 +369,7 @@ extension UnitTests {
 		func strayFileReplacedByFolderAtTopLevelThrowsItemNotFound() async throws {
 			let provider = makeProvider(directories: [])
 			provider.listingHook = failingListing(of: "dirs/top", with: CloudProviderError.itemTypeMismatch)
-			provider.metadataOverride = CloudProviderMock.reading([.file, nil], at: "dirs/top")
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFile", with: CloudProviderError.itemTypeMismatch)
+			provider.metadataOverride = CloudProviderMock.reading([.file], at: "dirs/top")
 			await #expect(throws: CloudProviderError.itemNotFound) {
 				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories([:]))
 			}
@@ -371,10 +379,13 @@ extension UnitTests {
 		/// A file that another writer put at the path after the listing makes the provider refuse the directory's delete, which the caller would take for the deleted folder being no folder.
 		@Test
 		func directoryReplacedByFileBeforeItsDeleteThrowsItemNotFound() async throws {
-			let provider = makeProvider(directories: [])
-			provider.afterMutationHook = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.itemTypeMismatch, at: ["dirs/top"])
+			let provider = makeProvider(directories: [], files: ["dirs/top/a", "dirs/file"])
 			await #expect(throws: CloudProviderError.itemNotFound) {
-				try await deleteDirectory(of: provider, subdirectoryIds: subdirectories([:]))
+				try await deleteDirectory(of: provider) { _ in
+					try await provider.deleteFolder(at: CloudPath("dirs/top"))
+					try await provider.moveFile(from: CloudPath("dirs/file"), to: CloudPath("dirs/top"))
+					return []
+				}
 			}
 			#expect(provider.calls.last == "deleteFolder")
 		}

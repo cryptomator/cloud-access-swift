@@ -26,8 +26,8 @@ extension UnitTests {
 
 		@Test
 		func vaultRootContainsFiles() async throws {
-			let provider = VaultFormat6CloudProviderMock()
-			let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"), withPageToken: nil)
+			let provider = CloudProviderMock.vaultFormat6()
+			let cloudItemList = try await provider.fetchItemList(forFolderAt: CloudPath(VaultTestFormat.rootDirectory), withPageToken: nil)
 			#expect(cloudItemList.items.count == 6)
 			#expect(cloudItemList.items.contains(where: { $0.name == "0dir1" }))
 			#expect(cloudItemList.items.contains(where: { $0.name == "DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng" }))
@@ -39,9 +39,9 @@ extension UnitTests {
 
 		@Test
 		func dir1FileContainsDirId() async throws {
-			let provider = VaultFormat6CloudProviderMock()
+			let provider = CloudProviderMock.vaultFormat6()
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			let metadata = try await provider.fetchItemMetadata(at: CloudPath("pathToVault/d/00/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/0dir1"))
+			let metadata = try await provider.fetchItemMetadata(at: CloudPath("\(VaultTestFormat.rootDirectory)/0dir1"))
 			#expect(metadata.itemType == .file)
 			_ = try await provider.downloadFile(from: metadata.cloudPath, to: localURL)
 			let downloadedContents = try Data(contentsOf: localURL)

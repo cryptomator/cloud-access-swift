@@ -1,6 +1,6 @@
 //
 //  CloudItemList.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Philipp Schmid on 22.04.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

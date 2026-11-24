@@ -1,6 +1,6 @@
 //
 //  HTTPDebugLogger.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 15.11.22.
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.

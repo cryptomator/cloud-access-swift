@@ -1,6 +1,6 @@
 //
 //  BoxSetup.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Majid Achhoud on 18.03.24.
 //  Copyright © 2024 Skymatic GmbH. All rights reserved.

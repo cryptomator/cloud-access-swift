@@ -1,6 +1,6 @@
 //
 //  MicrosoftGraphAuthenticationProvider.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Philipp Schmid on 23.04.21.
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.

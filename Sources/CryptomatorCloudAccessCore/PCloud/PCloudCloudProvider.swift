@@ -1,6 +1,6 @@
 //
 //  PCloudCloudProvider.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 16.02.22.
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.

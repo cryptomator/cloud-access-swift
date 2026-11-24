@@ -1,6 +1,6 @@
 //
 //  GoogleDriveItem.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 09.07.21.
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.

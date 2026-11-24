@@ -1,6 +1,6 @@
 //
 //  OAuthTokenStore.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 20.10.26.
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.

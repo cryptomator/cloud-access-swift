@@ -1,6 +1,6 @@
 //
 //  DropboxSetup.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Philipp Schmid on 01.04.21.
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.

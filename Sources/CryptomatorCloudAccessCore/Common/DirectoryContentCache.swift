@@ -1,6 +1,6 @@
 //
 //  DirectoryContentCache.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Philipp Schmid on 08.07.22.
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.

@@ -1,6 +1,6 @@
 //
 //  URL+SharePointValidation.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 13.03.25.
 //  Copyright © 2025 Skymatic GmbH. All rights reserved.

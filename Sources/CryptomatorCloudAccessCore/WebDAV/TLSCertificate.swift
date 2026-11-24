@@ -1,6 +1,6 @@
 //
 //  TLSCertificate.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 25.08.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

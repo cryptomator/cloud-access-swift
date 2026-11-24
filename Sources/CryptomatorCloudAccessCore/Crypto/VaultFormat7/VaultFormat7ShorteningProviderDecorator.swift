@@ -1,6 +1,6 @@
 //
 //  VaultFormat7ShorteningProviderDecorator.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 18.06.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

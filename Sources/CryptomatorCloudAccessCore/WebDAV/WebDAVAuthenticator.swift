@@ -1,6 +1,6 @@
 //
 //  WebDAVAuthenticator.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 29.06.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

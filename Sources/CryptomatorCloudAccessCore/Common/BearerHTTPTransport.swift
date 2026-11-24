@@ -1,6 +1,6 @@
 //
 //  BearerHTTPTransport.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 21.11.26.
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.

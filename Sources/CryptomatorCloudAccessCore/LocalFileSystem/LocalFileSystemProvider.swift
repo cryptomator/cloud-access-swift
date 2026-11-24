@@ -1,6 +1,6 @@
 //
 //  LocalFileSystemProvider.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Wahid Ali on 27.05.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

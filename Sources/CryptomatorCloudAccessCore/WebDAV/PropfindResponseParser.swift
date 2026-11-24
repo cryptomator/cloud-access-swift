@@ -1,6 +1,6 @@
 //
 //  PropfindResponseParser.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 07.07.20.
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.

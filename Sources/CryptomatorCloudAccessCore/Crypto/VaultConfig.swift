@@ -1,6 +1,6 @@
 //
 //  VaultConfig.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 01.03.21.
 //  Copyright © 2021 Skymatic GmbH. All rights reserved.

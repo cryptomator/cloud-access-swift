@@ -1,6 +1,6 @@
 //
 //  ProcessTemporaryDirectory.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Tobias Hagemann on 13.11.26.
 //  Copyright © 2026 Skymatic GmbH. All rights reserved.

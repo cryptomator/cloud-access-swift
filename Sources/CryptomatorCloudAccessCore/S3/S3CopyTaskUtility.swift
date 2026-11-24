@@ -1,6 +1,6 @@
 //
 //  S3CopyTaskUtility.swift
-//  CryptomatorCloudAccess
+//  CryptomatorCloudAccessCore
 //
 //  Created by Philipp Schmid on 15.06.22.
 //  Copyright © 2022 Skymatic GmbH. All rights reserved.

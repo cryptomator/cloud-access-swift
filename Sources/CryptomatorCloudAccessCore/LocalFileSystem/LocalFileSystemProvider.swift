@@ -53,7 +53,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 		self.shouldStopAccessingRootURL = securityScopedAccess.start(rootURL)
 		self.maxPageSize = maxPageSize
 		self.tmpDirURL = try ProcessTemporaryDirectory.shared.makeDirectory()
-		let dbURL = tmpDirURL.appending(component: "db.sqlite")
+		let dbURL = tmpDirURL.appending(component: "db.sqlite", directoryHint: .notDirectory)
 		self.cache = try DirectoryContentDBCache(fileAt: dbURL, maxPageSize: maxPageSize)
 	}
 
@@ -322,6 +322,7 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func getItemType(from url: URL) throws -> CloudItemType {
+		// `.path` drops a trailing slash, with which `attributesOfItem` would follow a symbolic link.
 		let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
 		return getItemType(from: attributes[FileAttributeKey.type] as? FileAttributeType)
 	}

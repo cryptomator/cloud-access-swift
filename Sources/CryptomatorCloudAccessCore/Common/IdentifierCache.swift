@@ -111,7 +111,7 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 
 	init() throws {
 		self.directoryURL = try ProcessTemporaryDirectory.shared.makeDirectory()
-		self.dbQueue = try DatabaseQueue.withoutDurability(path: directoryURL.appendingPathComponent("identifiers.sqlite").path)
+		self.dbQueue = try DatabaseQueue.withoutDurability(path: directoryURL.appending(component: "identifiers.sqlite", directoryHint: .notDirectory).path(percentEncoded: false))
 		try dbQueue.writeWithoutTransaction { db in
 			try db.execute(sql: "PRAGMA cache_size = -500")
 		}

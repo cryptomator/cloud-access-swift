@@ -84,7 +84,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		try Task.checkCancellation()
 		try cleartextCloudPath.checkAsSource()
 		let phases = Progress.phases(of: progress, 799, 200)
-		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let ciphertextLocalURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
@@ -107,7 +107,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		let cleartextFile = try LocalUploadFile(cleartextLocalURL)
 		try cleartextCloudPath.checkAsTarget()
 		let phases = Progress.phases(of: progress, 799, 200)
-		let ciphertextLocalURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let ciphertextLocalURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: ciphertextLocalURL)
 		}
@@ -133,8 +133,8 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 		try Task.checkCancellation()
 		try cleartextCloudPath.checkAsTarget()
 		let dirId = UUID().uuidString.data(using: .utf8)!
-		let dirIdFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-		let preparedFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let dirIdFileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
+		let preparedFileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: dirIdFileURL)
 			try? FileManager.default.removeItem(at: preparedFileURL)

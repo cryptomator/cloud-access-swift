@@ -82,6 +82,7 @@ final class OAuthTokenStore: Sendable {
 		self.lockPollInterval = lockPollInterval
 		self.lockEvents = lockEvents
 		self.coordinator = coordinator
+		// `.path` drops a trailing slash, so both spellings of the lock directory share one key.
 		self.key = "\(persistence.tokenLockDirectory.path)|\(provider.rawValue)|\(account)"
 	}
 

@@ -94,7 +94,7 @@ struct DropboxOAuthEndpoint: Sendable {
 				throw DropboxClient.apiError(of: response, outcome)
 			}
 		} catch {
-			CloudAccessDDLogDebug("DropboxOAuthEndpoint: POST \(request.url?.path ?? "") failed with \(error)")
+			CloudAccessDDLogDebug("DropboxOAuthEndpoint: POST \(request.url?.path(percentEncoded: false) ?? "") failed with \(error)")
 			throw convertingNetworkConnectionError(error)
 		}
 	}

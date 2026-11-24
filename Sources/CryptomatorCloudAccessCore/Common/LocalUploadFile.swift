@@ -23,6 +23,7 @@ struct LocalUploadFile: Sendable {
 	 */
 	init(_ localURL: URL) throws {
 		var status = stat()
+		// `.path` drops a trailing slash, with which `lstat` would follow a symbolic link.
 		guard lstat(localURL.path, &status) == 0 else {
 			throw LocalUploadFile.error(forErrno: errno)
 		}

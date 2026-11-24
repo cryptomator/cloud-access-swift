@@ -55,7 +55,7 @@ final class CrossProcessFileLock: Sendable {
 
 	init(directory: URL, name: String, events: Events = Events()) {
 		self.directory = directory
-		self.fileURL = directory.appendingPathComponent("\(name).lock", isDirectory: false)
+		self.fileURL = directory.appending(component: "\(name).lock", directoryHint: .notDirectory)
 		self.events = events
 	}
 
@@ -92,12 +92,12 @@ final class CrossProcessFileLock: Sendable {
 
 	private func openLockFile() throws -> Int32 {
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: CrossProcessFileLock.protection)
-		let fileDescriptor = open(fileURL.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+		let fileDescriptor = open(fileURL.path(percentEncoded: false), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
 		guard fileDescriptor >= 0 else {
 			throw CrossProcessFileLock.posixError(errno)
 		}
 		do {
-			try FileManager.default.setAttributes(CrossProcessFileLock.protection, ofItemAtPath: fileURL.path)
+			try FileManager.default.setAttributes(CrossProcessFileLock.protection, ofItemAtPath: fileURL.path(percentEncoded: false))
 		} catch {
 			close(fileDescriptor)
 			throw error

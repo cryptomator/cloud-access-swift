@@ -21,7 +21,7 @@ final class ProcessTemporaryDirectory: Sendable {
 		var willCreateProcessFolder: @Sendable (URL) -> Void = { _ in }
 	}
 
-	static let shared = ProcessTemporaryDirectory(parentURL: FileManager.default.temporaryDirectory.appendingPathComponent("CryptomatorCloudAccess", isDirectory: true), legacyStagingURL: FileManager.default.temporaryDirectory.appendingPathComponent("CryptomatorCloudAccessStaging", isDirectory: true))
+	static let shared = ProcessTemporaryDirectory(parentURL: FileManager.default.temporaryDirectory.appending(component: "CryptomatorCloudAccess", directoryHint: .isDirectory), legacyStagingURL: FileManager.default.temporaryDirectory.appending(component: "CryptomatorCloudAccessStaging", directoryHint: .isDirectory))
 
 	private static let legacyStagedFileMaxAge: TimeInterval = 24 * 60 * 60
 
@@ -36,7 +36,7 @@ final class ProcessTemporaryDirectory: Sendable {
 	 - Parameter probe: Returns 0 if a process has the pid, or else the `errno` that `kill(pid, 0)` would set. Tests inject one that simulates a filtered `kill`.
 	 */
 	init(parentURL: URL, legacyStagingURL: URL, probe: @escaping @Sendable (pid_t) -> Int32 = { ProcessTemporaryDirectory.probe($0) }, events: Events = Events()) {
-		self.processFoldersURL = parentURL.appendingPathComponent("pid-v1", isDirectory: true)
+		self.processFoldersURL = parentURL.appending(component: "pid-v1", directoryHint: .isDirectory)
 		self.legacyStagingURL = legacyStagingURL
 		self.probe = probe
 		self.events = events
@@ -60,14 +60,14 @@ final class ProcessTemporaryDirectory: Sendable {
 
 	/// Creates a new folder in the folder of this process. Its owner deletes it.
 	func makeDirectory() throws -> URL {
-		let url = try directoryURL().appendingPathComponent(UUID().uuidString, isDirectory: true)
+		let url = try directoryURL().appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
 		return url
 	}
 
 	/// Returns a new file URL in the folder of this process, at which no item exists yet. Its owner deletes the file.
 	func makeFileURL() throws -> URL {
-		return try directoryURL().appendingPathComponent(UUID().uuidString, isDirectory: false)
+		return try directoryURL().appending(component: UUID().uuidString, directoryHint: .notDirectory)
 	}
 
 	// MARK: - Setup
@@ -76,7 +76,7 @@ final class ProcessTemporaryDirectory: Sendable {
 	private func setUp() throws -> URL {
 		removeLegacyStagedFiles()
 		sweepProcessFolders()
-		let url = processFoldersURL.appendingPathComponent("\(getpid())-\(UUID().uuidString)", isDirectory: true)
+		let url = processFoldersURL.appending(component: "\(getpid())-\(UUID().uuidString)", directoryHint: .isDirectory)
 		events.willCreateProcessFolder(url)
 		try FileManager.default.createDirectory(at: processFoldersURL, withIntermediateDirectories: true)
 		try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
@@ -93,7 +93,7 @@ final class ProcessTemporaryDirectory: Sendable {
 			}
 			return modificationDate < cutoff
 		}
-		// Fails without harm if the folder is missing or isn't empty.
+		// Fails without harm if the folder is missing or isn't empty. `.path` drops the trailing slash, with which `rmdir` would remove the target of a symbolic link.
 		_ = rmdir(legacyStagingURL.path)
 	}
 

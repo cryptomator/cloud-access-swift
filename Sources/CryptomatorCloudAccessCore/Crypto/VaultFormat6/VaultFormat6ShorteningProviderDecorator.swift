@@ -213,7 +213,7 @@ final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
 	}
 
 	private func uploadNameFile(_ lngFileName: String, originalName: String) async throws {
-		let localNameFileURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localNameFileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: localNameFileURL)
 		}

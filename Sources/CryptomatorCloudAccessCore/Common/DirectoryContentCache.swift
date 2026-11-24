@@ -98,7 +98,7 @@ struct DirectoryContentDBCache: DirectoryContentCache {
 
 	/// Opens the database file at `url` without durability, so the provider must delete the file with itself and never reopen it.
 	init(fileAt url: URL, maxPageSize: Int) throws {
-		try self.init(dbWriter: DatabaseQueue.withoutDurability(path: url.path), maxPageSize: maxPageSize)
+		try self.init(dbWriter: DatabaseQueue.withoutDurability(path: url.path(percentEncoded: false)), maxPageSize: maxPageSize)
 	}
 
 	init(dbWriter: any DatabaseWriter, maxPageSize: Int) throws {

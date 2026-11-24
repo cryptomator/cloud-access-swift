@@ -22,7 +22,7 @@ enum DownloadOperation {
 		let stagingFile = try StagingFile()
 		do {
 			let itemMetadata = try await transfer(stagingFile.url)
-			let attributes = try FileManager.default.attributesOfItem(atPath: stagingFile.url.path)
+			let attributes = try FileManager.default.attributesOfItem(atPath: stagingFile.url.path(percentEncoded: false))
 			let metadata = CloudItemMetadata(name: itemMetadata.name, cloudPath: itemMetadata.cloudPath, itemType: .file, lastModifiedDate: itemMetadata.lastModifiedDate, size: Int((attributes as NSDictionary).fileSize()), isAlias: itemMetadata.isAlias)
 			try Task.checkCancellation()
 			try stagingFile.publish(to: destination)

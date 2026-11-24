@@ -44,7 +44,7 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	convenience init(client: PCloudClient, maxPageSize: Int = .max) throws {
 		try self.init(client: client) { tmpDirURL in
-			try DirectoryContentDBCache(fileAt: tmpDirURL.appendingPathComponent("db.sqlite"), maxPageSize: maxPageSize)
+			try DirectoryContentDBCache(fileAt: tmpDirURL.appending(component: "db.sqlite", directoryHint: .notDirectory), maxPageSize: maxPageSize)
 		}
 	}
 
@@ -328,7 +328,7 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	/// Downloads the folder's listing to a temporary file, which `body` reads and which is deleted afterwards.
 	private func withListing<T>(of folderItem: PCloudItem, _ body: (PCloudFolderListing) async throws -> T) async throws -> T {
-		let listingURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+		let listingURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: listingURL)
 		}

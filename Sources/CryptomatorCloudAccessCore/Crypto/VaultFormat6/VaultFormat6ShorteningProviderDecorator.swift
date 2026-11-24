@@ -161,7 +161,7 @@ final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
 	 */
 	private func getOriginalMetadataOfListedItem(_ shortenedMetadata: CloudItemMetadata) async throws -> CloudItemMetadata {
 		let originalPath = try await getOriginalPath(shortenedMetadata.cloudPath)
-		guard originalPath != shortenedMetadata.cloudPath, !shortenedNameCache.getShortenedPath(originalPath).pointsToLNG else {
+		guard originalPath != shortenedMetadata.cloudPath, !shortenedNameCache.needsShortening(originalPath) else {
 			return getOriginalMetadata(shortenedMetadata, originalPath: originalPath)
 		}
 		try Task.checkCancellation()
@@ -191,8 +191,7 @@ final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
 
 	/// Doesn't request anything, so that a download and an upload can still build the metadata to return after their commit point.
 	private func getOriginalMetadata(_ shortenedMetadata: CloudItemMetadata, originalPath: CloudPath) -> CloudItemMetadata {
-		let shortened = shortenedNameCache.getShortenedPath(originalPath)
-		if shortened.pointsToLNG {
+		if shortenedNameCache.needsShortening(originalPath) {
 			let originalItemType = parseVaultFormat6CiphertextName(originalPath.lastPathComponent).itemType
 			return CloudItemMetadata(name: originalPath.lastPathComponent, cloudPath: originalPath, itemType: originalItemType, lastModifiedDate: shortenedMetadata.lastModifiedDate, size: shortenedMetadata.size, isAlias: shortenedMetadata.isAlias)
 		} else {

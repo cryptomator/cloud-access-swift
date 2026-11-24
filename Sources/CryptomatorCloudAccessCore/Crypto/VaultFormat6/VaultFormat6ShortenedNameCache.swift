@@ -32,19 +32,21 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 	 - Returns: A `VaultFormat6ShorteningResult` object that is either based on the `originalPath` (if no shortening is required) or a shortened path.
 	 */
 	func getShortenedPath(_ originalPath: CloudPath) -> VaultFormat6ShorteningResult {
-		precondition(originalPath.pathComponents.count <= ciphertextNameCompIdx + 1)
-		if originalPath.pathComponents.count <= ciphertextNameCompIdx {
+		guard needsShortening(originalPath) else {
 			return VaultFormat6ShorteningResult(cloudPath: originalPath, pointsToLNG: false)
 		}
 		let originalName = originalPath.lastPathComponent
-		if originalName.count > VaultFormat6ShortenedNameCache.threshold {
-			let shortenedName = deflateName(originalName)
-			let shortenedPath = deflatePath(originalPath, with: shortenedName)
-			originalNames.record(shortenedName: shortenedName, originalName: originalName)
-			return VaultFormat6ShorteningResult(cloudPath: shortenedPath, pointsToLNG: true)
-		} else {
-			return VaultFormat6ShorteningResult(cloudPath: originalPath, pointsToLNG: false)
-		}
+		let shortenedName = deflateName(originalName)
+		let shortenedPath = deflatePath(originalPath, with: shortenedName)
+		originalNames.record(shortenedName: shortenedName, originalName: originalName)
+		return VaultFormat6ShorteningResult(cloudPath: shortenedPath, pointsToLNG: true)
+	}
+
+	/// Whether `getShortenedPath` shortens the path. Unlike it, this neither hashes the name nor records it for `getOriginalPath`.
+	func needsShortening(_ originalPath: CloudPath) -> Bool {
+		let pathComponents = originalPath.pathComponents
+		precondition(pathComponents.count <= ciphertextNameCompIdx + 1)
+		return pathComponents.count > ciphertextNameCompIdx && pathComponents[ciphertextNameCompIdx].count > VaultFormat6ShortenedNameCache.threshold
 	}
 
 	/**

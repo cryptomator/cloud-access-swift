@@ -29,11 +29,6 @@ private extension FileManager {
  Since the local file system is not actually a cloud, the naming might be confusing. However, iCloud Drive can be accessed via the local file system and this provider contains code to handle offloaded items.
  */
 public final class LocalFileSystemProvider: CloudProvider {
-	// iCloud Drive offloads an item as `.<name>.icloud`, but with two leading dots if its name starts with `_`, so the pattern accepts any number of them.
-	// See: https://github.com/cryptomator/cloud-access-swift/issues/19
-	// swiftlint:disable:next force_try
-	private static let iCloudPlaceholderRegex = try! NSRegularExpression(pattern: #"^\.+(.*)\.icloud$"#, options: [])
-
 	private let rootURL: URL
 	private let queue = OperationQueue()
 	private let shouldStopAccessingRootURL: Bool
@@ -378,12 +373,15 @@ public final class LocalFileSystemProvider: CloudProvider {
 	func getItemName(forItemAt url: URL) -> String {
 		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemName(forItemAt: \(url)) called")
 		let name = url.lastPathComponent
-		let range = NSRange(name.startIndex ..< name.endIndex, in: name)
-		guard let match = LocalFileSystemProvider.iCloudPlaceholderRegex.firstMatch(in: name, options: [], range: range), let matchedRange = Range(match.range(at: 1), in: name) else {
+		// iCloud Drive offloads an item as `.<name>.icloud`, so a dot-named `.foo` becomes `..foo.icloud` and keeps its leading dot. A name that starts with `_` gets a second leading dot, presumably so that the placeholder doesn't start with AppleDouble's `._`. That makes `._foo` share the placeholder of `_foo`. It is read as `_foo`, because the listing leaves out a dot-named item anyway.
+		// See: https://github.com/cryptomator/cloud-access-swift/issues/19
+		guard var originalName = name.removingUTF8Suffix(".icloud")?.removingUTF8Prefix(".") else {
 			return name
 		}
-		let originalName = String(name[matchedRange])
-		// A placeholder of dots alone, e.g. `..icloud`, keeps its name, because the empty stripped name would address the folder itself.
+		if let underscoredName = originalName.removingUTF8Prefix("."), underscoredName.hasUTF8Prefix("_") {
+			originalName = underscoredName
+		}
+		// A placeholder whose stripped name is empty, `.` or `..` (`..icloud` to `....icloud`) keeps its name, because the stripped name would address the folder or its parent.
 		return originalName.isSinglePathComponent ? originalName : name
 	}
 

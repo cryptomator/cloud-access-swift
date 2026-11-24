@@ -745,26 +745,24 @@ extension UnitTests {
 			#expect(!tmpDirURL.appending(cloudPath: CloudPath("/dir/sub")).hasDirectoryPath)
 		}
 
-		@Test
-		func testGetItemName() {
-			let iCloudPlaceholderFileURL = tmpDirURL.appendingPathComponent(".test.txt.icloud")
-			#expect(provider.getItemName(forItemAt: iCloudPlaceholderFileURL) == "test.txt")
+		/// Placeholder names as CloudDocs' `-[NSString br_sideFaultName]` builds them: one leading dot, and a second one for a name that starts with `_`. A line terminator is an ordinary character of the name.
+		@Test(arguments: [
+			(".test.txt.icloud", "test.txt"),
+			("..test.txt.icloud", ".test.txt"),
+			("...test.txt.icloud", "..test.txt"),
+			(".._test.txt.icloud", "_test.txt"),
+			("..__test.txt.icloud", "__test.txt"),
+			(".a\nb.icloud", "a\nb"),
+			(".a\u{2028}b.icloud", "a\u{2028}b")
+		])
+		func getItemNameRestoresPlaceholderName(placeholderName: String, expectedName: String) {
+			#expect(provider.getItemName(forItemAt: tmpDirURL.appendingPathComponent(placeholderName)) == expectedName)
+		}
 
-			let normalFileURL = tmpDirURL.appendingPathComponent("test.txt")
-			#expect(provider.getItemName(forItemAt: normalFileURL) == "test.txt")
-
-			let normalFolderURL = tmpDirURL.appendingPathComponent("Foo")
-			#expect(provider.getItemName(forItemAt: normalFolderURL) == "Foo")
-
-			let otherHiddenFileURL = tmpDirURL.appendingPathComponent(".test.txt")
-			#expect(provider.getItemName(forItemAt: otherHiddenFileURL) == ".test.txt")
-
-			let otherHiddenFolderURL = tmpDirURL.appendingPathComponent(".Foo")
-			#expect(provider.getItemName(forItemAt: otherHiddenFolderURL) == ".Foo")
-
-			for dotsOnlyPlaceholderName in ["..icloud", "...icloud"] {
-				#expect(provider.getItemName(forItemAt: tmpDirURL.appendingPathComponent(dotsOnlyPlaceholderName)) == dotsOnlyPlaceholderName)
-			}
+		/// Names that aren't `.<name>.icloud`, `.icloud` ending the name, and placeholders whose stripped name would address the folder or its parent.
+		@Test(arguments: ["test.txt", "Foo", ".test.txt", ".Foo", "test.txt.icloud", ".test.txt.icloud\n", ".icloud", "..icloud", "...icloud", "....icloud"])
+		func getItemNameKeepsName(name: String) {
+			#expect(provider.getItemName(forItemAt: tmpDirURL.appendingPathComponent(name)) == name)
 		}
 
 		/// Creates the regular file `/file`.

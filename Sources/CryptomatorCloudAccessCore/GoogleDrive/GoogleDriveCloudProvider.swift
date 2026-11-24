@@ -63,9 +63,9 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		let phases = Progress.phases(of: progress, 999)
-		let item = try await resolvePath(forItemAt: cloudPath)
+		let (item, parentItem) = try await preflight.resolveWithParent(at: cloudPath)
 		try Task.checkCancellation()
-		let metadata = try await downloadFile(for: item, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await downloadFile(for: item, in: parentItem, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -164,15 +164,16 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	}
 
 	/// Whether the item, or the cached row of the folder that holds it, is a shortcut, in which case the request reaches the shortcut's target or an item inside it.
-	private func isReachedThroughShortcut(_ item: GoogleDriveItem) -> Bool {
-		return item.shortcut != nil || identifierCache.get(item.cloudPath.deletingLastPathComponent())?.shortcut != nil
+	private func isReachedThroughShortcut(_ item: GoogleDriveItem, in parentItem: GoogleDriveItem) -> Bool {
+		return item.shortcut != nil || parentItem.shortcut != nil
 	}
 
-	private func downloadFile(for item: GoogleDriveItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
+	/// - Parameter parentItem: The cached row of the folder that holds the item, read together with the item's.
+	private func downloadFile(for item: GoogleDriveItem, in parentItem: GoogleDriveItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		guard item.effectiveItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
-		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: isReachedThroughShortcut(item))
+		let remoteMetadata = try await fetchItemMetadata(for: item, isAlias: isReachedThroughShortcut(item, in: parentItem))
 		try Task.checkCancellation()
 		return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 			try await perform("downloadFile(for: \(item.identifier), to: \(localURL))") {
@@ -206,10 +207,11 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 	/// Deletes a shortcut itself, not its target.
 	private func deleteItem(for item: GoogleDriveItem) async throws {
 		try await perform("deleteItem(for: \(item.identifier))") {
-			try await withoutCancellation {
-				try await self.client.delete(id: item.identifier)
+			try await preflight.commitDelete(item) {
+				try await withoutCancellation {
+					try await self.client.delete(id: item.identifier)
+				}
 			}
-			try identifierCache.invalidate(item)
 		}
 	}
 
@@ -224,18 +226,13 @@ public final class GoogleDriveCloudProvider: CloudProvider {
 		let addParents = isRename ? nil : move.targetParent.resolvedIdentifier
 		let removeParents = isRename ? nil : move.sourceParent.resolvedIdentifier
 		try await perform("moveItem(for: \(sourceItem.identifier), from: \(sourceItem.cloudPath.path), to: \(targetCloudPath.path))") {
-			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+			try await preflight.commitMove(move, to: targetCloudPath) {
 				let file = try await withoutCancellation {
 					try await self.client.update(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, addParents: addParents, removeParents: removeParents, fields: GoogleDriveCloudProvider.moveFields)
 				}
 				return try GoogleDriveItem(cloudPath: targetCloudPath, file: file)
 			}
 		}
-	}
-
-	/// Whether a move's error is one that a response throws if it can't be decoded or can't build the target item.
-	private static func isUnusableResponse(_ error: Error) -> Bool {
-		return [.unexpectedContent, .identifierNotFound].contains(error as? GoogleDriveError)
 	}
 
 	// MARK: - Resolve Path

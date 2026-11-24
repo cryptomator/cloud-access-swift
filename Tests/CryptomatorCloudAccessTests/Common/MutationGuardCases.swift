@@ -29,10 +29,14 @@ struct MutationGuardCase: Sendable {
 		case uploadFileToRoot = "uploadFile to the root"
 		case moveFileToRoot = "moveFile to the root"
 		case moveFolderToRoot = "moveFolder to the root"
+		case deleteFileOfRoot = "deleteFile of the root"
+		case deleteFolderOfRoot = "deleteFolder of the root"
+		case moveFileOfRoot = "moveFile of the root"
+		case moveFolderOfRoot = "moveFolder of the root"
 
 		var expected: CloudProviderError {
 			switch self {
-			case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile:
+			case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
 				return .itemTypeMismatch
 			case .createFolderInFile, .uploadFileIntoFile, .moveFileIntoFile, .moveFolderIntoFile, .createFolderBelowFileMidPath, .missingSourceIntoMissingParent:
 				return .parentFolderDoesNotExist
@@ -62,6 +66,10 @@ struct MutationGuardCase: Sendable {
 			case .uploadFileToRoot: return { _ = try await $0.uploadFile(from: localURL, to: .root, replaceExisting: true, progress: nil, onTaskCreation: nil) }
 			case .moveFileToRoot: return { try await $0.moveFile(from: CloudPath("/file.txt"), to: .root) }
 			case .moveFolderToRoot: return { try await $0.moveFolder(from: CloudPath("/folder"), to: .root) }
+			case .deleteFileOfRoot: return { try await $0.deleteFile(at: .root) }
+			case .deleteFolderOfRoot: return { try await $0.deleteFolder(at: .root) }
+			case .moveFileOfRoot: return { try await $0.moveFile(from: .root, to: CloudPath("/renamed")) }
+			case .moveFolderOfRoot: return { try await $0.moveFolder(from: .root, to: CloudPath("/renamed")) }
 			}
 		}
 	}
@@ -74,7 +82,7 @@ struct MutationGuardCase: Sendable {
 
 enum MutationGuardCases {
 	/**
-	 The cases in which a mutation sends no request: with an item of the wrong type, with an item that is no folder as a parent, or with the root as its target. A missing source or target parent ends the move after the lookups that found it missing.
+	 The cases in which a mutation sends no request: with an item of the wrong type, with an item that is no folder as a parent, with the root as its target, or with the root as its source. A missing source or target parent ends the move after the lookups that found it missing.
 
 	 - Parameter file: The lookup response in the root that finds the file `/file.txt`.
 	 - Parameter folder: The lookup response in the root that finds the folder `/folder`.
@@ -89,7 +97,7 @@ enum MutationGuardCases {
 				return [file]
 			case .missingSourceOntoExistingTarget, .missingSourceIntoMissingParent:
 				return [missing]
-			case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot:
+			case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
 				return []
 			}
 		}

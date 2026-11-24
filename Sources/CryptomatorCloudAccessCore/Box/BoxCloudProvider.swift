@@ -288,19 +288,21 @@ public final class BoxCloudProvider: CloudProvider {
 
 	private func deleteFile(for item: BoxItem) async throws {
 		try await perform("deleteFile(for: \(item.identifier))") {
-			try await withoutCancellation {
-				try await self.client.deleteFile(id: item.identifier)
+			try await preflight.commitDelete(item) {
+				try await withoutCancellation {
+					try await self.client.deleteFile(id: item.identifier)
+				}
 			}
-			try identifierCache.invalidate(item)
 		}
 	}
 
 	private func deleteFolder(for item: BoxItem) async throws {
 		try await perform("deleteFolder(for: \(item.identifier))") {
-			try await withoutCancellation {
-				try await self.client.deleteFolder(id: item.identifier)
+			try await preflight.commitDelete(item) {
+				try await withoutCancellation {
+					try await self.client.deleteFolder(id: item.identifier)
+				}
 			}
-			try identifierCache.invalidate(item)
 		}
 	}
 
@@ -308,7 +310,7 @@ public final class BoxCloudProvider: CloudProvider {
 		let sourceItem = move.source
 		let targetParentItem = move.targetParent
 		try await perform("moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))") {
-			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+			try await preflight.commitMove(move, to: targetCloudPath) {
 				let file = try await withoutCancellation {
 					try await self.client.moveFile(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
 				}
@@ -321,18 +323,13 @@ public final class BoxCloudProvider: CloudProvider {
 		let sourceItem = move.source
 		let targetParentItem = move.targetParent
 		try await perform("moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))") {
-			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+			try await preflight.commitMove(move, to: targetCloudPath) {
 				let folder = try await withoutCancellation {
 					try await self.client.moveFolder(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
 				}
 				return try BoxItem(cloudPath: targetCloudPath, entry: folder)
 			}
 		}
-	}
-
-	/// Whether a move's error is the one that a response throws if it can't be decoded or can't build the target item.
-	private static func isUnusableResponse(_ error: Error) -> Bool {
-		return error as? BoxError == .unexpectedContent
 	}
 
 	// MARK: - Resolve Path

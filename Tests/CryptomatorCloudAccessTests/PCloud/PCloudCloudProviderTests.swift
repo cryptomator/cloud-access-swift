@@ -939,6 +939,31 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// pCloud may have applied a delete whose response was lost, so the next read lists the parent instead of reaching the item by its old identifier.
+		@Test(arguments: [false, true])
+		func deleteWithLostResponseLeavesPathUncached(isFolder: Bool) async throws {
+			let cloudPath = CloudPath(isFolder ? "/folder" : "/file.txt")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: isFolder ? PCloudProviderTestResponse.rootWithFolder : PCloudProviderTestResponse.rootWithFile),
+				{ _ in throw URLError(.networkConnectionLost) },
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0), onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) {
+				if isFolder {
+					try await provider.deleteFolder(at: cloudPath)
+				} else {
+					try await provider.deleteFile(at: cloudPath)
+				}
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: cloudPath) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/listfolder"])
+			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "0")
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
 
 		/// Runs `operation` until its request is paused at its login, runs `intervening` meanwhile, and then lets the request go on, so that its response is processed after `intervening`.

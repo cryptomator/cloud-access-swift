@@ -90,7 +90,7 @@ struct ChangeMark: Sendable {
 /**
  Keeps the items of the paths that a provider resolved in a database file of its own, so that a large folder's items don't stay in memory. The cache deletes the file when it is released.
 
- A response can be processed long after its request was sent. A delete or move trusts the cached row without a request, so a row that a late response wrote could direct it at the wrong item. Each committed mutation therefore records what it changed. A delete or move records its paths and its item. An upload or folder creation records its path, and also its item if the response reports the item elsewhere. A read's write is refused, and a mutation's commit leaves its path uncached, if the path or the item has a newer record than the `ChangeMark` that the operation took. The records outlive the rows, because invalidation deletes rows. They cover only the mutations of this cache's provider object.
+ A response can be processed long after its request was sent. A delete or move trusts the cached row without a request, so a row that a late response wrote could direct it at the wrong item. Each committed mutation therefore records what it changed. A delete or move records its paths and its item, also when its request fails, because the server may have applied it. An upload or folder creation records its path, and also its item if the response reports the item elsewhere. A read's write is refused, and a mutation's commit leaves its path uncached, if the path or the item has a newer record than the `ChangeMark` that the operation took. The records outlive the rows, because invalidation deletes rows. They cover only the mutations of this cache's provider object.
  */
 final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	/// What a guarded write of a read's response did.
@@ -176,9 +176,9 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 	}
 
 	/**
-	 Commits a move after a successful response or one that can't be used. It removes every row of the moved item, the source path's row and the rows below them. If the response reports another item than the source, it removes that item's rows too. It caches the target item under the same conditions as `commitMutation(_:ifStillBelow:unchangedSince:)`.
+	 Commits a move after a successful response or a failed request. It removes every row of the moved item, the source path's row and the rows below them. If the response reports another item than the source, it removes that item's rows too. It caches the target item under the same conditions as `commitMutation(_:ifStillBelow:unchangedSince:)`.
 
-	 - Parameter targetItem: The moved item at its target, or `nil` if the response can't build it, which leaves the target path uncached if its parent is still connected.
+	 - Parameter targetItem: The moved item at its target, or `nil` if the request failed, which leaves the target path uncached if its parent is still connected.
 	 */
 	func commitMove(of sourceItem: Item, to targetCloudPath: CloudPath, as targetItem: Item?, ifStillBelow targetParentItem: Item, unchangedSince mark: ChangeMark) throws {
 		try dbQueue.write { db in
@@ -278,7 +278,7 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		return replacedItem
 	}
 
-	/// Commits a delete: removes every row of the item, the row at its path and the rows below them.
+	/// Commits a delete, also one whose request failed: removes every row of the item, the row at its path and the rows below them.
 	func invalidate(_ item: Item) throws {
 		try dbQueue.write { db in
 			try retire(item, in: db)

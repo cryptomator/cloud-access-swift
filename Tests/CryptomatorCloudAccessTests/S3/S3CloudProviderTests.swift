@@ -919,7 +919,7 @@ extension UnitTests {
 					return [S3CloudProviderTests.listing(of: "missing.txt")]
 				case .missingSourceIntoMissingParent:
 					return [S3CloudProviderTests.listing(of: "missing/")]
-				case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot:
+				case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
 					return []
 				}
 			}
@@ -932,10 +932,6 @@ extension UnitTests {
 			let decodedSource = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/a/../b"}"#.utf8))
 			let decodedTarget = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/x/./y"}"#.utf8))
 			let cases = [
-				MutationGuardCase(name: "deleteFile of the root", responses: [], expected: .itemTypeMismatch) { try await $0.deleteFile(at: .root) },
-				MutationGuardCase(name: "deleteFolder of the root", responses: [], expected: .itemTypeMismatch) { try await $0.deleteFolder(at: .root) },
-				MutationGuardCase(name: "moveFile of the root", responses: [], expected: .itemTypeMismatch) { try await $0.moveFile(from: .root, to: CloudPath("/x")) },
-				MutationGuardCase(name: "moveFolder of the root", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: CloudPath("/x")) },
 				MutationGuardCase(name: "moveFolder of the root into a folder", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: CloudPath("/folder/x")) },
 				MutationGuardCase(name: "moveFolder of the root to the root", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: .root) },
 				MutationGuardCase(name: "deleteFile of a relative path", responses: [], expected: .itemNotFound) { try await $0.deleteFile(at: CloudPath("a.txt")) },

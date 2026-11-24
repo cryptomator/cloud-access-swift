@@ -164,14 +164,14 @@ extension UnitTests {
 			}
 		}
 
-		/// Dropbox deletes and moves either type, so the wrong-type cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
+		/// Dropbox deletes and moves either type and leaves the root as a source to Dropbox, so the wrong-type and root-source cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
 		@Test
 		func mutationChecksFollowTheSharedContract() async throws {
 			let localURL = try makeLocalFile(content: "content")
 			let fileParent = DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt", body: DropboxMockResponse.file(name: "file.txt"))
 			let cases = MutationGuardCases.make(localURL: localURL) { kind in
 				switch kind {
-				case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile:
+				case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
 					return nil
 				case .createFolderInFile, .uploadFileIntoFile, .moveFileIntoFile, .moveFolderIntoFile:
 					return [fileParent]

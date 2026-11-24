@@ -747,6 +747,48 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// Box may have applied a delete whose response was lost, so the next read looks the path up instead of reaching the item by its old identifier.
+		@Test(arguments: [false, true])
+		func deleteWithLostResponseLeavesPathUncached(isFolder: Bool) async throws {
+			let cloudPath = CloudPath(isFolder ? "/folder" : "/file.txt")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: isFolder ? BoxCloudProviderTests.rootWithFolder : BoxCloudProviderTests.rootWithFile),
+				{ _ in throw URLError(.networkConnectionLost) },
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) {
+				if isFolder {
+					try await provider.deleteFolder(at: cloudPath)
+				} else {
+					try await provider.deleteFile(at: cloudPath)
+				}
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: cloudPath) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/2.0/folders/0/items"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Box may have applied a move whose response was lost, so the next read at the source looks the path up instead of reaching the moved item by its old identifier.
+		@Test
+		func moveWithLostResponseLeavesSourceUncached() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				{ _ in throw URLError(.networkConnectionLost) },
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt")) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/2.0/folders/0/items"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
 
 		private func lateMutationCase(_ kind: LateMutationKind) throws -> LateMutationCase {

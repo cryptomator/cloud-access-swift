@@ -223,6 +223,11 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		@Test
+		func rootDownloadThrowsItemTypeMismatchWithoutRequest() async throws {
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appendingPathComponent("root"), progress: nil, onTaskCreation: nil) }
+		}
+
 		/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
 		@Test
 		func listingSkipsNamesThatAreNoSinglePathComponent() async throws {
@@ -756,13 +761,14 @@ extension UnitTests {
 			#expect(request.httpBody?.isEmpty ?? true)
 		}
 
-		/// A refused delete leaves the item, so its cached identifier stays.
+		/// The client can't tell whether an earlier attempt of a refused delete was applied, so the cached identifier is dropped, and the next read looks the path up.
 		@Test
-		func refusedDeleteThrowsAndKeepsCachedItem() async throws {
+		func refusedDeleteThrowsAndDropsCachedItem() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
 				URLProtocolMock.handler(statusCode: 403),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record),
 				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
 			]
 
@@ -773,7 +779,24 @@ extension UnitTests {
 			}
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/F"])
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Graph may have applied a delete whose response was lost, so the next read looks the path up instead of reaching the item by its old identifier.
+		@Test
+		func deleteWithLostResponseLeavesPathUncached() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
+				{ _ in throw URLError(.networkConnectionLost) },
+				URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 

@@ -252,22 +252,24 @@ public final class PCloudCloudProvider: CloudProvider {
 
 	private func deleteFile(for item: PCloudItem) async throws {
 		try await perform("deleteFile(for: \(item.identifier))", mapping: [APIErrorCode.fileDoesNotExist: .itemNotFound, APIErrorCode.accessDenied: .deletionIncomplete]) {
-			try await withoutCancellation {
-				try await self.client.deleteFile(item.identifier)
+			try await preflight.commitDelete(item) {
+				try await withoutCancellation {
+					try await self.client.deleteFile(item.identifier)
+				}
+				CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) finished")
 			}
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFile(for: \(item.identifier)) finished")
-			try identifierCache.invalidate(item)
 		}
 	}
 
 	/// A refused delete throws `deletionIncomplete`, because pCloud doesn't document whether a refused recursive delete removed part of the folder.
 	private func deleteFolder(for item: PCloudItem) async throws {
 		try await perform("deleteFolder(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound, APIErrorCode.accessDenied: .deletionIncomplete, APIErrorCode.folderHasActiveShares: .deletionIncomplete]) {
-			try await withoutCancellation {
-				try await self.client.deleteFolderRecursive(item.identifier)
+			try await preflight.commitDelete(item) {
+				try await withoutCancellation {
+					try await self.client.deleteFolderRecursive(item.identifier)
+				}
+				CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) finished")
 			}
-			CloudAccessDDLogDebug("PCloudCloudProvider: deleteFolder(for: \(item.identifier)) finished")
-			try identifierCache.invalidate(item)
 		}
 	}
 
@@ -275,7 +277,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		let sourceItem = move.source
 		let targetParentItem = move.targetParent
 		try await perform("moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.fileDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
-			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+			try await preflight.commitMove(move, to: targetCloudPath) {
 				// `renamefile` replaces a file at the target and has no parameter to refuse, whereas `renamefolder` refuses with 2004. A file that another client creates at the target after the preflight's target lookup is therefore replaced.
 				let metadata = try await withoutCancellation {
 					try await self.client.renameFile(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
@@ -290,7 +292,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		let sourceItem = move.source
 		let targetParentItem = move.targetParent
 		try await perform("moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderAlreadyExists: .itemAlreadyExists, APIErrorCode.folderDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
-			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+			try await preflight.commitMove(move, to: targetCloudPath) {
 				let metadata = try await withoutCancellation {
 					try await self.client.renameFolder(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
 				}
@@ -298,11 +300,6 @@ public final class PCloudCloudProvider: CloudProvider {
 				return try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			}
 		}
-	}
-
-	/// Whether a move's error is the one that a response throws if it can't be decoded or can't build the target item. A body that isn't a pCloud result doesn't prove that the move was applied, but clearing the rows costs only a lookup.
-	private static func isUnusableResponse(_ error: Error) -> Bool {
-		return error as? PCloudError == .unexpectedContent
 	}
 
 	// MARK: - Resolve Path

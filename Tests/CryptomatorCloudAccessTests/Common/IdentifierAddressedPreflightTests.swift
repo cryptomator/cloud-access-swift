@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import GRDB
 import os
 import Testing
 @testable import CryptomatorCloudAccessCore
@@ -43,6 +44,8 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await preflight.prepareMove(from: CloudPath("/file"), to: .root, type: .file, operation: "moveFile") }
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await preflight.prepareMove(from: .root, to: CloudPath("/x"), type: .folder, operation: "moveFolder") }
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await preflight.prepareMove(from: .root, to: .root, type: .folder, operation: "moveFolder") }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await preflight.resolveSource(at: .root, type: .folder, operation: "deleteFolder") }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await preflight.resolveSource(at: .root, type: .file, operation: "deleteFile") }
 			#expect(lookups.calls.isEmpty)
 		}
 
@@ -290,15 +293,6 @@ extension UnitTests {
 			#expect(lookups.calls == ["0/gone", "0/gone/sub", "0/gone/sub/new", "0/gone", "0/gone/sub", "0/gone/sub/new"])
 		}
 
-		/// The root has no parent folder, so a delete of the root resolves it directly and leaves the decision to the server.
-		@Test
-		func rootDeleteResolvesRootWithoutLookup() async throws {
-			let item = try await makePreflight().resolveSource(at: .root, type: .folder, operation: "deleteFolder")
-
-			#expect(item.identifier == BoxItem.rootItem.identifier)
-			#expect(lookups.calls.isEmpty)
-		}
-
 		/// A folder cached below a file is never resolved, read or written into.
 		@Test
 		func folderCachedBelowFileIsNeverUsed() async throws {
@@ -341,24 +335,97 @@ extension UnitTests {
 			#expect(move.targetParent.identifier == "D")
 		}
 
-		/// An error other than an unusable response, e.g., a refusal, keeps the rows and records nothing, so a read that began before the move can still cache the target path.
+		/// The server may have applied a move whose request failed, e.g., with a refusal after an earlier attempt. Its source's and target's rows therefore go, and a read that began before the move can't cache the target path.
 		@Test
-		func moveWithOtherErrorKeepsRows() async throws {
+		func moveWithFailedRequestEvictsRowsAndRefusesOlderRead() async throws {
 			let preflight = makePreflight()
 			let move = try await preflight.prepareMove(from: CloudPath("/file"), to: CloudPath("/folder/new"), type: .file, operation: "moveFile")
 			let targetItem = BoxItem(cloudPath: CloudPath("/folder/new"), identifier: "T", itemType: .file)
 			try cache.addOrUpdate(targetItem)
+			try #require(cache.get(CloudPath("/file")) != nil)
 
 			await #expect(throws: CloudProviderError.quotaInsufficient) {
-				try await preflight.commitMove(move, to: CloudPath("/folder/new"), isUnusableResponse: { $0 as? BoxError == .unexpectedContent }, request: {
+				try await preflight.commitMove(move, to: targetItem.cloudPath, request: {
 					throw CloudProviderError.quotaInsufficient
 				})
 			}
 
-			#expect(cache.get(CloudPath("/file")) == move.source)
-			#expect(cache.get(targetItem.cloudPath) == targetItem)
+			#expect(cache.get(CloudPath("/file")) == nil)
+			#expect(cache.get(targetItem.cloudPath) == nil)
 			let readItem = BoxItem(cloudPath: targetItem.cloudPath, identifier: "R", itemType: .file)
-			#expect(try cache.addOrUpdate(readItem, ifStillBelow: move.targetParent, unchangedSince: move.changeMark).didSave)
+			#expect(try !cache.addOrUpdate(readItem, ifStillBelow: move.targetParent, unchangedSince: move.changeMark).didSave)
+		}
+
+		// MARK: - Commits
+
+		/// The server may have applied a delete whose request failed, so the item's row goes, and a read that began before the delete can't cache it again.
+		@Test
+		func deleteWithFailedRequestEvictsRowAndRefusesOlderRead() async throws {
+			let item = try #require(cache.get(CloudPath("/file")))
+			let mark = try cache.changeMark()
+
+			await #expect(throws: CloudProviderError.quotaInsufficient) {
+				try await makePreflight().commitDelete(item, request: {
+					throw CloudProviderError.quotaInsufficient
+				})
+			}
+
+			#expect(cache.get(item.cloudPath) == nil)
+			#expect(try !cache.addOrUpdate(item, ifStillBelow: BoxItem.rootItem, unchangedSince: mark).didSave)
+		}
+
+		@Test
+		func deleteWithSuccessfulRequestEvictsRow() async throws {
+			let item = try #require(cache.get(CloudPath("/file")))
+
+			try await makePreflight().commitDelete(item, request: {})
+
+			#expect(cache.get(item.cloudPath) == nil)
+		}
+
+		@Test(arguments: [true, false])
+		func failedCommitOfFailedRequestIsLoggedAndRequestErrorIsThrown(isMove: Bool) async throws {
+			let logCapture = LogCapture.start()
+			defer {
+				logCapture.stop()
+			}
+			let preflight = makePreflight()
+			let move = try await preflight.prepareMove(from: CloudPath("/file"), to: CloudPath("/folder/new"), type: .file, operation: "moveFile")
+			let item = try #require(cache.get(CloudPath("/link")))
+			try await refuseChangeRecords()
+
+			await #expect(throws: CloudProviderError.quotaInsufficient) {
+				if isMove {
+					try await preflight.commitMove(move, to: CloudPath("/folder/new"), request: {
+						throw CloudProviderError.quotaInsufficient
+					})
+				} else {
+					try await preflight.commitDelete(item, request: {
+						throw CloudProviderError.quotaInsufficient
+					})
+				}
+			}
+
+			#expect(logCapture.messages.count(where: { $0.hasPrefix("TestProvider: commit") && $0.contains("failed to clear the cache with error:") }) == 1)
+		}
+
+		/// A failed write of a successful request's commit is thrown, so that the caller doesn't take the mutation for committed while the old identifier is still cached.
+		@Test(arguments: [true, false])
+		func failedCommitOfSuccessfulRequestThrowsCacheError(isMove: Bool) async throws {
+			let preflight = makePreflight()
+			let move = try await preflight.prepareMove(from: CloudPath("/file"), to: CloudPath("/folder/new"), type: .file, operation: "moveFile")
+			let item = try #require(cache.get(CloudPath("/link")))
+			try await refuseChangeRecords()
+
+			await #expect(throws: DatabaseError.self) {
+				if isMove {
+					try await preflight.commitMove(move, to: CloudPath("/folder/new"), request: {
+						BoxItem(cloudPath: CloudPath("/folder/new"), identifier: "F", itemType: .file)
+					})
+				} else {
+					try await preflight.commitDelete(item, request: {})
+				}
+			}
 		}
 
 		// MARK: - Targets
@@ -529,6 +596,32 @@ extension UnitTests {
 			}
 		}
 
+		/// A move's or a delete's request that throws `CancellationError` in a cancelled task, e.g., after its session was invalidated, may have been applied, so it still commits. The commit's write doesn't check for cancellation.
+		@Test(arguments: [true, false])
+		func cancellationDuringRequestThrowsCancellationErrorAndEvictsRows(isMove: Bool) async throws {
+			let move = try await makePreflight().prepareMove(from: CloudPath("/file"), to: CloudPath("/folder/new"), type: .file, operation: "moveFile")
+			let item = try #require(cache.get(CloudPath("/file")))
+			let cache = cache
+			let task = Task {
+				let preflight = IdentifierAddressedPreflight(cache: cache, providerName: "TestProvider") { _, _ in nil }
+				let cancellingRequest: () async throws -> Void = {
+					withUnsafeCurrentTask { $0?.cancel() }
+					throw CancellationError()
+				}
+				if isMove {
+					try await preflight.commitMove(move, to: CloudPath("/folder/new"), request: {
+						try await cancellingRequest()
+						return item
+					})
+				} else {
+					try await preflight.commitDelete(item, request: cancellingRequest)
+				}
+			}
+
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
+			#expect(cache.get(item.cloudPath) == nil)
+		}
+
 		// MARK: - Helpers
 
 		/// Creates a preflight whose lookups are recorded as `<folder identifier>/<name>`. Without `lookUp`, every name is free.
@@ -544,6 +637,13 @@ extension UnitTests {
 			let localURL = tmpDirURL.appendingPathComponent("local.txt")
 			try Data("content".utf8).write(to: localURL)
 			return localURL
+		}
+
+		/// Makes every write that records a change fail, as a full disk would.
+		private func refuseChangeRecords() async throws {
+			try await cache.dbQueue.write { db in
+				try db.execute(sql: "CREATE TRIGGER refuseChangeRecords BEFORE INSERT ON ChangeRecords BEGIN SELECT RAISE(ABORT, 'refused'); END")
+			}
 		}
 	}
 }

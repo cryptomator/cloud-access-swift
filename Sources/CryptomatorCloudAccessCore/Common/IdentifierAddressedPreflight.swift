@@ -9,11 +9,11 @@
 import Foundation
 
 /**
- Resolves the paths of a provider that addresses its items by identifiers, and decides whether a mutation may proceed, before the provider sends its request. It also commits a move to the cache once the move's request returns.
+ Resolves the paths of a provider that addresses its items by identifiers, and decides whether a mutation may proceed, before the provider sends its request. It also commits a move or a delete to the cache once its request returns or fails.
 
  A target is judged by a fresh lookup in the parent folder that the write goes to, not by the item that the cache holds at its path, because another client may have moved, renamed, trashed or replaced that item. The only exception is an upload's `fastPath`, which must confirm the cached item with a request. Each method returns the items that it judged, so that the request names exactly them.
 
- It checks for cancellation before every lookup that it sends, and each `prepare…` and `resolveSource` method checks once more before it returns. `commitMove` doesn't check, because the move's request is the commit point.
+ It checks for cancellation before every lookup that it sends, and each `prepare…` and `resolveSource` method checks once more before it returns. `commitMove` and `commitDelete` don't check, because the request is the commit point.
  */
 struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	/// The items that a move names: the source, the folder that it was found in and the folder that it moves into, with the mark taken before they were resolved.
@@ -50,14 +50,35 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	}
 
 	/**
+	 Resolves the path and reads its item together with its parent's in one cache read. If the pair isn't cached and connected to the root once the path is resolved, because a concurrent write removed or replaced an item on the path, it resolves once more.
+
+	 - Throws: `CloudProviderError.itemTypeMismatch` for the root, which has no parent, without a lookup, and `Item.inconsistentCacheError` if the second resolution doesn't leave the pair cached either.
+	 */
+	func resolveWithParent(at cloudPath: CloudPath) async throws -> (item: Item, parent: Item) {
+		guard cloudPath != .root else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		for _ in 0 ..< 2 {
+			_ = try await resolve(at: cloudPath)
+			if let itemWithParent = cache.itemWithParent(at: cloudPath) {
+				return itemWithParent
+			}
+		}
+		throw Item.inconsistentCacheError
+	}
+
+	/**
 	 Resolves the source of a delete.
 
 	 - Parameter type: `.folder` requires a folder, and `.file` a file or a symbolic link.
 	 - Parameter operation: The name of the provider's method, for the log.
-	 - Throws: `CloudProviderError.itemTypeMismatch` if the item is of another type.
+	 - Throws: `CloudProviderError.itemTypeMismatch` for the root, without a lookup, and if the item is of another type.
 	 */
 	func resolveSource(at cloudPath: CloudPath, type: CloudItemType, operation: String) async throws -> Item {
-		let item = cloudPath == .root ? try await resolve(at: cloudPath) : try await resolveWithParent(at: cloudPath).item
+		guard cloudPath != .root else {
+			throw typeMismatch(at: cloudPath, operation: operation)
+		}
+		let item = try await resolveWithParent(at: cloudPath).item
 		try checkType(of: item, at: cloudPath, type: type, operation: operation)
 		try Task.checkCancellation()
 		return item
@@ -104,20 +125,38 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	/**
 	 Sends a move's request and commits it to the cache.
 
-	 A response that can't be decoded or can't build the target item still commits the move, without a target item, because the item may have left the source. Any other error, such as a refusal or a transport failure, changes nothing.
+	 Any error of `request` still commits the move, without a target item, because the server may have applied it. A transport failure or a response that can't be decoded or can't build the target item leaves the outcome open, and a refusal may answer a resend of an attempt that the server applied. Where the move wasn't applied, dropping the rows costs only a lookup. The request's error is rethrown unchanged. A failed write of that commit is only logged.
 
-	 - Parameter isUnusableResponse: Whether an error of `request` means such a response.
 	 - Parameter request: Sends the move and returns the moved item at the target.
 	 */
-	func commitMove(_ move: Move, to targetCloudPath: CloudPath, isUnusableResponse: (Error) -> Bool, request: () async throws -> Item) async throws {
+	func commitMove(_ move: Move, to targetCloudPath: CloudPath, request: () async throws -> Item) async throws {
 		let targetItem: Item
 		do {
 			targetItem = try await request()
-		} catch where isUnusableResponse(error) {
-			try cache.commitMove(of: move.source, to: targetCloudPath, as: nil, ifStillBelow: move.targetParent, unchangedSince: move.changeMark)
+		} catch {
+			commitAfterFailedRequest(operation: "commitMove(of: \(move.source.cloudPath.path), to: \(targetCloudPath.path))") {
+				try cache.commitMove(of: move.source, to: targetCloudPath, as: nil, ifStillBelow: move.targetParent, unchangedSince: move.changeMark)
+			}
 			throw error
 		}
 		try cache.commitMove(of: move.source, to: targetCloudPath, as: targetItem, ifStillBelow: move.targetParent, unchangedSince: move.changeMark)
+	}
+
+	/**
+	 Sends a delete's request and commits it to the cache.
+
+	 Any error of `request` still commits the delete, as `commitMove(_:to:request:)` does for a move. The request's error is rethrown unchanged, and a failed write of that commit is only logged.
+	 */
+	func commitDelete(_ item: Item, request: () async throws -> Void) async throws {
+		do {
+			try await request()
+		} catch {
+			commitAfterFailedRequest(operation: "commitDelete(of: \(item.cloudPath.path))") {
+				try cache.invalidate(item)
+			}
+			throw error
+		}
+		try cache.invalidate(item)
 	}
 
 	/**
@@ -167,15 +206,13 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 		}
 	}
 
-	/// Resolves a path below the root and reads its item together with its parent's. If the pair isn't cached and connected to the root once the path is resolved, because a concurrent write removed or replaced an item on the path, it resolves once more.
-	private func resolveWithParent(at cloudPath: CloudPath) async throws -> (item: Item, parent: Item) {
-		for _ in 0 ..< 2 {
-			_ = try await resolve(at: cloudPath)
-			if let itemWithParent = cache.itemWithParent(at: cloudPath) {
-				return itemWithParent
-			}
+	/// Writes the commit of a failed request. A failed write is logged, so that the request's error is the one thrown.
+	private func commitAfterFailedRequest(operation: String, _ write: () throws -> Void) {
+		do {
+			try write()
+		} catch let writeError {
+			CloudAccessDDLogDebug("\(providerName): \(operation) failed to clear the cache with error: \(writeError)")
 		}
-		throw Item.inconsistentCacheError
 	}
 
 	private func checkType(of item: Item, at cloudPath: CloudPath, type: CloudItemType, operation: String) throws {

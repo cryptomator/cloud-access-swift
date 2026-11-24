@@ -188,6 +188,11 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		@Test
+		func rootDownloadThrowsItemTypeMismatchWithoutRequest() async throws {
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appendingPathComponent("root"), progress: nil, onTaskCreation: nil) }
+		}
+
 		/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
 		@Test
 		func listingFailsIfShortcutTargetRequestFails() async throws {
@@ -940,6 +945,23 @@ extension UnitTests {
 			try await provider.deleteFile(at: CloudPath("/b"))
 
 			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files", "/drive/v3/files/A"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Drive may have applied a delete whose response was lost, so the next read looks the path up instead of reaching the item by its old identifier.
+		@Test
+		func deleteWithLostResponseLeavesPathUncached() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
+				{ _ in throw URLError(.networkConnectionLost) },
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record)
+			]
+
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 

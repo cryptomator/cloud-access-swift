@@ -64,9 +64,9 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		let phases = Progress.phases(of: progress, 999)
-		let item = try await resolvePath(forItemAt: cloudPath)
+		let (item, parentItem) = try await preflight.resolveWithParent(at: cloudPath)
 		try Task.checkCancellation()
-		let metadata = try await downloadFile(for: item, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await downloadFile(for: item, in: parentItem, to: localURL, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -169,16 +169,17 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 	}
 
 	/// Whether the item, or the cached row of the folder that holds it, is a remote item, in which case the request reaches the remote item's target or an item inside it.
-	private func isReachedThroughRemoteItem(_ item: MicrosoftGraphItem) -> Bool {
-		return item.isRemoteItem || identifierCache.get(item.cloudPath.deletingLastPathComponent())?.isRemoteItem == true
+	private func isReachedThroughRemoteItem(_ item: MicrosoftGraphItem, in parentItem: MicrosoftGraphItem) -> Bool {
+		return item.isRemoteItem || parentItem.isRemoteItem
 	}
 
-	private func downloadFile(for item: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
+	/// - Parameter parentItem: The cached row of the folder that holds the item, read together with the item's.
+	private func downloadFile(for item: MicrosoftGraphItem, in parentItem: MicrosoftGraphItem, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		guard item.effectiveItemType == .file else {
 			throw CloudProviderError.itemTypeMismatch
 		}
 		let itemAddress = address(of: item)
-		let isAlias = isReachedThroughRemoteItem(item)
+		let isAlias = isReachedThroughRemoteItem(item, in: parentItem)
 		let driveItem = try await perform { try await client.itemWithDownloadURL(at: itemAddress) }
 		let remoteMetadata = try convertToCloudItemMetadata(driveItem, at: item.cloudPath, isAlias: isAlias)
 		try Task.checkCancellation()
@@ -259,18 +260,19 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 
 	private func deleteItem(for item: MicrosoftGraphItem) async throws {
 		let itemAddress = address(of: item)
-		try await perform {
-			try await withoutCancellation {
-				try await self.client.delete(itemAddress)
+		try await preflight.commitDelete(item) {
+			try await perform {
+				try await withoutCancellation {
+					try await self.client.delete(itemAddress)
+				}
 			}
 		}
-		try identifierCache.invalidate(item)
 	}
 
 	private func moveItem(_ move: Preflight.Move, to targetCloudPath: CloudPath) async throws {
 		let sourceAddress = address(of: move.source)
 		let targetParentItem = move.targetParent
-		try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+		try await preflight.commitMove(move, to: targetCloudPath) {
 			let driveItem = try await perform {
 				try await withoutCancellation {
 					try await self.client.move(sourceAddress, named: targetCloudPath.lastPathComponent, toParentID: targetParentItem.identifier, parentDriveID: targetParentItem.driveIdentifier)
@@ -278,11 +280,6 @@ public final class MicrosoftGraphCloudProvider: CloudProvider {
 			}
 			return MicrosoftGraphItem(cloudPath: targetCloudPath, driveItem: driveItem)
 		}
-	}
-
-	/// Whether a move's successful response couldn't be decoded.
-	private static func isUnusableResponse(_ error: Error) -> Bool {
-		return error is DecodingError
 	}
 
 	// MARK: - Execution

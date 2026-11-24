@@ -1373,7 +1373,7 @@ extension UnitTests {
 		@Test
 		func deleteFileWithRefusedDeleteThrowsDeletionIncomplete() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
+				S3CloudProviderTests.listing(of: "a.txt", keys: ["a.txt"]),
 				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>AccessDenied</Code></Error>")
 			]
 
@@ -1397,8 +1397,8 @@ extension UnitTests {
 		/// The responses to the checks and the copy of a file move from `/a.txt` to `/b.txt`.
 		private static func fileMoveChecksAndCopy() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
 			return [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a.txt"])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
+				listing(of: "a.txt", keys: ["a.txt"]),
+				listing(of: "b.txt"),
 				URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
 			]
 		}

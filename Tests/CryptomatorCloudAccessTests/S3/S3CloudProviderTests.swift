@@ -908,7 +908,7 @@ extension UnitTests {
 				case .deleteFileOfFolder, .moveFileOfFolder:
 					return [S3CloudProviderTests.listing(of: "folder", commonPrefixes: ["folder/"])]
 				case .deleteFolderOfFile, .moveFolderOfFile:
-					return [S3CloudProviderTests.listing(of: "file.txt/"), S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"])]
+					return [S3CloudProviderTests.listing(of: "file.txt/", recursive: true), S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"])]
 				case .createFolderInFile, .uploadFileIntoFile:
 					return [S3CloudProviderTests.listing(of: "file.txt/sub"), S3CloudProviderTests.listing(of: "file.txt/")]
 				case .moveFileIntoFile, .moveFolderIntoFile:
@@ -951,7 +951,7 @@ extension UnitTests {
 		func deleteFolderOfKeyThatIsAlsoPrefixDeletesOnlyPrefix() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "a/", keys: ["a/x"]),
+				S3CloudProviderTests.listing(of: "a/", recursive: true, keys: ["a/x"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -966,9 +966,9 @@ extension UnitTests {
 		func deleteFolderOfFolderAppearingAfterItsListingDeletesIt() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "x/"),
+				S3CloudProviderTests.listing(of: "x/", recursive: true),
 				S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"]),
-				S3CloudProviderTests.listing(of: "x/", keys: ["x/"]),
+				S3CloudProviderTests.listing(of: "x/", recursive: true, keys: ["x/"]),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
@@ -981,8 +981,8 @@ extension UnitTests {
 		/// Nothing at the path, also once a folder that appeared after the first listing is gone again, must not count as a deleted or moved folder.
 		@Test
 		func missingFolderThrowsItemNotFoundWithoutWriting() async throws {
-			let missing = [S3CloudProviderTests.listing(of: "x/"), S3CloudProviderTests.listing(of: "x")]
-			let goneAgain = [S3CloudProviderTests.listing(of: "x/"), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"]), S3CloudProviderTests.listing(of: "x/")]
+			let missing = [S3CloudProviderTests.listing(of: "x/", recursive: true), S3CloudProviderTests.listing(of: "x")]
+			let goneAgain = [S3CloudProviderTests.listing(of: "x/", recursive: true), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"]), S3CloudProviderTests.listing(of: "x/", recursive: true)]
 			let cases = [
 				MutationGuardCase(name: "deleteFolder of a missing folder", responses: missing, expected: .itemNotFound) { try await $0.deleteFolder(at: CloudPath("/x")) },
 				MutationGuardCase(name: "moveFolder of a missing folder", responses: missing, expected: .itemNotFound) { try await $0.moveFolder(from: CloudPath("/x"), to: CloudPath("/y")) },
@@ -1027,7 +1027,7 @@ extension UnitTests {
 		func moveFolderOfKeyThatIsAlsoPrefixMovesOnlyPrefix() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "a/", keys: ["a/x"]),
+				S3CloudProviderTests.listing(of: "a/", recursive: true, keys: ["a/x"]),
 				S3CloudProviderTests.listing(of: "b"),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
@@ -1065,7 +1065,7 @@ extension UnitTests {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "folder/", keys: ["folder/"], onRequest: requests.record),
-				S3CloudProviderTests.listing(of: "src/", keys: ["src/a.txt"], onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "src/", recursive: true, keys: ["src/a.txt"], onRequest: requests.record),
 				S3CloudProviderTests.listing(of: "folder/dst", onRequest: requests.record),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
@@ -1085,8 +1085,8 @@ extension UnitTests {
 		func moveFolderListsPastPagesWithoutObjectsBeforeCopying() async throws {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "folder/", keys: ["other/x"], nextContinuationToken: "next", onRequest: requests.record),
-				S3CloudProviderTests.listing(of: "folder/", keys: ["folder/a.txt"], onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["other/x"], nextContinuationToken: "next", onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], onRequest: requests.record),
 				S3CloudProviderTests.listing(of: "target"),
 				S3CloudProviderTests.copyObject(requests),
 				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
@@ -1112,10 +1112,10 @@ extension UnitTests {
 					[S3CloudProviderTests.listing(of: "a.txt", keys: ["a.txt"], onRequest: { _ in canceller.cancel() }), URLProtocolMock.handler(statusCode: 204)]
 				}, operation: { try await $0.deleteFile(at: CloudPath("/a.txt")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "deleteFolder after the empty prefix", responses: { canceller in
-					[S3CloudProviderTests.listing(of: "x/", onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"])]
+					[S3CloudProviderTests.listing(of: "x/", recursive: true, onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"])]
 				}, operation: { try await $0.deleteFolder(at: CloudPath("/x")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "deleteFolder after the key lookup that follows the empty prefix", responses: { canceller in
-					[S3CloudProviderTests.listing(of: "x/"), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"], onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x/", keys: ["x/a.txt"])]
+					[S3CloudProviderTests.listing(of: "x/", recursive: true), S3CloudProviderTests.listing(of: "x", commonPrefixes: ["x/"], onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "x/", recursive: true, keys: ["x/a.txt"])]
 				}, operation: { try await $0.deleteFolder(at: CloudPath("/x")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "moveFile after the target's parent", responses: { canceller in
 					[S3CloudProviderTests.listing(of: "folder/", keys: ["folder/"], onRequest: { _ in canceller.cancel() }), S3CloudProviderTests.listing(of: "a.txt", keys: ["a.txt"])]
@@ -1124,20 +1124,20 @@ extension UnitTests {
 					[S3CloudProviderTests.listing(of: "a.txt", keys: ["a.txt"]), S3CloudProviderTests.listing(of: "b.txt", onRequest: { _ in canceller.cancel() }), URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)]
 				}, operation: { try await $0.moveFile(from: CloudPath("/a.txt"), to: CloudPath("/b.txt")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "moveFolder after the target", responses: { canceller in
-					[S3CloudProviderTests.listing(of: "folder/", keys: ["folder/a.txt"]), S3CloudProviderTests.listing(of: "target", onRequest: { _ in canceller.cancel() }), URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)]
+					[S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"]), S3CloudProviderTests.listing(of: "target", onRequest: { _ in canceller.cancel() }), URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)]
 				}, operation: { try await $0.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }, remainingResponses: 1),
 				CancelledMutationCase(name: "moveFolder after a recursive page without objects", responses: { canceller in
 					[
-						S3CloudProviderTests.listing(of: "folder/", keys: ["other/x"], nextContinuationToken: "next", onRequest: { _ in canceller.cancel() }),
-						S3CloudProviderTests.listing(of: "folder/", keys: ["folder/a.txt"]),
+						S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["other/x"], nextContinuationToken: "next", onRequest: { _ in canceller.cancel() }),
+						S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"]),
 						S3CloudProviderTests.listing(of: "target"),
 						URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
 					]
 				}, operation: { try await $0.moveFolder(from: CloudPath("/folder"), to: CloudPath("/target")) }, remainingResponses: 3),
 				CancelledMutationCase(name: "moveFolder after the page with objects that follows a page without", responses: { canceller in
 					[
-						S3CloudProviderTests.listing(of: "folder/", keys: ["other/x"], nextContinuationToken: "next"),
-						S3CloudProviderTests.listing(of: "folder/", keys: ["folder/a.txt"], onRequest: { _ in canceller.cancel() }),
+						S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["other/x"], nextContinuationToken: "next"),
+						S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/a.txt"], onRequest: { _ in canceller.cancel() }),
 						S3CloudProviderTests.listing(of: "target"),
 						URLProtocolMock.handler(body: S3MockResponse.copyObjectResult)
 					]
@@ -1423,11 +1423,13 @@ extension UnitTests {
 			}
 		}
 
-		/// Answers a `GET` with this `prefix` parameter with the keys and common prefixes, and fails any other request, so that a check of another path fails the test. It ignores the delimiter.
-		private static func listing(of prefix: String, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+		/// Answers a `GET` with this `prefix` parameter and the listing's `delimiter` (none if `recursive`, `/` otherwise) with the keys and common prefixes. It fails any other request, so that a check of another path or a listing of the other kind fails the test.
+		private static func listing(of prefix: String, recursive: Bool = false, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
 			let response = URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
 			return { request in
-				guard request.httpMethod == "GET", queryParameters(of: request)["prefix"] == prefix else {
+				let parameters = queryParameters(of: request)
+				let expectedDelimiter: String? = recursive ? nil : "/"
+				guard request.httpMethod == "GET", parameters["prefix"] == prefix, parameters["delimiter"] == expectedDelimiter else {
 					throw URLProtocolMockError.unexpectedRequest
 				}
 				return try response(request)

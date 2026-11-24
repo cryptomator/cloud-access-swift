@@ -371,7 +371,7 @@ public final class S3CloudProvider: CloudProvider {
 	private func listObjects(withPrefix prefix: String, recursive: Bool, pageToken: String?, maxKeys: Int = S3CloudProvider.s3MaxPageSize) async throws -> S3ListObjectsResult {
 		let result = try await client.listObjectsV2(prefix: prefix, delimiter: recursive ? nil : S3CloudProvider.delimiter, continuationToken: pageToken, maxKeys: maxKeys)
 		let hasPrefix: (String) -> Bool = { key in
-			guard key.removingUTF8Prefix(prefix) != nil else {
+			guard key.hasUTF8Prefix(prefix) else {
 				CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(prefix)")
 				return false
 			}
@@ -601,7 +601,7 @@ extension CloudItemMetadata {
 }
 
 extension CloudItemList {
-	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out the folder's own marker, which S3 lists with the folder's items. It leaves out those that aren't directly below the prefix, too, which only a server that ignores the delimiter or the prefix returns.
+	/// Leaves out the keys and common prefixes that no cloud path addresses. For the listing of a prefix, it also leaves out the folder's own marker, which S3 lists with the folder's items. It leaves out those that aren't directly below the prefix, too, which only a server that ignores the delimiter returns.
 	init(listObjects: S3ListObjectsResult, listedPrefix: String? = nil) {
 		let subFolders: [CloudItemMetadata] = listObjects.commonPrefixes.filter { CloudItemList.isAddressable($0, listedPrefix: listedPrefix) }.map { prefix in
 			let subFolderCloudPath = CloudPath(S3CloudProvider.delimiter + prefix)
@@ -625,8 +625,8 @@ extension CloudItemList {
 		guard let listedPrefix else {
 			return true
 		}
+		// `listObjects(withPrefix:recursive:pageToken:maxKeys:)` has already logged and left out the keys outside the prefix.
 		guard let remainder = key.removingUTF8Prefix(listedPrefix) else {
-			CloudAccessDDLogDebug("S3CloudProvider: skipping key \(key), because it doesn't start with the listed prefix \(listedPrefix)")
 			return false
 		}
 		// The remainder is empty for the folder's marker.

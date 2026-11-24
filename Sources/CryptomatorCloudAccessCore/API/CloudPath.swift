@@ -54,17 +54,27 @@ extension String {
 		return unicodeScalars.split(separator: separator, omittingEmptySubsequences: false).map { String(Substring($0)) }
 	}
 
-	/// Returns the string without the prefix, or `nil` if it doesn't start with the prefix's UTF-8 bytes. A `Character`-based search would miss a prefix whose end forms one `Character` with a combining mark after it, and it would match a canonically equivalent spelling, which a cloud can store as a different name.
+	/// Whether the string starts with the prefix's UTF-8 bytes. A `Character`-based search would miss a prefix whose end forms one `Character` with a combining mark after it. It would also match a canonically equivalent spelling, which a cloud can store as a different name.
+	func hasUTF8Prefix(_ prefix: String) -> Bool {
+		return utf8.starts(with: prefix.utf8)
+	}
+
+	/// Whether the string ends with the suffix's UTF-8 bytes. A `Character`-based search would miss a suffix whose start forms one `Character` with a prepended mark (e.g. U+0600) before it. It would also match a canonically equivalent spelling, which a cloud can store as a different name.
+	func hasUTF8Suffix(_ suffix: String) -> Bool {
+		return utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8)
+	}
+
+	/// Returns the string without the prefix, or `nil` if it doesn't start with the prefix's UTF-8 bytes (see `hasUTF8Prefix(_:)`).
 	func removingUTF8Prefix(_ prefix: String) -> String? {
-		guard utf8.starts(with: prefix.utf8) else {
+		guard hasUTF8Prefix(prefix) else {
 			return nil
 		}
 		return String(Substring(utf8.dropFirst(prefix.utf8.count)))
 	}
 
-	/// Returns the string without the suffix, or `nil` if it doesn't end with the suffix's UTF-8 bytes. A `Character`-based search would miss a suffix whose start forms one `Character` with a prepended mark (e.g. U+0600) before it, and it would match a canonically equivalent spelling, which a cloud can store as a different name.
+	/// Returns the string without the suffix, or `nil` if it doesn't end with the suffix's UTF-8 bytes (see `hasUTF8Suffix(_:)`).
 	func removingUTF8Suffix(_ suffix: String) -> String? {
-		guard utf8.suffix(suffix.utf8.count).elementsEqual(suffix.utf8) else {
+		guard hasUTF8Suffix(suffix) else {
 			return nil
 		}
 		return String(Substring(utf8.dropLast(suffix.utf8.count)))

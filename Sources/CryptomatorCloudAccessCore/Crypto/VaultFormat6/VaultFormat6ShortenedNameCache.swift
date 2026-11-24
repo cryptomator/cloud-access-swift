@@ -10,9 +10,7 @@ import Foundation
 
 struct VaultFormat6ShorteningResult {
 	let cloudPath: CloudPath
-	var pointsToLNG: Bool {
-		cloudPath.pathExtension == "lng"
-	}
+	let pointsToLNG: Bool
 }
 
 final class VaultFormat6ShortenedNameCache: Sendable {
@@ -36,16 +34,16 @@ final class VaultFormat6ShortenedNameCache: Sendable {
 	func getShortenedPath(_ originalPath: CloudPath) -> VaultFormat6ShorteningResult {
 		precondition(originalPath.pathComponents.count <= ciphertextNameCompIdx + 1)
 		if originalPath.pathComponents.count <= ciphertextNameCompIdx {
-			return VaultFormat6ShorteningResult(cloudPath: originalPath)
+			return VaultFormat6ShorteningResult(cloudPath: originalPath, pointsToLNG: false)
 		}
 		let originalName = originalPath.lastPathComponent
 		if originalName.count > VaultFormat6ShortenedNameCache.threshold {
 			let shortenedName = deflateName(originalName)
 			let shortenedPath = deflatePath(originalPath, with: shortenedName)
 			originalNames.record(shortenedName: shortenedName, originalName: originalName)
-			return VaultFormat6ShorteningResult(cloudPath: shortenedPath)
+			return VaultFormat6ShorteningResult(cloudPath: shortenedPath, pointsToLNG: true)
 		} else {
-			return VaultFormat6ShorteningResult(cloudPath: originalPath)
+			return VaultFormat6ShorteningResult(cloudPath: originalPath, pointsToLNG: false)
 		}
 	}
 

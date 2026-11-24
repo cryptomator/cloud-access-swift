@@ -14,8 +14,10 @@ extension VaultTestFormat {
 	/// The encrypted dir ID of the root, which every `CryptorMock` factory returns for the empty dir ID.
 	static let encryptedRootDirId = "00AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	static let rootDirectory = "pathToVault/d/\(nestedDirectories[0])"
-	static let directory1 = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
-	static let directory2 = "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+	static let directory1 = "pathToVault/d/\(nestedDirectories[1])"
+	static let directory2 = "pathToVault/d/\(nestedDirectories[2])"
+	static let directory3 = "pathToVault/d/\(nestedDirectories[3])"
+	static let directory4 = "pathToVault/d/\(nestedDirectories[4])"
 	/// The directory of every folder that a test creates, because the cryptor mock maps every unknown dir ID to it.
 	static let newDirectory = "pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"
 	/// The directories of the root and of `dir1-id` to `dir4-id`, by path below `pathToVault/d`, which a provider of nested references holds. The root's comes first.

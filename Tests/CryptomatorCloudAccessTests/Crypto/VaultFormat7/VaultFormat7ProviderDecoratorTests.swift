@@ -130,13 +130,13 @@ extension UnitTests {
 				"pathToVault/d/00",
 				VaultTestFormat.rootDirectory,
 				"\(VaultTestFormat.rootDirectory)/dir1.c9r",
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r",
-				"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+				VaultTestFormat.directory1,
+				"\(VaultTestFormat.directory1)/dir2.c9r",
+				VaultTestFormat.directory2
 			]
 			let files = [
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2.c9r/dir.c9r": Data("dir2-id".utf8),
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3.c9r": Data("ciphertext3".utf8)
+				"\(VaultTestFormat.directory1)/dir2.c9r/dir.c9r": Data("dir2-id".utf8),
+				"\(VaultTestFormat.directory1)/file3.c9r": Data("ciphertext3".utf8)
 			]
 			let provider = CloudProviderMock(folders: folders, files: files)
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
@@ -148,9 +148,9 @@ extension UnitTests {
 		/// A subfolder whose `name.c9s` can't be read is deleted with its parent, and the `.c9s` of a file holds no `dir.c9r` to follow.
 		@Test
 		func deleteFolderFollowsDirFilesOfC9SWithoutReadingNames() async throws {
-			let folderC9SPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/folder.c9s"
-			let fileC9SPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file.c9s"
-			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/folder.c9s": "dir2-id"], folders: [fileC9SPath], files: ["\(folderC9SPath)/name.c9s": Data(), "\(fileC9SPath)/contents.c9r": Data(), "\(fileC9SPath)/name.c9s": Data()])
+			let folderC9SPath = "\(VaultTestFormat.directory1)/folder.c9s"
+			let fileC9SPath = "\(VaultTestFormat.directory1)/file.c9s"
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/folder.c9s": "dir2-id"], folders: [fileC9SPath], files: ["\(folderC9SPath)/name.c9s": Data(), "\(fileC9SPath)/contents.c9r": Data(), "\(fileC9SPath)/name.c9s": Data()])
 			let downloadedNameFiles = OSAllocatedUnfairLock(initialState: [String]())
 			provider.transferHook = { cloudPath, _ in
 				if cloudPath.lastPathComponent == "name.c9s" {
@@ -161,38 +161,38 @@ extension UnitTests {
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			let decorator = try VaultFormat7ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
+			#expect(provider.deleted == [VaultTestFormat.directory2, VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
 			#expect(downloadedNameFiles.withLock { $0 } == [])
 		}
 
 		/// The `.c9r` and `.c9s` suffixes form one `Character` with a prepended mark before them, but they still mark a Cryptomator item.
 		@Test
 		func deleteFolderFollowsDirFilesOfItemsWhoseSuffixIsInCombinedCharacter() async throws {
-			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2\u{600}.c9r": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir3\u{600}.c9s": "dir3-id"])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/dir2\u{600}.c9r": "dir2-id", "\(VaultTestFormat.nestedDirectories[1])/dir3\u{600}.c9s": "dir3-id"])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"])
+			#expect(provider.deleted.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r", VaultTestFormat.directory1, VaultTestFormat.directory2, VaultTestFormat.directory3])
 		}
 
 		/// Only a `.c9r` or `.c9s` folder is a Cryptomator item, so the directory of the `dir.c9r` in another folder isn't deleted.
 		@Test
 		func deleteFolderIgnoresDirFileOfOtherFolder() async throws {
-			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/backup": "dir2-id"])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/backup": "dir2-id"])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
 		}
 
 		@Test
 		func deleteFolderDoesNotReadAliasDirFile() async throws {
-			let subfolderPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r"
-			let provider = makeNestedProvider(subdirectories: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r": "dir2-id"], aliases: ["\(subfolderPath)/dir.c9r"])
+			let subfolderPath = "\(VaultTestFormat.directory1)/sub.c9r"
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/sub.c9r": "dir2-id"], aliases: ["\(subfolderPath)/dir.c9r"])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", subfolderPath])
+			#expect(listedFolders.withLock { $0 } == [VaultTestFormat.directory1, subfolderPath])
 			#expect(transferredFiles.withLock { $0 } == ["\(VaultTestFormat.rootDirectory)/dir1.c9r/dir.c9r"])
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
 		}
 
 		/// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing, while the folder still lists it.
@@ -254,10 +254,10 @@ extension UnitTests {
 		/// A `dir.c9r` folder holds no dir ID, so the walk doesn't follow it and the parent is deleted.
 		@Test
 		func deleteFolderWithSubfolderHoldingDirFolderDeletesParent() async throws {
-			let provider = makeNestedProvider(subdirectories: [:], folders: ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/sub.c9r/dir.c9r"])
+			let provider = makeNestedProvider(subdirectories: [:], folders: ["\(VaultTestFormat.directory1)/sub.c9r", "\(VaultTestFormat.directory1)/sub.c9r/dir.c9r"])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
 		}
 
 		/// A `.c9r` without a readable `dir.c9r` is listed before it is deleted, to tell whether it holds one.

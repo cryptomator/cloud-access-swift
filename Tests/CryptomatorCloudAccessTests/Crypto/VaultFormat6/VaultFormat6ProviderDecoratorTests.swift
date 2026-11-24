@@ -175,12 +175,12 @@ extension UnitTests {
 				"pathToVault/d",
 				"pathToVault/d/00",
 				VaultTestFormat.rootDirectory,
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-				"pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+				VaultTestFormat.directory1,
+				VaultTestFormat.directory2
 			]
 			let files = [
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": Data("dir2-id".utf8),
-				"pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/file3": Data("ciphertext3".utf8)
+				"\(VaultTestFormat.directory1)/0dir2": Data("dir2-id".utf8),
+				"\(VaultTestFormat.directory1)/file3": Data("ciphertext3".utf8)
 			]
 
 			let provider = CloudProviderMock(folders: folders, files: files)
@@ -193,7 +193,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderWithUnreadableNameFileKeepsParent() async throws {
 			let nameFilePath = "pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir2": "dir2-id", "11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: [nameFilePath: Data("0\(String(repeating: "dir3", count: 33))".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0dir2": "dir2-id", "\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: [nameFilePath: Data("0\(String(repeating: "dir3", count: 33))".utf8)])
 			provider.transferHook = { cloudPath, _ in
 				if cloudPath.path == nameFilePath {
 					throw CloudProviderError.quotaInsufficient
@@ -201,57 +201,57 @@ extension UnitTests {
 			}
 			let decorator = try makeShorteningDecorator(over: provider)
 			await #expect(throws: CloudProviderError.quotaInsufficient) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
-			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"])
+			#expect(provider.deleted == [VaultTestFormat.directory2])
 		}
 
 		/// The name file doesn't hold a name that shortens to its `.lng` name. The library addresses an item by shortening its name again, so it ignores the item, and the item's directory stays.
 		@Test
 		func deleteFolderWithInvalidNameFileIgnoresItem() async throws {
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0dir3".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0dir3".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// Old Cryptomator versions shortened names of 129 characters, which a listing moves to their original name.
 		@Test
 		func deleteFolderFollowsLegacyShortenedDirFileWithoutMovingIt() async throws {
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": "dir3-id"], files: ["pathToVault/m/NY/7A/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": Data("0\(String(repeating: "dir3", count: 32))".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": "dir3-id"], files: ["pathToVault/m/NY/7A/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": Data("0\(String(repeating: "dir3", count: 32))".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == [VaultTestFormat.directory3, VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 			#expect(!provider.calls.contains("moveFile"))
 		}
 
 		/// The `0` prefix forms one `Character` with a combining mark after it, but it still marks a dir file.
 		@Test(arguments: Stacking.allCases)
 		func deleteFolderFollowsDirFileWhosePrefixIsInCombinedCharacter(stacking: Stacking) async throws {
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0\u{301}dir2": "dir2-id"])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0\u{301}dir2": "dir2-id"])
 			let decorator = stacking == .plain ? try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor) : try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == [VaultTestFormat.directory2, VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// The `.lng` suffix forms one `Character` with a prepended mark before it, but it still marks a shortened name. This one isn't a valid one, so the delete ignores it and its directory stays.
 		@Test
 		func deleteFolderDoesNotFollowInvalidShortenedNameWhoseSuffixIsInCombinedCharacter() async throws {
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/0dir3\u{600}.lng": "dir3-id"])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0dir3\u{600}.lng": "dir3-id"])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		/// A shortcut named like a dir file downloads its target, which can name a directory outside the deleted folder. A shortened one is skipped before its `.lng` name file is read.
 		@Test
 		func deleteFolderDoesNotFollowShortenedAliasDirFile() async throws {
-			let lngPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
-			let provider = makeNestedProvider(dirFiles: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0\(String(repeating: "dir3", count: 33))".utf8)], aliases: [lngPath])
+			let lngPath = "\(VaultTestFormat.directory1)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0\(String(repeating: "dir3", count: 33))".utf8)], aliases: [lngPath])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
-			#expect(listedFolders.withLock { $0 } == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"])
+			#expect(listedFolders.withLock { $0 } == [VaultTestFormat.directory1])
 			#expect(transferredFiles.withLock { $0 } == ["\(VaultTestFormat.rootDirectory)/0dir1"])
-			#expect(provider.deleted == ["pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "\(VaultTestFormat.rootDirectory)/0dir1"])
+			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
 		// MARK: - Internal

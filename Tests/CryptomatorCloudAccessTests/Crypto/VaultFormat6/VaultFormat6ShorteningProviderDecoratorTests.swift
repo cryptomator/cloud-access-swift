@@ -346,7 +346,7 @@ extension UnitTests {
 
 		@Test
 		func downloadFileWithLongNameKeepsAliasMarker() async throws {
-			let dirPath = "pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+			let dirPath = VaultTestFormat.directory1
 			let lngPath = "\(dirPath)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
 			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/11", dirPath], files: [lngPath: Data("dir3-id".utf8)], aliasedDownloads: [lngPath])
 			let shorteningDecorator = try VaultFormat6ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
@@ -415,15 +415,15 @@ extension UnitTests {
 		func deleteFileWithLongName() async throws {
 			try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
 			#expect(provider.deleted.count == 1)
-			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng"))
+			#expect(provider.deleted.contains("\(VaultTestFormat.directory3)/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng"))
 		}
 
 		@Test
 		func deleteFolderWithLongName() async throws {
 			try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)"))
 			#expect(provider.deleted.count == 3)
-			#expect(provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"))
-			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"))
+			#expect(provider.deleted.contains(VaultTestFormat.directory4))
+			#expect(provider.deleted.contains(VaultTestFormat.directory3))
 			#expect(provider.deleted.contains("\(VaultTestFormat.rootDirectory)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"))
 		}
 

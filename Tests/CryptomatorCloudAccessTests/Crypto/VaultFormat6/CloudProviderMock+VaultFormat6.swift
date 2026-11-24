@@ -31,8 +31,8 @@ extension CloudProviderMock {
 			root,
 			VaultTestFormat.directory1,
 			VaultTestFormat.directory2,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-			"pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+			VaultTestFormat.directory3,
+			VaultTestFormat.directory4
 		]
 		// Precompute data to improve type-check performance during compilation
 		let dir1IdData = Data("dir1-id".utf8)
@@ -59,8 +59,8 @@ extension CloudProviderMock {
 			"\(root)/CIVVSN3UPME74I7TGQESFYRUFKAUH6H7.lng": file5CiphertextData,
 			"\(VaultTestFormat.directory1)/0dir2": dir2IdData,
 			"\(VaultTestFormat.directory1)/file3": file3CiphertextData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/5ZIVSZELKKXO66ALXML6ORP32HF3OLAL.lng": dir4IdData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng": file6CiphertextData,
+			"\(VaultTestFormat.directory3)/5ZIVSZELKKXO66ALXML6ORP32HF3OLAL.lng": dir4IdData,
+			"\(VaultTestFormat.directory3)/LTGFEUKABMKGWWR2EAL6LSHZC7OGDRMN.lng": file6CiphertextData,
 			"pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": dir3NameData,
 			"pathToVault/m/5Z/IV/5ZIVSZELKKXO66ALXML6ORP32HF3OLAL.lng": dir4NameData,
 			"pathToVault/m/2Q/OD/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng": file4NameData,

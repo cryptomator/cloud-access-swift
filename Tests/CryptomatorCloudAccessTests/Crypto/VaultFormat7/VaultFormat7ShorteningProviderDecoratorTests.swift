@@ -20,6 +20,7 @@ extension UnitTests {
 		var shorteningDecorator: VaultFormat7ShorteningProviderDecorator
 		var decorator: VaultFormat7ProviderDecorator
 		let file4C9SDirPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
+		let dir3C9SDirPath = "\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"
 		/// The fixture holds `File 6 (Long)` only in `Directory 3 (Long)`, so its `.c9s` in the root doesn't exist.
 		let rootFile6C9SDirPath = "\(VaultTestFormat.rootDirectory)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"
 		/// The fixture holds `Directory 4 (Long)` only in `Directory 3 (Long)`, so its `.c9s` in the root doesn't exist.
@@ -61,8 +62,9 @@ extension UnitTests {
 
 		@Test
 		func fetchItemListWithCancelledNameLookup() async throws {
+			let nameFilePath = "\(file4C9SDirPath)/name.c9s"
 			provider.transferHook = { cloudPath, _ in
-				if cloudPath.path == "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s" {
+				if cloudPath.path == nameFilePath {
 					throw CancellationError()
 				}
 			}
@@ -87,13 +89,12 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let longName = "\(String(repeating: "a", count: 217)).c9r"
 			let ownDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
-			let file4DirPath = "\(dirPath)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
 			let file5DirPath = "\(dirPath)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, ownDirPath, file4DirPath, file5DirPath], files: [
+			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, ownDirPath, file4C9SDirPath, file5DirPath], files: [
 				"\(ownDirPath)/contents.c9r": Data(),
 				"\(ownDirPath)/name.c9s": Data(longName.utf8),
-				"\(file4DirPath)/contents.c9r": Data(),
-				"\(file4DirPath)/name.c9s": Data("\(String(repeating: "file5", count: 44)).c9r".utf8),
+				"\(file4C9SDirPath)/contents.c9r": Data(),
+				"\(file4C9SDirPath)/name.c9s": Data("\(String(repeating: "file5", count: 44)).c9r".utf8),
 				"\(file5DirPath)/contents.c9r": Data(),
 				"\(file5DirPath)/name.c9s": Data("\(String(repeating: "file4", count: 44)).c9r".utf8)
 			])
@@ -360,7 +361,7 @@ extension UnitTests {
 			#expect(provider.createdFolders.count == 3)
 			#expect(provider.createdFolders.contains(rootDir4C9SDirPath))
 			#expect(provider.createdFolders.contains("pathToVault/d/99"))
-			#expect(provider.createdFolders.contains("pathToVault/d/99/ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ"))
+			#expect(provider.createdFolders.contains(VaultTestFormat.newDirectory))
 			#expect(provider.createdFiles.count == 2)
 			#expect(provider.createdFiles["\(rootDir4C9SDirPath)/dir.c9r"] != nil)
 			#expect(Data("\(String(repeating: "dir4", count: 55)).c9r".utf8) == provider.createdFiles["\(rootDir4C9SDirPath)/name.c9s"])
@@ -370,30 +371,30 @@ extension UnitTests {
 		func deleteFileWithLongName() async throws {
 			try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
 			#expect(provider.deleted.count == 1)
-			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"))
+			#expect(provider.deleted.contains("\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"))
 		}
 
 		@Test
 		func deleteFolderWithLongName() async throws {
 			try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)"))
 			#expect(provider.deleted.count == 3)
-			#expect(provider.deleted.contains("pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"))
-			#expect(provider.deleted.contains("pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"))
-			#expect(provider.deleted.contains("\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"))
+			#expect(provider.deleted.contains(VaultTestFormat.directory4))
+			#expect(provider.deleted.contains(VaultTestFormat.directory3))
+			#expect(provider.deleted.contains(dir3C9SDirPath))
 		}
 
 		@Test
 		func deleteFileWithLongNameWithDeletionIncompleteRestoresNameFile() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete)
 			await #expect(throws: CloudProviderError.deletionIncomplete) { try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)")) }
-			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s"])
 		}
 
 		@Test
 		func deleteFolderWithLongNameWithDeletionIncompleteRestoresNameFile() async throws {
-			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: ["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"])
+			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete, at: [dir3C9SDirPath])
 			await #expect(throws: CloudProviderError.deletionIncomplete) { try await decorator.deleteFolder(at: CloudPath("/Directory 3 (Long)")) }
-			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(dir3C9SDirPath)/name.c9s"])
 		}
 
 		@Test
@@ -411,16 +412,16 @@ extension UnitTests {
 		func moveFileFromLongToShortName() async throws {
 			try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 3"))
 			#expect(provider.moved.count == 1)
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"] == "\(VaultTestFormat.rootDirectory)/file3.c9r")
+			#expect(provider.moved["\(file4C9SDirPath)/contents.c9r"] == "\(VaultTestFormat.rootDirectory)/file3.c9r")
 			#expect(provider.deleted.count == 1)
-			#expect(provider.deleted.contains("\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"))
+			#expect(provider.deleted.contains(file4C9SDirPath))
 		}
 
 		@Test
 		func moveFileFromLongToLongName() async throws {
 			try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 6 (Long)"))
 			#expect(provider.moved.count == 1)
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"] == rootFile6C9SDirPath)
+			#expect(provider.moved[file4C9SDirPath] == rootFile6C9SDirPath)
 			#expect(provider.createdFiles.count == 1)
 			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["\(rootFile6C9SDirPath)/name.c9s"])
 		}
@@ -438,7 +439,7 @@ extension UnitTests {
 		func moveFolderFromLongToShortName() async throws {
 			try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 2"))
 			#expect(provider.moved.count == 1)
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
+			#expect(provider.moved[dir3C9SDirPath] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
 			#expect(provider.deleted.count == 1)
 			#expect(provider.deleted.contains("\(VaultTestFormat.rootDirectory)/dir2.c9r/name.c9s"))
 		}
@@ -498,7 +499,7 @@ extension UnitTests {
 		func moveFolderFromLongToShortNameWithRefusedNameFileDeleteSucceeds() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("deleteFile", with: CloudProviderError.deletionIncomplete)
 			try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 2"))
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
+			#expect(provider.moved[dir3C9SDirPath] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
 		}
 
 		@Test
@@ -525,21 +526,21 @@ extension UnitTests {
 		func moveFileFromLongToLongNameWithMoveCompletedRestoresSourceNameFile() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
 			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 6 (Long)")) }
-			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(file4C9SDirPath)/name.c9s"])
 		}
 
 		@Test
 		func moveFolderFromLongToShortNameWithMoveCompletedRestoresSourceNameFile() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
 			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 2")) }
-			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(dir3C9SDirPath)/name.c9s"])
 		}
 
 		@Test
 		func moveFolderFromLongToLongNameWithMoveCompletedRestoresSourceNameFile() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
 			await #expect(throws: CloudProviderError.moveCompletedWithSourceRemaining) { try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 1/Directory 4 (Long)")) }
-			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "dir3", count: 55)).c9r".utf8) == provider.createdFiles["\(dir3C9SDirPath)/name.c9s"])
 		}
 
 		@Test
@@ -552,7 +553,7 @@ extension UnitTests {
 				}
 			}
 			await #expect(throws: CloudProviderError.quotaInsufficient) { try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 6 (Long)")) }
-			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(file4C9SDirPath)/name.c9s"])
 		}
 
 		/// The target is complete, so failing to restore the source's name file doesn't replace the move's outcome.
@@ -560,8 +561,9 @@ extension UnitTests {
 		func moveFileFromLongToLongNameWithMoveCompletedAndFailedSourceNameFileUploadRethrowsMoveCompleted() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
 			let failedSourceNameFileUploads = OSAllocatedUnfairLock(initialState: 0)
+			let sourceNameFilePath = "\(file4C9SDirPath)/name.c9s"
 			provider.transferHook = { cloudPath, _ in
-				if cloudPath.path == "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s" {
+				if cloudPath.path == sourceNameFilePath {
 					failedSourceNameFileUploads.withLock { $0 += 1 }
 					throw CloudProviderError.quotaInsufficient
 				}
@@ -573,8 +575,9 @@ extension UnitTests {
 		@Test
 		func moveFileFromLongToLongNameWithMoveCompletedAndCancelledSourceNameFileUploadThrowsCancellationError() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("moveFolder", with: CloudProviderError.moveCompletedWithSourceRemaining)
+			let sourceNameFilePath = "\(file4C9SDirPath)/name.c9s"
 			provider.transferHook = { cloudPath, _ in
-				if cloudPath.path == "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s" {
+				if cloudPath.path == sourceNameFilePath {
 					throw CancellationError()
 				}
 			}
@@ -621,8 +624,8 @@ extension UnitTests {
 			try await valueCancelledAfterFirstRemoteChange(of: provider) {
 				try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 3"))
 			}
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r"] == "\(VaultTestFormat.rootDirectory)/file3.c9r")
-			#expect(provider.deleted == ["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"])
+			#expect(provider.moved["\(file4C9SDirPath)/contents.c9r"] == "\(VaultTestFormat.rootDirectory)/file3.c9r")
+			#expect(provider.deleted == [file4C9SDirPath])
 		}
 
 		@Test
@@ -631,7 +634,7 @@ extension UnitTests {
 			try await valueCancelledAfterFirstRemoteChange(of: provider) {
 				try await decorator.moveFile(from: CloudPath("/File 4 (Long)"), to: CloudPath("/File 6 (Long)"))
 			}
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"] == rootFile6C9SDirPath)
+			#expect(provider.moved[file4C9SDirPath] == rootFile6C9SDirPath)
 			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["\(rootFile6C9SDirPath)/name.c9s"])
 		}
 
@@ -651,7 +654,7 @@ extension UnitTests {
 			try await valueCancelledAfterFirstRemoteChange(of: provider) {
 				try await decorator.moveFolder(from: CloudPath("/Directory 3 (Long)"), to: CloudPath("/Directory 2"))
 			}
-			#expect(provider.moved["\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
+			#expect(provider.moved[dir3C9SDirPath] == "\(VaultTestFormat.rootDirectory)/dir2.c9r")
 			#expect(provider.deleted == ["\(VaultTestFormat.rootDirectory)/dir2.c9r/name.c9s"])
 		}
 

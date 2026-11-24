@@ -36,10 +36,10 @@ extension CloudProviderMock {
 			VaultTestFormat.directory1,
 			"\(VaultTestFormat.directory1)/dir2.c9r",
 			VaultTestFormat.directory2,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s", // (dir4){55}.c9r
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s", // (file6){44}.c9r
-			"pathToVault/d/44/EEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+			VaultTestFormat.directory3,
+			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s", // (dir4){55}.c9r
+			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s", // (file6){44}.c9r
+			VaultTestFormat.directory4
 		]
 		// Precompute repeated strings to improve type-check performance during compilation
 		let dir1IdData = Data("dir1-id".utf8)
@@ -69,10 +69,10 @@ extension CloudProviderMock {
 			"\(root)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s": file5NameData,
 			"\(VaultTestFormat.directory1)/dir2.c9r/dir.c9r": dir2IdData,
 			"\(VaultTestFormat.directory1)/file3.c9r": file3CiphertextData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/dir.c9r": dir4IdData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/name.c9s": dir4NameData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/contents.c9r": file6CiphertextData,
-			"pathToVault/d/33/DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s": file6NameData
+			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/dir.c9r": dir4IdData,
+			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/name.c9s": dir4NameData,
+			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/contents.c9r": file6CiphertextData,
+			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s": file6NameData
 		]
 		return CloudProviderMock(folders: folders, files: files)
 	}

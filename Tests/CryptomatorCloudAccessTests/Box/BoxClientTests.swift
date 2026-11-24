@@ -276,8 +276,10 @@ enum BoxMockResponse {
 	static let user = #"{"type":"user","id":"USER-ID","name":"User"}"#
 	static let modifiedAt = "2026-10-20T11:05:00-07:00"
 
-	static func fileEntry(id: String, name: String, size: Int = 7, modifiedAt: String = modifiedAt) -> String {
-		return #"{"type":"file","id":"\#(id)","name":"\#(name)","size":\#(size),"modified_at":"\#(modifiedAt)"}"#
+	/// An entry in the folder `parentID`, or without a folder if it is `nil`.
+	static func fileEntry(id: String, name: String, size: Int = 7, modifiedAt: String = modifiedAt, parentID: String? = "0") -> String {
+		let parent = parentID.map { #","parent":{"type":"folder","id":"\#($0)"}"# } ?? ""
+		return #"{"type":"file","id":"\#(id)","name":"\#(name)","size":\#(size),"modified_at":"\#(modifiedAt)"\#(parent)}"#
 	}
 
 	static func folderEntry(id: String, name: String) -> String {

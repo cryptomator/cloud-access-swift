@@ -261,7 +261,47 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
-		/// A cached file that Box reports elsewhere, renamed, trashed or gone is looked up in the folder, which decides between a new version and a new file.
+		/// Box renames a file to a name sent with its new version, which would undo a move that landed after the file was resolved.
+		@Test
+		func replacingUploadSendsNoName() async throws {
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = downloadPreparation() + [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "0", status: "active")),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 12)]), onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+
+			let bodyString = try #require(requests.requests.first?.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+			#expect(bodyString.contains("name=\"attributes\"\r\n\r\n{}\r\n"), "\(bodyString)")
+		}
+
+		/// Another client can rename or move the file while its new version is uploaded, and Box then reports that client's name or folder. The upload still reports the requested path, and the next access to it looks it up, so that a delete can't reach the file elsewhere.
+		@Test(arguments: [("file.txt", "0"), ("renamed.txt", "0"), ("file.txt", "9"), ("file.txt", nil)] as [(String, String?)])
+		func replacingUploadOfFileThatLeftLeavesPathUncached(name: String, parentID: String?) async throws {
+			let hasLeft = name != "file.txt" || parentID != "0"
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = downloadPreparation() + [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "0", status: "active")),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: name, size: 12, parentID: parentID)])),
+				hasLeft ? URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot, onRequest: requests.record) : URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			let metadata = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			if hasLeft {
+				await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
+			} else {
+				try await provider.deleteFile(at: CloudPath("/file.txt"))
+			}
+
+			#expect(metadata.name == "file.txt")
+			#expect(requests.requests.map(\.url?.path) == [hasLeft ? "/2.0/folders/0/items" : "/2.0/files/5"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A cached file that Box reports elsewhere, renamed, trashed or gone is looked up in the folder, which decides between a new version and a new file. The uploaded file then takes the path's row, so that a delete reaches it.
 		@Test
 		func unconfirmedCachedFileIsLookedUpInFolder() async throws {
 			let cases: [(name: String, confirmation: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?))] = [
@@ -274,19 +314,19 @@ extension UnitTests {
 			for (name, confirmation) in cases {
 				for (listing, expectedUploadURL) in [(BoxMockResponse.items([BoxMockResponse.fileEntry(id: "6", name: "file.txt")]), "https://upload.box.com/api/2.0/files/6/content"), (BoxCloudProviderTests.emptyRoot, "https://upload.box.com/api/2.0/files/content")] {
 					let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max)
-					let uploadURL = OSAllocatedUnfairLock<String?>(initialState: nil)
+					let requests = RequestRecorder()
 					URLProtocolMock.requestHandler = downloadPreparation() + [
 						confirmation,
 						URLProtocolMock.handler(body: listing),
-						URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "6", name: "file.txt", size: 12)]), onRequest: { request in
-							uploadURL.withLock { $0 = request.url?.absoluteString }
-						})
+						URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "6", name: "file.txt", size: 12)]), onRequest: requests.record),
+						URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
 					]
 					_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
 					_ = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+					try await provider.deleteFile(at: CloudPath("/file.txt"))
 
-					#expect(uploadURL.withLock { $0 } == expectedUploadURL, "\(name)")
+					#expect(requests.requests.map(\.url?.absoluteString) == [expectedUploadURL, "https://api.box.com/2.0/files/6"], "\(name)")
 					#expect(URLProtocolMock.requestHandler.isEmpty, "\(name)")
 				}
 			}
@@ -621,7 +661,107 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
+		// MARK: - Late Responses
+
+		/// A lookup that returns after a rename and a new item at the name would cache the renamed item at the name, so its result is refused and the path resolves to the new item's row.
+		@Test
+		func lateLookupAfterRenameAndNewItemResolvesToNewItem() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try BoxCloudProvider(client: .mocked(tokenSource: tokenSource), maxPageSize: .max)
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: BoxMockResponse.fileEntry(id: "5", name: "renamed.txt")),
+				URLProtocolMock.handler(body: BoxMockResponse.items([BoxMockResponse.fileEntry(id: "5", name: "renamed.txt")])),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.folderEntry(id: "8", name: "file.txt")),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: BoxMockResponse.folderEntry(id: "8", name: "file.txt"), onRequest: requests.record)
+			]
+			tokenSource.setHook(atCall: 1) {
+				try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
+				try await provider.createFolder(at: CloudPath("/file.txt"))
+			}
+
+			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(metadata.itemType == .folder)
+			#expect(requests.requests.map(\.url?.path) == ["/2.0/folders/8"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test(arguments: LateMutationKind.allCases)
+		func lateMutationResponseLeavesMovedAwayTargetUncached(kind: LateMutationKind) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try BoxCloudProvider(client: .mocked(tokenSource: tokenSource), maxPageSize: .max)
+			let testCase = try lateMutationCase(kind)
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = testCase.responses + [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot, onRequest: requests.record)]
+			tokenSource.setHook(atCall: testCase.preparation.count + 1) {
+				try await testCase.rename(on: provider)
+			}
+
+			try await testCase.perform(on: provider)
+
+			await testCase.expectTargetIsLookedUp(on: provider, requests: requests, lookupPath: "/2.0/folders/0/items")
+		}
+
+		/// Box may have applied the move, so the item's rows go although the response is unusable, and a lookup that began before the move can't cache the item that the target held.
+		@Test(arguments: ["{", #"{"type":"web_link","id":"5","name":"b"}"#], [false, true])
+		func moveWithUnusableResponseEvictsItemAndRefusesOlderLookup(body: String, isFolder: Bool) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try BoxCloudProvider(client: .mocked(tokenSource: tokenSource), maxPageSize: .max)
+			let requests = RequestRecorder()
+			let entry: (String, String) -> String = { id, name in
+				isFolder ? BoxMockResponse.folderEntry(id: id, name: name) : BoxMockResponse.fileEntry(id: id, name: name)
+			}
+			let root = BoxMockResponse.items([entry("5", "a"), entry("5", "alias")])
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: root),
+				URLProtocolMock.handler(body: entry("5", "a")),
+				URLProtocolMock.handler(body: root),
+				URLProtocolMock.handler(body: entry("5", "alias")),
+				URLProtocolMock.handler(body: root),
+				URLProtocolMock.handler(body: body),
+				URLProtocolMock.handler(body: BoxMockResponse.items([entry("9", "b")])),
+				URLProtocolMock.handler(body: BoxMockResponse.items([entry("5", "b")])),
+				URLProtocolMock.handler(body: entry("5", "b"), onRequest: requests.record),
+				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/a"))
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/alias"))
+			tokenSource.setHook(atCall: 5) {
+				await #expect(throws: BoxError.unexpectedContent) {
+					if isFolder {
+						try await provider.moveFolder(from: CloudPath("/a"), to: CloudPath("/b"))
+					} else {
+						try await provider.moveFile(from: CloudPath("/a"), to: CloudPath("/b"))
+					}
+				}
+			}
+
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/b"))
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/alias")) }
+
+			#expect(requests.requests.map(\.url?.path) == [isFolder ? "/2.0/folders/5" : "/2.0/files/5", "/2.0/folders/0/items"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
+
+		private func lateMutationCase(_ kind: LateMutationKind) throws -> LateMutationCase {
+			let entry: (String) -> String = { name in
+				kind == .createFolder ? BoxMockResponse.folderEntry(id: "8", name: name) : BoxMockResponse.fileEntry(id: "8", name: name)
+			}
+			let source = URLProtocolMock.handler(body: BoxMockResponse.items([entry("src")]))
+			let atTarget = URLProtocolMock.handler(body: BoxMockResponse.items([entry("new")]))
+			let mutationResponse: LateMutationCase.Response = switch kind {
+			case .upload: URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([entry("new")]))
+			case .createFolder: URLProtocolMock.handler(statusCode: 201, body: entry("new"))
+			case .move: URLProtocolMock.handler(body: entry("new"))
+			}
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot)], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: [mutationResponse])
+		}
 
 		/// The response of a request for a file's type, identifier, name, parent and status.
 		private static func confirmation(name: String, parentID: String, status: String) -> String {

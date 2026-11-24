@@ -163,7 +163,8 @@ extension UnitTests {
 			let cases = [
 				ProviderCase(name: "listing without contents", responses: [#"{"result":0,"metadata":{"isfolder":true,"name":"","folderid":0,"modified":1792056600}}"#], operation: { _ = try await $0.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }, expected: PCloudError.unexpectedContent),
 				ProviderCase(name: "child without identifier", responses: [#"{"result":0,"metadata":{"isfolder":true,"name":"","folderid":0,"modified":1792056600,"contents":[{"isfolder":false,"name":"file.txt","modified":1792056600,"size":7}]}}"#], operation: { _ = try await $0.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }, expected: PCloudError.unexpectedContent),
-				ProviderCase(name: "file without size", responses: [PCloudProviderTestResponse.rootWithFile, #"{"result":0,"metadata":{"isfolder":false,"name":"file.txt","fileid":5,"modified":1792056600}}"#], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt")) }, expected: PCloudError.unexpectedContent)
+				ProviderCase(name: "file without size", responses: [PCloudProviderTestResponse.rootWithFile, #"{"result":0,"metadata":{"isfolder":false,"name":"file.txt","fileid":5,"modified":1792056600}}"#], operation: { _ = try await $0.fetchItemMetadata(at: CloudPath("/file.txt")) }, expected: PCloudError.unexpectedContent),
+				ProviderCase(name: "identifier above Int64.max", responses: [PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: UInt64(Int64.max) + 1, name: "file.txt")])], operation: { _ = try await $0.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }, expected: PCloudError.unexpectedContent)
 			]
 
 			for testCase in cases {
@@ -442,7 +443,11 @@ extension UnitTests {
 
 		@Test
 		func cancelledFillStopsAtNextChild() async throws {
-			let cache = try SaveCountingDirectoryContentCache(cache: DirectoryContentDBCache(dbWriter: DatabaseQueue(), maxPageSize: .max))
+			let cache = try SaveCountingDirectoryContentCache(cache: DirectoryContentDBCache(dbWriter: DatabaseQueue(), maxPageSize: .max)) { count in
+				if count == 1 {
+					withUnsafeCurrentTask { $0?.cancel() }
+				}
+			}
 			let provider = try PCloudCloudProvider(client: .mocked(), directoryContentCache: cache)
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFiles(["a", "b", "c"]))]
 
@@ -630,7 +635,342 @@ extension UnitTests {
 			#expect(progress.fractionCompleted == 1)
 		}
 
+		// MARK: - Late Responses
+
+		/// The listing's response names the file at the path that a rename freed and a new folder took, so it must not cache the file there, or deleting the folder would delete the renamed file.
+		@Test
+		func lateListingKeepsChildOutOfPathThatChanged() async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			let rootWithFile = URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFile)
+			URLProtocolMock.requestHandler = [
+				rootWithFile,
+				rootWithFile,
+				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 5, name: "renamed.txt")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.fileEntry(id: 5, name: "renamed.txt")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8, name: "file.txt")),
+				rootWithFile,
+				URLProtocolMock.handler(body: #"{"result":0}"#, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			let itemList = try await runningWhilePaused(tokenSource) {
+				try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			} intervening: {
+				try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
+				try await provider.createFolder(at: CloudPath("/file.txt"))
+			}
+			try await provider.deleteFolder(at: CloudPath("/file.txt"))
+
+			#expect(itemList.items.map(\.name) == ["file.txt"])
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+		}
+
+		/// The listed folder moved and a new folder took its path. No record names the child's path, so only the parent check keeps the moved folder's child out of the new folder.
+		@Test
+		func lateListingOfMovedFolderKeepsChildOut() async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, name: "moved")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "moved")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8, name: "folder")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, contents: [PCloudMockResponse.fileEntry(id: 5, name: "x")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8), onRequest: requests.record)
+			]
+
+			_ = try await runningWhilePaused(tokenSource) {
+				try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			} intervening: {
+				try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/moved"))
+				try await provider.createFolder(at: CloudPath("/folder"))
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/folder/x")) }
+
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The listing's mark precedes the lookup of its folder, so a change during that lookup refuses the listing's rows.
+		@Test
+		func listingWhoseFolderLookupSeesChangeKeepsChildOut() async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 1)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3)),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8, name: "new")),
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, contents: [PCloudMockResponse.folderEntry(id: 9, name: "new")])),
+				URLProtocolMock.handler(body: #"{"result":0}"#, onRequest: requests.record)
+			]
+
+			_ = try await runningWhilePaused(tokenSource) {
+				try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			} intervening: {
+				try await provider.createFolder(at: CloudPath("/folder/new"))
+			}
+			try await provider.deleteFolder(at: CloudPath("/folder/new"))
+
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+		}
+
+		/// A file and a folder of one name make the listing write its folders a second time, even if a later child fails the fill. That second write must not bring back a folder that was renamed meanwhile.
+		@Test(arguments: [false, true])
+		func replayOfFoldersKeepsRenamedFolderOut(fillFails: Bool) async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			let rootWithY = PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 7, name: "y")])
+			let childWithoutIdentifier = #"{"isfolder":false,"name":"broken","modified":1792056600,"size":7}"#
+			let lateChildren = [PCloudMockResponse.folderEntry(id: 7, name: "y"), PCloudMockResponse.folderEntry(id: 3, name: "x"), PCloudMockResponse.fileEntry(id: 5, name: "x")] + (fillFails ? [childWithoutIdentifier] : [])
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: rootWithY),
+				URLProtocolMock.handler(body: rootWithY),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 7, name: "z")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 7, name: "z")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8, name: "y")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: lateChildren)),
+				URLProtocolMock.handler(body: #"{"result":0}"#, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			try await runningWhilePaused(tokenSource) {
+				do {
+					_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+					#expect(!fillFails)
+				} catch PCloudError.unexpectedContent {
+					#expect(fillFails)
+				}
+			} intervening: {
+				try await provider.moveFolder(from: CloudPath("/y"), to: CloudPath("/z"))
+				try await provider.createFolder(at: CloudPath("/y"))
+			}
+			try await provider.deleteFolder(at: CloudPath("/y"))
+
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+		}
+
+		/// The listed folder moves away and a new folder takes its path while the listing fills, after a file overwrote the folder of its name. No record names the children's paths, so only the parent check keeps the second write of the folders out of the new folder.
+		@Test
+		func replayOfFoldersKeepsChildrenOutOfReplacedFolder() async throws {
+			let overwritten = TestSignal("file overwrote the folder of its name")
+			let replaced = DispatchSemaphore(value: 0)
+			let cache = try SaveCountingDirectoryContentCache(cache: DirectoryContentDBCache(dbWriter: DatabaseQueue(), maxPageSize: .max)) { count in
+				guard count == 3 else {
+					return
+				}
+				overwritten.fulfill()
+				if replaced.wait(timeout: testWaitDeadline()) == .timedOut {
+					Issue.record("The listed folder wasn't replaced while the listing filled")
+				}
+			}
+			let provider = try PCloudCloudProvider(client: .mocked(), directoryContentCache: cache)
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, contents: [PCloudMockResponse.folderEntry(id: 7, name: "y"), PCloudMockResponse.folderEntry(id: 4, name: "x"), PCloudMockResponse.fileEntry(id: 5, name: "x")])),
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3, name: "moved")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [PCloudMockResponse.folderEntry(id: 3, name: "moved")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8, name: "folder")),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 8), onRequest: requests.record)
+			]
+			let listing = Task {
+				try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			}
+			await overwritten.wait()
+			do {
+				try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/moved"))
+				try await provider.createFolder(at: CloudPath("/folder"))
+			} catch {
+				replaced.signal()
+				_ = try? await listing.value
+				throw error
+			}
+			replaced.signal()
+			_ = try await listing.value
+
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFolder(at: CloudPath("/folder/y")) }
+
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test(arguments: LateMutationKind.allCases)
+		func lateMutationResponseLeavesMovedAwayTargetUncached(kind: LateMutationKind) async throws {
+			let testCase = try lateMutationCase(kind)
+			let tokenSource = PausingTokenSource(pausedCall: testCase.preparation.count + 1)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = testCase.responses + [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0), onRequest: requests.record)]
+
+			try await runningWhilePaused(tokenSource) {
+				try await testCase.perform(on: provider)
+			} intervening: {
+				try await testCase.rename(on: provider)
+			}
+
+			await testCase.expectTargetIsLookedUp(on: provider, requests: requests, lookupPath: "/listfolder")
+		}
+
+		/// The item was deleted while its metadata was on the way, so the late response must not bring its row back.
+		@Test(arguments: [false, true])
+		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let requests = RequestRecorder()
+			let transfer = isDownload ? [URLProtocolMock.handler(body: PCloudMockResponse.fileLink()), URLProtocolMock.handler(body: "content")] : []
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFile),
+				URLProtocolMock.handler(body: #"{"result":0}"#),
+				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 5))
+			] + transfer + [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0), onRequest: requests.record)]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			try await runningWhilePaused(tokenSource) {
+				if isDownload {
+					_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+				} else {
+					_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+				}
+			} intervening: {
+				try await provider.deleteFile(at: CloudPath("/file.txt"))
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/listfolder"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// A folder's metadata comes from its listing, which is a request of its own kind.
+		@Test
+		func lateFolderMetadataLeavesInvalidatedRowAlone() async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder),
+				URLProtocolMock.handler(body: #"{"result":0}"#),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3)),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0), onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			_ = try await runningWhilePaused(tokenSource) {
+				try await provider.fetchItemMetadata(at: CloudPath("/folder"))
+			} intervening: {
+				try await provider.deleteFolder(at: CloudPath("/folder"))
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/folder")) }
+
+			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["0"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func metadataReadOfColdPathWarmsCache() async throws {
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFile),
+				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 5)),
+				URLProtocolMock.handler(body: PCloudMockResponse.file(id: 5))
+			]
+
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// pCloud may have applied the move, so the item's rows go although the response is unusable, and a listing that began before the move can't cache the item that the target held.
+		@Test(arguments: [
+			("{", false),
+			(#"{"result":0,"metadata":{"isfolder":false,"name":"b","modified":1792056600,"size":7}}"#, false),
+			(PCloudMockResponse.file(id: UInt64(Int64.max) + 1, name: "b"), false),
+			("{", true),
+			(#"{"result":0,"metadata":{"isfolder":true,"name":"b","modified":1792056600}}"#, true),
+			(PCloudMockResponse.folder(id: UInt64(Int64.max) + 1, name: "b"), true)
+		])
+		func moveWithUnusableResponseEvictsItemAndRefusesOlderListing(body: String, isFolder: Bool) async throws {
+			let tokenSource = PausingTokenSource(pausedCall: 2)
+			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			let entry: (UInt64, String) -> String = { id, name in
+				isFolder ? PCloudMockResponse.folderEntry(id: id, name: name) : PCloudMockResponse.fileEntry(id: id, name: name)
+			}
+			let root = PCloudMockResponse.folder(id: 0, contents: [entry(5, "a"), entry(5, "alias")])
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: root),
+				URLProtocolMock.handler(body: root),
+				URLProtocolMock.handler(body: body),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry(9, "b")])),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0), onRequest: requests.record),
+				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry(5, "b")])),
+				URLProtocolMock.handler(body: #"{"result":0}"#, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+
+			_ = try await runningWhilePaused(tokenSource) {
+				try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			} intervening: {
+				await #expect(throws: PCloudError.unexpectedContent) {
+					if isFolder {
+						try await provider.moveFolder(from: CloudPath("/a"), to: CloudPath("/b"))
+					} else {
+						try await provider.moveFile(from: CloudPath("/a"), to: CloudPath("/b"))
+					}
+				}
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/alias")) }
+			if isFolder {
+				try await provider.deleteFolder(at: CloudPath("/b"))
+			} else {
+				try await provider.deleteFile(at: CloudPath("/b"))
+			}
+
+			#expect(requests.requests.map(\.url?.path) == ["/listfolder", isFolder ? "/deletefolderrecursive" : "/deletefile"])
+			#expect(requests.requests.last.map { URLProtocolMock.formParameters(of: $0)[isFolder ? "folderid" : "fileid"] } == "5")
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
+
+		/// Runs `operation` until its request is paused at its login, runs `intervening` meanwhile, and then lets the request go on, so that its response is processed after `intervening`.
+		private func runningWhilePaused<Value: Sendable>(_ tokenSource: PausingTokenSource, _ operation: @escaping @Sendable () async throws -> Value, intervening: () async throws -> Void) async throws -> Value {
+			let task = Task {
+				try await operation()
+			}
+			await tokenSource.entered.wait()
+			do {
+				try await intervening()
+			} catch {
+				tokenSource.resume()
+				_ = try? await cancellingValue(of: task)
+				throw error
+			}
+			tokenSource.resume()
+			return try await cancellingValue(of: task)
+		}
+
+		private func lateMutationCase(_ kind: LateMutationKind) throws -> LateMutationCase {
+			let isFolder = kind == .createFolder
+			let entry: (String) -> String = { name in
+				isFolder ? PCloudMockResponse.folderEntry(id: 8, name: name) : PCloudMockResponse.fileEntry(id: 8, name: name)
+			}
+			let result: (String) -> String = { name in
+				isFolder ? PCloudMockResponse.folder(id: 8, name: name) : PCloudMockResponse.file(id: 8, name: name)
+			}
+			let source = URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry("src")]))
+			let atTarget = URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry("new")]))
+			let mutationBody = kind == .upload ? PCloudMockResponse.uploadedFile(id: 8, name: "new") : result("new")
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: result("moved"))], mutationResponses: [URLProtocolMock.handler(body: mutationBody)])
+		}
 
 		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {
 			#expect(fractions.count == 1, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
@@ -745,17 +1085,19 @@ private final class PausingTokenSource: PCloudTokenSource {
 	}
 }
 
-/// Forwards to a cache, and cancels the current task when the first element is saved.
+/// Forwards to a cache, and runs a hook with the element's 1-based number before saving it. By then the listing has written the element's item to the identifier cache.
 private final class SaveCountingDirectoryContentCache: DirectoryContentCache {
 	let cache: DirectoryContentDBCache
 	private let saves = OSAllocatedUnfairLock(initialState: 0)
+	private let onSave: @Sendable (_ count: Int) -> Void
 
 	var saveCount: Int {
 		return saves.withLock { $0 }
 	}
 
-	init(cache: DirectoryContentDBCache) {
+	init(cache: DirectoryContentDBCache, onSave: @escaping @Sendable (_ count: Int) -> Void) {
 		self.cache = cache
+		self.onSave = onSave
 	}
 
 	func save(_ element: CloudItemMetadata, in snapshot: DirectoryContentSnapshot, index: Int64) throws {
@@ -763,9 +1105,7 @@ private final class SaveCountingDirectoryContentCache: DirectoryContentCache {
 			$0 += 1
 			return $0
 		}
-		if count == 1 {
-			withUnsafeCurrentTask { $0?.cancel() }
-		}
+		onSave(count)
 		try cache.save(element, in: snapshot, index: index)
 	}
 

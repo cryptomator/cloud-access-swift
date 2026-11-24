@@ -100,9 +100,9 @@ final class BoxClient: SplitSessionClient, Sendable {
 		return try await uploadMultipart(BoxClient.uploadURL("/files/content"), attributes: BoxItemRequest(name: name, parent: BoxParentReference(id: parentID)), from: fileURL, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
-	/// Uploads the file as a new version of an existing file in a single request.
-	func uploadFileVersion(from fileURL: URL, fileID: String, name: String, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxFiles {
-		return try await uploadMultipart(BoxClient.uploadURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"), attributes: BoxItemRequest(name: name, parent: nil), from: fileURL, progress: progress, onTaskCreation: onTaskCreation)
+	/// Uploads the file as a new version of an existing file in a single request. It sends no name, because Box would rename the file to it, which undoes a move that landed after the file was resolved.
+	func uploadFileVersion(from fileURL: URL, fileID: String, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxFiles {
+		return try await uploadMultipart(BoxClient.uploadURL("/files/\(HTTPClientSupport.pathComponent(fileID))/content"), attributes: BoxVersionAttributes(), from: fileURL, progress: progress, onTaskCreation: onTaskCreation)
 	}
 
 	func createUploadSession(parentID: String, name: String, fileSize: Int64) async throws -> BoxUploadSession {
@@ -181,7 +181,7 @@ final class BoxClient: SplitSessionClient, Sendable {
 
 	// MARK: - Bodies
 
-	private func uploadMultipart(_ url: URL, attributes: BoxItemRequest, from fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxFiles {
+	private func uploadMultipart(_ url: URL, attributes: some Encodable, from fileURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxFiles {
 		let boundary = "Boundary-\(UUID().uuidString)"
 		let attributesData = try JSONEncoder().encode(attributes)
 		// The body is written once, so that every attempt uploads it from the same file.

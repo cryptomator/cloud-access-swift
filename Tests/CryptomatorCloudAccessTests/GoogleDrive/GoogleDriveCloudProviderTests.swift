@@ -780,7 +780,183 @@ extension UnitTests {
 			await #expect(throws: CancellationError.self) { try await cancellingValue(of: task) }
 		}
 
+		// MARK: - Late Responses
+
+		/// The listing's response names the file at the path that a rename freed and a new folder took, so it must not cache the file there, or deleting the folder would delete the renamed file.
+		@Test
+		func lateListingKeepsChildOutOfPathThatChanged() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "renamed.txt")),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "N", name: "file.txt")),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
+				try await provider.createFolder(at: CloudPath("/file.txt"))
+			}
+
+			let itemList = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			try await provider.deleteFolder(at: CloudPath("/file.txt"))
+
+			#expect(itemList.items.map(\.name) == ["file.txt"])
+			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files/N"])
+		}
+
+		/// The listed folder moved and a new folder took its path. No record names the child's path, so only the parent check keeps the moved folder's child out of the new folder.
+		@Test
+		func lateListingOfMovedFolderKeepsChildOut() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "D", name: "moved")),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "N", name: "folder")),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "C", name: "x")])),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record)
+			]
+			tokenSource.setHook(atCall: 2) {
+				try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/moved"))
+				try await provider.createFolder(at: CloudPath("/folder"))
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/folder/x")) }
+
+			#expect(requests.requests.map { URLProtocolMock.queryParameter("q", of: $0) } == ["'N' in parents and name contains 'x' and trashed = false"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The listing's mark precedes the lookup of its folder, so a change during that lookup refuses the listing's rows.
+		@Test
+		func listingWhoseFolderLookupSeesChangeKeepsChildOut() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.folder(id: "N", name: "new")),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.folder(id: "X", name: "new")])),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			tokenSource.setHook(atCall: 1) {
+				try await provider.createFolder(at: CloudPath("/folder/new"))
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			try await provider.deleteFolder(at: CloudPath("/folder/new"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files/N"])
+		}
+
+		@Test(arguments: LateMutationKind.allCases)
+		func lateMutationResponseLeavesMovedAwayTargetUncached(kind: LateMutationKind) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let testCase = try lateMutationCase(kind)
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = testCase.responses + [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record)]
+			tokenSource.setHook(atCall: testCase.preparation.count + 1) {
+				try await testCase.rename(on: provider)
+			}
+
+			try await testCase.perform(on: provider)
+
+			await testCase.expectTargetIsLookedUp(on: provider, requests: requests, lookupPath: "/drive/v3/files")
+		}
+
+		/// The item was deleted while its metadata was on the way, so the late response must not bring its row back.
+		@Test(arguments: [false, true])
+		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
+				URLProtocolMock.handler(statusCode: 204),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt"))
+			] + (isDownload ? [URLProtocolMock.handler(body: "content")] : []) + [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record)]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				try await provider.deleteFile(at: CloudPath("/file.txt"))
+			}
+
+			if isDownload {
+				_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+			} else {
+				_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func metadataReadOfColdPathWarmsCache() async throws {
+			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt"))]
+
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Drive may have applied the move, so the item's rows go although the response is unusable, and a listing that began before the move can't cache the item that the target held.
+		@Test(arguments: [("{", GoogleDriveError.unexpectedContent), (#"{"name":"b"}"#, GoogleDriveError.identifierNotFound)])
+		func moveWithUnusableResponseEvictsItemAndRefusesOlderListing(body: String, expectedError: GoogleDriveError) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A", name: "a"), GoogleDriveMockResponse.file(id: "A", name: "alias")])),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
+				URLProtocolMock.handler(body: body),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "D", name: "b")])),
+				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder, onRequest: requests.record),
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "A", name: "b")])),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				await #expect(throws: expectedError) { try await provider.moveFile(from: CloudPath("/a"), to: CloudPath("/b")) }
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/alias")) }
+			try await provider.deleteFile(at: CloudPath("/b"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/drive/v3/files", "/drive/v3/files/A"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
+
+		private func lateMutationCase(_ kind: LateMutationKind) throws -> LateMutationCase {
+			let entry: (String) -> String = { name in
+				kind == .createFolder ? GoogleDriveMockResponse.folder(id: "L", name: name) : GoogleDriveMockResponse.file(id: "L", name: name)
+			}
+			let emptyFolder = URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder)
+			let source = URLProtocolMock.handler(body: GoogleDriveMockResponse.files([entry("src")]))
+			let mutationResponses: [LateMutationCase.Response] = switch kind {
+			case .upload: [GoogleDriveMockResponse.session(), URLProtocolMock.handler(body: entry("new"))]
+			case .createFolder, .move: [URLProtocolMock.handler(body: entry("new"))]
+			}
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [source, emptyFolder] : [emptyFolder], renameResponses: [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([entry("new")])), emptyFolder, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
+		}
 
 		/// The responses of the name lookup and the metadata request of `/file.txt`, before its download.
 		private func downloadPreparation() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
@@ -798,28 +974,6 @@ extension UnitTests {
 			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)
 			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
 		}
-	}
-}
-
-/// Hands out a fixed token and runs a hook before handing out the token of one call, i.e., before that request is sent.
-private final class HookedTokenSource: BearerTokenSource {
-	private let state = OSAllocatedUnfairLock<(callCount: Int, hooks: [Int: @Sendable () async throws -> Void])>(initialState: (0, [:]))
-
-	func setHook(atCall call: Int, _ hook: @escaping @Sendable () async throws -> Void) {
-		state.withLock { $0.hooks[call] = hook }
-	}
-
-	func accessToken() async throws -> String {
-		let hook = state.withLock { state in
-			state.callCount += 1
-			return state.hooks.removeValue(forKey: state.callCount)
-		}
-		try await hook?()
-		return "TOKEN"
-	}
-
-	func refresh(rejecting accessToken: String) async throws -> String {
-		return "TOKEN"
 	}
 }
 

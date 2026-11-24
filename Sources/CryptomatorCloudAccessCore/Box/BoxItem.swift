@@ -19,6 +19,11 @@ struct BoxItem: Decodable, IdentifierCacheItem, Equatable {
 }
 
 extension BoxItem {
+	/// Includes the type, because Box addresses files and folders through separate endpoints and doesn't document their IDs as distinct.
+	var changeIdentity: String {
+		return "\(itemType.rawValue):\(identifier)"
+	}
+
 	/// - Throws: `BoxError.unexpectedContent` if the entry is neither a file nor a folder.
 	init(cloudPath: CloudPath, entry: BoxEntry) throws {
 		self.cloudPath = cloudPath

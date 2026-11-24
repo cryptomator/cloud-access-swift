@@ -112,11 +112,14 @@ struct BoxParentReference: Codable, Sendable {
 	let id: String
 }
 
-/// The body of a request that names an item and optionally moves it, and the `attributes` part of an upload.
+/// The body of a request that names an item and its folder, and the `attributes` part of a new file's upload.
 struct BoxItemRequest: Encodable, Sendable {
 	let name: String
-	let parent: BoxParentReference?
+	let parent: BoxParentReference
 }
+
+/// The `attributes` part of a version upload, which names nothing, so that the file keeps its name and folder.
+struct BoxVersionAttributes: Encodable, Sendable {}
 
 struct BoxUploadSessionRequest: Encodable, Sendable {
 	let folderID: String?

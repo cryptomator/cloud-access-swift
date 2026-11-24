@@ -34,6 +34,11 @@ extension GoogleDriveItem {
 		return itemType == .unknown ? .unknown : (shortcut?.targetItemType ?? itemType)
 	}
 
+	/// The item's own identifier, not `resolvedIdentifier`, because a delete and a move act on the shortcut itself.
+	var changeIdentity: String {
+		return identifier
+	}
+
 	init(cloudPath: CloudPath, file: GoogleDriveFile) throws {
 		self.cloudPath = cloudPath
 		guard let identifier = file.id else {

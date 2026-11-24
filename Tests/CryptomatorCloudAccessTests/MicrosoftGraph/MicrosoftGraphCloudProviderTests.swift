@@ -918,7 +918,184 @@ extension UnitTests {
 			}
 		}
 
+		// MARK: - Late Responses
+
+		/// The listing's response names the file at the path that a rename freed and a new folder took, so it must not cache the file there, or deleting the folder would delete the renamed file.
+		@Test(arguments: [nil, "https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT"] as [String?])
+		func lateListingKeepsChildOutOfPathThatChanged(pageToken: String?) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			let listing = #"{"value":[\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: listing),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(body: #"{"id":"F","name":"renamed.txt","file":{}}"#),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"N","name":"file.txt","folder":{}}"#),
+				URLProtocolMock.handler(body: listing),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
+				try await provider.createFolder(at: CloudPath("/file.txt"))
+			}
+
+			let itemList = try await provider.fetchItemList(forFolderAt: .root, withPageToken: pageToken)
+			try await provider.deleteFolder(at: CloudPath("/file.txt"))
+
+			#expect(itemList.items.map(\.name) == ["file.txt"])
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/N"])
+		}
+
+		/// The listed folder moved and a new folder took its path. No record names the child's path, so only the parent check keeps the moved folder's child out of the new folder.
+		@Test
+		func lateListingOfMovedFolderKeepsChildOut() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"id":"D","name":"folder","folder":{}}"#),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(body: #"{"id":"D","name":"moved","folder":{}}"#),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"N","name":"folder","folder":{}}"#),
+				URLProtocolMock.handler(body: #"{"value":[{"id":"C","name":"x","file":{}}]}"#),
+				URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)
+			]
+			tokenSource.setHook(atCall: 2) {
+				try await provider.moveFolder(from: CloudPath("/folder"), to: CloudPath("/moved"))
+				try await provider.createFolder(at: CloudPath("/folder"))
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/folder/x")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/N:/x:"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// The listing's mark precedes the lookup of its folder, so a change during that lookup refuses the listing's rows.
+		@Test
+		func listingWhoseFolderLookupSeesChangeKeepsChildOut() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"N","name":"new","folder":{}}"#),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem),
+				URLProtocolMock.handler(body: #"{"value":[{"id":"X","name":"new","folder":{}}]}"#),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			tokenSource.setHook(atCall: 1) {
+				try await provider.createFolder(at: CloudPath("/folder/new"))
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
+			try await provider.deleteFolder(at: CloudPath("/folder/new"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/N"])
+		}
+
+		@Test(arguments: LateMutationKind.allCases)
+		func lateMutationResponseLeavesMovedAwayTargetUncached(kind: LateMutationKind) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let testCase = try lateMutationCase(kind)
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = testCase.responses + [URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)]
+			tokenSource.setHook(atCall: testCase.preparation.count + 1) {
+				try await testCase.rename(on: provider)
+			}
+
+			try await testCase.perform(on: provider)
+
+			await testCase.expectTargetIsLookedUp(on: provider, requests: requests, lookupPath: "/v1.0/me/drive/items/root:/new:")
+		}
+
+		/// The item was deleted while its metadata was on the way, so the late response must not bring its row back.
+		@Test(arguments: [false, true])
+		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#),
+				URLProtocolMock.handler(statusCode: 204),
+				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem)
+			] + (isDownload ? [URLProtocolMock.handler(body: "content")] : []) + [URLProtocolMock.handler(statusCode: 404, onRequest: requests.record)]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				try await provider.deleteFile(at: CloudPath("/file.txt"))
+			}
+
+			if isDownload {
+				_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil)
+			} else {
+				_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+			}
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file.txt")) }
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		@Test
+		func metadataReadOfColdPathWarmsCache() async throws {
+			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem)]
+
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
+
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
+		/// Graph accepted the move, so the item's rows go although the response can't be decoded, and a listing that began before the move can't cache the item that the target held.
+		@Test
+		func moveWithUndecodableResponseEvictsItemAndRefusesOlderListing() async throws {
+			let tokenSource = HookedTokenSource()
+			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [
+				URLProtocolMock.handler(body: #"{"value":[{"id":"A","name":"a","file":{}},{"id":"A","name":"alias","file":{}}]}"#),
+				URLProtocolMock.handler(statusCode: 404),
+				URLProtocolMock.handler(body: "{"),
+				URLProtocolMock.handler(body: #"{"value":[{"id":"D","name":"b","file":{}}]}"#),
+				URLProtocolMock.handler(statusCode: 404, onRequest: requests.record),
+				URLProtocolMock.handler(body: #"{"id":"A","name":"b","file":{}}"#),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
+			]
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			tokenSource.setHook(atCall: 2) {
+				await #expect(throws: DecodingError.self) { try await provider.moveFile(from: CloudPath("/a"), to: CloudPath("/b")) }
+			}
+
+			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/alias")) }
+			try await provider.deleteFile(at: CloudPath("/b"))
+
+			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/alias:", "/v1.0/me/drive/items/A"])
+			#expect(URLProtocolMock.requestHandler.isEmpty)
+		}
+
 		// MARK: - Helpers
+
+		private func lateMutationCase(_ kind: LateMutationKind) throws -> LateMutationCase {
+			let entry: (String) -> String = { name in
+				kind == .createFolder ? #"{"id":"L","name":"\#(name)","folder":{}}"# : #"{"id":"L","name":"\#(name)","file":{}}"#
+			}
+			let notFound = URLProtocolMock.handler(statusCode: 404)
+			let mutationResponses: [LateMutationCase.Response] = switch kind {
+			case .upload: [URLProtocolMock.handler(body: #"{"uploadUrl":"https://upload.example.com/up/TOKEN"}"#), URLProtocolMock.handler(statusCode: 201, body: entry("new"))]
+			case .createFolder: [URLProtocolMock.handler(statusCode: 201, body: entry("new"))]
+			case .move: [URLProtocolMock.handler(body: entry("new"))]
+			}
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [URLProtocolMock.handler(body: entry("src")), notFound] : [notFound], renameResponses: [URLProtocolMock.handler(body: entry("new")), notFound, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
+		}
 
 		/// The responses of the path lookup and the metadata request of `/file.txt`, before its download.
 		private func downloadPreparation() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {

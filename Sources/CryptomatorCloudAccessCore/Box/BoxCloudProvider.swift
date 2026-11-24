@@ -10,6 +10,8 @@ import CryptoKit
 import Foundation
 
 public final class BoxCloudProvider: CloudProvider {
+	private typealias Preflight = IdentifierAddressedPreflight<BoxItem>
+
 	private static let confirmationFields = "type,id,name,parent,item_status"
 
 	private let client: BoxClient
@@ -72,7 +74,7 @@ public final class BoxCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		let upload = try await preflight.prepareUpload(from: localURL, to: cloudPath, replaceExisting: replaceExisting, fastPath: confirmCachedFile(_:in:))
 		let phases = Progress.phases(of: progress, 999)
-		let metadata = try await uploadFile(for: upload.parent, replacing: upload.existing, from: upload.file, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(upload, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -80,8 +82,8 @@ public final class BoxCloudProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let parentItem = try await preflight.prepareCreateFolder(at: cloudPath)
-		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
+		let creation = try await preflight.prepareCreateFolder(at: cloudPath)
+		try await createFolder(creation, with: cloudPath.lastPathComponent)
 	}
 
 	@concurrent
@@ -102,14 +104,14 @@ public final class BoxCloudProvider: CloudProvider {
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .file, operation: "moveFile")
-		try await moveFile(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
+		try await moveFile(move, to: targetCloudPath)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .folder, operation: "moveFolder")
-		try await moveFolder(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
+		try await moveFolder(move, to: targetCloudPath)
 	}
 
 	// MARK: - Operations
@@ -167,21 +169,37 @@ public final class BoxCloudProvider: CloudProvider {
 		})
 	}
 
-	// swiftlint:disable:next function_parameter_count
-	private func uploadFile(for parentItem: BoxItem, replacing existingItem: BoxItem?, from localFile: LocalUploadFile, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
-		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), replacing: \(existingItem?.identifier ?? "nil"), from: \(localFile.url), to: \(cloudPath)) called")
-		let file: BoxEntry = switch (existingItem, localFile.size >= chunkedUploadThreshold) {
+	private func uploadFile(_ upload: Preflight.Upload, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		let parentItem = upload.parent
+		let localFile = upload.file
+		CloudAccessDDLogDebug("BoxCloudProvider: uploadFile(for: \(parentItem.identifier), replacing: \(upload.existing?.identifier ?? "nil"), from: \(localFile.url), to: \(cloudPath)) called")
+		let file: BoxEntry = switch (upload.existing, localFile.size >= chunkedUploadThreshold) {
 		case let (item?, true):
 			try await uploadLargeExistingFile(for: item, from: localFile, progress: progress)
 		case let (item?, false):
-			try await uploadSmallExistingFile(for: item, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
+			try await uploadSmallExistingFile(for: item, from: localFile.url, progress: progress, onTaskCreation: onTaskCreation)
 		case (nil, true):
 			try await uploadLargeNewFile(for: parentItem, from: localFile, to: cloudPath, progress: progress)
 		case (nil, false):
 			try await uploadSmallNewFile(for: parentItem, from: localFile.url, to: cloudPath, progress: progress, onTaskCreation: onTaskCreation)
 		}
-		try identifierCache.addOrUpdate(BoxItem(cloudPath: cloudPath, entry: file), ifStillBelow: parentItem)
-		return try convertToCloudItemMetadata(file, at: cloudPath)
+		let item = try BoxItem(cloudPath: cloudPath, entry: file)
+		guard upload.existing != nil else {
+			try identifierCache.commitMutation(item, ifStillBelow: parentItem, unchangedSince: upload.changeMark)
+			return try convertToCloudItemMetadata(file, at: cloudPath)
+		}
+		// A new version keeps the file's name and folder, which another client can have changed while it was uploaded.
+		if Self.isEntry(file, at: cloudPath, in: parentItem) {
+			try identifierCache.commitMutation(item, ifStillBelow: parentItem, unchangedSince: upload.changeMark)
+		} else {
+			try identifierCache.commitMutation(ofItemThatLeft: item, ifStillBelow: parentItem)
+		}
+		return try convertToCloudItemMetadata(file, at: cloudPath, name: cloudPath.lastPathComponent)
+	}
+
+	/// Whether Box reports the entry under the path's name in the folder.
+	private static func isEntry(_ entry: BoxEntry, at cloudPath: CloudPath, in parentItem: BoxItem) -> Bool {
+		return entry.name == cloudPath.lastPathComponent && entry.parent?.id == parentItem.identifier
 	}
 
 	private func uploadSmallNewFile(for parentItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxEntry {
@@ -191,9 +209,9 @@ public final class BoxCloudProvider: CloudProvider {
 		}
 	}
 
-	private func uploadSmallExistingFile(for existingItem: BoxItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxEntry {
-		return try await perform("uploadSmallExistingFile(for: \(existingItem.identifier), to: \(cloudPath))") {
-			let files = try await client.uploadFileVersion(from: localURL, fileID: existingItem.identifier, name: cloudPath.lastPathComponent, progress: progress, onTaskCreation: onTaskCreation)
+	private func uploadSmallExistingFile(for existingItem: BoxItem, from localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> BoxEntry {
+		return try await perform("uploadSmallExistingFile(for: \(existingItem.identifier))") {
+			let files = try await client.uploadFileVersion(from: localURL, fileID: existingItem.identifier, progress: progress, onTaskCreation: onTaskCreation)
 			return try uploadedFile(in: files)
 		}
 	}
@@ -258,12 +276,13 @@ public final class BoxCloudProvider: CloudProvider {
 		return try uploadedFile(in: committedFiles)
 	}
 
-	private func createFolder(for parentItem: BoxItem, with name: String) async throws {
+	private func createFolder(_ creation: Preflight.CreateFolder, with name: String) async throws {
+		let parentItem = creation.parent
 		try await perform("createFolder(for: \(parentItem.identifier), with: \(name))") {
 			let folder = try await withoutCancellation {
 				try await self.client.createFolder(name: name, parentID: parentItem.identifier)
 			}
-			try identifierCache.addOrUpdate(BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), entry: folder), ifStillBelow: parentItem)
+			try identifierCache.commitMutation(BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), entry: folder), ifStillBelow: parentItem, unchangedSince: creation.changeMark)
 		}
 	}
 
@@ -285,30 +304,41 @@ public final class BoxCloudProvider: CloudProvider {
 		}
 	}
 
-	private func moveFile(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) async throws {
+	private func moveFile(_ move: Preflight.Move, to targetCloudPath: CloudPath) async throws {
+		let sourceItem = move.source
+		let targetParentItem = move.targetParent
 		try await perform("moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))") {
-			let file = try await withoutCancellation {
-				try await self.client.moveFile(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+				let file = try await withoutCancellation {
+					try await self.client.moveFile(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+				}
+				return try BoxItem(cloudPath: targetCloudPath, entry: file)
 			}
-			try identifierCache.invalidate(sourceItem)
-			try identifierCache.addOrUpdate(BoxItem(cloudPath: targetCloudPath, entry: file), ifStillBelow: targetParentItem)
 		}
 	}
 
-	private func moveFolder(from sourceItem: BoxItem, toParent targetParentItem: BoxItem, targetCloudPath: CloudPath) async throws {
+	private func moveFolder(_ move: Preflight.Move, to targetCloudPath: CloudPath) async throws {
+		let sourceItem = move.source
+		let targetParentItem = move.targetParent
 		try await perform("moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))") {
-			let folder = try await withoutCancellation {
-				try await self.client.moveFolder(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+				let folder = try await withoutCancellation {
+					try await self.client.moveFolder(id: sourceItem.identifier, name: targetCloudPath.lastPathComponent, parentID: targetParentItem.identifier)
+				}
+				return try BoxItem(cloudPath: targetCloudPath, entry: folder)
 			}
-			try identifierCache.invalidate(sourceItem)
-			try identifierCache.addOrUpdate(BoxItem(cloudPath: targetCloudPath, entry: folder), ifStillBelow: targetParentItem)
 		}
+	}
+
+	/// Whether a move's error is the one that a response throws if it can't be decoded or can't build the target item.
+	private static func isUnusableResponse(_ error: Error) -> Bool {
+		return error as? BoxError == .unexpectedContent
 	}
 
 	// MARK: - Resolve Path
 
-	private var preflight: IdentifierAddressedPreflight<BoxItem> {
-		return IdentifierAddressedPreflight(cache: identifierCache, providerName: "BoxCloudProvider", lookUp: getBoxItem(for:withParentItem:))
+	private var preflight: Preflight {
+		return Preflight(cache: identifierCache, providerName: "BoxCloudProvider", lookUp: getBoxItem(for:withParentItem:))
 	}
 
 	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> BoxItem {
@@ -344,7 +374,7 @@ public final class BoxCloudProvider: CloudProvider {
 		} catch CloudProviderError.itemNotFound {
 			return nil
 		}
-		guard entry.itemType == .file, entry.itemStatus == "active", entry.name == cachedItem.cloudPath.lastPathComponent, entry.parent?.id == parentItem.identifier else {
+		guard entry.itemType == .file, entry.itemStatus == "active", Self.isEntry(entry, at: cachedItem.cloudPath, in: parentItem) else {
 			return nil
 		}
 		return cachedItem
@@ -363,10 +393,11 @@ public final class BoxCloudProvider: CloudProvider {
 	/**
 	 Converts a file or folder entry. A folder has no size or date, and a file entry without a date has none either.
 
+	 - Parameter name: The name to report instead of the entry's.
 	 - Throws: `BoxError.unexpectedContent` for any other entry, e.g., a web link, and for a file whose `modified_at` doesn't parse.
 	 */
-	private func convertToCloudItemMetadata(_ entry: BoxEntry, at cloudPath: CloudPath) throws -> CloudItemMetadata {
-		let name = entry.name ?? ""
+	private func convertToCloudItemMetadata(_ entry: BoxEntry, at cloudPath: CloudPath, name: String? = nil) throws -> CloudItemMetadata {
+		let name = name ?? entry.name ?? ""
 		switch entry.itemType {
 		case .file:
 			var lastModifiedDate: Date?

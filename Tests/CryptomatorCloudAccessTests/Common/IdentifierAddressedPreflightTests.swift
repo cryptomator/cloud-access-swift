@@ -153,7 +153,7 @@ extension UnitTests {
 			#expect(lookups.calls == ["D/a", "E/a"])
 		}
 
-		/// A write without the parent check can cache an item after its folder's row was removed, and the move looks the missing rows up instead of failing.
+		/// An item whose folder has no row isn't connected, and the move looks the missing rows up instead of failing.
 		@Test
 		func sourceCachedWithoutFolderRowIsLookedUpAgain() async throws {
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/gone/x"), identifier: "X", itemType: .file))
@@ -202,7 +202,7 @@ extension UnitTests {
 			#expect(lookups.calls == ["E2/b"])
 		}
 
-		/// The ancestor of the target's folder was removed while the source was looked up, and a write without the parent check cached the target's folder again, so it is the row at its path but may have moved with the ancestor.
+		/// The ancestor of the target's folder was removed while the source was looked up, and the target's folder is back at its path without the ancestor's row, so it may have moved with the ancestor.
 		@Test
 		func moveIntoFolderLeftWithoutAncestorRowThrowsInconsistentCacheBeforeTargetLookup() async throws {
 			let folder = BoxItem(cloudPath: CloudPath("/folder"), identifier: "D", itemType: .folder)
@@ -221,7 +221,7 @@ extension UnitTests {
 			#expect(lookups.calls == ["O/a"])
 		}
 
-		/// The target's folder is looked up and cached at a path that held no row while an item cached below it without its row remains from a write without the parent check, so that item is dropped and looked up in the folder.
+		/// The target's folder is looked up and cached at a path that held no row while an item remains below it, so that item is dropped and looked up in the folder.
 		@Test
 		func folderCachedIntoEmptySlotDropsItemsLeftBelowIt() async throws {
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/p/x"), identifier: "X", itemType: .file))
@@ -280,7 +280,7 @@ extension UnitTests {
 				name == "new" ? nil : BoxItem(cloudPath: folderItem.cloudPath.appendingPathComponent(name), identifier: "\(folderItem.identifier)/\(name)", itemType: .folder)
 			}
 
-			let parentItem = try await preflight.prepareCreateFolder(at: CloudPath("/gone/sub/new"))
+			let parentItem = try await preflight.prepareCreateFolder(at: CloudPath("/gone/sub/new")).parent
 			try cache.invalidate(BoxItem(cloudPath: CloudPath("/gone"), identifier: "0/gone", itemType: .folder))
 			try cache.addOrUpdate(orphan)
 			let move = try await preflight.prepareMove(from: CloudPath("/file"), to: CloudPath("/gone/sub/new"), type: .file, operation: "moveFile")
@@ -299,7 +299,7 @@ extension UnitTests {
 			#expect(lookups.calls.isEmpty)
 		}
 
-		/// A folder cached below a file, e.g., by a listing that is still running when another client replaces the folder with a file, is never resolved, read or written into.
+		/// A folder cached below a file is never resolved, read or written into.
 		@Test
 		func folderCachedBelowFileIsNeverUsed() async throws {
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/file/sub"), identifier: "S", itemType: .folder))
@@ -341,6 +341,26 @@ extension UnitTests {
 			#expect(move.targetParent.identifier == "D")
 		}
 
+		/// An error other than an unusable response, e.g., a refusal, keeps the rows and records nothing, so a read that began before the move can still cache the target path.
+		@Test
+		func moveWithOtherErrorKeepsRows() async throws {
+			let preflight = makePreflight()
+			let move = try await preflight.prepareMove(from: CloudPath("/file"), to: CloudPath("/folder/new"), type: .file, operation: "moveFile")
+			let targetItem = BoxItem(cloudPath: CloudPath("/folder/new"), identifier: "T", itemType: .file)
+			try cache.addOrUpdate(targetItem)
+
+			await #expect(throws: CloudProviderError.quotaInsufficient) {
+				try await preflight.commitMove(move, to: CloudPath("/folder/new"), isUnusableResponse: { $0 as? BoxError == .unexpectedContent }, request: {
+					throw CloudProviderError.quotaInsufficient
+				})
+			}
+
+			#expect(cache.get(CloudPath("/file")) == move.source)
+			#expect(cache.get(targetItem.cloudPath) == targetItem)
+			let readItem = BoxItem(cloudPath: targetItem.cloudPath, identifier: "R", itemType: .file)
+			#expect(try cache.addOrUpdate(readItem, ifStillBelow: move.targetParent, unchangedSince: move.changeMark).didSave)
+		}
+
 		// MARK: - Targets
 
 		/// The folder's cached row changes during the target's lookup, and the returned folder is still the one that the target was looked up in.
@@ -352,7 +372,7 @@ extension UnitTests {
 				return nil
 			}
 
-			let parentItem = try await preflight.prepareCreateFolder(at: CloudPath("/folder/new"))
+			let parentItem = try await preflight.prepareCreateFolder(at: CloudPath("/folder/new")).parent
 
 			#expect(lookups.calls == ["D/new"])
 			#expect(parentItem.identifier == "D")
@@ -448,6 +468,39 @@ extension UnitTests {
 
 			await #expect(throws: CloudProviderError.unauthorized) { try await makePreflight().prepareUpload(from: makeLocalFile(), to: CloudPath("/folder/cached"), replaceExisting: true, fastPath: { _, _ in throw CloudProviderError.unauthorized }) }
 			#expect(lookups.calls.isEmpty)
+		}
+
+		// MARK: - Change Marks
+
+		/// The mark precedes the resolution, so that a change during the lookup of the target's folder refuses the mutation's commit.
+		@Test(arguments: ["createFolder", "upload", "move"])
+		func markPrecedesResolutionOfColdParent(operation: String) async throws {
+			let cache = cache
+			let target = BoxItem(cloudPath: CloudPath("/cold/new"), identifier: "N", itemType: .file)
+			let localURL = try makeLocalFile()
+			let preflight = makePreflight { name, _ in
+				guard name == "cold" else {
+					return nil
+				}
+				try cache.invalidate(target)
+				return BoxItem(cloudPath: CloudPath("/cold"), identifier: "C", itemType: .folder)
+			}
+
+			let (parent, mark): (BoxItem, ChangeMark)
+			switch operation {
+			case "createFolder":
+				let creation = try await preflight.prepareCreateFolder(at: target.cloudPath)
+				(parent, mark) = (creation.parent, creation.changeMark)
+			case "upload":
+				let upload = try await preflight.prepareUpload(from: localURL, to: target.cloudPath, replaceExisting: false)
+				(parent, mark) = (upload.parent, upload.changeMark)
+			default:
+				let move = try await preflight.prepareMove(from: CloudPath("/file"), to: target.cloudPath, type: .file, operation: "moveFile")
+				(parent, mark) = (move.targetParent, move.changeMark)
+			}
+			try cache.commitMutation(target, ifStillBelow: parent, unchangedSince: mark)
+
+			#expect(cache.get(target.cloudPath) == nil)
 		}
 
 		// MARK: - Cancellation

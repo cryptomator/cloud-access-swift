@@ -9,6 +9,8 @@
 import Foundation
 
 public final class PCloudCloudProvider: CloudProvider {
+	private typealias Preflight = IdentifierAddressedPreflight<PCloudItem>
+
 	/// The API error codes that the provider maps to a `CloudProviderError`.
 	private enum APIErrorCode {
 		static let componentOfParentDirectoryDoesNotExist = 2002
@@ -76,9 +78,10 @@ public final class PCloudCloudProvider: CloudProvider {
 		if let pageToken {
 			return try directoryContentCache.getPage(for: cloudPath, pageToken: pageToken)
 		}
+		let changeMark = try identifierCache.changeMark()
 		let item = try await resolvePath(forItemAt: cloudPath)
 		try Task.checkCancellation()
-		return try await fetchItemList(for: item)
+		return try await fetchItemList(for: item, changeMark: changeMark)
 	}
 
 	@concurrent
@@ -99,7 +102,7 @@ public final class PCloudCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		let upload = try await preflight.prepareUpload(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
 		let phases = Progress.phases(of: progress, 999)
-		let metadata = try await uploadFile(for: upload.parent, from: upload.file.url, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
+		let metadata = try await uploadFile(upload, to: cloudPath, progress: phases[0], onTaskCreation: onTaskCreation)
 		phases.completeTransfer()
 		return metadata
 	}
@@ -107,8 +110,8 @@ public final class PCloudCloudProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let parentItem = try await preflight.prepareCreateFolder(at: cloudPath)
-		try await createFolder(for: parentItem, with: cloudPath.lastPathComponent)
+		let creation = try await preflight.prepareCreateFolder(at: cloudPath)
+		try await createFolder(creation, with: cloudPath.lastPathComponent)
 	}
 
 	@concurrent
@@ -129,14 +132,14 @@ public final class PCloudCloudProvider: CloudProvider {
 	public func moveFile(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .file, operation: "moveFile")
-		try await moveFile(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
+		try await moveFile(move, to: targetCloudPath)
 	}
 
 	@concurrent
 	public func moveFolder(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
 		let move = try await preflight.prepareMove(from: sourceCloudPath, to: targetCloudPath, type: .folder, operation: "moveFolder")
-		try await moveFolder(from: move.source, toParent: move.targetParent, targetCloudPath: targetCloudPath)
+		try await moveFolder(move, to: targetCloudPath)
 	}
 
 	// MARK: - Operations
@@ -158,7 +161,6 @@ public final class PCloudCloudProvider: CloudProvider {
 		return try await perform("fetchFileMetadata(for: \(item.identifier))", mapping: [APIErrorCode.fileDoesNotExist: .itemNotFound]) {
 			let metadata = try await client.stat(fileID: item.identifier)
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFileMetadata(for: \(item.identifier)) received metadata: \(metadata)")
-			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: item.cloudPath)
 		}
 	}
@@ -168,19 +170,18 @@ public final class PCloudCloudProvider: CloudProvider {
 		return try await perform("fetchFolderMetadata(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound]) {
 			let metadata = try await withListing(of: item) { listing in listing.folder }
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchFolderMetadata(for: \(item.identifier)) received metadata: \(metadata)")
-			try identifierCache.addOrUpdate(item)
 			return try convertToCloudItemMetadata(metadata, at: item.cloudPath)
 		}
 	}
 
-	private func fetchItemList(for item: PCloudItem) async throws -> CloudItemList {
+	private func fetchItemList(for item: PCloudItem, changeMark: ChangeMark) async throws -> CloudItemList {
 		return try await perform("fetchItemList(for: \(item.identifier))", mapping: [APIErrorCode.folderDoesNotExist: .itemNotFound]) {
 			guard item.effectiveItemType == .folder else {
 				throw CloudProviderError.itemTypeMismatch
 			}
 			let itemList = try await withListing(of: item) { listing in
 				try await directoryContentCache.publishSnapshot(of: item.cloudPath) { snapshot in
-					try fillSnapshot(snapshot, from: listing)
+					try fillSnapshot(snapshot, from: listing, of: item, changeMark: changeMark)
 				}
 			}
 			CloudAccessDDLogDebug("PCloudCloudProvider: fetchItemList(for: \(item.identifier)) received first page of \(itemList.items.count) items")
@@ -224,17 +225,20 @@ public final class PCloudCloudProvider: CloudProvider {
 		}
 	}
 
-	private func uploadFile(for parentItem: PCloudItem, from localURL: URL, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+	private func uploadFile(_ upload: Preflight.Upload, to cloudPath: CloudPath, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
+		let parentItem = upload.parent
+		let localURL = upload.file.url
 		return try await perform("uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path))", mapping: [APIErrorCode.folderDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			let metadata = try await client.upload(fromFile: localURL, parentID: parentItem.identifier, name: cloudPath.lastPathComponent, progress: progress, onTaskCreation: onTaskCreation)
 			CloudAccessDDLogDebug("PCloudCloudProvider: uploadFile(for: \(parentItem.identifier), from: \(localURL), to: \(cloudPath.path)) received metadata: \(metadata)")
 			let item = try PCloudItem(cloudPath: cloudPath, metadata: metadata)
-			try identifierCache.addOrUpdate(item, ifStillBelow: parentItem)
+			try identifierCache.commitMutation(item, ifStillBelow: parentItem, unchangedSince: upload.changeMark)
 			return try convertToCloudItemMetadata(metadata, at: cloudPath)
 		}
 	}
 
-	private func createFolder(for parentItem: PCloudItem, with name: String) async throws {
+	private func createFolder(_ creation: Preflight.CreateFolder, with name: String) async throws {
+		let parentItem = creation.parent
 		try await perform("createFolder(for: \(parentItem.identifier), with: \(name))", mapping: [APIErrorCode.componentOfParentDirectoryDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.folderAlreadyExists: .itemAlreadyExists, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
 			let metadata = try await withoutCancellation {
 				try await self.client.createFolder(name: name, parentID: parentItem.identifier)
@@ -242,7 +246,7 @@ public final class PCloudCloudProvider: CloudProvider {
 			CloudAccessDDLogDebug("PCloudCloudProvider: createFolder(for: \(parentItem.identifier), with: \(name)) received metadata: \(metadata)")
 			let cloudPath = parentItem.cloudPath.appendingPathComponent(name)
 			let item = try PCloudItem(cloudPath: cloudPath, metadata: metadata)
-			try identifierCache.addOrUpdate(item, ifStillBelow: parentItem)
+			try identifierCache.commitMutation(item, ifStillBelow: parentItem, unchangedSince: creation.changeMark)
 		}
 	}
 
@@ -267,35 +271,44 @@ public final class PCloudCloudProvider: CloudProvider {
 		}
 	}
 
-	private func moveFile(from sourceItem: PCloudItem, toParent targetParentItem: PCloudItem, targetCloudPath: CloudPath) async throws {
+	private func moveFile(_ move: Preflight.Move, to targetCloudPath: CloudPath) async throws {
+		let sourceItem = move.source
+		let targetParentItem = move.targetParent
 		try await perform("moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderDoesNotExist: .parentFolderDoesNotExist, APIErrorCode.fileDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
-			// `renamefile` replaces a file at the target and has no parameter to refuse, whereas `renamefolder` refuses with 2004. A file that another client creates at the target after the preflight's target lookup is therefore replaced.
-			let metadata = try await withoutCancellation {
-				try await self.client.renameFile(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
+			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+				// `renamefile` replaces a file at the target and has no parameter to refuse, whereas `renamefolder` refuses with 2004. A file that another client creates at the target after the preflight's target lookup is therefore replaced.
+				let metadata = try await withoutCancellation {
+					try await self.client.renameFile(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
+				}
+				CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
+				return try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			}
-			CloudAccessDDLogDebug("PCloudCloudProvider: moveFile(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
-			try identifierCache.invalidate(sourceItem)
-			let targetItem = try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
-			try identifierCache.addOrUpdate(targetItem, ifStillBelow: targetParentItem)
 		}
 	}
 
-	private func moveFolder(from sourceItem: PCloudItem, toParent targetParentItem: PCloudItem, targetCloudPath: CloudPath) async throws {
+	private func moveFolder(_ move: Preflight.Move, to targetCloudPath: CloudPath) async throws {
+		let sourceItem = move.source
+		let targetParentItem = move.targetParent
 		try await perform("moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path))", mapping: [APIErrorCode.folderAlreadyExists: .itemAlreadyExists, APIErrorCode.folderDoesNotExist: .itemNotFound, APIErrorCode.userIsOverQuota: .quotaInsufficient]) {
-			let metadata = try await withoutCancellation {
-				try await self.client.renameFolder(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
+			try await preflight.commitMove(move, to: targetCloudPath, isUnusableResponse: Self.isUnusableResponse) {
+				let metadata = try await withoutCancellation {
+					try await self.client.renameFolder(sourceItem.identifier, toParent: targetParentItem.identifier, name: targetCloudPath.lastPathComponent)
+				}
+				CloudAccessDDLogDebug("PCloudCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
+				return try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
 			}
-			CloudAccessDDLogDebug("PCloudCloudProvider: moveFolder(from: \(sourceItem.identifier), toParent: \(targetParentItem.identifier), targetCloudPath: \(targetCloudPath.path)) received metadata: \(metadata)")
-			try identifierCache.invalidate(sourceItem)
-			let targetItem = try PCloudItem(cloudPath: targetCloudPath, metadata: metadata)
-			try identifierCache.addOrUpdate(targetItem, ifStillBelow: targetParentItem)
 		}
+	}
+
+	/// Whether a move's error is the one that a response throws if it can't be decoded or can't build the target item. A body that isn't a pCloud result doesn't prove that the move was applied, but clearing the rows costs only a lookup.
+	private static func isUnusableResponse(_ error: Error) -> Bool {
+		return error as? PCloudError == .unexpectedContent
 	}
 
 	// MARK: - Resolve Path
 
-	private var preflight: IdentifierAddressedPreflight<PCloudItem> {
-		return IdentifierAddressedPreflight(cache: identifierCache, providerName: "PCloudCloudProvider", lookUp: getPCloudItem(for:withParentItem:))
+	private var preflight: Preflight {
+		return Preflight(cache: identifierCache, providerName: "PCloudCloudProvider", lookUp: getPCloudItem(for:withParentItem:))
 	}
 
 	private func resolvePath(forItemAt cloudPath: CloudPath) async throws -> PCloudItem {
@@ -356,11 +369,11 @@ public final class PCloudCloudProvider: CloudProvider {
 	}
 
 	/**
-	 Saves the children of the listing in the snapshot and caches their items, stopping at the next child once the task is cancelled.
+	 Saves the children of the listing in the snapshot and caches the items that the cache accepts (see `IdentifierCache.addOrUpdate(_:ifStillBelow:unchangedSince:)`), stopping at the next child once the task is cancelled.
 
 	 A name that a file and a folder share caches the folder, as `child(named:in:)` resolves it. Once a file overwrites a cached folder, the listing's folders are cached again, because that folder may be listed before the file. The overwrite drops the items cached below that folder, so they are looked up again. This happens even if the fill fails or is cancelled, and the fill's error is thrown afterwards. A cached folder that the listing no longer holds stays overwritten by the file.
 	 */
-	private func fillSnapshot(_ snapshot: DirectoryContentSnapshot, from listing: PCloudFolderListing) throws {
+	private func fillSnapshot(_ snapshot: DirectoryContentSnapshot, from listing: PCloudFolderListing, of folderItem: PCloudItem, changeMark: ChangeMark) throws {
 		let folderPath = snapshot.folderEnumerationPath
 		var index: Int64 = 0
 		var overwroteCachedFolder = false
@@ -372,8 +385,8 @@ public final class PCloudCloudProvider: CloudProvider {
 					return true
 				}
 				let childPath = folderPath.appendingPathComponent(child.name)
-				let replacedItem = try identifierCache.replace(PCloudItem(cloudPath: childPath, metadata: child))
-				if !child.isFolder, replacedItem?.itemType == .folder {
+				let outcome = try identifierCache.addOrUpdate(PCloudItem(cloudPath: childPath, metadata: child), ifStillBelow: folderItem, unchangedSince: changeMark)
+				if !child.isFolder, case let .saved(replacedItem) = outcome, replacedItem?.itemType == .folder {
 					overwroteCachedFolder = true
 				}
 				index += 1
@@ -382,19 +395,19 @@ public final class PCloudCloudProvider: CloudProvider {
 			}
 		} catch {
 			if overwroteCachedFolder {
-				try? cacheFolders(of: listing, in: folderPath)
+				try? cacheFolders(of: listing, in: folderItem, changeMark: changeMark)
 			}
 			throw error
 		}
 		if overwroteCachedFolder {
-			try cacheFolders(of: listing, in: folderPath)
+			try cacheFolders(of: listing, in: folderItem, changeMark: changeMark)
 		}
 	}
 
-	private func cacheFolders(of listing: PCloudFolderListing, in folderPath: CloudPath) throws {
+	private func cacheFolders(of listing: PCloudFolderListing, in folderItem: PCloudItem, changeMark: ChangeMark) throws {
 		try forEachChild(of: listing) { child in
 			if child.isFolder, child.name.isSinglePathComponent {
-				try identifierCache.addOrUpdate(PCloudItem(cloudPath: folderPath.appendingPathComponent(child.name), metadata: child))
+				try identifierCache.addOrUpdate(PCloudItem(cloudPath: folderItem.cloudPath.appendingPathComponent(child.name), metadata: child), ifStillBelow: folderItem, unchangedSince: changeMark)
 			}
 			return true
 		}

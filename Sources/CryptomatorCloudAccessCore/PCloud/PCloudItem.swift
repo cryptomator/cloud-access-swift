@@ -20,8 +20,14 @@ struct PCloudItem: Decodable, IdentifierCacheItem, Equatable {
 }
 
 extension PCloudItem {
+	/// Includes the type, because pCloud numbers files and folders separately.
+	var changeIdentity: String {
+		return "\(itemType.rawValue):\(identifier)"
+	}
+
+	/// - Throws: `PCloudError.unexpectedContent` if the metadata has no identifier or one above `Int64.max`, which GRDB can't store and would trap on.
 	init(cloudPath: CloudPath, metadata: PCloudMetadata) throws {
-		guard let identifier = metadata.identifier else {
+		guard let identifier = metadata.identifier, identifier <= UInt64(Int64.max) else {
 			throw PCloudError.unexpectedContent
 		}
 		self.cloudPath = cloudPath

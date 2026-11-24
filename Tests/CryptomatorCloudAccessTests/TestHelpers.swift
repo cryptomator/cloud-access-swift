@@ -215,6 +215,28 @@ func removeItemRecordingFailure(at url: URL, sourceLocation: SourceLocation = #_
 
 // MARK: - Library
 
+/// Hands out a fixed token and runs a hook before handing out the token of one call, i.e., before that request is sent.
+final class HookedTokenSource: BearerTokenSource {
+	private let state = OSAllocatedUnfairLock<(callCount: Int, hooks: [Int: @Sendable () async throws -> Void])>(initialState: (0, [:]))
+
+	func setHook(atCall call: Int, _ hook: @escaping @Sendable () async throws -> Void) {
+		state.withLock { $0.hooks[call] = hook }
+	}
+
+	func accessToken() async throws -> String {
+		let hook = state.withLock { state in
+			state.callCount += 1
+			return state.hooks.removeValue(forKey: state.callCount)
+		}
+		try await hook?()
+		return "TOKEN"
+	}
+
+	func refresh(rejecting accessToken: String) async throws -> String {
+		return "TOKEN"
+	}
+}
+
 /// Expects the settings that `HTTPClientSupport.hardened` and `hardenedBackground` give a configuration: no cache, no credential storage and no shared cookies.
 func expectHardened(_ configuration: URLSessionConfiguration, sourceLocation: SourceLocation = #_sourceLocation) {
 	#expect(configuration.urlCache == nil, sourceLocation: sourceLocation)

@@ -49,6 +49,11 @@ extension MicrosoftGraphItem {
 		table.column(isRemoteItemKey, .boolean).notNull()
 	}
 
+	/// Leaves out the drive, because a drive's identifier can be spelled in several ways and a different spelling would miss a record. Two drives that share an item identifier only cost a later lookup.
+	var changeIdentity: String {
+		return identifier
+	}
+
 	func isSameItem(as other: MicrosoftGraphItem) -> Bool {
 		return identifier == other.identifier && MicrosoftGraphItem.isSameDrive(driveIdentifier, other.driveIdentifier) && itemType == other.itemType && isRemoteItem == other.isRemoteItem
 	}

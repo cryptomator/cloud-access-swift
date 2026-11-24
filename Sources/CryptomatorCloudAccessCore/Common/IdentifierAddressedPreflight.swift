@@ -9,31 +9,39 @@
 import Foundation
 
 /**
- Resolves the paths of a provider that addresses its items by identifiers, and decides whether a mutation may proceed, before the provider sends its request.
+ Resolves the paths of a provider that addresses its items by identifiers, and decides whether a mutation may proceed, before the provider sends its request. It also commits a move to the cache once the move's request returns.
 
  A target is judged by a fresh lookup in the parent folder that the write goes to, not by the item that the cache holds at its path, because another client may have moved, renamed, trashed or replaced that item. The only exception is an upload's `fastPath`, which must confirm the cached item with a request. Each method returns the items that it judged, so that the request names exactly them.
 
- It checks for cancellation before every request that it sends, and each `prepare…` and `resolveSource` method checks once more before it returns.
+ It checks for cancellation before every lookup that it sends, and each `prepare…` and `resolveSource` method checks once more before it returns. `commitMove` doesn't check, because the move's request is the commit point.
  */
 struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
-	/// The items that a move names: the source, the folder that it was found in and the folder that it moves into.
+	/// The items that a move names: the source, the folder that it was found in and the folder that it moves into, with the mark taken before they were resolved.
 	struct Move {
 		let source: Item
 		let sourceParent: Item
 		let targetParent: Item
+		let changeMark: ChangeMark
 	}
 
-	/// The local file of an upload, the folder that it is written into and the file that it replaces, if any.
+	/// The local file of an upload, the folder that it is written into and the file that it replaces, if any, with the mark taken before they were resolved.
 	struct Upload {
 		let file: LocalUploadFile
 		let parent: Item
 		let existing: Item?
+		let changeMark: ChangeMark
+	}
+
+	/// The folder that a new folder goes into, with the mark taken before it was resolved.
+	struct CreateFolder {
+		let parent: Item
+		let changeMark: ChangeMark
 	}
 
 	let cache: IdentifierCache<Item>
 	/// The name that the log lines start with.
 	let providerName: String
-	/// Returns the item that holds the name in the folder, or `nil` if the name is free. Throws `CloudProviderError.itemNotFound` if the provider can tell that the folder itself is gone. It must not write to the cache, because the resolution caches a found item only through the parent check, and a target check caches nothing.
+	/// Returns the item that holds the name in the folder, or `nil` if the name is free. Throws `CloudProviderError.itemNotFound` if the provider can tell that the folder itself is gone. It must not write to the cache, because the resolution caches a found item only through its guarded write (`IdentifierCache.addOrUpdate(_:ifStillBelow:unchangedSince:)`), and a target check caches nothing.
 	let lookUp: (_ name: String, _ folderItem: Item) async throws -> Item?
 
 	/// Resolves the path. A path below an item that is no folder throws `CloudProviderError.itemNotFound` without a lookup in that item.
@@ -56,13 +64,14 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	}
 
 	/// Resolves the folder that the new folder goes into, and throws `CloudProviderError.itemAlreadyExists` if an item holds its name.
-	func prepareCreateFolder(at cloudPath: CloudPath) async throws -> Item {
+	func prepareCreateFolder(at cloudPath: CloudPath) async throws -> CreateFolder {
+		let changeMark = try cache.changeMark()
 		let parentItem = try await resolveTargetParent(of: cloudPath)
 		if try await occupant(named: cloudPath.lastPathComponent, in: parentItem) != nil {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		try Task.checkCancellation()
-		return parentItem
+		return CreateFolder(parent: parentItem, changeMark: changeMark)
 	}
 
 	/**
@@ -71,6 +80,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	 - Throws: `Item.inconsistentCacheError` if, once the source is resolved, the target's folder is no longer the connected item at its path, or the source's folder has the target folder's path but is another item, because the move would then go into or out of a folder that left the path.
 	 */
 	func prepareMove(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, type: CloudItemType, operation: String) async throws -> Move {
+		let changeMark = try cache.changeMark()
 		guard sourceCloudPath != .root else {
 			throw typeMismatch(at: sourceCloudPath, operation: operation)
 		}
@@ -88,7 +98,26 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		try Task.checkCancellation()
-		return Move(source: sourceItem, sourceParent: sourceParentItem, targetParent: targetParentItem)
+		return Move(source: sourceItem, sourceParent: sourceParentItem, targetParent: targetParentItem, changeMark: changeMark)
+	}
+
+	/**
+	 Sends a move's request and commits it to the cache.
+
+	 A response that can't be decoded or can't build the target item still commits the move, without a target item, because the item may have left the source. Any other error, such as a refusal or a transport failure, changes nothing.
+
+	 - Parameter isUnusableResponse: Whether an error of `request` means such a response.
+	 - Parameter request: Sends the move and returns the moved item at the target.
+	 */
+	func commitMove(_ move: Move, to targetCloudPath: CloudPath, isUnusableResponse: (Error) -> Bool, request: () async throws -> Item) async throws {
+		let targetItem: Item
+		do {
+			targetItem = try await request()
+		} catch where isUnusableResponse(error) {
+			try cache.commitMove(of: move.source, to: targetCloudPath, as: nil, ifStillBelow: move.targetParent, unchangedSince: move.changeMark)
+			throw error
+		}
+		try cache.commitMove(of: move.source, to: targetCloudPath, as: targetItem, ifStillBelow: move.targetParent, unchangedSince: move.changeMark)
 	}
 
 	/**
@@ -98,6 +127,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 	 - Throws: `CloudProviderError.itemAlreadyExists` if an item holds the target's name and either `replaceExisting` is false or the item is no file.
 	 */
 	func prepareUpload(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, fastPath: ((_ cachedItem: Item, _ parentItem: Item) async throws -> Item?)? = nil) async throws -> Upload {
+		let changeMark = try cache.changeMark()
 		let localFile = try LocalUploadFile(localURL)
 		let parentItem = try await resolveTargetParent(of: cloudPath)
 		var existingItem: Item?
@@ -112,7 +142,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 			throw CloudProviderError.itemAlreadyExists
 		}
 		try Task.checkCancellation()
-		return Upload(file: localFile, parent: parentItem, existing: existingItem)
+		return Upload(file: localFile, parent: parentItem, existing: existingItem, changeMark: changeMark)
 	}
 
 	// MARK: - Steps
@@ -171,3 +201,5 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 extension IdentifierAddressedPreflight.Move: Sendable where Item: Sendable {}
 
 extension IdentifierAddressedPreflight.Upload: Sendable where Item: Sendable {}
+
+extension IdentifierAddressedPreflight.CreateFolder: Sendable where Item: Sendable {}

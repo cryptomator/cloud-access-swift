@@ -103,6 +103,51 @@ enum MutationGuardCases {
 		}
 	}
 
+	/// The cases in which a mutation has the root as its source or target. None of them sends a request.
+	static func makeRootCases(localURL: URL) -> [MutationGuardCase] {
+		return make(localURL: localURL) { kind in
+			switch kind {
+			case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
+				return []
+			default:
+				return nil
+			}
+		}
+	}
+
+	/// Paths that aren't `isResolvable`. `init(_:)` removes a `..` that follows a named component, so only a decoded path keeps the one in `/a/../b`, which a file system or server would resolve to `/b`.
+	static func unresolvablePaths() throws -> [CloudPath] {
+		return try [CloudPath("/.."), CloudPath("a.txt"), JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/a/../b"}"#.utf8))]
+	}
+
+	/**
+	 Every operation, reads included, on each of the paths. A move takes each as its source with a valid target and as its target with a valid source. None of them sends a request.
+
+	 - Parameter localURL: The local file that an upload reads.
+	 - Parameter downloadURL: The missing local file that a download would create.
+	 */
+	static func makeInvalidPathCases(localURL: URL, downloadURL: URL, paths: [CloudPath]) -> [MutationGuardCase] {
+		let operations: [(name: String, operation: @Sendable (any CloudProvider, CloudPath) async throws -> Void)] = [
+			("fetchItemMetadata", { _ = try await $0.fetchItemMetadata(at: $1) }),
+			("fetchItemList", { _ = try await $0.fetchItemList(forFolderAt: $1, withPageToken: nil) }),
+			("fetchItemList with a page token", { _ = try await $0.fetchItemList(forFolderAt: $1, withPageToken: "token") }),
+			("downloadFile", { _ = try await $0.downloadFile(from: $1, to: downloadURL, progress: nil, onTaskCreation: nil) }),
+			("uploadFile", { _ = try await $0.uploadFile(from: localURL, to: $1, replaceExisting: true, progress: nil, onTaskCreation: nil) }),
+			("createFolder", { try await $0.createFolder(at: $1) }),
+			("deleteFile", { try await $0.deleteFile(at: $1) }),
+			("deleteFolder", { try await $0.deleteFolder(at: $1) }),
+			("moveFile from", { try await $0.moveFile(from: $1, to: CloudPath("/renamed")) }),
+			("moveFile to", { try await $0.moveFile(from: CloudPath("/file.txt"), to: $1) }),
+			("moveFolder from", { try await $0.moveFolder(from: $1, to: CloudPath("/renamed")) }),
+			("moveFolder to", { try await $0.moveFolder(from: CloudPath("/folder"), to: $1) })
+		]
+		return paths.flatMap { cloudPath in
+			operations.map { name, operation in
+				MutationGuardCase(name: "\(name) at \(cloudPath.path)", responses: [], expected: .invalidPath) { try await operation($0, cloudPath) }
+			}
+		}
+	}
+
 	/// The cases of the shared contract, each with the responses that `trace` returns for its requests, leaving out a case for which it returns `nil`.
 	static func make(localURL: URL, trace: (MutationGuardCase.Kind) -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)]?) -> [MutationGuardCase] {
 		return MutationGuardCase.Kind.allCases.compactMap { kind in

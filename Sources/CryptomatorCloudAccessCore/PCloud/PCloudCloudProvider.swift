@@ -75,6 +75,7 @@ public final class PCloudCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
+		try cloudPath.checkResolvable()
 		if let pageToken {
 			return try directoryContentCache.getPage(for: cloudPath, pageToken: pageToken)
 		}

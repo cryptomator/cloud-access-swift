@@ -1162,6 +1162,22 @@ extension UnitTests {
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
+		/// A DELETE or MOVE of the base URL would act on everything below it, and the root always exists, so nothing can be created or moved there.
+		@Test
+		func rootAsSourceOrTargetThrowsWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeRootCases(localURL: makeLocalFile())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try WebDAVCloudProvider(client: client) }
+			#expect(RecordingURLProtocolMock.log.wireSummaries.isEmpty)
+		}
+
+		/// The request URL would otherwise address another item: `/..` one outside the base URL, `/a/../b` the item `/b`.
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try WebDAVCloudProvider(client: client) }
+			#expect(RecordingURLProtocolMock.log.wireSummaries.isEmpty)
+		}
+
 		@Test
 		func testMoveFile() async throws {
 			let baseURL = try #require(URL(string: "https://example.com/cloud/remote.php/webdav/"))
@@ -1375,6 +1391,12 @@ extension UnitTests {
 				.replacing("<d:response>", with: "<d:response \(attributesOverCap(value: value))>", maxReplacements: 1)
 				.replacing("</d:multistatus>", with: "</d:propstat></d:multistatus>")
 			return Data(document.utf8)
+		}
+
+		private func makeLocalFile() throws -> URL {
+			let localURL = tmpDirURL.appendingPathComponent("local.txt")
+			try Data("content".utf8).write(to: localURL)
+			return localURL
 		}
 
 		private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {

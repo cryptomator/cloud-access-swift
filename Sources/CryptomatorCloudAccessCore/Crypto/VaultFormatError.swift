@@ -11,7 +11,7 @@ import Foundation
 enum VaultFormatError: Error {
 	case encounteredUnrelatedFile
 	case invalidNameFile
-	/// A dir file is larger than `vaultDirFileMaxLength` or names the vault root or the directory of a folder that contains it, or a cleartext path names no folder below the root.
+	/// A dir file is larger than `vaultDirFileMaxLength`, was read through an alias, or names the vault root or the directory of a folder that contains it. Also thrown where the root is given in place of a folder below it.
 	case invalidDirectoryReference
 }
 

@@ -164,14 +164,14 @@ extension UnitTests {
 			}
 		}
 
-		/// Dropbox deletes and moves either type and leaves the root as a source to Dropbox, so the wrong-type and root-source cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
+		/// Dropbox deletes and moves either type, so the wrong-type cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
 		@Test
 		func mutationChecksFollowTheSharedContract() async throws {
 			let localURL = try makeLocalFile(content: "content")
 			let fileParent = DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt", body: DropboxMockResponse.file(name: "file.txt"))
 			let cases = MutationGuardCases.make(localURL: localURL) { kind in
 				switch kind {
-				case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
+				case .deleteFileOfFolder, .deleteFolderOfFile, .moveFileOfFolder, .moveFolderOfFile:
 					return nil
 				case .createFolderInFile, .uploadFileIntoFile, .moveFileIntoFile, .moveFolderIntoFile:
 					return [fileParent]
@@ -181,7 +181,7 @@ extension UnitTests {
 					return [DropboxCloudProviderTests.response(to: "/2/files/move_v2", statusCode: 409, body: DropboxMockResponse.error("from_lookup/not_found/.."))]
 				case .missingSourceIntoMissingParent:
 					return [DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/missing", statusCode: 409, body: DropboxMockResponse.error("path/not_found/.."))]
-				case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot:
+				case .createFolderAtRoot, .uploadFileToRoot, .moveFileToRoot, .moveFolderToRoot, .deleteFileOfRoot, .deleteFolderOfRoot, .moveFileOfRoot, .moveFolderOfRoot:
 					return []
 				}
 			}
@@ -189,6 +189,12 @@ extension UnitTests {
 				kind == .createFolderBelowFileMidPath ? [DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt/x", statusCode: 409, body: DropboxMockResponse.error("path/not_folder/.."))] : nil
 			}
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases + notFolderCases) { DropboxCloudProvider(client: .mocked(), maxPageSize: .max) }
+		}
+
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { DropboxCloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
 		@Test

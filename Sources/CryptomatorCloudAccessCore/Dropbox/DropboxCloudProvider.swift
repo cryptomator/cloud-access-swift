@@ -44,7 +44,8 @@ public final class DropboxCloudProvider: CloudProvider {
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
 		return try await perform("fetchItemMetadata(at: \(cloudPath.path))") {
-			try await convertToCloudItemMetadata(client.metadata(path: cloudPath.path), at: cloudPath, untaggedAs: nil)
+			try cloudPath.checkResolvable()
+			return try await convertToCloudItemMetadata(client.metadata(path: cloudPath.path), at: cloudPath, untaggedAs: nil)
 		}
 	}
 
@@ -52,6 +53,7 @@ public final class DropboxCloudProvider: CloudProvider {
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
 		return try await perform("fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil"))") {
+			try cloudPath.checkResolvable()
 			let result: DropboxListFolderResult
 			if let pageToken {
 				do {
@@ -81,7 +83,8 @@ public final class DropboxCloudProvider: CloudProvider {
 		try Task.checkCancellation()
 		let phases = Progress.phases(of: progress, 999)
 		let metadata = try await perform("downloadFile(from: \(cloudPath.path), to: \(localURL))") {
-			try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
+			try cloudPath.checkResolvable()
+			return try await DownloadOperation.download(to: localURL, transfer: { stagedFile in
 				let file = try await client.download(path: cloudPath.path, to: stagedFile, progress: phases[0], onTaskCreation: onTaskCreation)
 				return try convertToCloudItemMetadata(file, at: cloudPath, untaggedAs: .file)
 			})
@@ -163,6 +166,7 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	private func deleteItem(at cloudPath: CloudPath) async throws {
 		try await perform("deleteItem(at: \(cloudPath.path))") {
+			try cloudPath.checkAsSource()
 			try await withoutCancellation {
 				try await self.client.delete(path: cloudPath.path)
 			}
@@ -171,6 +175,7 @@ public final class DropboxCloudProvider: CloudProvider {
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
 		try await perform("moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))") {
+			try sourceCloudPath.checkAsSource()
 			try await checkTarget(at: targetCloudPath)
 			try Task.checkCancellation()
 			try await withoutCancellation {
@@ -257,11 +262,9 @@ public final class DropboxCloudProvider: CloudProvider {
 		try await performLogged(operation, by: "DropboxCloudProvider", convert: convertStandardError, body)
 	}
 
-	/// Throws `CloudProviderError.itemAlreadyExists` for the root as the target, which always exists, and `CloudProviderError.parentFolderDoesNotExist` if the target's parent is missing or no folder. Dropbox would otherwise create missing parent folders, and it reports a file parent as a conflict, which reads as `itemAlreadyExists`.
+	/// Throws `CloudProviderError.itemAlreadyExists` for the root as the target, which always exists, `CloudProviderError.invalidPath` for a target that isn't `isResolvable`, and `CloudProviderError.parentFolderDoesNotExist` if the target's parent is missing or no folder. Dropbox would otherwise create missing parent folders, and it reports a file parent as a conflict, which reads as `itemAlreadyExists`.
 	func checkTarget(at cloudPath: CloudPath) async throws {
-		guard cloudPath != .root else {
-			throw CloudProviderError.itemAlreadyExists
-		}
+		try cloudPath.checkAsTarget()
 		let parentCloudPath = cloudPath.deletingLastPathComponent()
 		if parentCloudPath == .root {
 			return

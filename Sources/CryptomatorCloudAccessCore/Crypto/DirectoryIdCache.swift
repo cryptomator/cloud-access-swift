@@ -50,11 +50,9 @@ final class DirectoryIdCache: Sendable {
 	}
 
 	func get(_ cleartextPath: CloudPath, onMiss: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data) async throws -> Data {
+		try cleartextPath.checkResolvable()
 		if let cached = try get(cleartextPath) {
 			return cached
-		}
-		guard cleartextPath.isResolvable else {
-			throw CloudProviderError.itemNotFound
 		}
 		let parentDirId = try await get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss)
 		let dirId = try await onMiss(cleartextPath, parentDirId)
@@ -68,10 +66,11 @@ final class DirectoryIdCache: Sendable {
 	 Cancellation is checked after each read, so that a call cancelled during a read throws without changing the cache, even if the read succeeded, and a caller can commit right after it returns.
 
 	 - Parameter isMissing: Whether an error of reading the folder's own dir file means that the folder has none, e.g., because it's gone.
-	 - Throws: `CloudProviderError.parentFolderDoesNotExist` if reading an ancestor's dir file throws `CloudProviderError.itemNotFound`. `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path isn't absolute or doesn't name a folder below the root (e.g., `/` or `/..`). The other errors of a read unchanged.
+	 - Throws: `CloudProviderError.parentFolderDoesNotExist` if reading an ancestor's dir file throws `CloudProviderError.itemNotFound`. `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path is the root. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). The other errors of a read unchanged.
 	 */
 	func verifiedDirectory(_ cleartextPath: CloudPath, readDirId: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data, treatingAsMissing isMissing: (Error) -> Bool) async throws -> VerifiedDirectory {
-		guard cleartextPath.isResolvable, cleartextPath != .root else {
+		try cleartextPath.checkResolvable()
+		guard cleartextPath != .root else {
 			throw VaultFormatError.invalidDirectoryReference
 		}
 		var containingDirIds = [Data()]

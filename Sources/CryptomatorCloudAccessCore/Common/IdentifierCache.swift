@@ -337,14 +337,12 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 
 	 If that write is refused, it starts over once from the deepest connected item with a new mark, because a caller uses the returned item without another check. If that happens again, it throws `Item.inconsistentCacheError`.
 
-	 A path that isn't `isResolvable` throws `CloudProviderError.itemNotFound` without a lookup.
+	 A path that isn't `isResolvable` throws `CloudProviderError.invalidPath` without a lookup.
 
 	 - Parameter lookUpChild: Returns the item of the given name in the given folder, or throws `CloudProviderError.itemNotFound`.
 	 */
 	func resolvePath(forItemAt cloudPath: CloudPath, lookUpChild: (_ name: String, _ parentItem: Item) async throws -> Item) async throws -> Item {
-		guard cloudPath.isResolvable else {
-			throw CloudProviderError.itemNotFound
-		}
+		try cloudPath.checkResolvable()
 		for _ in 0 ..< 2 {
 			if let item = try await attemptToResolvePath(forItemAt: cloudPath, lookUpChild: lookUpChild) {
 				return item
@@ -373,11 +371,9 @@ final class IdentifierCache<Item: IdentifierCacheItem>: Sendable {
 		return item
 	}
 
-	/// Returns the item of the path's parent folder, or throws `CloudProviderError.parentFolderDoesNotExist` if a folder on its path doesn't exist. The path itself is checked with `isResolvable`, because removing its last component standardizes what remains.
+	/// Returns the item of the path's parent folder, or throws `CloudProviderError.parentFolderDoesNotExist` if a folder on its path doesn't exist. A path that isn't `isResolvable` throws `CloudProviderError.invalidPath`. It is checked before its last component is removed, because the removal standardizes what remains.
 	func resolveParentPath(forItemAt cloudPath: CloudPath, lookUpChild: (_ name: String, _ parentItem: Item) async throws -> Item) async throws -> Item {
-		guard cloudPath.isResolvable else {
-			throw CloudProviderError.parentFolderDoesNotExist
-		}
+		try cloudPath.checkResolvable()
 		do {
 			return try await resolvePath(forItemAt: cloudPath.deletingLastPathComponent(), lookUpChild: lookUpChild)
 		} catch CloudProviderError.itemNotFound {

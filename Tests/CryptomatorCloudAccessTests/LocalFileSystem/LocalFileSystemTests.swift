@@ -47,6 +47,17 @@ extension UnitTests {
 			#expect(metadata.size == 11)
 		}
 
+		/// The root has no parent, so its metadata can't name it by the parent's path and the root folder's name.
+		@Test
+		func fetchItemMetadataOfRootReturnsRootPath() async throws {
+			try makeFile()
+			let metadata = try await provider.fetchItemMetadata(at: .root)
+			#expect(metadata.cloudPath == .root)
+			#expect(metadata.itemType == .folder)
+			let itemList = try await provider.fetchItemList(forFolderAt: metadata.cloudPath, withPageToken: nil)
+			#expect(itemList.items.map(\.cloudPath) == [CloudPath("/file")])
+		}
+
 		@Test
 		func fetchItemMetadataWithNotFoundError() async {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/file")) }
@@ -406,6 +417,29 @@ extension UnitTests {
 			#expect(!FileManager.default.fileExists(atPath: tmpDirURL.appendingPathComponent("renamed").path))
 		}
 
+		/// The root holds `/file.txt`, `/folder` and `/b`, which `/a/../b` would reach, and a file lies next to the root, which `/..` would reach. `appending(path:)` drops a NUL at the end of the path, so `/..` followed by a NUL would reach that file too, and `/` followed by a NUL would name the root. A refused operation changes nothing below the root or next to it, and `deleteFolder` of the root keeps the root.
+		@Test
+		func rootAndInvalidPathsAreRefusedWithoutAccess() async throws {
+			let rootURL = tmpDirURL.appendingPathComponent("root", isDirectory: true)
+			for folderName in ["folder", "b"] {
+				try FileManager.default.createDirectory(at: rootURL.appendingPathComponent(folderName, isDirectory: true), withIntermediateDirectories: true, attributes: nil)
+			}
+			try "hello world".write(to: rootURL.appendingPathComponent("file.txt", isDirectory: false), atomically: true, encoding: .utf8)
+			try "hello world".write(to: rootURL.appendingPathComponent("b/child", isDirectory: false), atomically: true, encoding: .utf8)
+			let localURL = tmpDirURL.appendingPathComponent("sibling.txt", isDirectory: false)
+			try "hello world".write(to: localURL, atomically: true, encoding: .utf8)
+			let provider = try LocalFileSystemProvider(rootURL: rootURL)
+			let nulPaths = ["..", "", ".", "file.txt"].map { CloudPath("/" + $0 + "\u{0}") }
+			let invalidPathCases = try MutationGuardCases.makeInvalidPathCases(localURL: localURL, downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths() + nulPaths)
+			let itemsBefore = try snapshot(of: tmpDirURL)
+
+			for testCase in MutationGuardCases.makeRootCases(localURL: localURL) + invalidPathCases {
+				await #expect(throws: testCase.expected, "\(testCase.name)") { try await testCase.operation(provider) }
+			}
+
+			#expect(try snapshot(of: tmpDirURL) == itemsBefore)
+		}
+
 		/// A file operation acts on a symbolic link itself, also on one to a folder or one whose target is missing, and never on its target.
 		@Test(arguments: [false, true], [false, true])
 		func fileOperationOnSymbolicLinkActsOnLink(isDangling: Bool, moves: Bool) async throws {
@@ -745,6 +779,17 @@ extension UnitTests {
 			try "hello world".write(to: lockedURL.appendingPathComponent("file", isDirectory: false), atomically: true, encoding: .utf8)
 			try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: lockedURL.path)
 			lockedURLs.append(lockedURL)
+		}
+
+		/// The path of every item below the folder, relative to it, with the content of each file and `nil` for each folder.
+		private func snapshot(of folderURL: URL) throws -> [String: Data?] {
+			let folderPath = folderURL.resolvingSymlinksInPath().path
+			let enumerator = try #require(FileManager.default.enumerator(at: folderURL, includingPropertiesForKeys: nil))
+			var items: [String: Data?] = [:]
+			for case let itemURL as URL in enumerator {
+				items[String(itemURL.resolvingSymlinksInPath().path.dropFirst(folderPath.count))] = try? Data(contentsOf: itemURL)
+			}
+			return items
 		}
 	}
 }

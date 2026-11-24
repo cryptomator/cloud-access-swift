@@ -59,9 +59,9 @@ extension UnitTests {
 			let preflight = makePreflight()
 
 			for path in ["/../x", "a/b", "x"] {
-				await #expect(throws: CloudProviderError.parentFolderDoesNotExist, "\(path)") { try await preflight.prepareCreateFolder(at: CloudPath(path)) }
-				await #expect(throws: CloudProviderError.itemNotFound, "\(path)") { try await preflight.resolve(at: CloudPath(path)) }
-				await #expect(throws: CloudProviderError.itemNotFound, "\(path)") { try await preflight.prepareMove(from: CloudPath(path), to: CloudPath("/other/new"), type: .file, operation: "moveFile") }
+				await #expect(throws: CloudProviderError.invalidPath, "\(path)") { try await preflight.prepareCreateFolder(at: CloudPath(path)) }
+				await #expect(throws: CloudProviderError.invalidPath, "\(path)") { try await preflight.resolve(at: CloudPath(path)) }
+				await #expect(throws: CloudProviderError.invalidPath, "\(path)") { try await preflight.prepareMove(from: CloudPath(path), to: CloudPath("/other/new"), type: .file, operation: "moveFile") }
 			}
 			#expect(lookups.calls.isEmpty)
 		}
@@ -73,9 +73,9 @@ extension UnitTests {
 			try #require(decodedPath.path == path)
 			let preflight = makePreflight()
 
-			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await preflight.prepareCreateFolder(at: decodedPath) }
-			await #expect(throws: CloudProviderError.itemNotFound) { try await preflight.resolve(at: decodedPath) }
-			await #expect(throws: CloudProviderError.itemNotFound) { try await preflight.resolveSource(at: decodedPath, type: .file, operation: "deleteFile") }
+			await #expect(throws: CloudProviderError.invalidPath) { try await preflight.prepareCreateFolder(at: decodedPath) }
+			await #expect(throws: CloudProviderError.invalidPath) { try await preflight.resolve(at: decodedPath) }
+			await #expect(throws: CloudProviderError.invalidPath) { try await preflight.resolveSource(at: decodedPath, type: .file, operation: "deleteFile") }
 			#expect(lookups.calls.isEmpty)
 			#expect(cache.get(.root) == BoxItem.rootItem)
 		}

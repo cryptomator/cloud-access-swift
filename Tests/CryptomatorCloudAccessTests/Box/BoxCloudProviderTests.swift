@@ -219,6 +219,12 @@ extension UnitTests {
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try BoxCloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try BoxCloudProvider(client: .mocked(), maxPageSize: .max) }
+		}
+
 		/// A listing of the target's folder that answers 404 shows that the folder is gone.
 		@Test
 		func targetLookupInMissingFolderThrowsParentFolderDoesNotExist() async throws {

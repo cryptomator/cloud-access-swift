@@ -13,6 +13,8 @@ public enum CloudProviderError: Error {
 	case itemAlreadyExists
 	case itemTypeMismatch
 	case parentFolderDoesNotExist
+	/// Thrown before any request for a cloud path that is relative or has an empty, `.` or `..` component below the root. The library resolves such a path to no item, so the caller has to correct it rather than retry. The local file system provider also throws it for a path that contains a NUL character, which no file name holds. It isn't `itemNotFound`, because `checkForItemExistence` and the `…IfExisting` helpers would take that for a missing item, although a file system or server would resolve the path to an item that may exist.
+	case invalidPath
 	case pageTokenInvalid
 	case quotaInsufficient
 	case unauthorized

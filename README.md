@@ -487,7 +487,7 @@ let rootURL = ... // rootURL.isFileURL must be `true`
 let provider = try LocalFileSystemProvider(rootURL: rootURL)
 ```
 
-When calling the functions of this provider, the cloud paths should be provided relative to the root URL.
+Cloud paths are absolute and resolve against the root URL, so `CloudPath("/")` names the root URL itself and `CloudPath("/Documents/file.txt")` names `Documents/file.txt` below it. A relative cloud path throws `CloudProviderError.invalidPath`.
 
 This provider uses `NSFileCoordinator` for its operations and supports asynchronous access.
 

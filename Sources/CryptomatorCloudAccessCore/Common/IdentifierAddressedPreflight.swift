@@ -105,9 +105,7 @@ struct IdentifierAddressedPreflight<Item: IdentifierCacheItem> {
 		guard sourceCloudPath != .root else {
 			throw typeMismatch(at: sourceCloudPath, operation: operation)
 		}
-		guard sourceCloudPath.isResolvable else {
-			throw CloudProviderError.itemNotFound
-		}
+		try sourceCloudPath.checkResolvable()
 		let targetParentItem = try await resolveTargetParent(of: targetCloudPath)
 		let (sourceItem, sourceParentItem) = try await resolveWithParent(at: sourceCloudPath)
 		try checkType(of: sourceItem, at: sourceCloudPath, type: type, operation: operation)

@@ -54,6 +54,7 @@ public final class S3CloudProvider: CloudProvider {
 	/// Lists the item's key as prefix (without trailing slash) instead of sending a `headObject` request, because some providers don't respond to that with an access denied error. A sibling such as `a/b 2/` or `a/b.txt` sorts before the folder `a/b/`, so when the first page holds only a sibling, the folder's own prefix is listed as well.
 	private func getItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		return try await perform("fetchItemMetadata(at: \(cloudPath.path))") {
+			try cloudPath.checkResolvable()
 			let output = try await listObjects(withPrefix: getKey(for: cloudPath), recursive: false, pageToken: nil, maxKeys: 1)
 			CloudAccessDDLogDebug("S3CloudProvider: fetchItemMetadata(at: \(cloudPath.path)) received output: \(output)")
 			if let item = CloudItemList(listObjects: output).items.first(where: { $0.cloudPath == cloudPath }) {
@@ -70,6 +71,7 @@ public final class S3CloudProvider: CloudProvider {
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
 		return try await perform("fetchItemList(forFolderAt: \(cloudPath.path), withPageToken: \(pageToken ?? "nil"))") {
+			try cloudPath.checkResolvable()
 			let prefix = getPrefix(for: cloudPath)
 			let output: S3ListObjectsResult
 			do {

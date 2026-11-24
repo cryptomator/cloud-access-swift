@@ -37,9 +37,9 @@ extension UnitTests {
 		}
 
 		@Test(arguments: ["/..", "one/two"])
-		func getOfPathThatNeverReachesRootThrowsItemNotFoundWithoutLookup(path: String) async throws {
+		func getOfPathThatNeverReachesRootThrowsInvalidPathWithoutLookup(path: String) async throws {
 			let lookups = OSAllocatedUnfairLock(initialState: 0)
-			await #expect(throws: CloudProviderError.itemNotFound) {
+			await #expect(throws: CloudProviderError.invalidPath) {
 				_ = try await cache.get(CloudPath(path), onMiss: { _, _ in
 					lookups.withLock { $0 += 1 }
 					return Data("ID".utf8)
@@ -168,10 +168,22 @@ extension UnitTests {
 			#expect(directory.containingDirIds == [Data(), Data("ONE".utf8)])
 		}
 
-		@Test(arguments: ["/", "/..", "one/two"])
-		func verifiedDirectoryRejectsPathNamingNoFolderBelowRoot(path: String) async throws {
+		@Test
+		func verifiedDirectoryRejectsRoot() async throws {
 			let reads = OSAllocatedUnfairLock(initialState: 0)
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
+				_ = try await cache.verifiedDirectory(.root, readDirId: { _, _ in
+					reads.withLock { $0 += 1 }
+					return Data("ID".utf8)
+				}, treatingAsMissing: { _ in false })
+			}
+			#expect(reads.withLock { $0 } == 0)
+		}
+
+		@Test(arguments: ["/..", "one/two"])
+		func verifiedDirectoryRejectsUnresolvablePath(path: String) async throws {
+			let reads = OSAllocatedUnfairLock(initialState: 0)
+			await #expect(throws: CloudProviderError.invalidPath) {
 				_ = try await cache.verifiedDirectory(CloudPath(path), readDirId: { _, _ in
 					reads.withLock { $0 += 1 }
 					return Data("ID".utf8)

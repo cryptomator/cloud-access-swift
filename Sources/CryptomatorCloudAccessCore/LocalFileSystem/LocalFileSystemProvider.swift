@@ -69,26 +69,28 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
-		let url = rootURL.appending(cloudPath: cloudPath)
+		try cloudPath.checkResolvable()
+		let url = try fileURL(for: cloudPath)
 		return try await withSecurityScopedAccess(to: url, "fetchItemMetadata(at: \(cloudPath.path))") {
-			try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent())
+			try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath == .root ? nil : cloudPath.deletingLastPathComponent())
 		}
 	}
 
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
+		try cloudPath.checkResolvable()
+		let url = try fileURL(for: cloudPath)
 		if let pageToken {
 			return try cache.getPage(for: cloudPath, pageToken: pageToken)
 		}
 		return try await cache.publishSnapshot(of: cloudPath) { snapshot in
-			try await fillCache(snapshot)
+			try await fillCache(snapshot, url: url)
 		}
 	}
 
-	private func fillCache(_ snapshot: DirectoryContentSnapshot) async throws {
+	private func fillCache(_ snapshot: DirectoryContentSnapshot, url: URL) async throws {
 		let cloudPath = snapshot.folderEnumerationPath
-		let url = rootURL.appending(cloudPath: cloudPath)
 		let operation = "fillCache(\(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let readingIntent = NSFileAccessIntent.readingIntent(with: url)
@@ -142,7 +144,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let url = rootURL.appending(cloudPath: cloudPath)
+		try cloudPath.checkResolvable()
+		let url = try fileURL(for: cloudPath)
 		let operation = "downloadFile(from: \(cloudPath.path) to: \(localURL))"
 		return try await withSecurityScopedAccess(to: url, operation) {
 			let phases = Progress.phases(of: progress, 999)
@@ -168,13 +171,15 @@ public final class LocalFileSystemProvider: CloudProvider {
 	public func uploadFile(from localURL: URL, to cloudPath: CloudPath, replaceExisting: Bool, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionUploadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
-		let url = rootURL.appending(cloudPath: cloudPath)
+		let localFile = try LocalUploadFile(localURL)
+		try cloudPath.checkAsTarget()
+		let url = try fileURL(for: cloudPath)
 		let operation = "uploadFile(from: \(localURL) to: \(cloudPath.path), replaceExisting: \(replaceExisting))"
 		return try await withSecurityScopedAccess(to: url, operation) {
 			let phases = Progress.phases(of: progress, 999)
 			let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: replaceExisting ? .forReplacing : [])
 			try await coordinated(writingIntent, operation, convert: convertCreationError) { coordinatedURL in
-				try self.validateAndCopyFile(from: localURL, to: coordinatedURL, replaceExisting: replaceExisting)
+				try self.validateAndCopyFile(from: localFile, to: coordinatedURL, replaceExisting: replaceExisting)
 				CloudAccessDDLogDebug("LocalFileSystemProvider: \(operation) finished, getting metadata…")
 			}
 			let metadata = try await getItemMetadata(forItemAt: url, parentCloudPath: cloudPath.deletingLastPathComponent())
@@ -186,7 +191,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		let url = rootURL.appending(cloudPath: cloudPath)
+		try cloudPath.checkAsTarget()
+		let url = try fileURL(for: cloudPath)
 		let operation = "createFolder(at: \(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: [])
@@ -210,7 +216,8 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func deleteItem(at cloudPath: CloudPath, type: CloudItemType) async throws {
-		let url = rootURL.appending(cloudPath: cloudPath)
+		try cloudPath.checkAsSource()
+		let url = try fileURL(for: cloudPath)
 		let operation = "deleteItem(at: \(cloudPath.path))"
 		try await withSecurityScopedAccess(to: url, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: url, options: .forDeleting)
@@ -242,8 +249,10 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath, type: CloudItemType) async throws {
-		let sourceURL = rootURL.appending(cloudPath: sourceCloudPath)
-		let targetURL = rootURL.appending(cloudPath: targetCloudPath)
+		try sourceCloudPath.checkAsSource()
+		try targetCloudPath.checkAsTarget()
+		let sourceURL = try fileURL(for: sourceCloudPath)
+		let targetURL = try fileURL(for: targetCloudPath)
 		let operation = "moveItem(from: \(sourceCloudPath.path), to: \(targetCloudPath.path))"
 		try await withSecurityScopedAccess(to: sourceURL, operation) {
 			let writingIntent = NSFileAccessIntent.writingIntent(with: sourceURL, options: .forMoving)
@@ -291,6 +300,14 @@ public final class LocalFileSystemProvider: CloudProvider {
 				}
 			}
 		}
+	}
+
+	/// Throws `CloudProviderError.invalidPath` for a path with a NUL character, which no file name holds. `appending(path:)` drops a NUL at the end of the path, so `/..` followed by one would pass `isResolvable` and still name the root's parent.
+	private func fileURL(for cloudPath: CloudPath) throws -> URL {
+		guard !cloudPath.path.unicodeScalars.contains("\u{0}") else {
+			throw CloudProviderError.invalidPath
+		}
+		return rootURL.appending(cloudPath: cloudPath)
 	}
 
 	private func withSecurityScopedAccess<T>(to url: URL, _ operation: String, _ body: () async throws -> T) async rethrows -> T {
@@ -370,8 +387,9 @@ public final class LocalFileSystemProvider: CloudProvider {
 	}
 
 	/// Doesn't check for cancellation, so that an upload can still fetch the metadata to return after its change.
-	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath) async throws -> CloudItemMetadata {
-		let operation = "getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path))"
+	/// - Parameter parentCloudPath: The cloud path of the item's parent, or `nil` for the root, which has none.
+	private func getItemMetadata(forItemAt url: URL, parentCloudPath: CloudPath?) async throws -> CloudItemMetadata {
+		let operation = "getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath?.path ?? "nil"))"
 		CloudAccessDDLogDebug("LocalFileSystemProvider: \(operation) called")
 		let readingIntent = NSFileAccessIntent.readingIntent(with: url, options: .immediatelyAvailableMetadataOnly)
 		return try await coordinated(readingIntent, operation, convert: convertStandardError) { coordinatedURL in
@@ -379,18 +397,17 @@ public final class LocalFileSystemProvider: CloudProvider {
 		}
 	}
 
-	private func readItemMetadata(forItemAt url: URL, coordinatedURL: URL, parentCloudPath: CloudPath) throws -> CloudItemMetadata {
+	private func readItemMetadata(forItemAt url: URL, coordinatedURL: URL, parentCloudPath: CloudPath?) throws -> CloudItemMetadata {
 		let attributes = try coordinatedURL.promisedItemResourceValues(forKeys: [.nameKey, .fileSizeKey, .contentModificationDateKey, .fileResourceTypeKey])
-		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath.path)) read attributes: \(attributes.allValues.reduce(into: [:]) { $0[$1.key.rawValue] = $1.value })")
+		CloudAccessDDLogDebug("LocalFileSystemProvider: getItemMetadata(forItemAt: \(url), parentCloudPath: \(parentCloudPath?.path ?? "nil")) read attributes: \(attributes.allValues.reduce(into: [:]) { $0[$1.key.rawValue] = $1.value })")
 		let name = attributes.name ?? url.lastPathComponent
 		let size = attributes.fileSize
 		let lastModifiedDate = attributes.contentModificationDate
 		let itemType = getItemType(from: attributes.fileResourceType)
-		return CloudItemMetadata(name: name, cloudPath: parentCloudPath.appendingPathComponent(name), itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
+		return CloudItemMetadata(name: name, cloudPath: parentCloudPath?.appendingPathComponent(name) ?? .root, itemType: itemType, lastModifiedDate: lastModifiedDate, size: size)
 	}
 
-	private func validateAndCopyFile(from sourceURL: URL, to targetURL: URL, replaceExisting: Bool) throws {
-		let sourceFile = try LocalUploadFile(sourceURL)
+	private func validateAndCopyFile(from sourceFile: LocalUploadFile, to targetURL: URL, replaceExisting: Bool) throws {
 		if replaceExisting {
 			do {
 				guard try validateItemType(at: targetURL, with: .file) else {

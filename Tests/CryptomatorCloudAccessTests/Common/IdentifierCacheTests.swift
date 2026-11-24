@@ -371,13 +371,13 @@ extension UnitTests {
 			let cache = try IdentifierCache<BoxItem>()
 			var lookupCount = 0
 
-			await #expect(throws: CloudProviderError.itemNotFound) {
+			await #expect(throws: CloudProviderError.invalidPath) {
 				try await cache.resolvePath(forItemAt: CloudPath(path)) { name, parentItem in
 					lookupCount += 1
 					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .folder)
 				}
 			}
-			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) {
+			await #expect(throws: CloudProviderError.invalidPath) {
 				try await cache.resolveParentPath(forItemAt: CloudPath(path).appendingPathComponent("y")) { name, parentItem in
 					lookupCount += 1
 					return BoxItem(cloudPath: parentItem.cloudPath.appendingPathComponent(name), identifier: name, itemType: .folder)

@@ -295,6 +295,13 @@ extension UnitTests {
 			])
 		}
 
+		/// A listing with a page token reads the snapshot without resolving the folder, so it checks the path itself.
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try PCloudCloudProvider(client: .mocked()) }
+		}
+
 		/// The folder lookup prefers the folder of the name even though the cache holds the file of that name.
 		@Test
 		func replacingUploadOntoCachedFileWithFolderOfSameNameThrowsItemAlreadyExists() async throws {

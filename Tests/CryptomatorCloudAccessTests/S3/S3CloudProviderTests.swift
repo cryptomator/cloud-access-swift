@@ -700,16 +700,6 @@ extension UnitTests {
 			#expect(itemList.items.map(\.cloudPath.path) == ["/f\u{600}/x.txt"])
 		}
 
-		/// A degenerate listed path keeps its dot segment in the prefix, so the key is checked as a whole, not only below the prefix.
-		@Test
-		func listingSkipsKeysWithDotSegmentInListedPrefix() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["../x.txt"]))]
-
-			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/.."), withPageToken: nil)
-
-			#expect(itemList.items.isEmpty)
-		}
-
 		@Test
 		func fetchItemMetadataOfNestedFileAndFolder() async throws {
 			URLProtocolMock.requestHandler = [
@@ -926,19 +916,20 @@ extension UnitTests {
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try S3CloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
-		/// No mutation takes the root as its source, because a folder operation would act on the whole bucket. A path that never reaches the root names no key. Neither sends a request.
+		/// No mutation takes the root as its source, because a folder operation would act on the whole bucket. Neither sends a request.
 		@Test
-		func rootSourceAndUnresolvablePathsThrowWithoutRequest() async throws {
-			let decodedSource = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/a/../b"}"#.utf8))
-			let decodedTarget = try JSONDecoder().decode(CloudPath.self, from: Data(#"{"path":"/x/./y"}"#.utf8))
+		func rootSourceThrowsWithoutRequest() async throws {
 			let cases = [
 				MutationGuardCase(name: "moveFolder of the root into a folder", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: CloudPath("/folder/x")) },
-				MutationGuardCase(name: "moveFolder of the root to the root", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: .root) },
-				MutationGuardCase(name: "deleteFile of a relative path", responses: [], expected: .itemNotFound) { try await $0.deleteFile(at: CloudPath("a.txt")) },
-				MutationGuardCase(name: "moveFile to a relative path", responses: [], expected: .parentFolderDoesNotExist) { try await $0.moveFile(from: CloudPath("/a.txt"), to: CloudPath("dest/taken")) },
-				MutationGuardCase(name: "deleteFile of a decoded unresolvable path", responses: [], expected: .itemNotFound) { try await $0.deleteFile(at: decodedSource) },
-				MutationGuardCase(name: "moveFile to a decoded unresolvable path", responses: [], expected: .parentFolderDoesNotExist) { try await $0.moveFile(from: CloudPath("/a.txt"), to: decodedTarget) }
+				MutationGuardCase(name: "moveFolder of the root to the root", responses: [], expected: .itemTypeMismatch) { try await $0.moveFolder(from: .root, to: .root) }
 			]
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try S3CloudProvider(client: .mocked(), maxPageSize: .max) }
+		}
+
+		/// Each path maps to a key: one that no listing shows (`..`, `a/../b`) or, for a relative path, the key of its absolute spelling.
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try S3CloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 

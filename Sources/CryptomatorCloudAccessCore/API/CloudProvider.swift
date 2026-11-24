@@ -32,6 +32,7 @@ public protocol CloudProvider: Sendable {
 	 - Returns: The metadata for a file or folder.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file or folder does not exist at `cloudPath`.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
 	   - `CancellationError` if the task was cancelled, or if the underlying SDK or the system cancelled a request.
@@ -50,6 +51,7 @@ public protocol CloudProvider: Sendable {
 	 - Returns: The item list for a folder (at page token if specified).
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
 	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `cloudPath`.
 	   - `CloudProviderError.pageTokenInvalid` if the `pageToken` is invalid.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
@@ -75,6 +77,7 @@ public protocol CloudProvider: Sendable {
 	 - Returns: The metadata of the downloaded file.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at `cloudPath`.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at the `localURL`.
 	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `cloudPath`.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
@@ -98,6 +101,7 @@ public protocol CloudProvider: Sendable {
 	 - Returns: The metadata of the uploaded file.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if no file exists at `localURL`, or if a symbolic link there points to a missing target.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
 	   - `CloudProviderError.itemAlreadyExists` if the file already exists at the `cloudPath` with `!replaceExisting` or the cloud provider finds a folder instead of a file at `cloudPath` with `replaceExisting`.
 	   - `CloudProviderError.itemTypeMismatch` if the local file system finds a folder instead of a file at `localURL` or as the target of a symbolic link there.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.
@@ -115,6 +119,7 @@ public protocol CloudProvider: Sendable {
 	 - Parameter cloudPath: The cloud path of the folder to create.
 	 - Throws:
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `cloudPath`.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `cloudPath` does not exist.
 	   - `CloudProviderError.quotaInsufficient` if the quota of the cloud provider is insufficient to fulfill the request.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
@@ -130,7 +135,8 @@ public protocol CloudProvider: Sendable {
 	 - Parameter cloudPath: The cloud path of the file to delete.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at `cloudPath`.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `cloudPath`. The Dropbox and WebDAV providers delete it instead. The local file system provider's check can miss a writer that doesn't use file coordination. Apart from the root, which it refuses without a request, a vault provider throws it only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
+	   - `CloudProviderError.itemTypeMismatch` if `cloudPath` is the root, which every provider refuses without a request, or if the cloud provider finds a folder instead of a file at `cloudPath`. The Dropbox and WebDAV providers delete an item of the wrong type instead. The local file system provider's check can miss a writer that doesn't use file coordination. A vault provider throws it for an item of the wrong type only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
 	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the file, wholly or in part. A file in a vault can consist of several cloud items. The S3, WebDAV and pCloud providers throw it.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
@@ -145,7 +151,8 @@ public protocol CloudProvider: Sendable {
 	 - Parameter cloudPath: The cloud path of the folder to delete.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `cloudPath`. A vault provider also throws it if the folder or a folder inside it exists but can't be listed, e.g., because a name file is missing. The folder then still exists.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `cloudPath`, or, on some providers, if `cloudPath` is the root. The Dropbox and WebDAV providers delete it instead. The local file system provider's check can miss a writer that doesn't use file coordination. Apart from the root, which it refuses without a request, a vault provider throws it only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
+	   - `CloudProviderError.invalidPath` if `cloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
+	   - `CloudProviderError.itemTypeMismatch` if `cloudPath` is the root, which every provider refuses without a request, or if the cloud provider finds a file instead of a folder at `cloudPath`. The Dropbox and WebDAV providers delete an item of the wrong type instead. The local file system provider's check can miss a writer that doesn't use file coordination. A vault provider throws it for an item of the wrong type only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
 	   - `CloudProviderError.deletionIncomplete` if the cloud refused to delete the folder, wholly or in part. The S3, WebDAV and pCloud providers throw it.
 	   - `CloudProviderError.unauthorized` if the request lacks valid authentication credentials.
 	   - `CloudProviderError.noInternetConnection` if there is no internet connection to handle the request.
@@ -161,7 +168,8 @@ public protocol CloudProvider: Sendable {
 	 - Parameter targetCloudPath: The cloud path of the desired destination.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the file does not exist at `sourceCloudPath`.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a folder instead of a file at `sourceCloudPath`. The Dropbox and WebDAV providers move it instead. The local file system provider's check can miss a writer that doesn't use file coordination. Apart from the root, which it refuses without a request, a vault provider throws it only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
+	   - `CloudProviderError.invalidPath` if `sourceCloudPath` or `targetCloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
+	   - `CloudProviderError.itemTypeMismatch` if `sourceCloudPath` is the root, which every provider refuses without a request, or if the cloud provider finds a folder instead of a file at `sourceCloudPath`. The Dropbox and WebDAV providers move an item of the wrong type instead. The local file system provider's check can miss a writer that doesn't use file coordination. A vault provider throws it for an item of the wrong type only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
 	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the file is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`. If the source doesn't exist either, a provider may throw this or `itemNotFound`, so this doesn't imply that the source exists. To tell a taken name from an earlier move that already completed, a caller checks the source and the target itself.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.
@@ -180,7 +188,8 @@ public protocol CloudProvider: Sendable {
 	 - Parameter targetCloudPath: The cloud path of the desired destination.
 	 - Throws:
 	   - `CloudProviderError.itemNotFound` if the folder does not exist at `sourceCloudPath`.
-	   - `CloudProviderError.itemTypeMismatch` if the cloud provider finds a file instead of a folder at `sourceCloudPath`, or, on some providers, if `sourceCloudPath` is the root. The Dropbox and WebDAV providers move it instead. The local file system provider's check can miss a writer that doesn't use file coordination. Apart from the root, which it refuses without a request, a vault provider throws it only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
+	   - `CloudProviderError.invalidPath` if `sourceCloudPath` or `targetCloudPath` isn't absolute or has an empty, `.` or `..` component below the root. The local file system provider also throws it for a path that contains a NUL character. No request is sent.
+	   - `CloudProviderError.itemTypeMismatch` if `sourceCloudPath` is the root, which every provider refuses without a request, or if the cloud provider finds a file instead of a folder at `sourceCloudPath`. The Dropbox and WebDAV providers move an item of the wrong type instead. The local file system provider's check can miss a writer that doesn't use file coordination. A vault provider throws it for an item of the wrong type only where the provider below it sees the wrong type. A VF7 or VF8 item with a shortened name is a folder there whatever its type, so the wrong operation isn't refused for it.
 	   - `CloudProviderError.moveCompletedWithSourceRemaining` if the folder is complete at `targetCloudPath`, but leftovers remain at `sourceCloudPath`. The S3 provider throws it. Through a vault provider, the leftovers can still refer to the moved folder's directory, so deleting the source, or a folder that contains it, deletes the moved folder's content.
 	   - `CloudProviderError.itemAlreadyExists` if a file or folder already exists at `targetCloudPath`. If the source doesn't exist either, a provider may throw this or `itemNotFound`, so this doesn't imply that the source exists. To tell a taken name from an earlier move that already completed, a caller checks the source and the target itself.
 	   - `CloudProviderError.parentFolderDoesNotExist` if the parent folder of `targetCloudPath` does not exist.

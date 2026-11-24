@@ -238,10 +238,6 @@ enum PathCheckingOperation: CaseIterable, CustomTestStringConvertible {
 		return takesPathAsSource ? .itemTypeMismatch : .itemAlreadyExists
 	}
 
-	var unresolvablePathError: CloudProviderError {
-		return takesPathAsSource ? .itemNotFound : .parentFolderDoesNotExist
-	}
-
 	func run(on provider: CloudProvider, at cloudPath: CloudPath, localDirectoryURL: URL) async throws {
 		let localURL = localDirectoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
 		switch self {
@@ -795,23 +791,13 @@ extension UnitTests {
 			#expect(fixture.provider.calls == [])
 		}
 
-		@Test(arguments: VaultTestFormat.allCases, PathCheckingOperation.allCases)
-		func operationAtUnresolvablePathThrowsWithoutRequest(format: VaultTestFormat, operation: PathCheckingOperation) async throws {
-			let fixture = try format.makeFixture(stacking: .shortening)
-			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
-				await #expect(throws: operation.unresolvablePathError, "\(cloudPath.path)") {
-					try await operation.run(on: fixture.decorator, at: cloudPath, localDirectoryURL: tmpDirURL)
-				}
-			}
-			#expect(fixture.provider.calls == [])
-		}
-
 		@Test(arguments: VaultTestFormat.allCases)
-		func readOfUnresolvablePathThrowsItemNotFoundWithoutRequest(format: VaultTestFormat) async throws {
+		func unresolvablePathsThrowWithoutRequest(format: VaultTestFormat) async throws {
 			let fixture = try format.makeFixture(stacking: .shortening)
-			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
-				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemMetadata(at: cloudPath) }
-				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemList(forFolderAt: cloudPath, withPageToken: nil) }
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try Data("content".utf8).write(to: localURL)
+			for testCase in try MutationGuardCases.makeInvalidPathCases(localURL: localURL, downloadURL: tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false), paths: MutationGuardCases.unresolvablePaths()) {
+				await #expect(throws: testCase.expected, "\(testCase.name)") { try await testCase.operation(fixture.decorator) }
 			}
 			#expect(fixture.provider.calls == [])
 		}
@@ -836,7 +822,7 @@ extension UnitTests {
 		func deleteFolderIfExistingAtUnresolvablePathThrowsWithoutRequest(format: VaultTestFormat) async throws {
 			let fixture = try format.makeFixture(stacking: .shortening)
 			for cloudPath in try VaultProviderDecoratorTests.unresolvablePaths() {
-				await #expect(throws: VaultFormatError.invalidDirectoryReference, "\(cloudPath.path)") { try await fixture.decorator.deleteFolderIfExisting(at: cloudPath) }
+				await #expect(throws: CloudProviderError.invalidPath, "\(cloudPath.path)") { try await fixture.decorator.deleteFolderIfExisting(at: cloudPath) }
 			}
 			#expect(fixture.provider.calls == [])
 		}

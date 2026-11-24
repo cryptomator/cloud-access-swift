@@ -62,6 +62,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemMetadata(at cloudPath: CloudPath) async throws -> CloudItemMetadata {
 		try Task.checkCancellation()
+		try cloudPath.checkResolvable()
 		return try await getItemMetadata(at: cloudPath)
 	}
 
@@ -92,6 +93,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	@concurrent
 	public func fetchItemList(forFolderAt cloudPath: CloudPath, withPageToken pageToken: String?) async throws -> CloudItemList {
 		try Task.checkCancellation()
+		try cloudPath.checkResolvable()
 		do {
 			if let pageToken {
 				return try directoryContentCache.getPage(for: cloudPath, pageToken: pageToken)
@@ -131,6 +133,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	public func downloadFile(from cloudPath: CloudPath, to localURL: URL, progress: Progress?, onTaskCreation: (@concurrent @Sendable (URLSessionDownloadTask) async -> Void)?) async throws -> CloudItemMetadata {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
+		try cloudPath.checkResolvable()
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
@@ -158,6 +161,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 		precondition(localURL.isFileURL)
 		try Task.checkCancellation()
 		let localFile = try LocalUploadFile(localURL)
+		try cloudPath.checkAsTarget()
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
@@ -192,6 +196,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	@concurrent
 	public func createFolder(at cloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
+		try cloudPath.checkAsTarget()
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
@@ -227,6 +232,7 @@ public final class WebDAVCloudProvider: CloudProvider {
 	}
 
 	private func deleteItem(at cloudPath: CloudPath) async throws {
+		try cloudPath.checkAsSource()
 		guard let url = URL(cloudPath: cloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}
@@ -252,6 +258,8 @@ public final class WebDAVCloudProvider: CloudProvider {
 	}
 
 	private func moveItem(from sourceCloudPath: CloudPath, to targetCloudPath: CloudPath) async throws {
+		try sourceCloudPath.checkAsSource()
+		try targetCloudPath.checkAsTarget()
 		guard let sourceURL = URL(cloudPath: sourceCloudPath, relativeTo: client.baseURL), let targetURL = URL(cloudPath: targetCloudPath, relativeTo: client.baseURL) else {
 			throw WebDAVProviderError.resolvingURLFailed
 		}

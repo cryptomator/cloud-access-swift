@@ -479,6 +479,12 @@ extension UnitTests {
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try GoogleDriveCloudProvider(client: .mocked()) }
 		}
 
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try GoogleDriveCloudProvider(client: .mocked()) }
+		}
+
 		/// A shortcut without its target's type is a symbolic link, which is deleted as a file and never replaced.
 		@Test
 		func shortcutWithoutTargetTypeIsDeletedAsFile() async throws {

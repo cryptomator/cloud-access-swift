@@ -861,6 +861,12 @@ extension UnitTests {
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try MicrosoftGraphCloudProvider(client: .mocked()) }
 		}
 
+		@Test
+		func unresolvablePathsThrowWithoutRequest() async throws {
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try MicrosoftGraphCloudProvider(client: .mocked()) }
+		}
+
 		/// The target is looked up in its folder, so an item that replaced the cached one is found there without a request by the cached identifier.
 		@Test
 		func createFolderJudgesTargetByLookupNotCachedItem() async throws {

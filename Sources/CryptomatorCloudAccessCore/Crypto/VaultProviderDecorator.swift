@@ -169,15 +169,11 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	 Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path. Throws `VaultFormatError.invalidDirectoryReference` before deleting anything if a download reaches one of these dir files through an alias, or if one of them names the root or an ancestor.
 
 	 The folder's directory and those of its subfolders are deleted before its reference, see `CiphertextDirectoryDeletion`. The delete lists the directories below any shortening decorator, and the layout resolves each listed item to the dir IDs it refers to.
-
-	 A path that isn't `isResolvable` also throws `VaultFormatError.invalidDirectoryReference`. With `CloudProviderError.itemNotFound`, `deleteFolderIfExisting` would report success although the folder that the path spells may exist.
 	 */
 	@concurrent
 	func deleteFolder(at cleartextCloudPath: CloudPath) async throws {
 		try Task.checkCancellation()
-		guard cleartextCloudPath != .root else {
-			throw CloudProviderError.itemTypeMismatch
-		}
+		try cleartextCloudPath.checkAsSource()
 		let directory = try await dirIdCache.verifiedDirectory(cleartextCloudPath, readDirId: { try await self.layout.readDirId($0, parentDirId: $1, refusingAlias: true, in: self) }, treatingAsMissing: layout.isMissingDirFile)
 		let referencePath = try layout.folderReferencePath(cleartextCloudPath, parentDirId: directory.parentDirId, in: self)
 		try await layout.checkReferenceBeforeDelete(at: referencePath, dirId: directory.dirId, in: self)

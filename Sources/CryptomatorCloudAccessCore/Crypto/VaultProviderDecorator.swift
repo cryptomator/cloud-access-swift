@@ -166,7 +166,7 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	}
 
 	/**
-	 Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path. Throws `VaultFormatError.invalidDirectoryReference` before deleting anything if a download reaches one of these dir files through an alias, or if one of them names the root or an ancestor.
+	 Reads the dir IDs of the folder and of its ancestors from their dir files instead of the cache, because another device may have moved the folder away and created a new one at its path. Throws `VaultFormatError.invalidDirectoryReference` before deleting anything if a download reaches one of these dir files through an alias, or if one of them names the root or an ancestor. Throws `CloudProviderError.itemTypeMismatch` before deleting anything if the layout confirms a regular file at the name, or finds a shortened file's content in its reference, which is a folder to the provider below.
 
 	 The folder's directory and those of its subfolders are deleted before its reference, see `CiphertextDirectoryDeletion`. The delete lists the directories below any shortening decorator, and the layout resolves each listed item to the dir IDs it refers to.
 	 */
@@ -236,12 +236,20 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 
 	// MARK: - Encryption
 
+	/// Throws `CloudProviderError.itemTypeMismatch` for a file at the path.
 	func dirId(of cleartextPath: CloudPath) async throws -> Data {
-		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.layout.readDirId($0, parentDirId: $1, refusingAlias: false, in: self) })
+		guard case let .directory(dirId) = try await cachedDirIdReadResult(of: cleartextPath) else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		return dirId
 	}
 
+	/// Throws `CloudProviderError.itemNotFound` for a file at the parent's path, because no item lies below a file.
 	func parentDirId(of cleartextPath: CloudPath) async throws -> Data {
-		return try await dirId(of: cleartextPath.deletingLastPathComponent())
+		guard case let .directory(dirId) = try await cachedDirIdReadResult(of: cleartextPath.deletingLastPathComponent()) else {
+			throw CloudProviderError.itemNotFound
+		}
+		return dirId
 	}
 
 	func parentDirId(ofTarget cleartextPath: CloudPath) async throws -> Data {
@@ -261,6 +269,10 @@ final class VaultProviderDecorator<Layout: VaultLayout>: CloudProvider {
 	/// The encrypted name of the item in the directory of the given dir ID.
 	func ciphertextName(of cleartextPath: CloudPath, parentDirId: Data) throws -> String {
 		return try cryptor.encryptFileName(cleartextPath.lastPathComponent, dirId: parentDirId, encoding: layout.fileNameEncoding)
+	}
+
+	private func cachedDirIdReadResult(of cleartextPath: CloudPath) async throws -> DirIdReadResult {
+		return try await dirIdCache.get(cleartextPath, onMiss: { try await self.layout.readDirId($0, parentDirId: $1, refusingAlias: false, in: self) })
 	}
 
 	// MARK: - Decryption

@@ -42,7 +42,7 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.invalidPath) {
 				_ = try await cache.get(CloudPath(path), onMiss: { _, _ in
 					lookups.withLock { $0 += 1 }
-					return Data("ID".utf8)
+					return .directory(Data("ID".utf8))
 				})
 			}
 			#expect(lookups.withLock { $0 } == 0)
@@ -123,7 +123,7 @@ extension UnitTests {
 			let reads = OSAllocatedUnfairLock(initialState: [String]())
 			let directory = try await cache.verifiedDirectory(CloudPath("/one/two/three"), readDirId: { cleartextPath, parentDirId in
 				reads.withLock { $0.append("\(cleartextPath.path) in \(String(bytes: parentDirId, encoding: .utf8)!)") }
-				return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+				return .directory(Data(cleartextPath.lastPathComponent.uppercased().utf8))
 			}, treatingAsMissing: { _ in false })
 
 			#expect(reads.withLock { $0 } == ["/one in ", "/one/two in ONE", "/one/two/three in TWO"])
@@ -139,7 +139,7 @@ extension UnitTests {
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
 				_ = try await cache.verifiedDirectory(CloudPath("/one/two/three"), readDirId: { cleartextPath, _ in
 					reads.withLock { $0.append(cleartextPath.path) }
-					return Data("ONE".utf8)
+					return .directory(Data("ONE".utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			#expect(reads.withLock { $0 } == ["/one", "/one/two"])
@@ -160,7 +160,7 @@ extension UnitTests {
 				guard cleartextPath.lastPathComponent == "one" else {
 					throw CloudProviderError.itemNotFound
 				}
-				return Data("ONE".utf8)
+				return .directory(Data("ONE".utf8))
 			}, treatingAsMissing: { error in error as? CloudProviderError == .itemNotFound })
 
 			#expect(Data("ONE".utf8) == directory.parentDirId)
@@ -174,7 +174,7 @@ extension UnitTests {
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
 				_ = try await cache.verifiedDirectory(.root, readDirId: { _, _ in
 					reads.withLock { $0 += 1 }
-					return Data("ID".utf8)
+					return .directory(Data("ID".utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			#expect(reads.withLock { $0 } == 0)
@@ -186,7 +186,7 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.invalidPath) {
 				_ = try await cache.verifiedDirectory(CloudPath(path), readDirId: { _, _ in
 					reads.withLock { $0 += 1 }
-					return Data("ID".utf8)
+					return .directory(Data("ID".utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			#expect(reads.withLock { $0 } == 0)
@@ -201,7 +201,7 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) {
 				_ = try await cache.verifiedDirectory(CloudPath(path), readDirId: { cleartextPath, _ in
 					reads.withLock { $0.append(cleartextPath.path) }
-					return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+					return .directory(Data(cleartextPath.lastPathComponent.uppercased().utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			#expect(reads.withLock { $0 } == ["/one"])
@@ -213,7 +213,7 @@ extension UnitTests {
 		func verifiedDirectoryWithDirIdRepeatingContainingOneThrowsInvalidDirectoryReference(repeatedDirId: String) async throws {
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) {
 				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
-					return Data((cleartextPath.lastPathComponent == "one" ? "ONE" : repeatedDirId).utf8)
+					return .directory(Data((cleartextPath.lastPathComponent == "one" ? "ONE" : repeatedDirId).utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			#expect(try cache.get(CloudPath("/one/two")) == nil)
@@ -229,7 +229,7 @@ extension UnitTests {
 					if cleartextPath.path == cancelledReadPath {
 						withUnsafeCurrentTask { $0?.cancel() }
 					}
-					return Data(cleartextPath.lastPathComponent.uppercased().utf8)
+					return .directory(Data(cleartextPath.lastPathComponent.uppercased().utf8))
 				}, treatingAsMissing: { _ in false })
 			}
 			await #expect(throws: CancellationError.self) { try await cancellingValue(of: verification) }
@@ -239,6 +239,26 @@ extension UnitTests {
 			} else {
 				#expect(try cache.get(CloudPath("/one/two")) == nil)
 			}
+		}
+
+		/// A read that confirms a file in a cancelled task changes nothing, although it would invalidate the path.
+		@Test(arguments: ["/one", "/one/two"])
+		func verifiedDirectoryCancelledDuringConfirmingReadKeepsCache(confirmingReadPath: String) async throws {
+			try cache.addOrUpdate(CloudPath("/one"), dirId: Data("ONE".utf8))
+			try cache.addOrUpdate(CloudPath("/one/two"), dirId: Data("TWO".utf8))
+			let cache: DirectoryIdCache = cache
+			let verification = Task {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
+					guard cleartextPath.path == confirmingReadPath else {
+						return .directory(Data(cleartextPath.lastPathComponent.uppercased().utf8))
+					}
+					withUnsafeCurrentTask { $0?.cancel() }
+					return .confirmedFile
+				}, treatingAsMissing: { _ in true })
+			}
+			await #expect(throws: CancellationError.self) { try await cancellingValue(of: verification) }
+			#expect(try Data("ONE".utf8) == cache.get(CloudPath("/one")))
+			#expect(try Data("TWO".utf8) == cache.get(CloudPath("/one/two")))
 		}
 
 		@Test
@@ -264,11 +284,60 @@ extension UnitTests {
 					}
 				}()
 				misses.withLock { $0.append(dirId) }
-				return Data(dirId.utf8)
+				return .directory(Data(dirId.utf8))
 			})
-			#expect(Data("THREE".utf8) == data)
+			#expect(.directory(Data("THREE".utf8)) == data)
 
 			#expect(misses.withLock { $0 } == ["ONE", "TWO", "THREE"])
+		}
+
+		@Test
+		func getBelowConfirmedFileThrowsItemNotFound() async throws {
+			let misses = OSAllocatedUnfairLock(initialState: [String]())
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				_ = try await cache.get(CloudPath("/one/two"), onMiss: { cleartextPath, _ in
+					misses.withLock { $0.append(cleartextPath.path) }
+					return .confirmedFile
+				})
+			}
+			#expect(misses.withLock { $0 } == ["/one"])
+			#expect(try cache.get(CloudPath("/one")) == nil)
+		}
+
+		@Test
+		func getOfConfirmedFileReturnsItWithoutCaching() async throws {
+			let result = try await cache.get(CloudPath("/one"), onMiss: { _, _ in .confirmedFile })
+			#expect(result == .confirmedFile)
+			#expect(try cache.get(CloudPath("/one")) == nil)
+		}
+
+		/// Another device replaced the cached folder `/one` with a file.
+		@Test
+		func verifiedDirectoryBelowConfirmedFileInvalidatesItAndThrowsItemNotFound() async throws {
+			try cache.addOrUpdate(CloudPath("/one"), dirId: Data("ONE".utf8))
+			try cache.addOrUpdate(CloudPath("/one/two"), dirId: Data("TWO".utf8))
+			let reads = OSAllocatedUnfairLock(initialState: [String]())
+			await #expect(throws: CloudProviderError.itemNotFound) {
+				_ = try await cache.verifiedDirectory(CloudPath("/one/two"), readDirId: { cleartextPath, _ in
+					reads.withLock { $0.append(cleartextPath.path) }
+					return .confirmedFile
+				}, treatingAsMissing: { _ in true })
+			}
+			#expect(reads.withLock { $0 } == ["/one"])
+			#expect(try cache.get(CloudPath("/one")) == nil)
+			#expect(try cache.get(CloudPath("/one/two")) == nil)
+		}
+
+		/// A confirmed file never counts as a missing dir file, which would let the delete go on.
+		@Test
+		func verifiedDirectoryOfConfirmedFileInvalidatesItAndThrowsItemTypeMismatch() async throws {
+			try cache.addOrUpdate(CloudPath("/one"), dirId: Data("ONE".utf8))
+			try cache.addOrUpdate(CloudPath("/one/sub"), dirId: Data("SUB".utf8))
+			await #expect(throws: CloudProviderError.itemTypeMismatch) {
+				_ = try await cache.verifiedDirectory(CloudPath("/one"), readDirId: { _, _ in .confirmedFile }, treatingAsMissing: { _ in true })
+			}
+			#expect(try cache.get(CloudPath("/one")) == nil)
+			#expect(try cache.get(CloudPath("/one/sub")) == nil)
 		}
 	}
 }

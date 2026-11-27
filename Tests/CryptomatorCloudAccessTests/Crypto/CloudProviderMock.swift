@@ -58,6 +58,7 @@ public final class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		var transferHook: (@Sendable (CloudPath, Progress?) async throws -> Void)?
 		var mutationHook: (@Sendable () -> Void)?
 		var metadataHook: (@Sendable (CloudPath) throws -> Void)?
+		var downloadHook: (@Sendable (CloudPath) throws -> Void)?
 		var metadataOverride: (@Sendable (CloudPath) throws -> CloudItemMetadata?)?
 		var moveHook: (@Sendable () throws -> Void)?
 		var listingHook: (@Sendable (CloudPath, String?) throws -> Void)?
@@ -170,6 +171,12 @@ public final class CloudProviderMock: CloudProvider, @unchecked Sendable {
 	var metadataHook: (@Sendable (CloudPath) throws -> Void)? {
 		get { state.withLock { $0.metadataHook } }
 		set { state.withLock { $0.metadataHook = newValue } }
+	}
+
+	/// Runs before a download looks up its item, which fails with the error that the hook throws, e.g., to model a stale cached ID whose item the provider no longer finds.
+	var downloadHook: (@Sendable (CloudPath) throws -> Void)? {
+		get { state.withLock { $0.downloadHook } }
+		set { state.withLock { $0.downloadHook = newValue } }
 	}
 
 	/// Runs after `metadataHook` and returns the metadata of an item instead of the provider's, which it falls back to for `nil`. An error that it throws fails the call.
@@ -319,6 +326,7 @@ public final class CloudProviderMock: CloudProvider, @unchecked Sendable {
 		precondition(localURL.isFileURL)
 		record("downloadFile")
 		try Task.checkCancellation()
+		try downloadHook?(cloudPath)
 		let item = try state.withLock { try $0.item(at: cloudPath.path) }
 		guard let data = item.data else {
 			throw CloudProviderError.itemTypeMismatch

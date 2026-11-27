@@ -35,20 +35,17 @@ struct VaultFormat6Layout: VaultLayout {
 		return .base32
 	}
 
-	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultFormat6ProviderDecorator) async throws -> Data {
+	/// The file of the name is read below the shortening decorator, because that one takes a `.lng` item's type from the original name instead of the physical item.
+	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultFormat6ProviderDecorator) async throws -> DirIdReadResult {
 		let folderCiphertextPath = try folderReferencePath(cleartextPath, parentDirId: parentDirId, in: decorator)
 		do {
-			return try await decorator.delegate.downloadDirFile(at: folderCiphertextPath, refusingAlias: refusingAlias)
+			return try await .directory(decorator.delegate.downloadDirFile(at: folderCiphertextPath, refusingAlias: refusingAlias))
 		} catch CloudProviderError.itemNotFound {
 			let fileCiphertextPath = try fileCiphertextPath(cleartextPath, parentDirId: parentDirId, in: decorator)
+			let physicalPath = decorator.shortening?.shortenedNameCache.getShortenedPath(fileCiphertextPath).cloudPath ?? fileCiphertextPath
 			try Task.checkCancellation()
-			if try await decorator.delegate.checkForItemExistence(at: fileCiphertextPath) {
-				// ciphertext file exists but ciphertext folder (with `0` prefix) does not
-				// symlink existence check has been omitted for simplicity
-				throw CloudProviderError.itemTypeMismatch
-			} else {
-				throw CloudProviderError.itemNotFound
-			}
+			// A symlink's `1S` name isn't probed, so a path below a symlink throws `itemNotFound`.
+			return try await decorator.physicalProvider.confirmFile(at: physicalPath)
 		}
 	}
 

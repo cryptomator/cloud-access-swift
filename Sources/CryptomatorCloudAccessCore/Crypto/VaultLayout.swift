@@ -15,6 +15,32 @@ protocol VaultShorteningDecorator: CloudProvider {
 	var delegate: CloudProvider { get }
 }
 
+/// What reading a folder's dir file found at the folder's path.
+enum DirIdReadResult: Equatable {
+	/// The dir ID that the folder's dir file holds.
+	case directory(Data)
+	/// No dir file, but a regular file of the name, so that a path below it names no item.
+	case confirmedFile
+}
+
+extension CloudItemMetadata {
+	/// Whether the item reports the name of the path it was read at, compared by bytes. A provider that resolves paths through cached IDs can reach another item, which reports its own name. `String` equality would take a canonically equivalent spelling for the name.
+	func reportsName(of cloudPath: CloudPath) -> Bool {
+		return name.utf8.elementsEqual(cloudPath.lastPathComponent.utf8)
+	}
+}
+
+extension CloudProvider {
+	/// Confirms a regular file at the path from its metadata, which must report a file of the path's name. Throws `CloudProviderError.itemTypeMismatch` for any other item, e.g., a symlink, a folder whose dir file a stale cached ID can't reach, or another item that a stale cached ID reaches. A failed read throws its error unchanged.
+	func confirmFile(at cloudPath: CloudPath) async throws -> DirIdReadResult {
+		let metadata = try await fetchItemMetadata(at: cloudPath)
+		guard metadata.itemType == .file, metadata.reportsName(of: cloudPath) else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		return .confirmedFile
+	}
+}
+
 /**
  The ciphertext layout of a vault format: how `VaultProviderDecorator` names, reads and writes the ciphertext items of a cleartext item.
 
@@ -28,8 +54,14 @@ protocol VaultLayout: Sendable {
 	/// The encoding of the encrypted names.
 	var fileNameEncoding: FileNameEncoding { get }
 
-	/// Reads the dir ID of a folder from its dir file, after the cache missed it or bypassing the cache.
-	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultProviderDecorator<Self>) async throws -> Data
+	/**
+	 Reads the dir ID of a folder from its dir file, after the cache missed it or bypassing the cache.
+
+	 Without a dir file, it confirms a regular file of the name only from physical evidence read below any shortening decorator. That is metadata that reports a file of the read path's name, or, for a shortened item that the format keeps in a folder, a complete listing of that folder whose item files all hold the file's content.
+
+	 - Throws: `CloudProviderError.itemNotFound` if the vault finds no item of the name. A file at a `.c9s` name, a `.c9s` without an item file and a VF6 symlink, whose `1S` name isn't probed, count as none. `CloudProviderError.itemTypeMismatch` if an item exists that is no confirmed file, e.g., a symlink, or a folder whose dir file a stale cached ID can't reach. `VaultFormatError.invalidDirectoryReference` if `refusingAlias` is set and the dir file is read through an alias.
+	 */
+	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultProviderDecorator<Self>) async throws -> DirIdReadResult
 
 	func fileCiphertextPath(_ cleartextPath: CloudPath, parentDirId: Data, in decorator: VaultProviderDecorator<Self>) throws -> CloudPath
 

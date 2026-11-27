@@ -49,15 +49,24 @@ final class DirectoryIdCache: Sendable {
 		}
 	}
 
-	func get(_ cleartextPath: CloudPath, onMiss: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data) async throws -> Data {
+	/**
+	 Returns the folder's cached dir ID, or else what `onMiss` finds at the folder's path in its parent's directory, which can be a confirmed file. Only a dir ID is cached.
+
+	 - Throws: `CloudProviderError.itemNotFound` if `onMiss` confirms a file at an ancestor's path. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). Any error of `onMiss` unchanged.
+	 */
+	func get(_ cleartextPath: CloudPath, onMiss: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> DirIdReadResult) async throws -> DirIdReadResult {
 		try cleartextPath.checkResolvable()
 		if let cached = try get(cleartextPath) {
-			return cached
+			return .directory(cached)
 		}
-		let parentDirId = try await get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss)
-		let dirId = try await onMiss(cleartextPath, parentDirId)
-		try addOrUpdate(cleartextPath, dirId: dirId)
-		return dirId
+		guard case let .directory(parentDirId) = try await get(cleartextPath.deletingLastPathComponent(), onMiss: onMiss) else {
+			throw CloudProviderError.itemNotFound
+		}
+		let result = try await onMiss(cleartextPath, parentDirId)
+		if case let .directory(dirId) = result {
+			try addOrUpdate(cleartextPath, dirId: dirId)
+		}
+		return result
 	}
 
 	/**
@@ -66,9 +75,9 @@ final class DirectoryIdCache: Sendable {
 	 Cancellation is checked after each read, so that a call cancelled during a read throws without changing the cache, even if the read succeeded, and a caller can commit right after it returns.
 
 	 - Parameter isMissing: Whether an error of reading the folder's own dir file means that the folder has none, e.g., because it's gone.
-	 - Throws: `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, after invalidating the path and its descendants, so that the caller looks the folder up again. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path is the root. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). Any other error of a read unchanged, e.g., `CloudProviderError.itemNotFound` for a missing ancestor's dir file.
+	 - Throws: `CloudProviderError.itemNotFound` if the cache holds another dir ID for a path, or if a read confirms a file at an ancestor's path. That path and its descendants are invalidated first, so that the caller looks the folder up again. `CloudProviderError.itemTypeMismatch` if a read confirms a file at the folder's own path, after invalidating the path and its descendants. `VaultFormatError.invalidDirectoryReference` if a dir ID repeats the root's or an ancestor's, or if the path is the root. `CloudProviderError.invalidPath` if the path isn't `isResolvable` (e.g., `/..`). Any other error of a read unchanged, e.g., `CloudProviderError.itemNotFound` for a missing ancestor's dir file.
 	 */
-	func verifiedDirectory(_ cleartextPath: CloudPath, readDirId: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> Data, treatingAsMissing isMissing: (Error) -> Bool) async throws -> VerifiedDirectory {
+	func verifiedDirectory(_ cleartextPath: CloudPath, readDirId: @Sendable (_ cleartextPath: CloudPath, _ parentDirId: Data) async throws -> DirIdReadResult, treatingAsMissing isMissing: (Error) -> Bool) async throws -> VerifiedDirectory {
 		try cleartextPath.checkResolvable()
 		guard cleartextPath != .root else {
 			throw VaultFormatError.invalidDirectoryReference
@@ -77,23 +86,33 @@ final class DirectoryIdCache: Sendable {
 		var ancestorPath = CloudPath.root
 		for component in cleartextPath.pathComponents.dropFirst().dropLast() {
 			ancestorPath = ancestorPath.appendingPathComponent(component)
-			let dirId = try await readDirId(ancestorPath, containingDirIds[containingDirIds.count - 1])
+			guard case let .directory(dirId) = try await readDirId(ancestorPath, containingDirIds[containingDirIds.count - 1]) else {
+				try Task.checkCancellation()
+				try invalidate(ancestorPath)
+				throw CloudProviderError.itemNotFound
+			}
 			try addVerified(ancestorPath, dirId: dirId, containingDirIds: containingDirIds)
 			containingDirIds.append(dirId)
 		}
 		let parentDirId = containingDirIds[containingDirIds.count - 1]
-		let dirId: Data?
+		let result: DirIdReadResult?
 		do {
-			dirId = try await readDirId(cleartextPath, parentDirId)
+			result = try await readDirId(cleartextPath, parentDirId)
 		} catch where isMissing(error) {
-			dirId = nil
+			result = nil
 		}
-		if let dirId {
+		switch result {
+		case let .directory(dirId):
 			try addVerified(cleartextPath, dirId: dirId, containingDirIds: containingDirIds)
-		} else {
+			return VerifiedDirectory(parentDirId: parentDirId, dirId: dirId, containingDirIds: Set(containingDirIds))
+		case .confirmedFile:
 			try Task.checkCancellation()
+			try invalidate(cleartextPath)
+			throw CloudProviderError.itemTypeMismatch
+		case nil:
+			try Task.checkCancellation()
+			return VerifiedDirectory(parentDirId: parentDirId, dirId: nil, containingDirIds: Set(containingDirIds))
 		}
-		return VerifiedDirectory(parentDirId: parentDirId, dirId: dirId, containingDirIds: Set(containingDirIds))
 	}
 
 	/// Caches a dir ID that was just read from its dir file, after checking cancellation, the cached dir ID and the containing dir IDs as `verifiedDirectory` documents.

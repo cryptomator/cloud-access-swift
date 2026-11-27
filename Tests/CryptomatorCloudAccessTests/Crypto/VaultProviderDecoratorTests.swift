@@ -860,6 +860,88 @@ extension UnitTests {
 			#expect(fixture.provider.moved == [:])
 		}
 
+		// MARK: - Parent Files
+
+		/// The calls that change a vault mock's items.
+		private static let mutationCalls: Set = ["uploadFile", "createFolder", "moveFile", "moveFolder", "deleteFile", "deleteFolder"]
+
+		/// The paths below a file of the vault mocks that the stacking can address. `File 4 (Long)` exists only in shortened form, so only the shortening stacking reaches it.
+		private static func pathsBelowFile(for stacking: Stacking) -> [CloudPath] {
+			return [CloudPath("/File 1/File 3")] + (stacking == .shortening ? [CloudPath("/File 4 (Long)/File 3")] : [])
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, PathCheckingOperation.allCases)
+		func operationBelowFileThrows(format: VaultTestFormat, operation: PathCheckingOperation) async throws {
+			for stacking in Stacking.allCases {
+				for cloudPath in Self.pathsBelowFile(for: stacking) {
+					let fixture = try format.makeFixture(stacking: stacking)
+					await #expect(throws: operation.missingParentError, "\(stacking) \(cloudPath.path)") {
+						try await operation.run(on: fixture.decorator, at: cloudPath, localDirectoryURL: tmpDirURL)
+					}
+					#expect(Self.mutationCalls.isDisjoint(with: fixture.provider.calls), "\(stacking) \(cloudPath.path)")
+				}
+			}
+		}
+
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func readsAndDeletesBelowFileReportAbsence(format: VaultTestFormat, stacking: Stacking) async throws {
+			for cloudPath in Self.pathsBelowFile(for: stacking) {
+				let fixture = try format.makeFixture(stacking: stacking)
+				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemMetadata(at: cloudPath) }
+				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.fetchItemList(forFolderAt: cloudPath, withPageToken: nil) }
+				await #expect(throws: CloudProviderError.itemNotFound, "\(cloudPath.path)") { try await fixture.decorator.deleteFolder(at: cloudPath) }
+				let exists = try await fixture.decorator.checkForItemExistence(at: cloudPath)
+				#expect(!exists, "\(cloudPath.path)")
+				try await fixture.decorator.deleteFileIfExisting(at: cloudPath)
+				try await fixture.decorator.deleteFolderIfExisting(at: cloudPath)
+				#expect(Self.mutationCalls.isDisjoint(with: fixture.provider.calls), "\(cloudPath.path)")
+			}
+		}
+
+		/// A symlink or an item of unknown type at a file's ciphertext name is no file, whatever name it reports.
+		@Test(arguments: VaultTestFormat.allCases, [CloudItemType.symlink, .unknown])
+		func readBelowNonFileAtFileNameThrowsItemTypeMismatch(format: VaultTestFormat, itemType: CloudItemType) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			fixture.provider.metadataOverride = CloudProviderMock.reading([itemType], at: format.filePath("file1", in: VaultTestFormat.rootDirectory))
+			let belowPath = CloudPath("/File 1/File 3")
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.fetchItemMetadata(at: belowPath) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.deleteFolderIfExisting(at: belowPath) }
+		}
+
+		/// A shortened file is a `.c9s` folder in vault format 7, which the provider below would delete as a folder.
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func deleteFolderAndListingOfFileThrowItemTypeMismatch(format: VaultTestFormat, stacking: Stacking) async throws {
+			let filePaths = [CloudPath("/File 1")] + (stacking == .shortening ? [CloudPath("/File 4 (Long)")] : [])
+			for cloudPath in filePaths {
+				let fixture = try format.makeFixture(stacking: stacking)
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(cloudPath.path)") { try await fixture.decorator.deleteFolder(at: cloudPath) }
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(cloudPath.path)") { try await fixture.decorator.fetchItemList(forFolderAt: cloudPath, withPageToken: nil) }
+				#expect(Self.mutationCalls.isDisjoint(with: fixture.provider.calls), "\(cloudPath.path)")
+			}
+		}
+
+		/// Another device replaced the folder `Directory 1` with a file after its dir ID and that of `Directory 2` were cached. A bypassing read drops them, so that a later listing doesn't list the cached directory.
+		@Test(arguments: VaultTestFormat.allCases)
+		func deleteFolderBelowFolderReplacedByFileDropsCachedDirIds(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			let folderPath = CloudPath("/Directory 1/Directory 2")
+			_ = try await fixture.decorator.fetchItemList(forFolderAt: folderPath, withPageToken: nil)
+			let referencePath = CloudPath(format.referencePath("dir1", in: VaultTestFormat.rootDirectory))
+			switch format {
+			case .vf6:
+				try await fixture.provider.deleteFile(at: referencePath)
+			case .vf7:
+				try await fixture.provider.deleteFolder(at: referencePath)
+			}
+			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			try Data("ciphertext1".utf8).write(to: localURL)
+			_ = try await fixture.provider.uploadFile(from: localURL, to: CloudPath(format.filePath("dir1", in: VaultTestFormat.rootDirectory)), replaceExisting: false)
+			let callCount = fixture.provider.calls.count
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.deleteFolder(at: folderPath) }
+			#expect(Self.mutationCalls.isDisjoint(with: fixture.provider.calls.dropFirst(callCount)))
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemList(forFolderAt: folderPath, withPageToken: nil) }
+		}
+
 		// MARK: - Requests
 
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
@@ -868,6 +950,30 @@ extension UnitTests {
 			let requests = fixture.provider.recordingRequests()
 			_ = try await fixture.decorator.fetchItemMetadata(at: CloudPath("/Directory 1/File 3"))
 			#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata"], metadataReads: [format.filePath("file3", in: VaultTestFormat.directory1)], transfers: [format.dirFilePath("dir1", in: VaultTestFormat.rootDirectory)]))
+		}
+
+		/// The mock records a transfer only for a file it holds, so the download of the missing dir file records none.
+		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
+		func fetchItemMetadataBelowFileRequests(format: VaultTestFormat, stacking: Stacking) async throws {
+			let fixture = try format.makeFixture(stacking: stacking)
+			let requests = fixture.provider.recordingRequests()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemMetadata(at: CloudPath("/File 1/File 3")) }
+			#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata"], metadataReads: [format.filePath("file1", in: VaultTestFormat.rootDirectory)]))
+		}
+
+		/// Vault format 6 reads the physical `.lng` file, and vault format 7 reads the `.c9s` folder and lists it.
+		@Test(arguments: VaultTestFormat.allCases)
+		func fetchItemMetadataBelowShortenedFileRequests(format: VaultTestFormat) async throws {
+			let fixture = try format.makeFixture(stacking: .shortening)
+			let requests = fixture.provider.recordingRequests()
+			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.fetchItemMetadata(at: CloudPath("/File 4 (Long)/File 3")) }
+			switch format {
+			case .vf6:
+				#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata"], metadataReads: ["\(VaultTestFormat.rootDirectory)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"]))
+			case .vf7:
+				let c9sPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
+				#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata", "fetchItemList"], metadataReads: [c9sPath], listings: [c9sPath]))
+			}
 		}
 
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)

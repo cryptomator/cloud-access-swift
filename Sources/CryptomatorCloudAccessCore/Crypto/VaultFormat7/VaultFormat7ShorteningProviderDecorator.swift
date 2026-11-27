@@ -15,6 +15,19 @@ private func isLeftOutOfListing(_ error: Error) -> Bool {
 	return isInvalidNameFile(error) || error is C9SItemFileMissing
 }
 
+func guessItemTypeByC9SItemName(_ c9sItemName: String) -> CloudItemType {
+	switch c9sItemName {
+	case "contents.c9r":
+		return .file
+	case "dir.c9r":
+		return .folder
+	case "symlink.c9r":
+		return .symlink
+	default:
+		return .unknown
+	}
+}
+
 private extension CloudPath {
 	func appendingNameFileComponent() -> CloudPath {
 		return appendingPathComponent("name.c9s")
@@ -280,19 +293,6 @@ final class VaultFormat7ShorteningProviderDecorator: VaultShorteningDecorator {
 			pageToken = c9sItemList.nextPageToken
 		} while pageToken != nil
 		throw C9SItemFileMissing()
-	}
-
-	private func guessItemTypeByC9SItemName(_ c9sItemName: String) -> CloudItemType {
-		switch c9sItemName {
-		case "contents.c9r":
-			return .file
-		case "dir.c9r":
-			return .folder
-		case "symlink.c9r":
-			return .symlink
-		default:
-			return .unknown
-		}
 	}
 
 	/**

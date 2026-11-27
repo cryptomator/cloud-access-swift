@@ -254,6 +254,42 @@ extension UnitTests {
 			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
 		}
 
+		// MARK: - Parent Files
+
+		/// A folder at a file's ciphertext name, without a `0`-prefixed dir file, is no file either, so a path below it keeps `itemTypeMismatch`.
+		@Test(arguments: Stacking.allCases)
+		func readBelowFolderAtFileNameThrowsItemTypeMismatch(stacking: Stacking) async throws {
+			var cases = [(cleartextPath: "/File 1", physicalPath: "\(VaultTestFormat.rootDirectory)/file1")]
+			if stacking == .shortening {
+				cases.append((cleartextPath: "/File 4 (Long)", physicalPath: "\(VaultTestFormat.rootDirectory)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"))
+			}
+			for (cleartextPath, physicalPath) in cases {
+				let fixture = CloudProviderMock.vaultFormat6()
+				let provider = CloudProviderMock(folders: fixture.folders.union([physicalPath]), files: fixture.files.filter { $0.key != physicalPath })
+				let decorator = stacking == .plain ? try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor) : try makeShorteningDecorator(over: provider)
+				let belowPath = CloudPath(cleartextPath).appendingPathComponent("File 3")
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(cleartextPath)") { try await decorator.fetchItemMetadata(at: belowPath) }
+				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(cleartextPath)") { try await decorator.deleteFolderIfExisting(at: belowPath) }
+			}
+		}
+
+		/// The `.lng` name holds a `K`, which the provider reports as U+212A KELVIN SIGN, a canonically equivalent spelling. A stale cached ID can reach another item, so only the same bytes confirm the file.
+		@Test
+		func readBelowFileReportingEquivalentNameThrowsItemTypeMismatch() async throws {
+			let lngPath = CloudPath("\(VaultTestFormat.rootDirectory)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng")
+			let reportedName = "2QODSHBUSLEFQ6UELQ45E\u{212A}J27HTAMZPH.lng"
+			#expect(reportedName == lngPath.lastPathComponent)
+			let provider = CloudProviderMock.vaultFormat6()
+			provider.metadataOverride = { cloudPath in
+				guard cloudPath.path == lngPath.path else {
+					return nil
+				}
+				return CloudItemMetadata(name: reportedName, cloudPath: cloudPath, itemType: .file, lastModifiedDate: nil, size: nil)
+			}
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await decorator.fetchItemMetadata(at: CloudPath("/File 4 (Long)/File 3")) }
+		}
+
 		// MARK: - Internal
 
 		/// Returns a provider that holds `Directory 1`, the given dir files (by path below `pathToVault/d` and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.

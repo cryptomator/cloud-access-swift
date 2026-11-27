@@ -35,6 +35,8 @@ extension UnitTests {
 		let vaultPath = CloudPath("pathToVault")
 		let cryptor = CryptorMock.vaultFormat7()
 		let tmpDirURL: URL
+		/// The `.c9s` of `File 4 (Long)` in the vault mock.
+		static let shortenedFileC9SPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
 
 		init() throws {
 			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -271,8 +273,8 @@ extension UnitTests {
 			#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata", "fetchItemList", "deleteFolder"], metadataReads: [c9rPath], listings: [c9rPath], deleted: [c9rPath]))
 		}
 
-		/// Only a `dir.c9r` file holds a dir ID, so a `.c9r` without one is deleted without a walk.
-		@Test(arguments: zip([["symlink.c9r"], []], [[], ["dir.c9r"]]))
+		/// Only a `dir.c9r` file holds a dir ID, so a `.c9r` without one is deleted without a walk. A `contents.c9r` holds a file only in a `.c9s`.
+		@Test(arguments: zip([["symlink.c9r"], [], ["contents.c9r"]], [[], ["dir.c9r"], []]))
 		func deleteFolderWithoutDirFileDeletesReference(files: [String], folders: [String]) async throws {
 			let provider = makeBrokenFolderProvider(files: files, folders: folders)
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
@@ -317,7 +319,198 @@ extension UnitTests {
 			#expect(provider.deleted == [])
 		}
 
+		// MARK: - Parent Files
+
+		/// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing, so the listed `dir.c9r`, also an alias, shows that the `.c9s` isn't a file.
+		@Test(arguments: [false, true], [false, true])
+		func readBelowC9SWithUnreadableDirFileThrowsItemTypeMismatch(isAlias: Bool, reversesPages: Bool) async throws {
+			let provider = makeShortenedFileProvider(files: ["contents.c9r", "dir.c9r"], aliases: isAlias ? ["dir.c9r"] : [], reversesPages: reversesPages)
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.lastPathComponent == "dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			try await expectItemTypeMismatch(below: CloudPath("/File 4 (Long)"), of: makeShorteningDecorator(over: provider))
+		}
+
+		/// Only a `.c9s` whose item files are all `contents.c9r` files holds a file. Where it also holds a `contents.c9r` file, the other item file lies on a later page, so the first page can't settle it. The download of a `dir.c9r` fails as through a stale cached ID, because the provider would refuse a download of a `dir.c9r` folder before the classification.
+		@Test(arguments: zip([["symlink.c9r"], [], ["contents.c9r", "symlink.c9r"], ["contents.c9r"]], [[], ["contents.c9r"], [], ["dir.c9r"]]))
+		func readBelowC9SHoldingNotOnlyFileThrowsItemTypeMismatch(files: [String], folders: [String]) async throws {
+			let provider = makeShortenedFileProvider(files: files, folders: folders, maxPageSize: 1)
+			provider.downloadHook = { cloudPath in
+				if cloudPath.lastPathComponent == "dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			try await expectItemTypeMismatch(below: CloudPath("/File 4 (Long)"), of: makeShorteningDecorator(over: provider))
+		}
+
+		/// The listing of the `.c9s` ends before it shows whether the `dir.c9r` on its second page exists.
+		@Test
+		func readBelowC9SWhoseLaterPageIsMissingThrowsItemTypeMismatch() async throws {
+			let provider = makeShortenedFileProvider(files: ["contents.c9r", "dir.c9r"], maxPageSize: 1)
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.lastPathComponent == "dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let laterPageRequested = TestSignal("later page of the .c9s requested")
+			let c9sPath = Self.shortenedFileC9SPath
+			provider.listingHook = { cloudPath, pageToken in
+				if cloudPath.path == c9sPath, pageToken != nil {
+					laterPageRequested.fulfill()
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await decorator.fetchItemMetadata(at: CloudPath("/File 4 (Long)/File 3")) }
+			#expect(laterPageRequested.fulfillmentCount == 1)
+		}
+
+		/// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing, while the `.c9r` is still a folder.
+		@Test
+		func readBelowFolderWithUnreadableDirFileThrowsItemTypeMismatch() async throws {
+			let provider = CloudProviderMock.vaultFormat7()
+			provider.transferHook = { cloudPath, _ in
+				if cloudPath.path == "\(VaultTestFormat.rootDirectory)/dir1.c9r/dir.c9r" {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			try await expectItemTypeMismatch(below: CloudPath("/Directory 1"), of: VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor))
+		}
+
+		/// A stale cached ID can reach another item, which reports its own name.
+		@Test(arguments: zip(["/File 1", "/File 4 (Long)"], ["\(VaultTestFormat.rootDirectory)/file1.c9r", VaultFormat7ProviderDecoratorTests.shortenedFileC9SPath]))
+		func readBelowItemReportingAnotherNameThrowsItemTypeMismatch(cleartextPath: String, physicalPath: String) async throws {
+			let provider = CloudProviderMock.vaultFormat7()
+			provider.metadataOverride = { cloudPath in
+				guard cloudPath.path == physicalPath else {
+					return nil
+				}
+				let itemType: CloudItemType = physicalPath.hasUTF8Suffix(".c9s") ? .folder : .file
+				return CloudItemMetadata(name: "renamed", cloudPath: cloudPath, itemType: itemType, lastModifiedDate: nil, size: nil)
+			}
+			try await expectItemTypeMismatch(below: CloudPath(cleartextPath), of: makeShorteningDecorator(over: provider))
+		}
+
+		/// S3 reports an object at the `.c9s` key as a file while the `.c9s` prefix holds items, and a LocalFS or Google Drive `.c9s` can read as a symlink or of unknown type, so the listing decides. A folder delete refuses the shortened file, because deleting its `.c9s` would delete the file. A path below it names no item.
+		@Test(arguments: [CloudItemType.file, .symlink, .unknown])
+		func deleteFolderOfShortenedFileWhoseC9SReadsAsNoFolderThrowsItemTypeMismatch(itemType: CloudItemType) async throws {
+			let provider = CloudProviderMock.vaultFormat7()
+			provider.metadataOverride = CloudProviderMock.reading([itemType], at: Self.shortenedFileC9SPath)
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await decorator.deleteFolder(at: CloudPath("/File 4 (Long)")) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.fetchItemMetadata(at: CloudPath("/File 4 (Long)/File 3")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// A `.c9s` that reads as a file isn't confirmed as one if its listing shows another item file.
+		@Test
+		func readBelowC9SReadingAsFileHoldingSymlinkThrowsItemTypeMismatch() async throws {
+			let provider = makeShortenedFileProvider(files: ["symlink.c9r"])
+			provider.metadataOverride = CloudProviderMock.reading([.file], at: Self.shortenedFileC9SPath)
+			try await expectItemTypeMismatch(below: CloudPath("/File 4 (Long)"), of: makeShorteningDecorator(over: provider))
+		}
+
+		/// Another item file than a `contents.c9r` file on the first page doesn't end the listing, so the failure of a later page reaches the caller.
+		@Test
+		func readBelowC9SWithOtherItemFileThrowsLaterPageFailure() async throws {
+			let provider = makeShortenedFileProvider(folders: ["contents.c9r"], maxPageSize: 1)
+			let c9sPath = Self.shortenedFileC9SPath
+			provider.listingHook = { cloudPath, pageToken in
+				if cloudPath.path == c9sPath, pageToken != nil {
+					throw CloudProviderError.noInternetConnection
+				}
+			}
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await decorator.fetchItemMetadata(at: CloudPath("/File 4 (Long)/File 3")) }
+		}
+
+		/// A shortened file whose `.c9s` can't be confirmed is refused by the delete's lookup of its `contents.c9r`: a stale cached ID reaches the `.c9s` under another name after another client renamed it, a later page of the confirming listing fails, or every listing of the `.c9s` fails, as a listing that leaves the file out would.
+		@Test(arguments: ["renamed", "laterPageFailsOnce", "listingFails"])
+		func deleteFolderOfUnconfirmedShortenedFileThrowsItemTypeMismatch(unconfirmedBy cause: String) async throws {
+			let provider = makeShortenedFileProvider(files: ["contents.c9r"], maxPageSize: cause == "laterPageFailsOnce" ? 1 : .max)
+			let c9sPath = Self.shortenedFileC9SPath
+			let failedListings = OSAllocatedUnfairLock(initialState: 0)
+			if cause == "renamed" {
+				provider.metadataOverride = { cloudPath in
+					return cloudPath.path == c9sPath ? CloudItemMetadata(name: "renamed.c9s", cloudPath: cloudPath, itemType: .folder, lastModifiedDate: nil, size: nil) : nil
+				}
+			} else {
+				provider.listingHook = { cloudPath, pageToken in
+					guard cloudPath.path == c9sPath, cause == "listingFails" || pageToken != nil else {
+						return
+					}
+					let isFirstFailure = failedListings.withLock { count in
+						defer { count += 1 }
+						return count == 0
+					}
+					if cause == "listingFails" || isFirstFailure {
+						throw CloudProviderError.itemNotFound
+					}
+				}
+			}
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await decorator.deleteFolder(at: CloudPath("/File 4 (Long)")) }
+			#expect(provider.deleted == [])
+			#expect((failedListings.withLock { $0 } > 0) == (cause != "renamed"))
+		}
+
+		/// The delete's lookup of the `contents.c9r` fails, so it can't tell whether the `.c9s` holds a file and deletes nothing.
+		@Test
+		func deleteFolderOfShortenedFileWhoseContentsLookupFailsThrowsIt() async throws {
+			let provider = makeShortenedFileProvider(files: ["contents.c9r"])
+			let c9sPath = Self.shortenedFileC9SPath
+			provider.listingHook = { cloudPath, _ in
+				if cloudPath.path == c9sPath {
+					throw CloudProviderError.itemNotFound
+				}
+			}
+			provider.metadataHook = { cloudPath in
+				if cloudPath.path == "\(c9sPath)/contents.c9r" {
+					throw CloudProviderError.quotaInsufficient
+				}
+			}
+			let decorator = try makeShorteningDecorator(over: provider)
+			await #expect(throws: CloudProviderError.quotaInsufficient) { try await decorator.deleteFolder(at: CloudPath("/File 4 (Long)")) }
+			#expect(provider.deleted == [])
+		}
+
+		/// The shortening decorator reports a file at a `.c9s` name as missing, so a path below it names no item either.
+		@Test
+		func readBelowFileAtC9SNameThrowsItemNotFound() async throws {
+			let c9sPath = Self.shortenedFileC9SPath
+			let fixture = CloudProviderMock.vaultFormat7()
+			let files = fixture.files.filter { !$0.key.hasUTF8Prefix("\(c9sPath)/") }.merging([c9sPath: Data()]) { $1 }
+			let provider = CloudProviderMock(folders: fixture.folders.subtracting([c9sPath]), files: files)
+			let decorator = try makeShorteningDecorator(over: provider)
+			let belowPath = CloudPath("/File 4 (Long)/File 3")
+			await #expect(throws: CloudProviderError.itemNotFound) { try await decorator.fetchItemMetadata(at: belowPath) }
+			let exists = try await decorator.checkForItemExistence(at: belowPath)
+			#expect(!exists)
+		}
+
 		// MARK: - Internal
+
+		/// Expects that a read and a folder delete below the item at the path keep `itemTypeMismatch`, so that `deleteFolderIfExisting` doesn't take the path for gone.
+		func expectItemTypeMismatch(below cloudPath: CloudPath, of decorator: VaultFormat7ProviderDecorator, sourceLocation: SourceLocation = #_sourceLocation) async {
+			let belowPath = cloudPath.appendingPathComponent("File 3")
+			await #expect(throws: CloudProviderError.itemTypeMismatch, sourceLocation: sourceLocation) { try await decorator.fetchItemMetadata(at: belowPath) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch, sourceLocation: sourceLocation) { try await decorator.deleteFolderIfExisting(at: belowPath) }
+		}
+
+		/// Returns a vault mock whose `.c9s` of `File 4 (Long)` holds its name file and the given files and folders by name instead of its `contents.c9r`. A listing marks the items of `aliases` as aliases.
+		func makeShortenedFileProvider(files: [String] = [], folders: [String] = [], maxPageSize: Int = .max, aliases: [String] = [], reversesPages: Bool = false) -> CloudProviderMock {
+			let c9sPath = Self.shortenedFileC9SPath
+			let fixture = CloudProviderMock.vaultFormat7()
+			let fixtureFiles = fixture.files.filter { $0.key != "\(c9sPath)/contents.c9r" }
+			return CloudProviderMock(folders: fixture.folders.union(folders.map { "\(c9sPath)/\($0)" }), files: fixtureFiles.merging(files.map { ("\(c9sPath)/\($0)", Data()) }) { $1 }, maxPageSize: maxPageSize, aliases: Set(aliases.map { "\(c9sPath)/\($0)" }), reversesPages: reversesPages)
+		}
+
+		func makeShorteningDecorator(over provider: CloudProvider) throws -> VaultFormat7ProviderDecorator {
+			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
+			return try VaultFormat7ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
+		}
 
 		func makeLocalFile() throws -> URL {
 			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)

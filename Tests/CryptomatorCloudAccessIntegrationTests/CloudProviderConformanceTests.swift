@@ -492,7 +492,7 @@ extension IntegrationTests {
 
 		// MARK: - Parent That Is a File Tests
 
-		@Test(arguments: IntegrationBackend.selectedPlain)
+		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let localURL = context.tmpDirURL.appendingPathComponent("sub", isDirectory: false)
@@ -504,7 +504,7 @@ extension IntegrationTests {
 		}
 
 		/// The second folder's parent `x` lies below the file, so Dropbox looks up a path below a file.
-		@Test(arguments: IntegrationBackend.selectedPlain)
+		@Test(arguments: IntegrationBackend.selected)
 		func createFolderIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let parentCloudPath = try await context.makeSandbox().appendingPathComponent("parent.txt")
@@ -514,7 +514,7 @@ extension IntegrationTests {
 			}
 		}
 
-		@Test(arguments: IntegrationBackend.selectedPlain)
+		@Test(arguments: IntegrationBackend.selected)
 		func moveFileIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let sandbox = try await context.makeSandbox()
@@ -528,7 +528,7 @@ extension IntegrationTests {
 			}
 		}
 
-		@Test(arguments: IntegrationBackend.selectedPlain)
+		@Test(arguments: IntegrationBackend.selected)
 		func moveFolderIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let sandbox = try await context.makeSandbox()
@@ -539,6 +539,26 @@ extension IntegrationTests {
 				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.moveFolder(from: sourceCloudPath, to: parentCloudPath.appendingPathComponent("sub")) }
 				let sourceExists = try await context.provider.checkForItemExistence(at: sourceCloudPath)
 				#expect(sourceExists, "The source of the refused move is gone")
+			}
+		}
+
+		/// Only the vault backends, because whether plain Dropbox answers a metadata read or delete below a file with `not_found` isn't known. On Dropbox, VF8 downloads a `dir.c9r` below the file and relies on that download answering `not_found`. The long name is shortened in every vault format.
+		@Test(arguments: IntegrationBackend.selectedVaults)
+		func readsAndDeletesBelowFileReportAbsence(backend: IntegrationBackend) async throws {
+			try await withIntegrationFixture(backend) { context in
+				let sandbox = try await context.makeSandbox()
+				for parentName in ["parent.txt", String(repeating: "f", count: 200)] {
+					let parentCloudPath = sandbox.appendingPathComponent(parentName)
+					let belowCloudPath = parentCloudPath.appendingPathComponent("sub")
+					try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
+					try await expectCloudProviderError(.itemNotFound) { try await context.provider.fetchItemMetadata(at: belowCloudPath) }
+					let belowExists = try await context.provider.checkForItemExistence(at: belowCloudPath)
+					#expect(!belowExists, "A path below the file \(parentName.count) characters long exists")
+					try await context.provider.deleteFileIfExisting(at: belowCloudPath)
+					try await context.provider.deleteFolderIfExisting(at: belowCloudPath)
+					let parentExists = try await context.provider.checkForItemExistence(at: parentCloudPath)
+					#expect(parentExists, "The file \(parentName.count) characters long above the deleted path is gone")
+				}
 			}
 		}
 

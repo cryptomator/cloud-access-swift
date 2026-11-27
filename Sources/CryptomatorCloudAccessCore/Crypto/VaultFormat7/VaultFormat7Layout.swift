@@ -16,11 +16,20 @@ private extension CloudPath {
 	func appendingDirFileComponent() -> CloudPath {
 		return appendingPathComponent("dir.c9r")
 	}
+
+	func appendingContentsFileComponent() -> CloudPath {
+		return appendingPathComponent("contents.c9r")
+	}
 }
 
 /// Whether a listed item of a `.c9r` or `.c9s` is the file that holds its dir ID. A folder of that name holds none.
 private func isDirFile(_ item: CloudItemMetadata) -> Bool {
 	return item.name == "dir.c9r" && item.itemType == .file
+}
+
+/// Whether a listed item of a `.c9s` is the file that holds a shortened file's content.
+private func isContentsFile(_ item: CloudItemMetadata) -> Bool {
+	return item.name == "contents.c9r" && item.itemType == .file
 }
 
 /**
@@ -35,18 +44,17 @@ extension C9RVaultLayout {
 		return .base64url
 	}
 
-	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultProviderDecorator<Self>) async throws -> Data {
+	/// A shortened file is a `.c9s` folder, whose type the shortening decorator takes from the first item file it lists, so its file is confirmed from the physical `.c9s` instead.
+	func readDirId(_ cleartextPath: CloudPath, parentDirId: Data, refusingAlias: Bool, in decorator: VaultProviderDecorator<Self>) async throws -> DirIdReadResult {
 		let c9rPath = try folderReferencePath(cleartextPath, parentDirId: parentDirId, in: decorator)
 		do {
-			return try await decorator.delegate.downloadDirFile(at: c9rPath.appendingDirFileComponent(), refusingAlias: refusingAlias)
+			return try await .directory(decorator.delegate.downloadDirFile(at: c9rPath.appendingDirFileComponent(), refusingAlias: refusingAlias))
 		} catch CloudProviderError.itemNotFound {
 			try Task.checkCancellation()
-			if try await decorator.delegate.checkForItemExistence(at: c9rPath) {
-				// `*.c9r` exists but `*.c9r/dir.c9r` does not, so it's not a directory as expected
-				throw CloudProviderError.itemTypeMismatch
-			} else {
-				throw CloudProviderError.itemNotFound
+			if case let .c9sDirectory(c9sDir) = decorator.shortening?.shortenedNameCache.getShortenedPath(c9rPath) {
+				return try await confirmFile(inC9S: c9sDir.cloudPath, in: decorator)
 			}
+			return try await decorator.physicalProvider.confirmFile(at: c9rPath)
 		}
 	}
 
@@ -84,7 +92,7 @@ extension C9RVaultLayout {
 
 	func didCreateDirectory(at dirPath: CloudPath, preparedFileURL: URL, in decorator: VaultProviderDecorator<Self>) async throws {}
 
-	/// `itemTypeMismatch`: the `.c9r` exists, but the download found no `dir.c9r`, e.g., it's a symlink. `itemNotFound`: the `.c9r` is gone, or it's a `.c9s` that the shortening decorator reports as missing because it holds no item file. Either way it's deleted without a walk unless it lists a `dir.c9r`.
+	/// `itemTypeMismatch`: the `.c9r` or `.c9s` exists and is no confirmed file, but the download found no `dir.c9r`, e.g., it's a symlink or a stale cached ID reaches it. `itemNotFound`: the `.c9r` or `.c9s` is gone, or it's a `.c9s` that is a file or holds no item file. Either way it's deleted without a walk unless it lists a `dir.c9r`, or it's a `.c9s` that holds a `contents.c9r` file. A confirmed file is no error, so it never gets here.
 	func isMissingDirFile(_ error: Error) -> Bool {
 		switch error {
 		case CloudProviderError.itemNotFound, CloudProviderError.itemTypeMismatch:
@@ -95,11 +103,20 @@ extension C9RVaultLayout {
 	}
 
 	func checkReferenceBeforeDelete(at referencePath: CloudPath, dirId: Data?, in decorator: VaultProviderDecorator<Self>) async throws {
-		let holdsUnreadableDirFile = dirId == nil ? try await holdsDirFile(referencePath, in: decorator) : false
+		guard dirId == nil else {
+			return
+		}
+		let holdsUnreadableDirFile = try await holdsDirFile(referencePath, in: decorator)
 		try Task.checkCancellation()
 		if holdsUnreadableDirFile {
 			// A provider that addresses items by cached IDs reports a `dir.c9r` that another client replaced as missing. Deleting the `.c9r` would orphan its directory. A later delete can read the new ID once the provider has cached it, which some providers' listings do.
 			throw CloudProviderError.itemNotFound
+		}
+		let holdsContentsFile = try await holdsContentsFile(referencePath, in: decorator)
+		try Task.checkCancellation()
+		if holdsContentsFile {
+			// A shortened file that couldn't be confirmed, e.g., because a stale cached ID reaches its `.c9s` after another client renamed it. Deleting the `.c9s` as a folder would delete the file.
+			throw CloudProviderError.itemTypeMismatch
 		}
 	}
 
@@ -151,6 +168,56 @@ extension C9RVaultLayout {
 			pageToken = itemList.nextPageToken
 		} while pageToken != nil
 		return false
+	}
+
+	/// Whether the `.c9s` of a shortened name holds a `contents.c9r` file. It's read by its path below the shortening decorator, because a listing can leave it out (LocalFS skips a hidden one) or fail before reaching it. Any failure but `itemNotFound` is thrown. A `contents.c9r` in a plain `.c9r` holds no file, so it isn't looked up.
+	private func holdsContentsFile(_ c9rPath: CloudPath, in decorator: VaultProviderDecorator<Self>) async throws -> Bool {
+		guard case let .c9sDirectory(c9sDir) = decorator.shortening?.shortenedNameCache.getShortenedPath(c9rPath) else {
+			return false
+		}
+		do {
+			return try await decorator.physicalProvider.fetchItemMetadata(at: c9sDir.cloudPath.appendingContentsFileComponent()).itemType == .file
+		} catch CloudProviderError.itemNotFound {
+			return false
+		}
+	}
+
+	/**
+	 Tells from the physical `.c9s` of a name without a readable `dir.c9r` whether a regular file holds the name. Only a complete listing whose item files are all `contents.c9r` files, at least one, confirms it, because the item files of a `.c9s` can lie on any page. A listed `dir.c9r` file settles that it's no file at once. Its own metadata need only report its name: S3 reports an object at the `.c9s` key as a file even while the `.c9s` prefix holds items.
+
+	 - Throws: `CloudProviderError.itemNotFound` if the `.c9s` is gone, if its first page throws `itemNotFound` or `itemTypeMismatch` (e.g., because the `.c9s` is a file), or if it holds no item file, as the shortening decorator reports it. `CloudProviderError.itemTypeMismatch` if it reports another name, e.g., a renamed `.c9s` that a stale cached ID reaches, or if it lists another item file than a `contents.c9r` file. A later page that throws either error also yields `itemTypeMismatch`, because the pages listed so far can't tell. Any other failure is thrown unchanged.
+	 */
+	private func confirmFile(inC9S c9sPath: CloudPath, in decorator: VaultProviderDecorator<Self>) async throws -> DirIdReadResult {
+		let metadata = try await decorator.physicalProvider.fetchItemMetadata(at: c9sPath)
+		guard metadata.reportsName(of: c9sPath) else {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		var holdsContentsFile = false
+		var holdsOtherItemFile = false
+		var pageToken: String?
+		repeat {
+			try Task.checkCancellation()
+			let itemList: CloudItemList
+			do {
+				itemList = try await decorator.physicalProvider.fetchItemList(forFolderAt: c9sPath, withPageToken: pageToken)
+			} catch let error as CloudProviderError where [.itemNotFound, .itemTypeMismatch].contains(error) {
+				throw pageToken == nil ? CloudProviderError.itemNotFound : CloudProviderError.itemTypeMismatch
+			}
+			if itemList.items.contains(where: isDirFile) {
+				throw CloudProviderError.itemTypeMismatch
+			}
+			let itemFiles = itemList.items.filter { guessItemTypeByC9SItemName($0.name) != .unknown }
+			holdsContentsFile = holdsContentsFile || itemFiles.contains(where: isContentsFile)
+			holdsOtherItemFile = holdsOtherItemFile || !itemFiles.allSatisfy(isContentsFile)
+			pageToken = itemList.nextPageToken
+		} while pageToken != nil
+		if holdsOtherItemFile {
+			throw CloudProviderError.itemTypeMismatch
+		}
+		guard holdsContentsFile else {
+			throw CloudProviderError.itemNotFound
+		}
+		return .confirmedFile
 	}
 }
 

@@ -172,7 +172,7 @@ final class VaultFormat6ShorteningProviderDecorator: VaultShorteningDecorator {
 				// Another listing or client may have moved the item after this page was listed, which a provider that checks the target first reports as `itemAlreadyExists`. The item at the original name is the one that the vault addresses under that name, so it is returned even if the listed name still exists. It is returned only if it reports the original name byte for byte, because the crypto decorator decrypts the reported name. A stale cached ID can report another item's name there, and cryptolib's Base32 decoder rejects a canonically equivalent spelling. Either entry would take the original's place in the page's duplicate filter. The check covers only the name, not that the item still occupies the original path.
 				try Task.checkCancellation()
 				let metadata = try await delegate.fetchItemMetadata(at: originalPath)
-				guard metadata.name.utf8.elementsEqual(originalPath.lastPathComponent.utf8) else {
+				guard metadata.reportsName(of: originalPath) else {
 					throw LegacyNameNotMoved()
 				}
 				return metadata

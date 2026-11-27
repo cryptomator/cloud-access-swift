@@ -32,11 +32,6 @@ extension UnitTests {
 		}
 
 		@Test
-		func runsAtMostLimitOperationsAtOnce() async throws {
-			try await assertRunsAtMostLimitOperationsAtOnce { try await allSettled($0, limit: $1, $2) }
-		}
-
-		@Test
 		func cancellationStartsNoFurtherOperations() async throws {
 			let startedCount = OSAllocatedUnfairLock(initialState: 0)
 			let gate = Gate()

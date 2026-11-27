@@ -261,7 +261,7 @@ extension UnitTests {
 				S3CloudProviderTests.part(2, requests),
 				S3CloudProviderTests.part(3, requests),
 				S3CloudProviderTests.completeMultipartUpload(requests),
-				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", keys: ["file.bin"], size: 10, onRequest: requests.record)
 			]
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: progress, onTaskCreation: { _ in
@@ -271,24 +271,19 @@ extension UnitTests {
 			#expect(metadata.size == 10)
 			let sent = requests.requests
 			#expect(sent.map(\.httpMethod) == ["GET", "POST", "PUT", "PUT", "PUT", "POST", "GET"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1]) == ["uploads": ""])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[1]) == ["uploads": nil])
 			#expect(sent[1].value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
 			for (index, request) in sent[2 ... 4].enumerated() {
-				let query = S3CloudProviderTests.queryParameters(of: request)
+				let query = try S3CloudProviderTests.queryParameters(of: request)
 				#expect(String(index + 1) == query["partNumber"])
 				#expect(query["uploadId"] == "upload-id")
 			}
 			#expect(sent[2 ... 4].map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) } == ["0123", "4567", "89"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[5]) == ["uploadId": "upload-id"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[5]) == ["uploadId": "upload-id"])
 			let completionBody = String(bytes: sent[5].httpBody ?? Data(), encoding: .utf8) ?? ""
 			#expect(completionBody.contains("<Part><PartNumber>1</PartNumber><ETag>&quot;etag-1&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;etag-2&quot;</ETag></Part><Part><PartNumber>3</PartNumber><ETag>&quot;etag-3&quot;</ETag></Part></CompleteMultipartUpload>"), "\(completionBody)")
 			#expect(!onTaskCreationCalled.withLock { $0 }, "A task that uploads only a part was passed to onTaskCreation")
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 3)
-			for (index, (fraction, (bytesBefore, partLength))) in zip(recordedFractions, [(0.0, 4.0), (4.0, 4.0), (8.0, 2.0)]).enumerated() {
-				#expect(fraction > (bytesBefore + partLength / 2) / 10, "part \(index)")
-				#expect(fraction < 1, "part \(index)")
-			}
+			assertTransferProgress(fractions.withLock { $0 }, parts: [(4, 10), (4, 10), (2, 10)])
 			#expect(progress.fractionCompleted == 1)
 			#expect(try temporaryFiles == uuidNamedTemporaryFiles())
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -302,7 +297,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.bin", onRequest: requests.record),
 				URLProtocolMock.handler(onRequest: requests.record),
-				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", keys: ["file.bin"], size: 10, onRequest: requests.record)
 			]
 
 			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
@@ -311,7 +306,7 @@ extension UnitTests {
 
 			let sent = requests.requests
 			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "GET"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1])["uploadId"] == nil)
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[1])["uploadId"] == nil)
 			#expect(Data("0123456789".utf8) == sent[1].httpBody)
 			#expect(onTaskCreationCalled.withLock { $0 })
 		}
@@ -330,7 +325,7 @@ extension UnitTests {
 				S3CloudProviderTests.part(2, requests),
 				S3CloudProviderTests.part(3, requests),
 				S3CloudProviderTests.completeMultipartUpload(),
-				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10))
+				S3CloudProviderTests.listing(of: "file.bin", keys: ["file.bin"], size: 10)
 			]
 
 			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: nil)
@@ -490,7 +485,7 @@ extension UnitTests {
 					canceller.cancel()
 				}),
 				S3CloudProviderTests.completeMultipartUpload(requests),
-				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
+				S3CloudProviderTests.listing(of: "file.bin", keys: ["file.bin"], size: 10, onRequest: requests.record)
 			]
 
 			let metadata = try await cancellingValue(of: canceller.start {
@@ -561,7 +556,7 @@ extension UnitTests {
 			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "GET")
 			#expect(request.url?.path == "/exampleBucket")
-			#expect(S3CloudProviderTests.queryParameters(of: request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"])
+			#expect(try S3CloudProviderTests.queryParameters(of: request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"])
 			#expect([CloudPath("/folder/a.txt"), CloudPath("/folder/sub")] == itemList.items.map(\.cloudPath))
 			#expect(itemList.items.map(\.itemType) == [.file, .folder])
 			#expect(itemList.nextPageToken == "next")
@@ -570,7 +565,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListParsesLastModified() async throws {
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "folder/", body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
+				S3CloudProviderTests.listing(of: "folder/", keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z")
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
@@ -598,7 +593,7 @@ extension UnitTests {
 			#expect(["f/..", "f/../", "f//", "f/./", "/", ""].map { "S3CloudProvider: skipping key \($0), because one of its segments is no single path component" }.sorted() == skippedKeys.sorted())
 		}
 
-		/// The folder's marker and the left-out keys prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` exists beside them.
+		/// The folder's marker or the keys below its prefix that the item list leaves out prove that the folder exists, so the listing skips the existence check. That check would fail if an object `f` existed beside the folder.
 		@Test
 		func listingReturnsEmptyPageWithTokenIfPageHoldsOnlyMarkerOrSkippedKeys() async throws {
 			for keys in [["f/"], ["f/.", "f/.."]] {
@@ -617,7 +612,7 @@ extension UnitTests {
 			}
 		}
 
-		/// A server that ignores the delimiter or the prefix must not get items listed that aren't directly in the folder, where the vault layer would trap on a path that is too deep.
+		/// If a server ignores the delimiter or the prefix, the listing leaves out the items that aren't directly below the folder, because the vault layer would trap on their paths.
 		@Test
 		func listingSkipsKeysThatAreNotDirectlyBelowFolder() async throws {
 			URLProtocolMock.requestHandler = [
@@ -707,7 +702,7 @@ extension UnitTests {
 
 			#expect(CloudPath("/folder") == metadata.cloudPath)
 			#expect(metadata.itemType == .folder)
-			#expect(requests.requests.map(S3CloudProviderTests.queryParameters(of:)) == [
+			#expect(try requests.requests.map(S3CloudProviderTests.queryParameters(of:)) == [
 				["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
 				["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
 			])
@@ -775,9 +770,9 @@ extension UnitTests {
 			let sent = requests.requests
 			let bodies = sent.map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) ?? "" }
 			#expect(sent.map(\.httpMethod) == ["GET", "POST", "GET", "POST"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[2]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1]) == ["delete": ""])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[2]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[1]) == ["delete": nil])
 			#expect(bodies[1].contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), "\(bodies[1])")
 			#expect(bodies[3].contains("<Object><Key>folder/b.txt</Key></Object>"), "\(bodies[3])")
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -813,8 +808,8 @@ extension UnitTests {
 
 			let sent = requests.requests
 			#expect(sent.map(\.httpMethod) == ["GET", "PUT", "PUT", "POST", "GET", "PUT", "POST"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[4]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[4]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
 			#expect(S3CloudProviderTests.copySources(of: sent[1 ... 2]) == ["/exampleBucket/target/": "exampleBucket/folder/", "/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt"])
 			#expect(S3CloudProviderTests.copySources(of: sent[5 ... 5]) == ["/exampleBucket/target/sub/b.txt": "exampleBucket/folder/sub/b.txt"])
 			#expect(S3CloudProviderTests.deletedKeys(of: sent[3]) == ["folder/", "folder/a.txt"])
@@ -1028,7 +1023,7 @@ extension UnitTests {
 
 			let sent = requests.requests
 			#expect(sent.map(\.httpMethod) == ["GET", "GET", "GET", "PUT", "POST"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1]) == ["list-type": "2", "prefix": "src/", "max-keys": "1000"])
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[1]) == ["list-type": "2", "prefix": "src/", "max-keys": "1000"])
 			#expect(S3CloudProviderTests.copySources(of: sent[3 ... 3]) == ["/exampleBucket/folder/dst/a.txt": "exampleBucket/src/a.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -1049,7 +1044,7 @@ extension UnitTests {
 
 			let sent = requests.requests
 			#expect(sent.map(\.httpMethod) == ["GET", "GET", "PUT", "POST"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1])["continuation-token"] == "next")
+			#expect(try S3CloudProviderTests.queryParameters(of: sent[1])["continuation-token"] == "next")
 			#expect(S3CloudProviderTests.copySources(of: sent[2 ... 2]) == ["/exampleBucket/target/a.txt": "exampleBucket/folder/a.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -1376,27 +1371,35 @@ extension UnitTests {
 			}
 		}
 
-		/// Answers like `listing(of:recursive:body:onRequest:)` with a `ListBucketResult` of the keys, common prefixes and continuation token.
-		private static func listing(of prefix: String, recursive: Bool = false, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
-			return listing(of: prefix, recursive: recursive, body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken), onRequest: onRequest)
+		/// Answers like `listing(of:recursive:body:onRequest:)` with a `ListBucketResult` of the arguments, in which every object has the given size and modification date.
+		private static func listing(of prefix: String, recursive: Bool = false, keys: [String] = [], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = S3MockResponse.defaultObjectSize, lastModified: String = S3MockResponse.defaultLastModified, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
+			return listing(of: prefix, recursive: recursive, body: S3MockResponse.listBucketResult(keys: keys, commonPrefixes: commonPrefixes, nextContinuationToken: nextContinuationToken, size: size, lastModified: lastModified), onRequest: onRequest)
 		}
 
-		/// Answers a `GET` with this `prefix` parameter and the listing's `delimiter` (none if `recursive`, `/` otherwise) with the body. It fails any other request, so that a check of another path or a listing of the other kind fails the test.
+		/// Answers a `GET` whose `prefix` parameter is `prefix` and whose `delimiter` is the listing's (none if `recursive`, `/` otherwise) with the body. It compares the prefix by bytes, as S3 compares keys. It fails any other request, so that a check of another path or a listing of the other kind fails the test.
 		private static func listing(of prefix: String, recursive: Bool = false, body: String, onRequest: @escaping @Sendable (URLRequest) -> Void = { _ in }) -> @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) {
 			let response = URLProtocolMock.handler(body: body, onRequest: onRequest)
+			let expectedDelimiter: String?? = recursive ? nil : "/"
 			return { request in
-				let parameters = queryParameters(of: request)
-				let expectedDelimiter: String? = recursive ? nil : "/"
-				guard request.httpMethod == "GET", parameters["prefix"] == prefix, parameters["delimiter"] == expectedDelimiter else {
+				let parameters = try queryParameters(of: request)
+				guard request.httpMethod == "GET", case let sentPrefix?? = parameters["prefix"], sentPrefix.utf8.elementsEqual(prefix.utf8), parameters["delimiter"] == expectedDelimiter else {
 					throw URLProtocolMockError.unexpectedRequest
 				}
 				return try response(request)
 			}
 		}
 
-		private static func queryParameters(of request: URLRequest) -> [String: String] {
+		/// The request's query parameters, with `nil` as the value of a parameter that has none. It throws for a name that occurs more than once.
+		private static func queryParameters(of request: URLRequest) throws -> [String: String?] {
 			let queryItems = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
-			return Dictionary(queryItems.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
+			var parameters = [String: String?]()
+			for item in queryItems {
+				guard !parameters.keys.contains(item.name) else {
+					throw URLProtocolMockError.duplicateQueryParameter(item.name)
+				}
+				parameters[item.name] = .some(item.value)
+			}
+			return parameters
 		}
 
 		/// The responses to the checks of a folder move from `/folder` to `/target`: the first page of the source's recursive listing, which shows that it is a folder, and the target's lookup, which finds nothing.
@@ -1452,7 +1455,7 @@ extension UnitTests {
 		private func assertAborted(_ requests: RequestRecorder, attempts: Int = 1, temporaryFiles: Set<String>, sourceLocation: SourceLocation = #_sourceLocation) throws {
 			let aborts = requests.requests
 			#expect(Array(repeating: "DELETE", count: attempts) == aborts.map(\.httpMethod), sourceLocation: sourceLocation)
-			#expect(Array(repeating: ["uploadId": "upload-id"], count: attempts) == aborts.map(S3CloudProviderTests.queryParameters(of:)), sourceLocation: sourceLocation)
+			#expect(try Array(repeating: ["uploadId": "upload-id"], count: attempts) == aborts.map(S3CloudProviderTests.queryParameters(of:)), sourceLocation: sourceLocation)
 			#expect(URLProtocolMock.requestHandler.isEmpty, sourceLocation: sourceLocation)
 			#expect(try temporaryFiles == uuidNamedTemporaryFiles(), sourceLocation: sourceLocation)
 		}

@@ -99,7 +99,7 @@ enum IntegrationTestSecrets {
 	}
 
 	private static let values = Result {
-		let fileURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(component: ".integration-test-secrets.sh", directoryHint: .notDirectory)
+		let fileURL = URL(filePath: #filePath, directoryHint: .notDirectory).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appending(component: ".integration-test-secrets.sh", directoryHint: .notDirectory)
 		return try parse(String(contentsOf: fileURL, encoding: .utf8))
 	}
 

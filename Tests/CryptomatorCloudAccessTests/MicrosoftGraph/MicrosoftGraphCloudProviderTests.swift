@@ -416,22 +416,18 @@ extension UnitTests {
 		func uploadOfSeveralChunksSendsEachChunkOnceAndHandsOverNoTask() async throws {
 			let chunkLength = 5 * 1024 * 1024
 			let content = Data((0 ..< chunkLength * 3 / 2).map { UInt8($0 % 251) })
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try content.write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: content)
 			let progress = Progress(totalUnitCount: 1)
 			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
-			let chunks = OSAllocatedUnfairLock(initialState: [(method: String?, range: String?, body: Data)]())
+			let requests = RequestRecorder()
 			let fractionBeforeSecondChunk = OSAllocatedUnfairLock<Double?>(initialState: nil)
-			let recordChunk: @Sendable (URLRequest) -> Void = { request in
-				chunks.withLock { $0.append((request.httpMethod, request.value(forHTTPHeaderField: "Content-Range"), URLProtocolMock.body(of: request))) }
-			}
 			let taskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = uploadPreparation() + [
-				URLProtocolMock.handler(statusCode: 202, body: "{}", onRequest: recordChunk),
+				URLProtocolMock.handler(statusCode: 202, body: "{}", onRequest: requests.record),
 				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"F","name":"file.txt","size":7864320,"file":{}}"#, onRequest: { request in
 					fractionBeforeSecondChunk.withLock { $0 = progress.fractionCompleted }
-					recordChunk(request)
+					requests.record(request)
 				})
 			]
 
@@ -439,10 +435,10 @@ extension UnitTests {
 				taskCount.withLock { $0 += 1 }
 			})
 
-			let sentChunks = chunks.withLock { $0 }
-			#expect(sentChunks.map(\.method) == ["PUT", "PUT"])
-			#expect(sentChunks.map(\.range) == ["bytes 0-5242879/7864320", "bytes 5242880-7864319/7864320"])
-			#expect([content.prefix(chunkLength), content.suffix(from: chunkLength)] == sentChunks.map(\.body))
+			let sentChunks = requests.requests
+			#expect(sentChunks.map(\.httpMethod) == ["PUT", "PUT"])
+			#expect(sentChunks.map { $0.value(forHTTPHeaderField: "Content-Range") } == ["bytes 0-5242879/7864320", "bytes 5242880-7864319/7864320"])
+			#expect([content.prefix(chunkLength), content.suffix(from: chunkLength)] == sentChunks.map(\.httpBody))
 			// The first chunk holds two thirds of the bytes.
 			#expect(try abs(0.999 * 2 / 3 - #require(fractionBeforeSecondChunk.withLock { $0 })) <= 0.001)
 			// The last chunk holds the remaining third, so the upload's share isn't exceeded.

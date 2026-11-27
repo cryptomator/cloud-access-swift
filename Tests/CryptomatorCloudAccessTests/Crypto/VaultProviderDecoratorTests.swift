@@ -463,8 +463,7 @@ extension UnitTests {
 		func downloadFileWithCancellationDuringDecryption(format: VaultTestFormat) async throws {
 			let cryptor = try Cryptor(masterkey: Masterkey.createNew(), scheme: .sivCtrMac)
 			let cloudPath = CloudPath("/File")
-			let cleartextURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try Data(count: 1024 * 1024).write(to: cleartextURL)
+			let cleartextURL = try makeLocalFile(in: tmpDirURL, data: Data(count: 1024 * 1024))
 			let rootDirId = try cryptor.encryptDirId(Data())
 			let provider = CloudProviderMock(folders: ["pathToVault/d/\(rootDirId.prefix(2))/\(rootDirId.dropFirst(2))"], files: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: cryptor)
@@ -552,8 +551,7 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringEncryption(format: VaultTestFormat) async throws {
 			let provider = CloudProviderMock(folders: [], files: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: Cryptor(masterkey: Masterkey.createNew(), scheme: .sivCtrMac))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try Data(count: 1024 * 1024).write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: Data(count: 1024 * 1024))
 			let progress = Progress(totalUnitCount: 1)
 			let progressObserver = progress.observe(\.fractionCompleted) { progress, _ in
 				if progress.fractionCompleted > 0 {

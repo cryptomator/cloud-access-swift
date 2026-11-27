@@ -461,15 +461,12 @@ extension UnitTests {
 		@Test
 		func smallUploadSendsMultipartBodyAndHandsOverTaskOnce() async throws {
 			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content")
-			let sentBodies = OSAllocatedUnfairLock(initialState: [(contentType: String?, body: Data)]())
-			let recordBody: @Sendable (URLRequest) -> Void = { request in
-				sentBodies.withLock { $0.append((request.value(forHTTPHeaderField: "Content-Type"), URLProtocolMock.body(of: request))) }
-			}
+			let requests = RequestRecorder()
 			let taskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
-				URLProtocolMock.handler(statusCode: 503, onRequest: recordBody),
-				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 12)]), onRequest: recordBody)
+				URLProtocolMock.handler(statusCode: 503, onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 12)]), onRequest: requests.record)
 			]
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
@@ -478,10 +475,10 @@ extension UnitTests {
 
 			#expect(metadata.size == 12)
 			#expect(taskCount.withLock { $0 } == 1)
-			let (contentType, body) = try #require(sentBodies.withLock { $0 }.last)
-			let boundary = try #require(contentType?.components(separatedBy: "boundary=").last)
+			let request = try #require(requests.requests.last)
+			let boundary = try #require(request.value(forHTTPHeaderField: "Content-Type")?.components(separatedBy: "boundary=").last)
 			let expectedPrefix = "--\(boundary)\r\nContent-Disposition: form-data; name=\"attributes\"\r\n\r\n"
-			let bodyString = try #require(String(data: body, encoding: .utf8))
+			let bodyString = try #require(request.httpBody.flatMap { String(data: $0, encoding: .utf8) })
 			#expect(bodyString.hasPrefix(expectedPrefix), "\(bodyString)")
 			#expect(bodyString.hasSuffix("\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\"\r\nContent-Type: application/octet-stream\r\n\r\nfile content\r\n--\(boundary)--\r\n"), "\(bodyString)")
 			let attributes = try #require(bodyString.dropFirst(expectedPrefix.count).components(separatedBy: "\r\n").first)
@@ -521,22 +518,16 @@ extension UnitTests {
 			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
 			let content = "0123456789"
 			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: content)
-			let partRequests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: Data)]())
-			let recordPart: @Sendable (URLRequest) -> Void = { request in
-				partRequests.withLock { $0.append((request, URLProtocolMock.body(of: request))) }
-			}
-			let commitRequest = OSAllocatedUnfairLock<(request: URLRequest, body: Data)?>(initialState: nil)
+			let requests = RequestRecorder()
 			let taskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
 			] + (0 ..< 3).map { index in
-				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)","offset":\#(index * 4),"size":\#(min(4, 10 - index * 4)),"sha1":"H\#(index)"}}"#, onRequest: recordPart)
+				URLProtocolMock.handler(body: #"{"part":{"part_id":"P\#(index)","offset":\#(index * 4),"size":\#(min(4, 10 - index * 4)),"sha1":"H\#(index)"}}"#, onRequest: requests.record)
 			} + [
 				URLProtocolMock.handler(statusCode: 202, headerFields: ["Retry-After": "0"]),
-				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]), onRequest: { request in
-					commitRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
-				})
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]), onRequest: requests.record)
 			]
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
@@ -545,15 +536,17 @@ extension UnitTests {
 
 			#expect(metadata.size == 10)
 			#expect(taskCount.withLock { $0 } == 0)
-			let parts = partRequests.withLock { $0 }
-			#expect(parts.map { $0.request.value(forHTTPHeaderField: "content-range") } == ["bytes 0-3/10", "bytes 4-7/10", "bytes 8-9/10"])
-			#expect(["0123", "4567", "89"].map { BoxCloudProviderTests.digest(of: $0) } == parts.map { $0.request.value(forHTTPHeaderField: "digest") })
-			#expect(parts.map { String(data: $0.body, encoding: .utf8) } == ["0123", "4567", "89"])
-			#expect(parts.map(\.request.httpMethod) == ["PUT", "PUT", "PUT"])
-			let (request, body) = try #require(commitRequest.withLock { $0 })
-			#expect(request.url?.absoluteString == "https://upload.box.com/api/2.0/files/upload_sessions/S/commit")
-			#expect(BoxCloudProviderTests.digest(of: content) == request.value(forHTTPHeaderField: "digest"))
-			let commitParts = try #require((JSONSerialization.jsonObject(with: body) as? [String: Any])?["parts"] as? [[String: Any]])
+			let sent = requests.requests
+			try #require(sent.count == 4)
+			let parts = sent.prefix(3)
+			#expect(parts.map { $0.value(forHTTPHeaderField: "content-range") } == ["bytes 0-3/10", "bytes 4-7/10", "bytes 8-9/10"])
+			#expect(["0123", "4567", "89"].map { BoxCloudProviderTests.digest(of: $0) } == parts.map { $0.value(forHTTPHeaderField: "digest") })
+			#expect(parts.map { $0.httpBody.flatMap { String(data: $0, encoding: .utf8) } } == ["0123", "4567", "89"])
+			#expect(parts.map(\.httpMethod) == ["PUT", "PUT", "PUT"])
+			let commit = try #require(sent.last)
+			#expect(commit.url?.absoluteString == "https://upload.box.com/api/2.0/files/upload_sessions/S/commit")
+			#expect(BoxCloudProviderTests.digest(of: content) == commit.value(forHTTPHeaderField: "digest"))
+			let commitParts = try #require((JSONSerialization.jsonObject(with: commit.httpBody ?? Data()) as? [String: Any])?["parts"] as? [[String: Any]])
 			#expect(commitParts.map { $0["part_id"] as? String } == ["P0", "P1", "P2"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -625,12 +618,7 @@ extension UnitTests {
 
 			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 3)
-			for (index, (fraction, (bytesBefore, partLength))) in zip(recordedFractions, [(0.0, 4.0), (4.0, 4.0), (8.0, 2.0)]).enumerated() {
-				#expect(fraction > (bytesBefore + partLength / 2) / 10, "part \(index)")
-				#expect(fraction < 1, "part \(index)")
-			}
+			assertTransferProgress(fractions.withLock { $0 }, parts: [(4, 10), (4, 10), (2, 10)])
 		}
 
 		@Test

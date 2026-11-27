@@ -369,8 +369,7 @@ extension UnitTests {
 		func uploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			let probe = OnTaskCreationProbe()
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: { probe.expectOnTaskCreationReturned() })
@@ -404,8 +403,7 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringOnTaskCreation() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
 
@@ -438,8 +436,7 @@ extension UnitTests {
 		func uploadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			let upload = Task {
@@ -485,8 +482,7 @@ extension UnitTests {
 		func uploadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
 			let (gatedProvider, gate) = try makeGatedProvider()
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
 			URLProtocolSequenceMock.steps.append(.response(propfindResponse, nil))
@@ -534,8 +530,7 @@ extension UnitTests {
 		func uploadFileWithTransportError() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			URLProtocolMock.requestHandler.append({ _ in
 				throw URLProtocolMockError.simulatedTransportFailure
@@ -615,8 +610,7 @@ extension UnitTests {
 		@Test
 		func testUploadFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
@@ -640,8 +634,7 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringTransfer() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			let progress = Progress(totalUnitCount: 1)
 			let putStarted = TestSignal("PUT request started")
 			let putGate = DispatchSemaphore(value: 0)
@@ -671,8 +664,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithQuotaInsufficientError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 			let progress = Progress(totalUnitCount: 1)
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 507, for: responseURL)
@@ -685,8 +677,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithReplaceExisting() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
 			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
@@ -715,8 +706,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
 			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
@@ -745,8 +735,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithReplaceExistingAndAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
 			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
@@ -759,8 +748,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithParentFolderDoesNotExistError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 409, for: responseURL)
@@ -772,8 +760,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithParentFolderDoesNotExistErrorWhenReceiving404Error() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 404, for: responseURL)
@@ -785,8 +772,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithUnauthorizedError() async throws {
 			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
-			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, data: getTestData(forResource: "item-data", withExtension: "txt"))
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))

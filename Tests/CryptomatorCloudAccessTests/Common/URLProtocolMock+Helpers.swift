@@ -64,10 +64,23 @@ extension SplitURLSession.Hooks {
 
 /// Checks the fractions that `recordingTransferProgress` recorded for a transfer that ran in a single task.
 func assertTransferProgress(_ fractions: [Double], _ comment: Comment? = nil, sourceLocation: SourceLocation = #_sourceLocation) {
+	assertTransferProgress(fractions, parts: [(length: 1, totalLength: 1)], comment, sourceLocation: sourceLocation)
+}
+
+/**
+ Checks the fractions that `recordingTransferProgress` recorded for a transfer that ran in one task per part, the parts sending `length` bytes one after the other.
+
+ More than half of each part's bytes must count towards the progress when its task terminates, and the progress must not complete before the transfer returns. `totalLength` is the byte count that the progress spans while the part is sent, which grows when the transfer sends bytes again.
+ */
+func assertTransferProgress(_ fractions: [Double], parts: [(length: Double, totalLength: Double)], _ comment: Comment? = nil, sourceLocation: SourceLocation = #_sourceLocation) {
 	let suffix = comment.map { " (\($0.rawValue))" } ?? ""
-	#expect(fractions.count == 1, "Unexpected number of transfer tasks\(suffix)", sourceLocation: sourceLocation)
-	#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress\(suffix)", sourceLocation: sourceLocation)
-	#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned\(suffix)", sourceLocation: sourceLocation)
+	#expect(fractions.count == parts.count, "Unexpected number of transfer tasks\(suffix)", sourceLocation: sourceLocation)
+	var bytesBefore = 0.0
+	for (index, (fraction, part)) in zip(fractions, parts).enumerated() {
+		#expect(fraction > (bytesBefore + part.length / 2) / part.totalLength, "The progress of transfer task \(index) isn't part of the transfer's progress\(suffix)", sourceLocation: sourceLocation)
+		#expect(fraction < 1, "The progress completed before transfer task \(index) returned\(suffix)", sourceLocation: sourceLocation)
+		bytesBefore += part.length
+	}
 }
 
 /// Checks the fractions that `recordingTransferProgress` recorded for a transfer that was retried once. The retry starts at half of the fraction that the first attempt reached, and the transfer ends where the first attempt did.

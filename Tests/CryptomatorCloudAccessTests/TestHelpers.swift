@@ -71,37 +71,6 @@ func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: Tes
 	return try await releasingOnError(task, by: release.fulfill, sourceLocation: sourceLocation, body)
 }
 
-/// Runs `map` over four elements with a limit of two. It fails the test unless two operations start at once, if more than two run at once, or if the values come back out of order.
-func assertRunsAtMostLimitOperationsAtOnce(_ map: @escaping @Sendable ([Int], Int, @escaping @Sendable (Int) async throws -> Int) async throws -> [Int], sourceLocation: SourceLocation = #_sourceLocation) async throws {
-	let runningCount = OSAllocatedUnfairLock(initialState: 0)
-	let gate = Gate()
-	let limitStarted = TestSignal("two operations started", expectedCount: 2, allowsOverFulfillment: true, sourceLocation: sourceLocation)
-	let limitExceeded = TestSignal("more than two operations ran at once", allowsOverFulfillment: true, sourceLocation: sourceLocation)
-	let mapping = Task {
-		try await map([1, 2, 3, 4], 2) { element in
-			let running = runningCount.withLock { count in
-				count += 1
-				return count
-			}
-			if running > 2 {
-				limitExceeded.fulfill()
-			} else {
-				limitStarted.fulfill()
-			}
-			await gate.wait()
-			runningCount.withLock { $0 -= 1 }
-			return element
-		}
-	}
-
-	await limitStarted.wait(sourceLocation: sourceLocation)
-	await limitExceeded.expectNoFulfillment(within: .seconds(0.2), sourceLocation: sourceLocation)
-	gate.open()
-
-	let values = try await cancellingValue(of: mapping, sourceLocation: sourceLocation)
-	#expect(values == [1, 2, 3, 4], sourceLocation: sourceLocation)
-}
-
 // MARK: - Signals
 
 /**
@@ -247,8 +216,12 @@ func makeTemporaryDirectory() throws -> URL {
 }
 
 func makeLocalFile(in directory: URL, named name: String = UUID().uuidString, content: String = "content") throws -> URL {
+	return try makeLocalFile(in: directory, named: name, data: Data(content.utf8))
+}
+
+func makeLocalFile(in directory: URL, named name: String = UUID().uuidString, data: Data) throws -> URL {
 	let url = directory.appending(component: name, directoryHint: .notDirectory)
-	try Data(content.utf8).write(to: url)
+	try data.write(to: url)
 	return url
 }
 

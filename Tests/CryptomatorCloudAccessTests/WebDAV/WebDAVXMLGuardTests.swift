@@ -359,10 +359,10 @@ extension UnitTests {
 		@Test
 		func validatesFiles() throws {
 			let overCap = Data(("<a><!--" + String(repeating: "c", count: WebDAVXMLLimits.maxDelimitedLength + 1) + "--></a>").utf8)
-			let listingURL = try write(fixture("item-list"))
-			let overCapURL = try write(overCap)
-			let multibyteURL = try write(Data("<r>äöü😀</r>".utf8))
-			let emptyURL = try write(Data())
+			let listingURL = try makeLocalFile(in: tmpDirURL, data: fixture("item-list"))
+			let overCapURL = try makeLocalFile(in: tmpDirURL, data: overCap)
+			let multibyteURL = try makeLocalFile(in: tmpDirURL, data: Data("<r>äöü😀</r>".utf8))
+			let emptyURL = try makeLocalFile(in: tmpDirURL, data: Data())
 			for chunkSize in WebDAVXMLGuardTests.fileChunkSizes {
 				try WebDAVXMLGuard.validate(fileAt: listingURL, chunkSize: chunkSize)
 				#expect(throws: WebDAVXMLGuardError.limitExceeded(.comment)) { try WebDAVXMLGuard.validate(fileAt: overCapURL, chunkSize: chunkSize) }
@@ -373,7 +373,7 @@ extension UnitTests {
 
 		@Test
 		func validatingFileInCancelledTaskThrowsCancellationError() async throws {
-			let fileURL = try write(Data("<r/>".utf8))
+			let fileURL = try makeLocalFile(in: tmpDirURL, data: Data("<r/>".utf8))
 			let task = cancelledTask { try WebDAVXMLGuard.validate(fileAt: fileURL) }
 			await #expect(throws: CancellationError.self) { try await task.value }
 		}
@@ -445,12 +445,6 @@ extension UnitTests {
 
 		private func fixture(_ name: String) throws -> Data {
 			return try Data(contentsOf: #require(Bundle.module.url(forResource: name, withExtension: "xml")))
-		}
-
-		private func write(_ data: Data) throws -> URL {
-			let fileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try data.write(to: fileURL)
-			return fileURL
 		}
 	}
 }

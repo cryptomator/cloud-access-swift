@@ -12,6 +12,7 @@ import Testing
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
+	case duplicateQueryParameter(String)
 	case simulatedTransportFailure
 }
 
@@ -146,9 +147,7 @@ class URLProtocolAuthenticationMock: URLProtocol {
 	override func stopLoading() {}
 }
 
-/// Test-only `URLProtocol` that emits a queued sequence of either HTTP responses or auth challenges
-/// in order. Used to target an auth challenge at a specific request (e.g. the transfer task) while
-/// letting earlier requests (e.g. the preflight `PROPFIND`) resolve normally.
+/// A `URLProtocol` that answers each request with the next of its queued steps: a response, a response delivered in chunks, a failure or an auth challenge. It lets a test aim a step at one request of a sequence, e.g. an auth challenge at a transfer task.
 class URLProtocolSequenceMock: URLProtocol {
 	enum Step {
 		case response(HTTPURLResponse, Data?)

@@ -87,7 +87,7 @@ extension UnitTests {
 
 		@Test
 		func forEachChildStopsWhenBodyReturnsFalse() throws {
-			let fileURL = try write(PCloudMockResponse.folder(id: 0, contents: ["a", "b", "c"].enumerated().map { PCloudMockResponse.fileEntry(id: UInt64($0), name: $1) }))
+			let fileURL = try makeLocalFile(in: tmpDirURL, content: PCloudMockResponse.folder(id: 0, contents: ["a", "b", "c"].enumerated().map { PCloudMockResponse.fileEntry(id: UInt64($0), name: $1) }))
 			var names = [String]()
 
 			try PCloudListingReader.forEachChild(inFileAt: fileURL) { element in
@@ -107,7 +107,7 @@ extension UnitTests {
 			let rootEnd = try #require(bytes.lastIndex(of: UInt8(ascii: "}")))
 
 			for length in 0 ..< bytes.count {
-				let fileURL = try write(bytes.prefix(length))
+				let fileURL = try makeLocalFile(in: tmpDirURL, data: bytes.prefix(length))
 				if length > rootEnd {
 					#expect(throws: Never.self, "\(length)") { try PCloudListingReader.validate(fileAt: fileURL, chunkSize: 3) }
 				} else {
@@ -141,7 +141,7 @@ extension UnitTests {
 			]
 
 			for listing in invalidListings {
-				let fileURL = try write(listing)
+				let fileURL = try makeLocalFile(in: tmpDirURL, data: listing)
 				for chunkSize in PCloudListingReaderTests.chunkSizes {
 					assertThrows(.unexpectedContent, reading: fileURL, chunkSize: chunkSize)
 				}
@@ -154,7 +154,7 @@ extension UnitTests {
 			let listing = Data(PCloudMockResponse.folder(id: 3, contents: [#"{"isfolder":false,"name":"a.txt","fileid":5,"modified":1,"size":7,"icon":"\ud800\a\uZZZZ\u{01}\n","x":{"\udc00":[01,1-2,--,1e,1.2.3,1E5,1e+5,-1.5E-3]},"\#(longKey)":0}"#]).utf8)
 				.replacing(Data("\\n".utf8), with: Data([0x0A, 0xFF, 0xC0, 0xAF]))
 				.replacing(Data(#""result":0"#.utf8), with: Data(#""other":["\udc00",{"\#(longKey)":0}],"result":0"#.utf8))
-			let fileURL = try write(listing)
+			let fileURL = try makeLocalFile(in: tmpDirURL, data: listing)
 
 			for chunkSize in PCloudListingReaderTests.chunkSizes {
 				#expect(try PCloudListingReader.validate(fileAt: fileURL, chunkSize: chunkSize).metadata == .object)
@@ -246,7 +246,7 @@ extension UnitTests {
 			]
 
 			for listing in listings {
-				try assertThrows(.listingTooLarge, reading: write(listing), chunkSize: HTTPClientSupport.temporaryFileBufferLength)
+				try assertThrows(.listingTooLarge, reading: makeLocalFile(in: tmpDirURL, content: listing), chunkSize: HTTPClientSupport.temporaryFileBufferLength)
 			}
 		}
 
@@ -270,23 +270,13 @@ extension UnitTests {
 			return summary
 		}
 
-		private func write(_ listing: String) throws -> URL {
-			return try write(Data(listing.utf8))
-		}
-
-		private func write(_ data: Data) throws -> URL {
-			let fileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
-			try data.write(to: fileURL)
-			return fileURL
-		}
-
 		private func validate(_ listing: String, chunkSize: Int) throws -> PCloudListingReader.Summary {
-			return try PCloudListingReader.validate(fileAt: write(listing), chunkSize: chunkSize)
+			return try PCloudListingReader.validate(fileAt: makeLocalFile(in: tmpDirURL, content: listing), chunkSize: chunkSize)
 		}
 
 		private func children(of listing: String, chunkSize: Int) throws -> [PCloudMetadata] {
 			var children = [PCloudMetadata]()
-			try PCloudListingReader.forEachChild(inFileAt: write(listing), chunkSize: chunkSize) { element in
+			try PCloudListingReader.forEachChild(inFileAt: makeLocalFile(in: tmpDirURL, content: listing), chunkSize: chunkSize) { element in
 				try children.append(PCloudJSON.child(in: element))
 				return true
 			}

@@ -495,12 +495,7 @@ extension UnitTests {
 
 			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 3)
-			for (index, (fraction, (bytesBefore, chunkLength))) in zip(recordedFractions, [(0.0, 4.0), (4.0, 4.0), (8.0, 2.0)]).enumerated() {
-				#expect(fraction > (bytesBefore + chunkLength / 2) / 10, "chunk \(index)")
-				#expect(fraction < 1, "chunk \(index)")
-			}
+			assertTransferProgress(fractions.withLock { $0 }, parts: [(4, 10), (4, 10), (2, 10)])
 		}
 
 		/// Bytes sent again after a corrected offset count on top of those sent so far, so the progress never completes before the last append.
@@ -521,12 +516,7 @@ extension UnitTests {
 			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			// 16 bytes are sent in all: 0..<8, and 2..<10 again.
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 4)
-			for (index, (fraction, (bytesBefore, chunkLength, totalLength))) in zip(recordedFractions, [(0.0, 4.0, 10.0), (4.0, 4.0, 10.0), (8.0, 4.0, 16.0), (12.0, 4.0, 16.0)]).enumerated() {
-				#expect(fraction > (bytesBefore + chunkLength / 2) / totalLength, "append \(index)")
-				#expect(fraction < 1, "append \(index)")
-			}
+			assertTransferProgress(fractions.withLock { $0 }, parts: [(4, 10), (4, 10), (4, 16), (4, 16)])
 		}
 
 		@Test

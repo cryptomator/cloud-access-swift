@@ -610,6 +610,8 @@ extension S3Client {
 }
 
 enum S3MockResponse {
+	static let defaultObjectSize = 7
+	static let defaultLastModified = "2026-10-18T12:34:56.000Z"
 	static let completeMultipartUploadResult = "<CompleteMultipartUploadResult><ETag>\"etag\"</ETag></CompleteMultipartUploadResult>"
 	static let copyObjectResult = "<CopyObjectResult><ETag>\"etag\"</ETag></CopyObjectResult>"
 	static func deleteResult(errors: [(key: String, code: String?)]) -> String {
@@ -630,7 +632,7 @@ enum S3MockResponse {
 		return "<InitiateMultipartUploadResult><Bucket>exampleBucket</Bucket><Key>b.txt</Key><UploadId>\(uploadID)</UploadId></InitiateMultipartUploadResult>"
 	}
 
-	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = 7, lastModified: String = "2026-10-18T12:34:56.000Z") -> String {
+	static func listBucketResult(keys: [String], commonPrefixes: [String] = [], nextContinuationToken: String? = nil, size: Int = defaultObjectSize, lastModified: String = defaultLastModified) -> String {
 		let contents = keys.map { "<Contents><Key>\($0)</Key><LastModified>\(lastModified)</LastModified><Size>\(size)</Size></Contents>" }.joined()
 		let prefixes = commonPrefixes.map { "<CommonPrefixes><Prefix>\($0)</Prefix></CommonPrefixes>" }.joined()
 		let continuation = nextContinuationToken.map { "<IsTruncated>true</IsTruncated><NextContinuationToken>\($0)</NextContinuationToken>" } ?? "<IsTruncated>false</IsTruncated>"

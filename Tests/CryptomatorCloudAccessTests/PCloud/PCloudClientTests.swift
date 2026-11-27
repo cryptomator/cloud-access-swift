@@ -22,8 +22,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = []
 			self.sleeps = SleepRecorder()
 			self.client = PCloudClient.mocked(sleeps: sleeps)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -34,24 +33,25 @@ extension UnitTests {
 
 		@Test
 		func callSendsFormBodyWithAccessToken() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3), onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 3), onRequest: requests.record)]
 
 			_ = try await client.listFolder(3, to: listingURL())
 
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://eapi.pcloud.com/listfolder")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
+			#expect(URLProtocolMock.formParameters(of: request)["access_token"] == PCloudCredential.stubAccessToken)
 		}
 
 		@Test
 		func callGoesToHostOfStoredLogin() async throws {
-			let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			let lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 			defer {
-				try? FileManager.default.removeItem(at: lockDirectoryURL)
+				if FileManager.default.fileExists(atPath: lockDirectoryURL.path) {
+					removeItemRecordingFailure(at: lockDirectoryURL)
+				}
 			}
 			let buffer = TokenBuffer()
 			buffer.store(OAuthToken(accessToken: "STORED", refreshToken: nil, expiresAt: nil, apiHost: "api.pcloud.com"))
@@ -67,28 +67,24 @@ extension UnitTests {
 
 		@Test
 		func callPercentEncodesParameters() async throws {
-			let sentBody = OSAllocatedUnfairLock<String?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 4), onRequest: { request in
-				sentBody.withLock { $0 = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 4), onRequest: requests.record)]
 
 			_ = try await client.createFolder(name: "a+b&c=d/é ~", parentID: 0)
 
-			let body = try #require(sentBody.withLock { $0 })
+			let body = try #require(requests.requests.first?.httpBody.flatMap { String(data: $0, encoding: .utf8) })
 			#expect(body.contains("name=a%2Bb%26c%3Dd%2F%C3%A9%20~&"), "\(body)")
 		}
 
 		@Test
 		func commandsSendTheirParameters() async throws {
 			for command in PCloudClientTests.commands {
-				let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-				URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: command.successBody, onRequest: { request in
-					sentRequest.withLock { $0 = request }
-				})]
+				let requests = RequestRecorder()
+				URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: command.successBody, onRequest: requests.record)]
 
 				try await command.call(client)
 
-				let request = try #require(sentRequest.withLock { $0 }, "\(command.name)")
+				let request = try #require(requests.requests.first, "\(command.name)")
 				#expect(request.url?.path == "/\(command.name)", "\(command.name)")
 				#expect(command.parameters.merging(["access_token": PCloudCredential.stubAccessToken]) { first, _ in first } == URLProtocolMock.formParameters(of: request), "\(command.name)")
 			}
@@ -96,15 +92,13 @@ extension UnitTests {
 
 		@Test
 		func uploadSendsParametersInQueryAndFileAsBody() async throws {
-			let sentRequest = OSAllocatedUnfairLock<(request: URLRequest, body: Data)?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 42), onRequest: { request in
-				sentRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
-			})]
-			let fileURL = try makeLocalFile()
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 42), onRequest: requests.record)]
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			let metadata = try await client.upload(fromFile: fileURL, parentID: 3, name: "a+b.txt", progress: nil, onTaskCreation: nil)
 
-			let (request, body) = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(metadata.identifier == 42)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.path == "/uploadfile")
@@ -112,21 +106,19 @@ extension UnitTests {
 			let query = try #require(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery })
 			#expect(query.contains("filename=a%2Bb.txt"), "\(query)")
 			#expect(["access_token": PCloudCredential.stubAccessToken, "folderid": "3", "filename": "a+b.txt", "nopartial": "1", "iconformat": "id", "timeformat": "timestamp"] == URLProtocolMock.parameters(inFormEncoded: query))
-			#expect(Data("content".utf8) == body)
+			#expect(Data("content".utf8) == request.httpBody)
 		}
 
 		@Test
 		func downloadSendsOnlyDownloadTagToHostOfLink() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content", onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content", onRequest: requests.record)]
 			let fileLink = PCloudFileLink(hosts: ["c1.pcloud.com", "c2.pcloud.com"], path: "/dir/a#b?c%d.txt", dwltag: "TAG")
-			let stagingURL = tmpDirURL.appendingPathComponent("download.txt")
+			let stagingURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 
 			try await client.download(fileLink, to: stagingURL, progress: nil, onTaskCreation: nil)
 
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			let url = try #require(request.url)
 			#expect(request.httpMethod == "GET")
 			#expect(url.host == "c1.pcloud.com")
@@ -178,17 +170,17 @@ extension UnitTests {
 				{ _ in throw URLError(.notConnectedToInternet) },
 				{ _ in throw URLError(.notConnectedToInternet) }
 			]
-			let fileURL = try makeLocalFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.upload(fromFile: fileURL, parentID: 0, name: "a.txt", progress: nil, onTaskCreation: nil) }
-			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.download(PCloudMockResponse.link, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.noInternetConnection) { try await client.download(PCloudMockResponse.link, to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 		}
 
 		@Test
 		func cancelledTasksThrowCancellationError() async throws {
 			let client = client
-			let fileURL = try makeLocalFile()
-			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
+			let downloadURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let listingURL = listingURL()
 			URLProtocolMock.requestHandler = Array(repeating: { _ in throw URLError(.cancelled) }, count: 3)
 			let operations: [@Sendable () async throws -> Void] = [
@@ -213,7 +205,7 @@ extension UnitTests {
 		@Test
 		func failedDownloadThrowsErrorOfResultAndLeavesNoFile() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 410, body: PCloudMockResponse.result(2009))]
-			let stagingURL = tmpDirURL.appendingPathComponent("download.txt")
+			let stagingURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 
 			await #expect(throws: PCloudError.apiError(code: 2009, message: "Error 2009.")) { try await client.download(PCloudMockResponse.link, to: stagingURL, progress: nil, onTaskCreation: nil) }
 			#expect(!FileManager.default.fileExists(atPath: stagingURL.path))
@@ -289,9 +281,11 @@ extension UnitTests {
 
 		@Test
 		func retryReadsLoginAgain() async throws {
-			let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			let lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 			defer {
-				try? FileManager.default.removeItem(at: lockDirectoryURL)
+				if FileManager.default.fileExists(atPath: lockDirectoryURL.path) {
+					removeItemRecordingFailure(at: lockDirectoryURL)
+				}
 			}
 			let buffer = TokenBuffer()
 			buffer.store(OAuthToken(accessToken: "STORED", refreshToken: nil, expiresAt: nil, apiHost: "api.pcloud.com"))
@@ -410,10 +404,10 @@ extension UnitTests {
 				URLProtocolMock.handler(body: "content", onRequest: recordMarker),
 				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 42), onRequest: recordMarker)
 			]
-			let fileURL = try makeLocalFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			_ = try await backgroundClient.listFolder(0, to: listingURL())
-			try await backgroundClient.download(PCloudMockResponse.link, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			try await backgroundClient.download(PCloudMockResponse.link, to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			_ = try await backgroundClient.upload(fromFile: fileURL, parentID: 0, name: "a.txt", progress: nil, onTaskCreation: nil)
 
 			#expect(markers.withLock { $0 } == ["metadata", "transfer", "transfer"])
@@ -432,11 +426,11 @@ extension UnitTests {
 				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 42)),
 				URLProtocolMock.handler(body: "content")
 			]
-			let fileURL = try makeLocalFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			_ = try await client.getFileLink(fileID: 5)
 			_ = try await client.upload(fromFile: fileURL, parentID: 0, name: "a.txt", progress: nil, onTaskCreation: nil)
-			try await client.download(PCloudMockResponse.link, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			try await client.download(PCloudMockResponse.link, to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			let log = logCapture.joinedMessages
 			#expect(log.contains("--> GET https://c1.pcloud.com/<redacted>"), "\(log)")
@@ -456,7 +450,7 @@ extension UnitTests {
 				throw URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString])
 			}
 			URLProtocolMock.requestHandler = [failWithURL, failWithURL]
-			let fileURL = try makeLocalFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			var errors = [Error]()
 
 			do {
@@ -465,7 +459,7 @@ extension UnitTests {
 				errors.append(error)
 			}
 			do {
-				try await client.download(PCloudMockResponse.link, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+				try await client.download(PCloudMockResponse.link, to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			} catch {
 				errors.append(error)
 			}
@@ -485,9 +479,11 @@ extension UnitTests {
 		/// Every API call of the client that sends a form body, with the parameters besides `access_token` that pcloud-sdk-swift 3.2 sent for it.
 		private static let commands = [
 			Command(name: "listfolder", parameters: ["folderid": "3", "recursive": "0"].merging(formatParameters) { $1 }, isIdempotent: true, successBody: PCloudMockResponse.folder(id: 3), call: { client in
-				let listingURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+				let listingURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				defer {
-					try? FileManager.default.removeItem(at: listingURL)
+					if FileManager.default.fileExists(atPath: listingURL.path) {
+						removeItemRecordingFailure(at: listingURL)
+					}
 				}
 				_ = try await client.listFolder(3, to: listingURL)
 			}),
@@ -502,13 +498,7 @@ extension UnitTests {
 		]
 
 		private func listingURL() -> URL {
-			return tmpDirURL.appendingPathComponent(UUID().uuidString)
-		}
-
-		private func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data("content".utf8).write(to: localURL)
-			return localURL
+			return tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		}
 	}
 }
@@ -534,9 +524,7 @@ extension PCloudCredential {
 
 extension PCloudClient {
 	static func mocked(tokenSource: any PCloudTokenSource = PCloudCredential.stubTokenSource, hooks: SplitURLSession.Hooks = SplitURLSession.Hooks(), sleeps: SleepRecorder = SleepRecorder()) -> PCloudClient {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return PCloudClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
+		return PCloudClient(tokenSource: tokenSource, configuration: URLProtocolMock.configuration(), metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

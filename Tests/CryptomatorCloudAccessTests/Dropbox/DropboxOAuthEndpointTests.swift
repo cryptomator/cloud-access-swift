@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
@@ -23,16 +22,14 @@ extension UnitTests {
 
 		@Test
 		func exchangePostsCodeAndVerifierAndReturnsUserID() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxOAuthEndpointTests.exchangeResponse, onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let recorder = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxOAuthEndpointTests.exchangeResponse, onRequest: recorder.record)]
 
 			let (token, userID) = try await DropboxOAuthEndpoint.mocked().exchange(code: "SECRET-CODE", codeVerifier: "SECRET-VERIFIER")
 
 			#expect(userID == "12345")
 			#expect(OAuthToken(accessToken: "SECRET-ACCESS", refreshToken: "SECRET-REFRESH", expiresAt: DropboxOAuthEndpointTests.now.addingTimeInterval(14400)) == token)
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(recorder.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://api.dropboxapi.com/oauth2/token")
 			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "authorization_code", "code": "SECRET-CODE", "code_verifier": "SECRET-VERIFIER", "client_id": "APP-KEY", "redirect_uri": "db-APP-KEY://2/token"])
@@ -55,15 +52,13 @@ extension UnitTests {
 
 		@Test
 		func refreshPostsRefreshGrantAndKeepsRefreshToken() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxOAuthEndpointTests.refreshResponse, onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let recorder = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxOAuthEndpointTests.refreshResponse, onRequest: recorder.record)]
 
 			let token = try await DropboxOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "SECRET-REFRESH", expiresAt: nil))
 
 			#expect(OAuthToken(accessToken: "SECRET-REFRESHED-ACCESS", refreshToken: "SECRET-REFRESH", expiresAt: DropboxOAuthEndpointTests.now.addingTimeInterval(14400)) == token)
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(recorder.requests.first)
 			#expect(request.url?.absoluteString == "https://api.dropboxapi.com/oauth2/token")
 			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "APP-KEY"])
 		}
@@ -102,14 +97,12 @@ extension UnitTests {
 
 		@Test
 		func revokeOfLongLivedTokenSendsItWithoutRefresh() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "null", onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let recorder = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "null", onRequest: recorder.record)]
 
 			try await DropboxOAuthEndpoint.mocked().revoke(OAuthToken(accessToken: "SECRET-LONG-LIVED", refreshToken: nil, expiresAt: nil))
 
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(recorder.requests.first)
 			#expect(request.url?.absoluteString == "https://api.dropboxapi.com/2/auth/token/revoke")
 			#expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer SECRET-LONG-LIVED")
 		}
@@ -175,8 +168,6 @@ extension UnitTests {
 
 extension DropboxOAuthEndpoint {
 	static func mocked() -> DropboxOAuthEndpoint {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return DropboxOAuthEndpoint(appKey: "APP-KEY", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
+		return DropboxOAuthEndpoint(appKey: "APP-KEY", configuration: URLProtocolMock.configuration(), now: { Date(timeIntervalSince1970: 1_792_000_000) })
 	}
 }

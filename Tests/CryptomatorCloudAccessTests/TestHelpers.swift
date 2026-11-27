@@ -55,15 +55,51 @@ func cancellingValue<Value: Sendable>(of task: Task<Value, Error>, timeout: Dura
 	throw error
 }
 
-/// Runs `body` while `task` waits for `release`. If `body` throws, it fulfills `release` and waits for the task before rethrowing. Otherwise the task would run on into a later test, which its timed-out wait would fail.
-func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: TestSignal, sourceLocation: SourceLocation = #_sourceLocation, _ body: () async throws -> Value) async throws -> Value {
+/// Runs `body` while `task` waits to be released. If `body` throws, it calls `release` and waits for the task before rethrowing. Otherwise the task would run on into a later test, which its timed-out wait would fail.
+func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: @Sendable () -> Void, sourceLocation: SourceLocation = #_sourceLocation, _ body: () async throws -> Value) async throws -> Value {
 	do {
 		return try await body()
 	} catch {
-		release.fulfill()
+		release()
 		_ = try? await cancellingValue(of: task, sourceLocation: sourceLocation)
 		throw error
 	}
+}
+
+/// Runs `body` like the closure overload, fulfilling `release` if `body` throws.
+func releasingOnError<Value>(_ task: Task<some Sendable, Error>, by release: TestSignal, sourceLocation: SourceLocation = #_sourceLocation, _ body: () async throws -> Value) async throws -> Value {
+	return try await releasingOnError(task, by: release.fulfill, sourceLocation: sourceLocation, body)
+}
+
+/// Runs `map` over four elements with a limit of two. It fails the test unless two operations start at once, if more than two run at once, or if the values come back out of order.
+func assertRunsAtMostLimitOperationsAtOnce(_ map: @escaping @Sendable ([Int], Int, @escaping @Sendable (Int) async throws -> Int) async throws -> [Int], sourceLocation: SourceLocation = #_sourceLocation) async throws {
+	let runningCount = OSAllocatedUnfairLock(initialState: 0)
+	let gate = Gate()
+	let limitStarted = TestSignal("two operations started", expectedCount: 2, allowsOverFulfillment: true, sourceLocation: sourceLocation)
+	let limitExceeded = TestSignal("more than two operations ran at once", allowsOverFulfillment: true, sourceLocation: sourceLocation)
+	let mapping = Task {
+		try await map([1, 2, 3, 4], 2) { element in
+			let running = runningCount.withLock { count in
+				count += 1
+				return count
+			}
+			if running > 2 {
+				limitExceeded.fulfill()
+			} else {
+				limitStarted.fulfill()
+			}
+			await gate.wait()
+			runningCount.withLock { $0 -= 1 }
+			return element
+		}
+	}
+
+	await limitStarted.wait(sourceLocation: sourceLocation)
+	await limitExceeded.expectNoFulfillment(within: .seconds(0.2), sourceLocation: sourceLocation)
+	gate.open()
+
+	let values = try await cancellingValue(of: mapping, sourceLocation: sourceLocation)
+	#expect(values == [1, 2, 3, 4], sourceLocation: sourceLocation)
 }
 
 // MARK: - Signals
@@ -202,7 +238,19 @@ final class Gate: Sendable {
 	}
 }
 
-// MARK: - Cleanup
+// MARK: - Temporary Files
+
+func makeTemporaryDirectory() throws -> URL {
+	let url = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
+	try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+	return url
+}
+
+func makeLocalFile(in directory: URL, named name: String = UUID().uuidString, content: String = "content") throws -> URL {
+	let url = directory.appending(component: name, directoryHint: .notDirectory)
+	try Data(content.utf8).write(to: url)
+	return url
+}
 
 /// Records a failed removal as an issue of the running test instead of throwing, because a suite's `deinit` can't throw.
 func removeItemRecordingFailure(at url: URL, sourceLocation: SourceLocation = #_sourceLocation) {
@@ -254,7 +302,7 @@ func uuidNamedTemporaryFiles() throws -> Set<String> {
 func assertThrowsCancellationErrorInCancelledTask(_ provider: CloudProvider, sourceLocation: SourceLocation = #_sourceLocation) async {
 	let cloudPath = CloudPath("/foo")
 	let otherCloudPath = CloudPath("/bar")
-	let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+	let localURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 	let operations: [(String, @Sendable () async throws -> Void)] = [
 		("fetchItemMetadata", { _ = try await provider.fetchItemMetadata(at: cloudPath) }),
 		("fetchItemList", { _ = try await provider.fetchItemList(forFolderAt: cloudPath, withPageToken: nil) }),

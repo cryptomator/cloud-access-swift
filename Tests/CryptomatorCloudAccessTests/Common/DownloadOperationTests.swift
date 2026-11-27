@@ -18,10 +18,9 @@ extension UnitTests {
 		let destinationURL: URL
 
 		init() throws {
-			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let tmpDirURL = try makeTemporaryDirectory()
 			self.tmpDirURL = tmpDirURL
-			self.destinationURL = tmpDirURL.appendingPathComponent("destination", isDirectory: false)
+			self.destinationURL = tmpDirURL.appending(component: "destination", directoryHint: .notDirectory)
 		}
 
 		deinit {

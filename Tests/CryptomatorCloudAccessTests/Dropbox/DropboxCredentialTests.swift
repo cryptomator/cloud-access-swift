@@ -20,7 +20,7 @@ extension UnitTests {
 
 		init() {
 			URLProtocolMock.requestHandler = []
-			self.lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			self.lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		}
 
 		deinit {
@@ -280,8 +280,10 @@ extension UnitTests {
 
 		/// The tokens that a store published stay in its process for its lock directory and account, so each login of a loop gets its own directory.
 		private func useNewLockDirectory() {
-			try? FileManager.default.removeItem(at: lockDirectoryURL)
-			lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			if FileManager.default.fileExists(atPath: lockDirectoryURL.path) {
+				removeItemRecordingFailure(at: lockDirectoryURL)
+			}
+			lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		}
 
 		private func makeTokenSource(buffer: TokenBuffer) throws -> StoredOAuthTokenSource {

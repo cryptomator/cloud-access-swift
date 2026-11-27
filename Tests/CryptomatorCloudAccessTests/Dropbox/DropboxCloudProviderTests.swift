@@ -21,8 +21,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -98,8 +97,8 @@ extension UnitTests {
 
 		@Test
 		func routeErrorsAreConverted() async throws {
-			let localURL = try makeLocalFile(content: "content")
-			let localTargetURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let localTargetURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let cases: [ErrorCase] = [
 				ErrorCase(summary: "path/not_found/..", expectedError: CloudProviderError.itemNotFound) { _ = try await $0.fetchItemMetadata(at: CloudPath("/missing")) },
 				ErrorCase(summary: "path/not_folder/..", expectedError: CloudProviderError.itemTypeMismatch) { _ = try await $0.fetchItemList(forFolderAt: CloudPath("/file.txt"), withPageToken: nil) },
@@ -146,7 +145,7 @@ extension UnitTests {
 
 		@Test
 		func missingParentFolderThrowsWithoutWriting() async throws {
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			let operations: [(name: String, operation: @Sendable (DropboxCloudProvider) async throws -> Void)] = [
 				("upload", { _ = try await $0.uploadFile(from: localURL, to: CloudPath("/missing/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }),
 				("create folder", { try await $0.createFolder(at: CloudPath("/missing/folder")) }),
@@ -167,7 +166,7 @@ extension UnitTests {
 		/// Dropbox deletes and moves either type, so the wrong-type cases don't apply. Whether Dropbox answers a lookup below a file with `not_found` or `not_folder` is unknown, so the case below a file mid-path runs with both.
 		@Test
 		func mutationChecksFollowTheSharedContract() async throws {
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			let fileParent = DropboxCloudProviderTests.response(to: "/2/files/get_metadata", path: "/file.txt", body: DropboxMockResponse.file(name: "file.txt"))
 			let cases = MutationGuardCases.make(localURL: localURL) { kind in
 				switch kind {
@@ -193,7 +192,7 @@ extension UnitTests {
 
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { DropboxCloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
@@ -230,22 +229,15 @@ extension UnitTests {
 		@Test
 		func downloadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: DropboxCloudProvider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content", headerFields: ["Dropbox-API-Result": DropboxMockResponse.file(name: "file.txt", tagged: false)], onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content", headerFields: ["Dropbox-API-Result": DropboxMockResponse.file(name: "file.txt", tagged: false)], onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: DropboxDate.date(from: DropboxMockResponse.serverModified), size: 7) == metadata)
 		}
@@ -253,54 +245,38 @@ extension UnitTests {
 		@Test
 		func uploadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: DropboxCloudProvider = provider
-			let localURL = try makeLocalFile(content: "content")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", tagged: false), onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", tagged: false), onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: DropboxDate.date(from: DropboxMockResponse.serverModified), size: 7) == metadata)
 		}
 
 		@Test
 		func cancellationDuringOnTaskCreationSendsNoTransfer() async throws {
 			let provider: DropboxCloudProvider = provider
-			let localURL = try makeLocalFile(content: "content")
-			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let downloadURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content")]
 
-			await #expect(throws: CancellationError.self) {
-				try await cancellingValue(of: Task {
-					try await provider.downloadFile(from: CloudPath("/file.txt"), to: downloadURL, progress: nil, onTaskCreation: { _ in
-						withUnsafeCurrentTask { $0?.cancel() }
-					})
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: downloadURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) {
-				try await cancellingValue(of: Task {
-					try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-						withUnsafeCurrentTask { $0?.cancel() }
-					})
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			#expect(URLProtocolMock.requestHandler.count == 1)
 			#expect(!FileManager.default.fileExists(atPath: downloadURL.path))
 		}
 
 		@Test
 		func transfersReportBytesOfTask() async throws {
-			let localURL = try makeLocalFile(content: "content")
-			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let downloadURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let transfers = [
 				TransferCase(name: "download", response: URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7", "Dropbox-API-Result": DropboxMockResponse.file(name: "file.txt", tagged: false)])) { provider, progress in
 					_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: downloadURL, progress: progress, onTaskCreation: nil)
@@ -318,10 +294,7 @@ extension UnitTests {
 
 				try await transfer.operation(provider, progress)
 
-				let recordedFractions = fractions.withLock { $0 }
-				#expect(recordedFractions.count == 1, "\(name)")
-				#expect((recordedFractions.first ?? 0) > 0.5, "\(name)")
-				#expect((recordedFractions.first ?? 1) < 1, "\(name)")
+				assertTransferProgress(fractions.withLock { $0 }, "\(name)")
 			}
 		}
 
@@ -339,15 +312,15 @@ extension UnitTests {
 				})
 			]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
 
 		@Test
 		func uploadModeFollowsReplaceExisting() async throws {
-			let localURL = try makeLocalFile(content: "content")
-			let largeLocalURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let largeLocalURL = try makeLocalFile(in: tmpDirURL, content: "0123456789")
 			let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 16)
 			for (replaceExisting, expectedMode) in [(false, "add"), (true, "overwrite")] {
 				let recorder = RequestRecorder()
@@ -370,8 +343,8 @@ extension UnitTests {
 
 		@Test
 		func uploadThroughSymbolicLinkSendsTarget() async throws {
-			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
-			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "content"))
+			let linkURL = tmpDirURL.appending(component: "link.txt", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(in: tmpDirURL))
 			let recorder = RequestRecorder()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", tagged: false), onRequest: recorder.record)]
 
@@ -392,7 +365,7 @@ extension UnitTests {
 				}
 			})
 			let provider = DropboxCloudProvider(client: .mocked(hooks: hooks), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let log = RequestRecorder()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart, onRequest: log.record)]
@@ -426,7 +399,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 10, tagged: false))
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
 			#expect(try log.requests.map(DropboxCloudProviderTests.appendOffset) == [0, 8])
 			#expect(log.requests.map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) } == ["0123", "89"])
@@ -447,7 +420,7 @@ extension UnitTests {
 				}
 				+ [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 16, tagged: false))]
 
-			let metadata = try await provider.uploadFile(from: makeLocalFile(content: "0123456789ABCDEF"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789ABCDEF"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.size == 16)
 			#expect(sleeps.durations.count == 4)
@@ -464,7 +437,7 @@ extension UnitTests {
 			]
 			for (name, appends) in cases {
 				let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
-				let localURL = try makeLocalFile(content: "0123456789ABCDEF")
+				let localURL = try makeLocalFile(in: tmpDirURL, content: "0123456789ABCDEF")
 				let temporaryFiles = try uuidNamedTemporaryFiles()
 				URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart)] + appends + [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 16, tagged: false))]
 
@@ -484,7 +457,7 @@ extension UnitTests {
 					URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 16, tagged: false))
 				]
 
-				await #expect(throws: DropboxError.unexpectedContent, "\(correctOffset)") { try await provider.uploadFile(from: makeLocalFile(content: "0123456789ABCDEF"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+				await #expect(throws: DropboxError.unexpectedContent, "\(correctOffset)") { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789ABCDEF"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 				#expect(URLProtocolMock.requestHandler.count == 1, "\(correctOffset)")
 			}
 		}
@@ -492,7 +465,7 @@ extension UnitTests {
 		@Test
 		func fileThatGetsShorterDuringUploadThrows() async throws {
 			let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 4)
-			let localURL = try makeLocalFile(content: "0123456789ABCDEF")
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "0123456789ABCDEF")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart, onRequest: { _ in
@@ -520,7 +493,7 @@ extension UnitTests {
 				+ Array(repeating: URLProtocolMock.handler(body: "null"), count: 3)
 				+ [URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 10, tagged: false))]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			let recordedFractions = fractions.withLock { $0 }
 			#expect(recordedFractions.count == 3)
@@ -545,7 +518,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: DropboxMockResponse.file(name: "file.txt", size: 10, tagged: false))
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			// 16 bytes are sent in all: 0..<8, and 2..<10 again.
 			let recordedFractions = fractions.withLock { $0 }
@@ -559,7 +532,7 @@ extension UnitTests {
 		@Test
 		func cancellationBeforeFinishStopsUploadSession() async throws {
 			let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 8)
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "0123456789")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart),
@@ -582,7 +555,7 @@ extension UnitTests {
 		@Test
 		func cancelledUploadSessionStillFinishes() async throws {
 			let provider = DropboxCloudProvider(client: .mocked(), maxPageSize: .max, uploadSessionThreshold: 10, uploadSessionChunkLength: 16)
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "0123456789")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: DropboxCloudProviderTests.uploadSessionStart),
@@ -626,12 +599,6 @@ extension UnitTests {
 
 		private static func appendOffset(of request: URLRequest) throws -> Int {
 			return try #require((argument(of: request)?["cursor"] as? [String: Any])?["offset"] as? Int)
-		}
-
-		private func makeLocalFile(content: String) throws -> URL {
-			let url = tmpDirURL.appendingPathComponent(UUID().uuidString)
-			try Data(content.utf8).write(to: url)
-			return url
 		}
 	}
 }

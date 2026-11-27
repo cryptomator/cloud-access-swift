@@ -22,7 +22,7 @@ struct IntegrationTestContext: Sendable {
 		self.backend = fixture.backend
 		self.provider = try fixture.makeProvider()
 		self.treeRoot = fixture.treeRoot
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		self.tmpDirURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		self.fixture = fixture
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
@@ -47,7 +47,7 @@ struct IntegrationTestContext: Sendable {
 
 	/// Uploads a file that the operation under test needs, and waits until it is visible.
 	func uploadPrerequisite(_ content: String, to cloudPath: CloudPath) async throws {
-		let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		try content.write(to: localURL, atomically: true, encoding: .utf8)
 		_ = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false)
 		try await waitUntilVisible(cloudPath, through: provider, on: backend.kind)

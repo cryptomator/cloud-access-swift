@@ -33,33 +33,7 @@ extension UnitTests {
 
 		@Test
 		func runsAtMostLimitOperationsAtOnce() async throws {
-			let runningCount = OSAllocatedUnfairLock(initialState: 0)
-			let gate = Gate()
-			let limitStarted = TestSignal("two operations started", expectedCount: 2, allowsOverFulfillment: true)
-			let limitExceeded = TestSignal("more than two operations ran at once", allowsOverFulfillment: true)
-			let settling = Task {
-				try await allSettled([1, 2, 3, 4], limit: 2) { element in
-					let running = runningCount.withLock { count in
-						count += 1
-						return count
-					}
-					if running > 2 {
-						limitExceeded.fulfill()
-					} else {
-						limitStarted.fulfill()
-					}
-					await gate.wait()
-					runningCount.withLock { $0 -= 1 }
-					return element
-				}
-			}
-
-			await limitStarted.wait()
-			await limitExceeded.expectNoFulfillment(within: .seconds(0.2))
-			gate.open()
-
-			let values = try await cancellingValue(of: settling)
-			#expect(values == [1, 2, 3, 4])
+			try await assertRunsAtMostLimitOperationsAtOnce { try await allSettled($0, limit: $1, $2) }
 		}
 
 		@Test

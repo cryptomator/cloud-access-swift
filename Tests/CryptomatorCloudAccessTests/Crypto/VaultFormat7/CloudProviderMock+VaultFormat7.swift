@@ -8,6 +8,14 @@
 
 import Foundation
 
+extension VaultTestFormat {
+	static let dir3C9SName = "kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s" // (dir3){55}.c9r
+	static let dir4C9SName = "ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s" // (dir4){55}.c9r
+	static let file4C9SName = "9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s" // (file4){44}.c9r
+	static let file5C9SName = "aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s" // (file5){44}.c9r
+	static let file6C9SName = "nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s" // (file6){44}.c9r
+}
+
 extension CloudProviderMock {
 	/**
 	 A vault of format 7, whose names `CryptorMock.vaultFormat7()` encrypts:
@@ -30,15 +38,15 @@ extension CloudProviderMock {
 		let folders: Set = [
 			root,
 			"\(root)/dir1.c9r",
-			"\(root)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s", // (dir3){55}.c9r
-			"\(root)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s", // (file4){44}.c9r
-			"\(root)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s", // (file5){44}.c9r
+			"\(root)/\(VaultTestFormat.dir3C9SName)",
+			"\(root)/\(VaultTestFormat.file4C9SName)",
+			"\(root)/\(VaultTestFormat.file5C9SName)",
 			VaultTestFormat.directory1,
 			"\(VaultTestFormat.directory1)/dir2.c9r",
 			VaultTestFormat.directory2,
 			VaultTestFormat.directory3,
-			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s", // (dir4){55}.c9r
-			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s", // (file6){44}.c9r
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.dir4C9SName)",
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.file6C9SName)",
 			VaultTestFormat.directory4
 		]
 		// Precompute repeated strings to improve type-check performance during compilation
@@ -59,20 +67,20 @@ extension CloudProviderMock {
 		let file6NameData = Data("\(String(repeating: "file6", count: 44)).c9r".utf8)
 		let files = [
 			"\(root)/dir1.c9r/dir.c9r": dir1IdData,
-			"\(root)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/dir.c9r": dir3IdData,
-			"\(root)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s/name.c9s": dir3NameData,
+			"\(root)/\(VaultTestFormat.dir3C9SName)/dir.c9r": dir3IdData,
+			"\(root)/\(VaultTestFormat.dir3C9SName)/name.c9s": dir3NameData,
 			"\(root)/file1.c9r": file1CiphertextData,
 			"\(root)/file2.c9r": file2CiphertextData,
-			"\(root)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/contents.c9r": file4CiphertextData,
-			"\(root)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s/name.c9s": file4NameData,
-			"\(root)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/contents.c9r": file5CiphertextData,
-			"\(root)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s/name.c9s": file5NameData,
+			"\(root)/\(VaultTestFormat.file4C9SName)/contents.c9r": file4CiphertextData,
+			"\(root)/\(VaultTestFormat.file4C9SName)/name.c9s": file4NameData,
+			"\(root)/\(VaultTestFormat.file5C9SName)/contents.c9r": file5CiphertextData,
+			"\(root)/\(VaultTestFormat.file5C9SName)/name.c9s": file5NameData,
 			"\(VaultTestFormat.directory1)/dir2.c9r/dir.c9r": dir2IdData,
 			"\(VaultTestFormat.directory1)/file3.c9r": file3CiphertextData,
-			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/dir.c9r": dir4IdData,
-			"\(VaultTestFormat.directory3)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s/name.c9s": dir4NameData,
-			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/contents.c9r": file6CiphertextData,
-			"\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s": file6NameData
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.dir4C9SName)/dir.c9r": dir4IdData,
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.dir4C9SName)/name.c9s": dir4NameData,
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.file6C9SName)/contents.c9r": file6CiphertextData,
+			"\(VaultTestFormat.directory3)/\(VaultTestFormat.file6C9SName)/name.c9s": file6NameData
 		]
 		return CloudProviderMock(folders: folders, files: files)
 	}

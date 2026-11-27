@@ -879,7 +879,7 @@ extension UnitTests {
 		@Test
 		func databaseFileIsDeletedWithCache() throws {
 			var cache: IdentifierCache<PCloudItem>? = try IdentifierCache<PCloudItem>()
-			let databaseURL = try #require(cache).directoryURL.appendingPathComponent("identifiers.sqlite")
+			let databaseURL = try #require(cache).directoryURL.appending(component: "identifiers.sqlite", directoryHint: .notDirectory)
 
 			#expect(FileManager.default.fileExists(atPath: databaseURL.path))
 			#expect(try databaseURL.path.hasPrefix(ProcessTemporaryDirectory.shared.directoryURL().path))

@@ -20,8 +20,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = try PCloudCloudProvider(client: .mocked())
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -43,14 +42,14 @@ extension UnitTests {
 				URLProtocolMock.handler(body: PCloudMockResponse.result(2041))
 			]
 
-			await #expect(throws: PCloudError.apiError(code: 2041, message: "Error 2041.")) { try await provider.uploadFile(from: makeLocalFile(), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: PCloudError.apiError(code: 2041, message: "Error 2041.")) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 		}
 
 		/// Each API error code that a method maps, scripted after the listings that resolve its paths.
 		@Test
 		func mapsAPIErrorCodesPerMethod() async throws {
-			let localURL = try makeLocalFile()
-			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
+			let downloadURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let rootWithFolder = PCloudProviderTestResponse.rootWithFolder
 			let rootWithFile = PCloudProviderTestResponse.rootWithFile
 			let cases = [
@@ -89,7 +88,7 @@ extension UnitTests {
 			defer {
 				logCapture.stop()
 			}
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(statusCode: 410, body: #"{"result":2009,"error":"Cannot serve /SECRETPATH/file.txt"}"#)]
 
 			await #expect(throws: PCloudError.apiError(code: 2009, message: "Cannot serve /SECRETPATH/file.txt")) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
@@ -109,7 +108,7 @@ extension UnitTests {
 			}
 			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(statusCode: 403, body: PCloudMockResponse.result(2094))]
 
-			await #expect(throws: CloudProviderError.unauthorized) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.unauthorized) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 			#expect(logCapture.messages.filter { $0.hasPrefix("PCloudClient: file link download failed with ") } == ["PCloudClient: file link download failed with pCloud API error 2094"])
 		}
 
@@ -276,7 +275,7 @@ extension UnitTests {
 
 		@Test
 		func uploadFileOntoFileAndFolderOfSameNameThrowsItemAlreadyExists() async throws {
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFileAndFolderNamedX(fileFirst: true))]
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { _ = try await provider.uploadFile(from: localURL, to: CloudPath("/x"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
@@ -287,7 +286,7 @@ extension UnitTests {
 		@Test
 		func mutationGuardsSendNoRequestBeyondResolution() async throws {
 			let rootWithFile = PCloudProviderTestResponse.rootWithFile
-			let cases = try MutationGuardCases.make(localURL: makeLocalFile(), file: URLProtocolMock.handler(body: rootWithFile), folder: URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder), missing: URLProtocolMock.handler(body: rootWithFile))
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), file: URLProtocolMock.handler(body: rootWithFile), folder: URLProtocolMock.handler(body: PCloudProviderTestResponse.rootWithFolder), missing: URLProtocolMock.handler(body: rootWithFile))
 
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try PCloudCloudProvider(client: .mocked()) }
 			try await expectErrorsConsumingAllResponses([
@@ -298,7 +297,7 @@ extension UnitTests {
 		/// A listing with a page token reads the snapshot without resolving the folder, so it checks the path itself.
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try PCloudCloudProvider(client: .mocked()) }
 		}
 
@@ -311,7 +310,7 @@ extension UnitTests {
 			]
 			_ = try await provider.fetchItemList(forFolderAt: .root, withPageToken: nil)
 
-			await #expect(throws: CloudProviderError.itemAlreadyExists) { _ = try await provider.uploadFile(from: makeLocalFile(), to: CloudPath("/x"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { _ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt"), to: CloudPath("/x"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -488,7 +487,7 @@ extension UnitTests {
 			}
 			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content")]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			let log = logCapture.joinedMessages
 			for secret in [PCloudCredential.stubAccessToken, PCloudMockResponse.link.path, PCloudMockResponse.link.dwltag] {
@@ -530,22 +529,15 @@ extension UnitTests {
 		@Test
 		func downloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content", onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content", onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(metadata.size == 7)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -554,63 +546,47 @@ extension UnitTests {
 		@Test
 		func uploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider = provider
-			let localURL = try makeLocalFile()
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
+			let probe = OnTaskCreationProbe()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0)),
-				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 5), onRequest: { _ in
-					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-				})
+				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 5), onRequest: { _ in probe.expectOnTaskCreationReturned() })
 			]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(CloudPath("/file.txt") == metadata.cloudPath)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
-		func downloadFileWithCancellationDuringOnTaskCreation() async throws {
+		func downloadFileWithCancellationDuringOnTaskCreation() async {
 			let provider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content")]
 
-			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
 
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
 		@Test
 		func uploadFileWithCancellationDuringOnTaskCreation() async throws {
 			let provider = provider
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0)),
 				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 5))
 			]
 
-			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
-
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
 		}
 
 		@Test
@@ -620,7 +596,7 @@ extension UnitTests {
 			let provider = try PCloudCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions, excluding: PCloudProviderTestResponse.isListing)))
 			URLProtocolMock.requestHandler = PCloudProviderTestResponse.downloadPreparation + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 			#expect(progress.fractionCompleted == 1)
@@ -636,7 +612,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: PCloudMockResponse.uploadedFile(id: 5))
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 			#expect(progress.fractionCompleted == 1)
@@ -831,7 +807,7 @@ extension UnitTests {
 		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
 			let tokenSource = PausingTokenSource(pausedCall: 2)
 			let provider = try PCloudCloudProvider(client: .mocked(tokenSource: tokenSource))
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let requests = RequestRecorder()
 			let transfer = isDownload ? [URLProtocolMock.handler(body: PCloudMockResponse.fileLink()), URLProtocolMock.handler(body: "content")] : []
 			URLProtocolMock.requestHandler = [
@@ -979,13 +955,7 @@ extension UnitTests {
 				try await operation()
 			}
 			await tokenSource.entered.wait()
-			do {
-				try await intervening()
-			} catch {
-				tokenSource.resume()
-				_ = try? await cancellingValue(of: task)
-				throw error
-			}
+			try await releasingOnError(task, by: tokenSource.resume, intervening)
 			tokenSource.resume()
 			return try await cancellingValue(of: task)
 		}
@@ -1001,19 +971,7 @@ extension UnitTests {
 			let source = URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry("src")]))
 			let atTarget = URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0, contents: [entry("new")]))
 			let mutationBody = kind == .upload ? PCloudMockResponse.uploadedFile(id: 8, name: "new") : result("new")
-			return try LateMutationCase(kind: kind, localURL: makeLocalFile(), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: result("moved"))], mutationResponses: [URLProtocolMock.handler(body: mutationBody)])
-		}
-
-		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {
-			#expect(fractions.count == 1, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
-		}
-
-		private func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data("content".utf8).write(to: localURL)
-			return localURL
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: PCloudMockResponse.folder(id: 0))], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: result("moved"))], mutationResponses: [URLProtocolMock.handler(body: mutationBody)])
 		}
 
 		/// Runs each case on a provider of its own and expects its error and every scripted response to be consumed.

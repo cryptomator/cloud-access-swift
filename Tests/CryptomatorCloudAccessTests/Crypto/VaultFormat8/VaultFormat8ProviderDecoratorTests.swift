@@ -22,8 +22,7 @@ extension UnitTests {
 		init() throws {
 			let vaultPath = CloudPath("pathToVault")
 			let cryptor = CryptorMock.vaultFormat8()
-			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let tmpDirURL = try makeTemporaryDirectory()
 			let provider = CloudProviderMock(folders: [VaultTestFormat.rootDirectory], files: [:])
 			self.decorator = try VaultFormat8ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			self.vaultPath = vaultPath
@@ -41,7 +40,7 @@ extension UnitTests {
 			try await decorator.createFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.createdFolders.count == 3)
 			#expect(provider.createdFolders.contains("\(VaultTestFormat.rootDirectory)/dir1.c9r"))
-			#expect(provider.createdFolders.contains("pathToVault/d/99"))
+			#expect(provider.createdFolders.contains(VaultTestFormat.newDirectoryParent))
 			#expect(provider.createdFolders.contains(VaultTestFormat.newDirectory))
 			#expect(provider.createdFiles.count == 2)
 			#expect(provider.createdFiles["\(VaultTestFormat.rootDirectory)/dir1.c9r/dir.c9r"] != nil)
@@ -60,7 +59,7 @@ extension UnitTests {
 			try await decorator.createFolder(at: CloudPath("/Directory 1"))
 			let dirFilePath = "\(VaultTestFormat.rootDirectory)/dir1.c9r/dir.c9r"
 			let dirIdFilePath = "\(VaultTestFormat.newDirectory)/dirid.c9r"
-			#expect(requests() == RecordedRequests(calls: ["createFolder", "uploadFile", "createFolder", "createFolder", "uploadFile"], transfers: [dirFilePath, dirIdFilePath], createdFolders: ["\(VaultTestFormat.rootDirectory)/dir1.c9r", "pathToVault/d/99", VaultTestFormat.newDirectory], createdFiles: [dirFilePath, dirIdFilePath]))
+			#expect(requests() == RecordedRequests(calls: ["createFolder", "uploadFile", "createFolder", "createFolder", "uploadFile"], transfers: [dirFilePath, dirIdFilePath], createdFolders: ["\(VaultTestFormat.rootDirectory)/dir1.c9r", VaultTestFormat.newDirectoryParent, VaultTestFormat.newDirectory], createdFiles: [dirFilePath, dirIdFilePath]))
 			#expect(Data("some-encrypted-content".utf8) == provider.createdFiles[dirIdFilePath])
 			let dirId = try #require(provider.createdFiles[dirFilePath])
 			#expect(encryptedContents.withLock { $0 } == [dirId])
@@ -73,7 +72,7 @@ extension UnitTests {
 			try await valueCancelledAfterFirstRemoteChange(of: provider) {
 				try await decorator.createFolder(at: CloudPath("/Directory 1"))
 			}
-			#expect(provider.createdFolders.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r", "pathToVault/d/99", VaultTestFormat.newDirectory])
+			#expect(provider.createdFolders.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r", VaultTestFormat.newDirectoryParent, VaultTestFormat.newDirectory])
 			#expect(provider.createdFiles.keys.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r/dir.c9r", "\(VaultTestFormat.newDirectory)/dirid.c9r"])
 			#expect(try decorator.dirIdCache.get(CloudPath("/Directory 1")) != nil)
 		}

@@ -23,7 +23,7 @@ extension MicrosoftGraphCredential {
 		let account = "IntegrationTest"
 		let storage = MemoryOAuthTokenStorage()
 		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: IntegrationTestSecrets.microsoftGraphRefreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .microsoftGraph, account: account))
-		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("MicrosoftGraphTokenLocks", isDirectory: true)
+		let lockDirectory = FileManager.default.temporaryDirectory.appending(component: "MicrosoftGraphTokenLocks", directoryHint: .isDirectory)
 		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
 		let clientID = try IntegrationTestSecrets.microsoftGraphClientId
 		let redirectURI = try IntegrationTestSecrets.microsoftGraphRedirectUri

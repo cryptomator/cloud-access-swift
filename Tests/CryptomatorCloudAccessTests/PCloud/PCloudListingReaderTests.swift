@@ -17,8 +17,7 @@ extension UnitTests {
 		private let tmpDirURL: URL
 
 		init() throws {
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -276,7 +275,7 @@ extension UnitTests {
 		}
 
 		private func write(_ data: Data) throws -> URL {
-			let fileURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+			let fileURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try data.write(to: fileURL)
 			return fileURL
 		}

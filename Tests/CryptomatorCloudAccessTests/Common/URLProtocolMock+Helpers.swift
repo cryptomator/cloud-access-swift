@@ -62,6 +62,14 @@ extension SplitURLSession.Hooks {
 	}
 }
 
+/// Checks the fractions that `recordingTransferProgress` recorded for a transfer that ran in a single task.
+func assertTransferProgress(_ fractions: [Double], _ comment: Comment? = nil, sourceLocation: SourceLocation = #_sourceLocation) {
+	let suffix = comment.map { " (\($0.rawValue))" } ?? ""
+	#expect(fractions.count == 1, "Unexpected number of transfer tasks\(suffix)", sourceLocation: sourceLocation)
+	#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress\(suffix)", sourceLocation: sourceLocation)
+	#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned\(suffix)", sourceLocation: sourceLocation)
+}
+
 /// Checks the fractions that `recordingTransferProgress` recorded for a transfer that was retried once. The retry starts at half of the fraction that the first attempt reached, and the transfer ends where the first attempt did.
 func assertRetryHalvesProgress(_ fractions: [Double], fractionAtRetry: Double?, sourceLocation: SourceLocation = #_sourceLocation) throws {
 	#expect(fractions.count == 2, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)

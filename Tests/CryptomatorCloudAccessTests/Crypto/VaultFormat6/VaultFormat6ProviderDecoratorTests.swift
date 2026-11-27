@@ -37,8 +37,7 @@ extension UnitTests {
 		let tmpDirURL: URL
 
 		init() throws {
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -59,7 +58,7 @@ extension UnitTests {
 		func downloadFileOfFolderThrowsItemTypeMismatch(stacking: Stacking) async throws {
 			let fixture = try VaultFormat6Fixture(stacking: stacking, vaultPath: vaultPath, cryptor: cryptor)
 			let requests = fixture.provider.recordingRequests()
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await fixture.decorator.downloadFile(from: CloudPath("/Directory 1/Directory 2"), to: localURL) }
 			#expect(requests() == RecordedRequests(calls: ["downloadFile", "downloadFile", "fetchItemMetadata"], metadataReads: ["\(VaultTestFormat.directory1)/0dir2"], transfers: ["\(VaultTestFormat.rootDirectory)/0dir1"]))
 		}
@@ -68,8 +67,7 @@ extension UnitTests {
 		func uploadFileOverFolderThrowsItemAlreadyExists(stacking: Stacking) async throws {
 			let fixture = try VaultFormat6Fixture(stacking: stacking, vaultPath: vaultPath, cryptor: cryptor)
 			let requests = fixture.provider.recordingRequests()
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext1")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await fixture.decorator.uploadFile(from: localURL, to: CloudPath("/Directory 1/Directory 2"), replaceExisting: true) }
 			#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata"], metadataReads: ["\(VaultTestFormat.directory1)/0dir2"], transfers: ["\(VaultTestFormat.rootDirectory)/0dir1"]))
 		}
@@ -89,8 +87,7 @@ extension UnitTests {
 			fixture.provider.transferHook = { _, _ in
 				withUnsafeCurrentTask { $0?.cancel() }
 			}
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext3".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			let decorator = fixture.decorator
 			let upload = Task {
 				try await decorator.uploadFile(from: localURL, to: CloudPath("/Directory 1/File 3"), replaceExisting: false)
@@ -127,8 +124,7 @@ extension UnitTests {
 			cryptor.encryptContentHook = { _, _ in
 				encryptions.withLock { $0 += 1 }
 			}
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext3".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			let decorator = fixture.decorator
 			let upload = Task {
 				try await decorator.uploadFile(from: localURL, to: CloudPath("/Directory 1/File 3"), replaceExisting: false)
@@ -155,7 +151,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListClassifiesPrefixInCombinedCharacter() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/0\u{301}X": Data(), "\(dirPath)/1S\u{301}Y": Data()])
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath]), files: ["\(dirPath)/0\u{301}X": Data(), "\(dirPath)/1S\u{301}Y": Data()])
 			let cryptor = CryptorMock(dirIds: ["": VaultTestFormat.encryptedRootDirId], fileNames: ["\u{301}X": "Folder", "\u{301}Y": "Link"], contents: [:])
 			let decorator = try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
@@ -170,14 +166,11 @@ extension UnitTests {
 			// └─Directory 1
 			//   ├─ Directory 2
 			//   └─ File 3
-			let folders: Set = [
-				"pathToVault",
-				"pathToVault/d",
-				"pathToVault/d/00",
+			let folders = VaultTestFormat.rootDirectoryAncestors.union([
 				VaultTestFormat.rootDirectory,
 				VaultTestFormat.directory1,
 				VaultTestFormat.directory2
-			]
+			])
 			let files = [
 				"\(VaultTestFormat.directory1)/0dir2": Data("dir2-id".utf8),
 				"\(VaultTestFormat.directory1)/file3": Data("ciphertext3".utf8)
@@ -193,7 +186,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderWithUnreadableNameFileKeepsParent() async throws {
 			let nameFilePath = "pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0dir2": "dir2-id", "\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: [nameFilePath: Data("0\(String(repeating: "dir3", count: 33))".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/0dir2": "dir2-id", "\(VaultTestFormat.directory1)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: [nameFilePath: Data("0\(String(repeating: "dir3", count: 33))".utf8)])
 			provider.transferHook = { cloudPath, _ in
 				if cloudPath.path == nameFilePath {
 					throw CloudProviderError.quotaInsufficient
@@ -207,7 +200,7 @@ extension UnitTests {
 		/// The name file doesn't hold a name that shortens to its `.lng` name. The library addresses an item by shortening its name again, so it ignores the item, and the item's directory stays.
 		@Test
 		func deleteFolderWithInvalidNameFileIgnoresItem() async throws {
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0dir3".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0dir3".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
@@ -216,7 +209,7 @@ extension UnitTests {
 		/// Old Cryptomator versions shortened names of 129 characters, which a listing moves to their original name.
 		@Test
 		func deleteFolderFollowsLegacyShortenedDirFileWithoutMovingIt() async throws {
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": "dir3-id"], files: ["pathToVault/m/NY/7A/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": Data("0\(String(repeating: "dir3", count: 32))".utf8)])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": "dir3-id"], files: ["pathToVault/m/NY/7A/NY7AR6SU3UK6BE5C526DHZZE7V72H2EV.lng": Data("0\(String(repeating: "dir3", count: 32))".utf8)])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted == [VaultTestFormat.directory3, VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
@@ -226,7 +219,7 @@ extension UnitTests {
 		/// The `0` prefix forms one `Character` with a combining mark after it, but it still marks a dir file.
 		@Test(arguments: Stacking.allCases)
 		func deleteFolderFollowsDirFileWhosePrefixIsInCombinedCharacter(stacking: Stacking) async throws {
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0\u{301}dir2": "dir2-id"])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/0\u{301}dir2": "dir2-id"])
 			let decorator = stacking == .plain ? try VaultFormat6ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor) : try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted == [VaultTestFormat.directory2, VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
@@ -235,7 +228,7 @@ extension UnitTests {
 		/// The `.lng` suffix forms one `Character` with a prepended mark before it, but it still marks a shortened name. This one isn't a valid one, so the delete ignores it and its directory stays.
 		@Test
 		func deleteFolderDoesNotFollowInvalidShortenedNameWhoseSuffixIsInCombinedCharacter() async throws {
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/0dir3\u{600}.lng": "dir3-id"])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/0dir3\u{600}.lng": "dir3-id"])
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/0dir1"])
@@ -245,7 +238,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderDoesNotFollowShortenedAliasDirFile() async throws {
 			let lngPath = "\(VaultTestFormat.directory1)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng"
-			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.nestedDirectories[1])/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0\(String(repeating: "dir3", count: 33))".utf8)], aliases: [lngPath])
+			let provider = makeNestedProvider(dirFiles: ["\(VaultTestFormat.directory1)/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": "dir3-id"], files: ["pathToVault/m/DL/2X/DL2XHF4PL5BKUCEJFIOEWB5JPAURMP3Y.lng": Data("0\(String(repeating: "dir3", count: 33))".utf8)], aliases: [lngPath])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try makeShorteningDecorator(over: provider)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
@@ -292,11 +285,11 @@ extension UnitTests {
 
 		// MARK: - Internal
 
-		/// Returns a provider that holds `Directory 1`, the given dir files (by path below `pathToVault/d` and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
+		/// Returns a provider that holds `Directory 1`, the given dir files (by full path and dir ID, replacing a default one) and the given files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
 		func makeNestedProvider(dirFiles: [String: String], files: [String: Data] = [:], aliases: Set<String> = [], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
 			let folders = Set(["pathToVault", "pathToVault/d"] + VaultTestFormat.nestedDirectories.map { "pathToVault/d/\($0)" })
-			let references = ["\(VaultTestFormat.nestedDirectories[0])/0dir1": "dir1-id"].merging(dirFiles) { $1 }
-			return CloudProviderMock(folders: folders, files: Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)", Data($0.value.utf8)) }).merging(files) { $1 }, aliases: aliases, aliasedDownloads: aliasedDownloads)
+			let references = ["\(VaultTestFormat.rootDirectory)/0dir1": "dir1-id"].merging(dirFiles) { $1 }
+			return CloudProviderMock(folders: folders, files: references.mapValues { Data($0.utf8) }.merging(files) { $1 }, aliases: aliases, aliasedDownloads: aliasedDownloads)
 		}
 
 		func makeShorteningDecorator(over provider: CloudProvider) throws -> VaultFormat6ProviderDecorator {

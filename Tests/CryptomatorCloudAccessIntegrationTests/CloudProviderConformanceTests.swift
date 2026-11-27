@@ -185,7 +185,7 @@ extension IntegrationTests {
 		func downloadFileWithNotFoundError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let cloudPath = context.treeRoot.appendingPathComponent("thisFileMustNotExist.txt")
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try await expectCloudProviderError(.itemNotFound) { try await context.provider.downloadFile(from: cloudPath, to: localURL) }
 			}
 		}
@@ -194,7 +194,7 @@ extension IntegrationTests {
 		func downloadFileWithAlreadyExistsError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let cloudPath = context.treeRoot.appendingPathComponent("test 0.txt")
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try "".write(to: localURL, atomically: true, encoding: .utf8)
 				try await expectCloudProviderError(.itemAlreadyExists) { try await context.provider.downloadFile(from: cloudPath, to: localURL) }
 			}
@@ -204,7 +204,7 @@ extension IntegrationTests {
 		func downloadFileFailWithTypeMismatchError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder")
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try await expectCloudProviderError(.itemTypeMismatch) { try await context.provider.downloadFile(from: cloudPath, to: localURL) }
 			}
 		}
@@ -214,12 +214,12 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithReplaceExisting(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let initialLocalURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let initialLocalURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try "Start content".write(to: initialLocalURL, atomically: true, encoding: .utf8)
-				let overwrittenUploadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let overwrittenUploadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let overwrittenTestContent = "Overwritten content"
 				try overwrittenTestContent.write(to: overwrittenUploadURL, atomically: true, encoding: .utf8)
-				let overwrittenLocalURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let overwrittenLocalURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let cloudPath = try await context.makeSandbox().appendingPathComponent("FileToOverwrite.txt")
 				let progress = Progress(totalUnitCount: 1)
 				let initialMetadata = try await context.provider.uploadFile(from: initialLocalURL, to: cloudPath, replaceExisting: false, progress: progress, onTaskCreation: nil)
@@ -235,7 +235,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithNotFoundError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("nonExistentFile.txt", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "nonExistentFile.txt", directoryHint: .notDirectory)
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder/EmptySubfolder/nonExistentFile.txt")
 				try await expectCloudProviderError(.itemNotFound) { try await context.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false) }
 			}
@@ -244,7 +244,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithAlreadyExistsErrorAndNotReplaceExisting(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("test 0.txt", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "test 0.txt", directoryHint: .notDirectory)
 				try IntegrationFixture.testContentForFilesInTestFolder.write(to: localURL, atomically: true, encoding: .utf8)
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder/test 0.txt")
 				try await expectCloudProviderError(.itemAlreadyExists) { try await context.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false) }
@@ -254,7 +254,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithAlreadyExistsErrorAndReplaceExisting(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("overwriteFolder.txt", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "overwriteFolder.txt", directoryHint: .notDirectory)
 				try IntegrationFixture.testContentForFilesInTestFolder.write(to: localURL, atomically: true, encoding: .utf8)
 				let cloudPath = try await context.makeSandbox().appendingPathComponent("overwriteFolder.txt")
 				try await context.createPrerequisiteFolder(at: cloudPath)
@@ -265,7 +265,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("test 0.txt", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "test 0.txt", directoryHint: .notDirectory)
 				try IntegrationFixture.testContentForFilesInTestFolder.write(to: localURL, atomically: true, encoding: .utf8)
 				let cloudPath = context.treeRoot.appendingPathComponent("testFolder/thisFolderMustNotExist/test 0.txt")
 				try await expectCloudProviderError(.parentFolderDoesNotExist) { try await context.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false) }
@@ -275,7 +275,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileWithTypeMismatchError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("itemTypeMismatchFolder", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "itemTypeMismatchFolder", directoryHint: .notDirectory)
 				try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false)
 				let cloudPath = context.treeRoot.appendingPathComponent("itemTypeMismatchFolder")
 				try await expectCloudProviderError(.itemTypeMismatch) { try await context.provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false) }
@@ -495,7 +495,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selected)
 		func uploadFileIntoFileWithParentFolderDoesNotExistError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent("sub", isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: "sub", directoryHint: .notDirectory)
 				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
 				let parentCloudPath = try await context.makeSandbox().appendingPathComponent("parent.txt")
 				try await context.uploadPrerequisite(Conformance.testContentForSandboxItems, to: parentCloudPath)
@@ -586,7 +586,7 @@ extension IntegrationTests {
 		func downloadFileWithUnauthorizedError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
 				let cloudPath = context.treeRoot.appendingPathComponent("test 0.txt")
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let provider = try await context.makeUnauthorizedProvider()
 				try await expectCloudProviderError(.unauthorized) { try await provider.downloadFile(from: cloudPath, to: localURL) }
 			}
@@ -595,7 +595,7 @@ extension IntegrationTests {
 		@Test(arguments: IntegrationBackend.selectedPlainRemote)
 		func uploadFileWithUnauthorizedError(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try IntegrationFixture.testContentForFilesInTestFolder.write(to: localURL, atomically: true, encoding: .utf8)
 				let cloudPath = context.sandboxPath()
 				let provider = try await context.makeUnauthorizedProvider()
@@ -661,9 +661,9 @@ extension IntegrationTests {
 				let existingFileCloudPath = context.treeRoot.appendingPathComponent("test 0.txt")
 				let uploadCloudPath = sandbox.appendingPathComponent("cancelledFile.txt")
 				let folderCloudPath = sandbox.appendingPathComponent("cancelledFolder")
-				let uploadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let uploadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try IntegrationFixture.testContentForFilesInTestFolder.write(to: uploadURL, atomically: true, encoding: .utf8)
-				let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let downloadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let operations: [(String, @Sendable () async throws -> Void)] = [
 					("fetchItemMetadata", { _ = try await provider.fetchItemMetadata(at: existingFileCloudPath) }),
 					("uploadFile", { _ = try await provider.uploadFile(from: uploadURL, to: uploadCloudPath, replaceExisting: false) }),
@@ -716,12 +716,12 @@ extension IntegrationTests {
 				let sandbox = try await context.makeSandbox()
 				let folderPath = sandbox.appendingPathComponent(String(repeating: "d", count: 200))
 				let filePath = sandbox.appendingPathComponent(String(repeating: "f", count: 200))
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
-				let overwritingURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let overwritingURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let overwrittenContent = "Overwritten content"
 				try overwrittenContent.write(to: overwritingURL, atomically: true, encoding: .utf8)
-				let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let downloadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				let (writer, writerRecorder) = try context.makeRecordingProvider()
 
 				try await writer.createFolder(at: folderPath)
@@ -764,7 +764,7 @@ extension IntegrationTests {
 				let renamedFilePath = sandbox.appendingPathComponent(String(repeating: "r", count: 200))
 				let shortFilePath = sandbox.appendingPathComponent("shortName")
 				let nestedFilePath = folderPath.appendingPathComponent("fileInFolderWithLongName")
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try Conformance.testContentForSandboxItems.write(to: localURL, atomically: true, encoding: .utf8)
 				let (writer, writerRecorder) = try context.makeRecordingProvider()
 				try await writer.createFolder(at: folderPath)
@@ -872,7 +872,7 @@ extension IntegrationTests {
 		}
 
 		private static func expectDownload(from cloudPath: CloudPath, toHave expectedFileContent: String, in context: IntegrationTestContext) async throws {
-			let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 			let metadata = try await context.provider.downloadFile(from: cloudPath, to: localURL, progress: progress, onTaskCreation: nil)
 			let expectedLastModifiedDate = try await context.provider.fetchItemMetadata(at: cloudPath).lastModifiedDate

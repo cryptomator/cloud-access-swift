@@ -38,10 +38,9 @@ extension UnitTests {
 
 		@Test
 		func databaseFileNeedsNoDurability() throws {
-			let directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-			defer { try? FileManager.default.removeItem(at: directoryURL) }
-			let fileCache = try DirectoryContentDBCache(fileAt: directoryURL.appendingPathComponent("db.sqlite"), maxPageSize: maxPageSize)
+			let directoryURL = try makeTemporaryDirectory()
+			defer { removeItemRecordingFailure(at: directoryURL) }
+			let fileCache = try DirectoryContentDBCache(fileAt: directoryURL.appending(component: "db.sqlite", directoryHint: .notDirectory), maxPageSize: maxPageSize)
 
 			let (journalMode, synchronous, cacheSize) = try fileCache.dbWriter.read { db in
 				try (String.fetchOne(db, sql: "PRAGMA journal_mode"), Int.fetchOne(db, sql: "PRAGMA synchronous"), Int.fetchOne(db, sql: "PRAGMA cache_size"))

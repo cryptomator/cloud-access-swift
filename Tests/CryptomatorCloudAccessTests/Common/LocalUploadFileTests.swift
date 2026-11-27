@@ -15,8 +15,7 @@ extension UnitTests {
 		let tmpDirURL: URL
 
 		init() throws {
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -25,7 +24,7 @@ extension UnitTests {
 
 		@Test
 		func regularFileKeepsURL() throws {
-			let fileURL = try makeTargetFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "target.bin", content: "0123456789")
 
 			let file = try LocalUploadFile(fileURL)
 
@@ -35,8 +34,8 @@ extension UnitTests {
 
 		@Test
 		func symbolicLinkResolvesToTarget() throws {
-			let linkURL = tmpDirURL.appendingPathComponent("link.bin")
-			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeTargetFile())
+			let linkURL = tmpDirURL.appending(component: "link.bin", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(in: tmpDirURL, named: "target.bin", content: "0123456789"))
 
 			let file = try LocalUploadFile(linkURL)
 
@@ -45,9 +44,9 @@ extension UnitTests {
 
 		@Test
 		func chainOfSymbolicLinksResolvesToTarget() throws {
-			let firstLinkURL = tmpDirURL.appendingPathComponent("first-link.bin")
-			let secondLinkURL = tmpDirURL.appendingPathComponent("second-link.bin")
-			try FileManager.default.createSymbolicLink(at: firstLinkURL, withDestinationURL: makeTargetFile())
+			let firstLinkURL = tmpDirURL.appending(component: "first-link.bin", directoryHint: .notDirectory)
+			let secondLinkURL = tmpDirURL.appending(component: "second-link.bin", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: firstLinkURL, withDestinationURL: makeLocalFile(in: tmpDirURL, named: "target.bin", content: "0123456789"))
 			try FileManager.default.createSymbolicLink(at: secondLinkURL, withDestinationURL: firstLinkURL)
 
 			let file = try LocalUploadFile(secondLinkURL)
@@ -57,13 +56,13 @@ extension UnitTests {
 
 		@Test
 		func missingFileThrowsItemNotFound() {
-			#expect(throws: CloudProviderError.itemNotFound) { try LocalUploadFile(self.tmpDirURL.appendingPathComponent("missing.bin")) }
+			#expect(throws: CloudProviderError.itemNotFound) { try LocalUploadFile(self.tmpDirURL.appending(component: "missing.bin", directoryHint: .notDirectory)) }
 		}
 
 		@Test
 		func danglingSymbolicLinkThrowsItemNotFound() throws {
-			let linkURL = tmpDirURL.appendingPathComponent("link.bin")
-			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: tmpDirURL.appendingPathComponent("missing.bin"))
+			let linkURL = tmpDirURL.appending(component: "link.bin", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: tmpDirURL.appending(component: "missing.bin", directoryHint: .notDirectory))
 
 			#expect(throws: CloudProviderError.itemNotFound) { try LocalUploadFile(linkURL) }
 		}
@@ -75,7 +74,7 @@ extension UnitTests {
 
 		@Test
 		func symbolicLinkToFolderThrowsItemTypeMismatch() throws {
-			let linkURL = tmpDirURL.appendingPathComponent("link")
+			let linkURL = tmpDirURL.appending(component: "link", directoryHint: .notDirectory)
 			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: tmpDirURL)
 
 			#expect(throws: CloudProviderError.itemTypeMismatch) { try LocalUploadFile(linkURL) }
@@ -83,7 +82,7 @@ extension UnitTests {
 
 		@Test
 		func fileInUnreadableFolderThrowsFileReadNoPermission() throws {
-			let fileURL = try makeTargetFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "target.bin", content: "0123456789")
 			try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: tmpDirURL.path)
 			defer {
 				try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmpDirURL.path)
@@ -93,12 +92,6 @@ extension UnitTests {
 
 			#expect(error.code == .fileReadNoPermission)
 			#expect((error.userInfo[NSUnderlyingErrorKey] as? POSIXError)?.code == .EACCES)
-		}
-
-		private func makeTargetFile() throws -> URL {
-			let fileURL = tmpDirURL.appendingPathComponent("target.bin")
-			try Data("0123456789".utf8).write(to: fileURL)
-			return fileURL
 		}
 
 		private func expectTarget(_ file: LocalUploadFile) throws {

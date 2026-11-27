@@ -22,9 +22,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = []
 			self.registry = BackgroundURLSessionRegistry { [sessionCreationCount] _ in
 				sessionCreationCount.withLock { $0 += 1 }
-				let configuration = URLSessionConfiguration.default
-				configuration.protocolClasses = [URLProtocolMock.self]
-				return configuration
+				return URLProtocolMock.configuration()
 			}
 		}
 
@@ -72,10 +70,9 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = Array(repeating: { [url] _ in
 				(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 			}, count: 2)
-			let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: FileManager.default.temporaryDirectory)
 			defer {
-				try? FileManager.default.removeItem(at: fileURL)
+				removeItemRecordingFailure(at: fileURL)
 			}
 			let owner = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)
 			let otherOwner = SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)

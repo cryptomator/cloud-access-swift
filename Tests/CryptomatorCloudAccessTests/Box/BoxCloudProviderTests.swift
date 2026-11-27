@@ -25,8 +25,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -123,20 +122,18 @@ extension UnitTests {
 
 		@Test
 		func createFolderPostsNameAndParent() async throws {
-			let sentRequest = OSAllocatedUnfairLock<(request: URLRequest, body: Data)?>(initialState: nil)
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
-				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.folderEntry(id: "3", name: "folder"), onRequest: { request in
-					sentRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
-				})
+				URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.folderEntry(id: "3", name: "folder"), onRequest: requests.record)
 			]
 
 			try await provider.createFolder(at: CloudPath("/folder"))
 
-			let (request, body) = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://api.box.com/2.0/folders")
-			#expect(try (["name": "folder", "parent": ["id": "0"]] as NSDictionary) == (JSONSerialization.jsonObject(with: body) as? NSDictionary))
+			#expect(try (["name": "folder", "parent": ["id": "0"]] as NSDictionary) == (JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? NSDictionary))
 		}
 
 		@Test
@@ -151,28 +148,26 @@ extension UnitTests {
 
 		@Test
 		func moveFilePutsNameAndParent() async throws {
-			let sentRequest = OSAllocatedUnfairLock<(request: URLRequest, body: Data)?>(initialState: nil)
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
 				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
-				URLProtocolMock.handler(body: BoxMockResponse.fileEntry(id: "5", name: "renamed.txt"), onRequest: { request in
-					sentRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
-				})
+				URLProtocolMock.handler(body: BoxMockResponse.fileEntry(id: "5", name: "renamed.txt"), onRequest: requests.record)
 			]
 
 			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
 
-			let (request, body) = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "PUT")
 			#expect(request.url?.absoluteString == "https://api.box.com/2.0/files/5")
-			#expect(try (["name": "renamed.txt", "parent": ["id": "0"]] as NSDictionary) == (JSONSerialization.jsonObject(with: body) as? NSDictionary))
+			#expect(try (["name": "renamed.txt", "parent": ["id": "0"]] as NSDictionary) == (JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? NSDictionary))
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		/// A mutation's request is its commit point, so it runs with its retries also if the task is cancelled during the first attempt.
 		@Test
 		func cancelledMutationsStillFinishTheirRequests() async throws {
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789")
 			let cases = [
 				MutationCase(name: "create folder", preparation: [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot)], success: URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.folderEntry(id: "3", name: "folder"))) { provider in
 					try await provider.createFolder(at: CloudPath("/folder"))
@@ -214,21 +209,21 @@ extension UnitTests {
 
 		@Test
 		func mutationGuardsSendNoRequestBeyondResolution() async throws {
-			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot))
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), file: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot))
 
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try BoxCloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try BoxCloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
 		/// A listing of the target's folder that answers 404 shows that the folder is gone.
 		@Test
 		func targetLookupInMissingFolderThrowsParentFolderDoesNotExist() async throws {
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let operations: [(name: String, run: @Sendable (BoxCloudProvider) async throws -> Void)] = [
 				("upload", { _ = try await $0.uploadFile(from: localURL, to: CloudPath("/folder/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil) }),
 				("createFolder", { try await $0.createFolder(at: CloudPath("/folder/sub")) })
@@ -257,7 +252,7 @@ extension UnitTests {
 			]
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 
 			let sent = requests.requests
 			try #require(sent.count == 2)
@@ -277,7 +272,7 @@ extension UnitTests {
 			]
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 
 			let bodyString = try #require(requests.requests.first?.httpBody.flatMap { String(data: $0, encoding: .utf8) })
 			#expect(bodyString.contains("name=\"attributes\"\r\n\r\n{}\r\n"), "\(bodyString)")
@@ -295,7 +290,7 @@ extension UnitTests {
 			]
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			let metadata = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 			if hasLeft {
 				await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/file.txt")) }
 			} else {
@@ -316,7 +311,7 @@ extension UnitTests {
 				("trashed", URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "0", status: "trashed"))),
 				("gone", URLProtocolMock.handler(statusCode: 404, body: BoxMockResponse.error(status: 404, code: "not_found")))
 			]
-			let localURL = try makeLocalFile(content: "file content")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content")
 			for (name, confirmation) in cases {
 				for (listing, expectedUploadURL) in [(BoxMockResponse.items([BoxMockResponse.fileEntry(id: "6", name: "file.txt")]), "https://upload.box.com/api/2.0/files/6/content"), (BoxCloudProviderTests.emptyRoot, "https://upload.box.com/api/2.0/files/content")] {
 					let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max)
@@ -341,7 +336,7 @@ extension UnitTests {
 		@Test
 		func cancellationDuringConfirmationStopsUploadBeforeListing() async throws {
 			let provider = provider
-			let localURL = try makeLocalFile(content: "file content")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = downloadPreparation() + [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.confirmation(name: "file.txt", parentID: "9", status: "active"), onRequest: { _ in
@@ -368,7 +363,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 			try await provider.deleteFile(at: CloudPath("/file.txt"))
 
 			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["DELETE", "/2.0/files/8"]])
@@ -390,7 +385,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
 				try? await provider.deleteFolder(at: CloudPath("/folder"))
 				try? await provider.createFolder(at: CloudPath("/folder"))
 			})
@@ -404,7 +399,7 @@ extension UnitTests {
 
 		@Test
 		func downloadWaitsWhileFileIsNotReady() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let taskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = downloadPreparation() + [
 				URLProtocolMock.handler(statusCode: 202, body: "PENDING", headerFields: ["Retry-After": "0"]),
@@ -422,7 +417,7 @@ extension UnitTests {
 
 		@Test
 		func downloadThatStaysNotReadyThrowsAndLeavesNoFile() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = downloadPreparation() + Array(repeating: URLProtocolMock.handler(statusCode: 202, body: "PENDING", headerFields: ["Retry-After": "0"]), count: 5)
 
 			await #expect(throws: BoxError.fileNotReady) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
@@ -437,12 +432,9 @@ extension UnitTests {
 			let provider = try BoxCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)), maxPageSize: .max)
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
-			let recordedFractions = fractions.withLock { $0 }
-			#expect(recordedFractions.count == 1)
-			#expect((recordedFractions.first ?? 0) > 0.5)
-			#expect((recordedFractions.first ?? 1) < 1)
+			assertTransferProgress(fractions.withLock { $0 })
 		}
 
 		/// Each attempt adds the progress of its task, so a retry takes half of the transfer's share instead of pushing it past complete.
@@ -459,7 +451,7 @@ extension UnitTests {
 				})
 			]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
@@ -468,7 +460,7 @@ extension UnitTests {
 
 		@Test
 		func smallUploadSendsMultipartBodyAndHandsOverTaskOnce() async throws {
-			let localURL = try makeLocalFile(content: "file content")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content")
 			let sentBodies = OSAllocatedUnfairLock(initialState: [(contentType: String?, body: Data)]())
 			let recordBody: @Sendable (URLRequest) -> Void = { request in
 				sentBodies.withLock { $0.append((request.value(forHTTPHeaderField: "Content-Type"), URLProtocolMock.body(of: request))) }
@@ -499,7 +491,7 @@ extension UnitTests {
 		/// Only a missing scope is a login failure, and a full storage is a quota failure. Any other 403, e.g., for a folder shared view-only, passes through raw, because signing in again wouldn't fix it.
 		@Test
 		func uploadErrors() async throws {
-			let localURL = try makeLocalFile(content: "file content")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "file content")
 			let cases = [
 				ErrorCase(name: "storage_limit_exceeded", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "storage_limit_exceeded")), expectedError: CloudProviderError.quotaInsufficient),
 				ErrorCase(name: "insufficient_scope", response: URLProtocolMock.handler(statusCode: 403, body: BoxMockResponse.error(status: 403, code: "insufficient_scope")), expectedError: CloudProviderError.unauthorized),
@@ -528,7 +520,7 @@ extension UnitTests {
 		func chunkedUploadSendsPartsWithDigestsAndCommits() async throws {
 			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
 			let content = "0123456789"
-			let localURL = try makeLocalFile(content: content)
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: content)
 			let partRequests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: Data)]())
 			let recordPart: @Sendable (URLRequest) -> Void = { request in
 				partRequests.withLock { $0.append((request, URLProtocolMock.body(of: request))) }
@@ -569,21 +561,19 @@ extension UnitTests {
 		@Test
 		func chunkedUploadOfExistingFileCreatesSessionForFile() async throws {
 			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
-			let sessionRequest = OSAllocatedUnfairLock<(request: URLRequest, body: Data)?>(initialState: nil)
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
-				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: { request in
-					sessionRequest.withLock { $0 = (request, URLProtocolMock.body(of: request)) }
-				})
+				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: requests.record)
 			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
-			let metadata = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.size == 10)
-			let (request, body) = try #require(sessionRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://upload.box.com/api/2.0/files/5/upload_sessions")
-			#expect(try (["file_size": 10] as NSDictionary) == (JSONSerialization.jsonObject(with: body) as? NSDictionary))
+			#expect(try (["file_size": 10] as NSDictionary) == (JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? NSDictionary))
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -599,7 +589,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
 			]
 
-			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
 
@@ -607,21 +597,19 @@ extension UnitTests {
 		@Test
 		func chunkedUploadThroughSymbolicLinkUsesSizeOfTarget() async throws {
 			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
-			let localURL = try makeLocalFile(content: "0123456789")
-			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789")
+			let linkURL = tmpDirURL.appending(component: "link.txt", directoryHint: .notDirectory)
 			try FileManager.default.createSymbolicLink(atPath: linkURL.path, withDestinationPath: localURL.lastPathComponent)
-			let sessionBody = OSAllocatedUnfairLock<Data?>(initialState: nil)
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
-				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: { request in
-					sessionBody.withLock { $0 = URLProtocolMock.body(of: request) }
-				})
+				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession, onRequest: requests.record)
 			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
 			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
-			let body = try #require(sessionBody.withLock { $0 })
-			#expect(try (JSONSerialization.jsonObject(with: body) as? [String: Any])?["file_size"] as? Int == 10)
+			let request = try #require(requests.requests.first)
+			#expect(try (JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])?["file_size"] as? Int == 10)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -635,7 +623,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 201, body: BoxCloudProviderTests.uploadSession)
 			] + BoxCloudProviderTests.uploadedPartResponses() + [URLProtocolMock.handler(statusCode: 201, body: BoxMockResponse.files([BoxMockResponse.fileEntry(id: "5", name: "file.txt", size: 10)]))]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			let recordedFractions = fractions.withLock { $0 }
 			#expect(recordedFractions.count == 3)
@@ -648,7 +636,7 @@ extension UnitTests {
 		@Test
 		func cancellationBeforePartStopsChunkedUpload() async throws {
 			let provider = try BoxCloudProvider(client: .mocked(), maxPageSize: .max, chunkedUploadThreshold: 10)
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt", content: "0123456789")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot),
@@ -808,7 +796,7 @@ extension UnitTests {
 			case .createFolder: URLProtocolMock.handler(statusCode: 201, body: entry("new"))
 			case .move: URLProtocolMock.handler(body: entry("new"))
 			}
-			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot)], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: [mutationResponse])
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), preparation: kind == .move ? [source, source] : [URLProtocolMock.handler(body: BoxCloudProviderTests.emptyRoot)], renameResponses: [atTarget, atTarget, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: [mutationResponse])
 		}
 
 		/// The response of a request for a file's type, identifier, name, parent and status.
@@ -833,12 +821,6 @@ extension UnitTests {
 				URLProtocolMock.handler(body: BoxCloudProviderTests.rootWithFile),
 				URLProtocolMock.handler(body: BoxMockResponse.fileEntry(id: "5", name: "file.txt"))
 			]
-		}
-
-		private func makeLocalFile(content: String) throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data(content.utf8).write(to: localURL)
-			return localURL
 		}
 	}
 }

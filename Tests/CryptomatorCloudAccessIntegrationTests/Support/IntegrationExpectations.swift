@@ -72,11 +72,11 @@ func patternedData(length: Int, seed: UInt32) -> Data {
 func expectUploadRoundTrips(ofLength length: Int, to cloudPath: CloudPath, through provider: CloudProvider, in context: IntegrationTestContext) async throws {
 	for (replaceExisting, seed) in [(false, UInt32(1)), (true, UInt32(2))] {
 		let data = patternedData(length: length, seed: seed)
-		let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+		let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		try data.write(to: localURL)
 
 		let metadata = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: replaceExisting)
-		let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+		let downloadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		_ = try await provider.downloadFile(from: cloudPath, to: downloadURL)
 
 		#expect(metadata.size == data.count)

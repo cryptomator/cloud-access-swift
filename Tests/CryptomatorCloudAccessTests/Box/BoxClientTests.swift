@@ -23,8 +23,7 @@ extension UnitTests {
 			self.tokenSource = OAuthTokenSourceStub()
 			self.sleeps = SleepRecorder()
 			self.client = BoxClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -134,21 +133,19 @@ extension UnitTests {
 			]
 
 			_ = try await client.folder(id: "7")
-			try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)
+			try await client.download(fileID: "5", to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(markers.withLock { $0 } == ["metadata", "transfer"])
 		}
 
 		@Test
 		func listingSendsFieldsAndEscapedMarker() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"entries":[]}"#, onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: #"{"entries":[]}"#, onRequest: requests.record)]
 
 			_ = try await client.folderItems(id: "7", marker: "a+b c", limit: 100)
 
-			let url = try #require(sentRequest.withLock { $0 }?.url)
+			let url = try #require(requests.requests.first?.url)
 			#expect(url.scheme == "https")
 			#expect(url.host == "api.box.com")
 			#expect(url.path == "/2.0/folders/7/items")
@@ -160,14 +157,12 @@ extension UnitTests {
 		/// Box sends nothing before a recursive folder delete is done, so the request's timeout exceeds the 600 s after which Box gives up.
 		@Test
 		func recursiveFolderDeleteWaitsLongerThanBoxTimeLimit() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 204, onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)]
 
 			try await client.deleteFolder(id: "7")
 
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.url?.path == "/2.0/folders/7")
 			#expect(request.url?.query == "recursive=true")
 			#expect(request.timeoutInterval > 600)
@@ -175,8 +170,7 @@ extension UnitTests {
 
 		@Test
 		func uploadSessionURLOutsideBoxIsRejectedWithoutRequest() async throws {
-			let partFileURL = tmpDirURL.appendingPathComponent("part")
-			try Data("part".utf8).write(to: partFileURL)
+			let partFileURL = try makeLocalFile(in: tmpDirURL, named: "part", content: "part")
 
 			for url in ["https://evil.example/upload", "http://upload.box.com/api/2.0/files/upload_sessions/S", "https://evilbox.com/upload"] {
 				await #expect(throws: BoxError.unexpectedContent, "\(url)") { try await client.uploadPart(url: url, from: partFileURL, range: 0 ... 3, fileSize: 4, digest: "sha=", progress: nil) }
@@ -191,8 +185,7 @@ extension UnitTests {
 			defer {
 				logCapture.stop()
 			}
-			let fileURL = tmpDirURL.appendingPathComponent("upload")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload")
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: #"{"type":"user","id":"USER-ID","name":"User","login":"secret@example.com"}"#),
 				URLProtocolMock.handler(body: #"{"type":"folder","id":"7","name":"folder","owned_by":{"login":"owner@example.com"}}"#),
@@ -222,7 +215,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt"]),
 				URLProtocolMock.handler(body: "content")
 			]
-			let stagingURL = tmpDirURL.appendingPathComponent("download")
+			let stagingURL = tmpDirURL.appending(component: "download", directoryHint: .notDirectory)
 
 			try await client.download(fileID: "5", to: stagingURL, progress: nil, onTaskCreation: nil)
 
@@ -246,7 +239,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 404, body: "<Error>https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt</Error>")
 			]
 
-			await #expect(throws: BoxError.apiError(statusCode: 404, code: nil, message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: BoxError.apiError(statusCode: 404, code: nil, message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 
 			#expect(logCapture.messages.contains { $0.hasPrefix("<-- 404 ") && $0.contains("https://dl.boxcloud.com") }, "\(logCapture.joinedMessages)")
 			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
@@ -259,16 +252,14 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 404, body: #"{"type":"error","status":404,"code":"not_found","message":"https://dl.boxcloud.com/d/1/SECRET-PATH/file.txt"}"#)
 			]
 
-			await #expect(throws: BoxError.apiError(statusCode: 404, code: "not_found", message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: BoxError.apiError(statusCode: 404, code: "not_found", message: nil)) { try await client.download(fileID: "5", to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 		}
 	}
 }
 
 extension BoxClient {
 	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> BoxClient {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return BoxClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
+		return BoxClient(tokenSource: tokenSource, configuration: URLProtocolMock.configuration(), metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

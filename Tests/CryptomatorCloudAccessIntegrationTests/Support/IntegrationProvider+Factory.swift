@@ -22,7 +22,7 @@ enum SharedCredentials {
 
 extension IntegrationProvider {
 	/// The folder that the local file system provider works in, removed at the end of the run.
-	static let localFileSystemRootURL = FileManager.default.temporaryDirectory.appendingPathComponent("iOS-IntegrationTests-\(UUID().uuidString)", isDirectory: true)
+	static let localFileSystemRootURL = FileManager.default.temporaryDirectory.appending(component: "iOS-IntegrationTests-\(UUID().uuidString)", directoryHint: .isDirectory)
 
 	func makeProvider(maxPageSize: Int = .max) async throws -> CloudProvider {
 		switch self {

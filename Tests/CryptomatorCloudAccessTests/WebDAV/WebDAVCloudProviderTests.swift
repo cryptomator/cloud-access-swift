@@ -28,8 +28,7 @@ extension UnitTests {
 			URLProtocolSequenceMock.steps = []
 			RecordingURLProtocolMock.log.reset()
 			RecordingURLProtocolAuthenticationMock.log.reset()
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 			self.baseURL = try #require(URL(string: "/cloud/remote.php/webdav/"))
 			self.client = .mocked(baseURL: baseURL)
 			self.provider = try WebDAVCloudProvider(client: client)
@@ -44,13 +43,7 @@ extension UnitTests {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -73,13 +66,7 @@ extension UnitTests {
 			<d:response><d:href>/cloud/remote.php/webdav/Documents/About.txt</d:href><d:propstat><d:prop><d:getcontentlength>1074</d:getcontentlength><d:resourcetype /></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
 			</d:multistatus>
 			""".utf8)
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
 			#expect(metadata.cloudPath.path == "/Documents/About.txt")
@@ -92,13 +79,7 @@ extension UnitTests {
 		func fetchItemMetadataWithNotFoundError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -132,13 +113,7 @@ extension UnitTests {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 			let propfindData = try getTestData(forResource: "item-metadata-missing-resourcetype", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/Documents/About.txt"))
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -152,15 +127,8 @@ extension UnitTests {
 
 		@Test
 		func testFetchItemList() async throws {
-			let baseURL: URL = baseURL
 			let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == baseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: baseURL)
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/"])
@@ -177,14 +145,7 @@ extension UnitTests {
 
 		@Test
 		func fetchItemListWithNotFoundError() async throws {
-			let baseURL: URL = baseURL
-			let propfindResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == baseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: baseURL)
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/"])
@@ -196,13 +157,7 @@ extension UnitTests {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/Documents/About.txt"), withPageToken: nil) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 1 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -258,13 +213,8 @@ extension UnitTests {
 				_ = try? await cancellingValue(of: heldListing)
 				return
 			}
-			let otherItemList: CloudItemList
-			do {
-				otherItemList = try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
-			} catch {
-				hold.release()
-				_ = try? await cancellingValue(of: heldListing)
-				throw error
+			let otherItemList = try await releasingOnError(heldListing, by: hold.release) {
+				try await provider.fetchItemListExhaustively(forFolderAt: CloudPath("/"))
 			}
 			hold.release()
 			let itemList = try await cancellingValue(of: heldListing)
@@ -373,26 +323,13 @@ extension UnitTests {
 		@Test
 		func testDownloadFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path, request.httpMethod == "PROPFIND" else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
-
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 			let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-			let getResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path, request.httpMethod == "GET" else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (getResponse, getData)
-			})
+			try enqueueResponse(statusCode: 200, data: getData, for: responseURL)
 
 			let metadata = try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil)
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "GET /cloud/remote.php/webdav/Documents/About.txt"])
@@ -412,25 +349,18 @@ extension UnitTests {
 		func downloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let probe = OnTaskCreationProbe()
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
-			try enqueueResponse(statusCode: 200, data: getData, for: responseURL, onRequest: {
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})
+			try enqueueResponse(statusCode: 200, data: getData, for: responseURL, onRequest: { probe.expectOnTaskCreationReturned() })
 
 			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: probe.onTaskCreation())
 			}
 			_ = try await cancellingValue(of: download)
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try getData == Data(contentsOf: localURL))
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -439,26 +369,19 @@ extension UnitTests {
 		func uploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let probe = OnTaskCreationProbe()
 			try enqueueResponse(statusCode: 404, for: responseURL)
-			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: {
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})
+			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL, onRequest: { probe.expectOnTaskCreationReturned() })
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 
 			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: probe.onTaskCreation())
 			}
 			_ = try await cancellingValue(of: upload)
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -466,18 +389,14 @@ extension UnitTests {
 		func downloadFileWithCancellationDuringOnTaskCreation() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-data", withExtension: "txt"), for: responseURL)
 
-			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
 
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
@@ -485,19 +404,14 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringOnTaskCreation() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
 
-			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
-
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
 		}
 
 		/// A task that is cancelled before the session resumed it terminates without the session having registered it, so the session has to complete the call itself.
@@ -505,7 +419,7 @@ extension UnitTests {
 		func downloadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 
 			let download = Task {
@@ -524,7 +438,7 @@ extension UnitTests {
 		func uploadFileDoesNotHangWhenOnTaskCreationCancelsTask() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 			try enqueueResponse(statusCode: 404, for: responseURL)
 
@@ -543,7 +457,7 @@ extension UnitTests {
 		func downloadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
 			let (gatedProvider, gate) = try makeGatedProvider()
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
 			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -571,7 +485,7 @@ extension UnitTests {
 		func uploadFileWithUnauthorizedTransferReturnsAfterTaskCompletion() async throws {
 			let (gatedProvider, gate) = try makeGatedProvider()
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -597,7 +511,7 @@ extension UnitTests {
 		func downloadFileWithTransportError() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try enqueueResponse(statusCode: 200, data: getTestData(forResource: "item-metadata", withExtension: "xml"), for: responseURL)
 			URLProtocolMock.requestHandler.append({ _ in
 				throw URLProtocolMockError.simulatedTransportFailure
@@ -620,7 +534,7 @@ extension UnitTests {
 		func uploadFileWithTransportError() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 			try enqueueResponse(statusCode: 404, for: responseURL)
 			URLProtocolMock.requestHandler.append({ _ in
@@ -641,24 +555,11 @@ extension UnitTests {
 		@Test
 		func downloadFileWithNotFoundError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
-
-			let getResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (getResponse, nil)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
+			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			let progress = Progress(totalUnitCount: 1)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL, progress: progress, onTaskCreation: nil) }
@@ -671,26 +572,13 @@ extension UnitTests {
 		@Test
 		func downloadFileWithAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			FileManager.default.createFile(atPath: localURL.path, contents: nil, attributes: nil)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
-
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 			let getData = try getTestData(forResource: "item-data", withExtension: "txt")
-			let getResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (getResponse, getData)
-			})
+			try enqueueResponse(statusCode: 200, data: getData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "GET /cloud/remote.php/webdav/Documents/About.txt"])
@@ -700,16 +588,10 @@ extension UnitTests {
 		@Test
 		func downloadFileWithTypeMismatchError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 
 			let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/Documents/About.txt"), to: localURL) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -719,7 +601,7 @@ extension UnitTests {
 		@Test
 		func downloadFileWithUnauthorizedError() async throws {
 			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 			let failureResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 401, httpVersion: "HTTP/1.1", headerFields: nil))
@@ -733,34 +615,13 @@ extension UnitTests {
 		@Test
 		func testUploadFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
-
-			let putResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
-			let putData = Data()
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (putResponse, putData)
-			})
-
-			let propfindResponseAfterUpload = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+			try enqueueResponse(statusCode: 404, for: responseURL)
+			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
 			let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponseAfterUpload, propfindDataAfterUpload)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindDataAfterUpload, for: responseURL)
 
 			let progress = Progress(totalUnitCount: 1)
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
@@ -779,7 +640,7 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringTransfer() async throws {
 			let provider: WebDAVCloudProvider = provider
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 			let progress = Progress(totalUnitCount: 1)
 			let putStarted = TestSignal("PUT request started")
@@ -810,7 +671,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithQuotaInsufficientError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 			let progress = Progress(totalUnitCount: 1)
 			try enqueueResponse(statusCode: 404, for: responseURL)
@@ -824,35 +685,14 @@ extension UnitTests {
 		@Test
 		func uploadFileWithReplaceExisting() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
-
-			let putData = Data()
-			let putResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (putResponse, putData)
-			})
-
-			let propfindResponseAfterUpload = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
+			try enqueueResponse(statusCode: 201, data: Data(), for: responseURL)
 			let propfindDataAfterUpload = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponseAfterUpload, propfindDataAfterUpload)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindDataAfterUpload, for: responseURL)
 
 			let metadata = try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true)
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt", "PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -866,7 +706,7 @@ extension UnitTests {
 
 		@Test
 		func uploadFileWithNotFoundError() async {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == [])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -875,17 +715,11 @@ extension UnitTests {
 		@Test
 		func uploadFileWithAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 			let propfindData = try getTestData(forResource: "item-metadata", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -895,16 +729,10 @@ extension UnitTests {
 		@Test
 		func uploadFileWithTypeMismatchError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try FileManager.default.createDirectory(at: localURL, withIntermediateDirectories: false, attributes: nil)
 
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			let putError = POSIXError(.EISDIR)
 			URLProtocolMock.requestHandler.append({ _ in
@@ -917,17 +745,11 @@ extension UnitTests {
 		@Test
 		func uploadFileWithReplaceExistingAndAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 			let propfindData = try getTestData(forResource: "item-list", withExtension: "xml")
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, propfindData)
-			})
+			try enqueueResponse(statusCode: 200, data: propfindData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: true) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt"])
@@ -937,24 +759,11 @@ extension UnitTests {
 		@Test
 		func uploadFileWithParentFolderDoesNotExistError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
-
-			let putResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (putResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
+			try enqueueResponse(statusCode: 409, for: responseURL)
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -963,24 +772,11 @@ extension UnitTests {
 		@Test
 		func uploadFileWithParentFolderDoesNotExistErrorWhenReceiving404Error() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
-			let propfindResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (propfindResponse, nil)
-			})
-
-			let putResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (putResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
+			try enqueueResponse(statusCode: 404, for: responseURL)
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.uploadFile(from: localURL, to: CloudPath("/Documents/About.txt"), replaceExisting: false) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["PROPFIND Depth 0 /cloud/remote.php/webdav/Documents/About.txt", "PUT /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -989,7 +785,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithUnauthorizedError() async throws {
 			let unauthorizedProvider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL, protocolClass: RecordingURLProtocolAuthenticationMock.self))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try getTestData(forResource: "item-data", withExtension: "txt").write(to: localURL)
 
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
@@ -1005,13 +801,7 @@ extension UnitTests {
 		func testCreateFolder() async throws {
 			let responseURL = try #require(URL(string: "foo/", relativeTo: baseURL))
 
-			let mkcolResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (mkcolResponse, nil)
-			})
+			try enqueueResponse(statusCode: 201, for: responseURL)
 			try await provider.createFolder(at: CloudPath("/foo"))
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 		}
@@ -1020,13 +810,7 @@ extension UnitTests {
 		func createFolderWithAlreadyExistsError() async throws {
 			let responseURL = try #require(URL(string: "foo/", relativeTo: baseURL))
 
-			let mkcolResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 405, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (mkcolResponse, nil)
-			})
+			try enqueueResponse(statusCode: 405, for: responseURL)
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.createFolder(at: CloudPath("/foo")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -1036,13 +820,7 @@ extension UnitTests {
 		func createFolderWithParentFolderDoesNotExistError() async throws {
 			let responseURL = try #require(URL(string: "foo/", relativeTo: baseURL))
 
-			let mkcolResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (mkcolResponse, nil)
-			})
+			try enqueueResponse(statusCode: 409, for: responseURL)
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.createFolder(at: CloudPath("/foo")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MKCOL /cloud/remote.php/webdav/foo"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -1083,13 +861,7 @@ extension UnitTests {
 		func testDeleteFile() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let deleteResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (deleteResponse, nil)
-			})
+			try enqueueResponse(statusCode: 204, for: responseURL)
 			try await provider.deleteFile(at: CloudPath("/Documents/About.txt"))
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["DELETE /cloud/remote.php/webdav/Documents/About.txt"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -1099,13 +871,7 @@ extension UnitTests {
 		func deleteFileWithNotFoundError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let deleteResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (deleteResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/Documents/About.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["DELETE /cloud/remote.php/webdav/Documents/About.txt"])
@@ -1165,7 +931,7 @@ extension UnitTests {
 		/// A DELETE or MOVE of the base URL would act on everything below it, and the root always exists, so nothing can be created or moved there.
 		@Test
 		func rootAsSourceOrTargetThrowsWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeRootCases(localURL: makeLocalFile())
+			let cases = try MutationGuardCases.makeRootCases(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"))
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try WebDAVCloudProvider(client: client) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries.isEmpty)
 		}
@@ -1173,7 +939,7 @@ extension UnitTests {
 		/// The request URL would otherwise address another item: `/..` one outside the base URL, `/a/../b` the item `/b`.
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try WebDAVCloudProvider(client: client) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries.isEmpty)
 		}
@@ -1184,13 +950,7 @@ extension UnitTests {
 			let provider = try WebDAVCloudProvider(client: .mocked(baseURL: baseURL))
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 201, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (moveResponse, nil)
-			})
+			try enqueueResponse(statusCode: 201, for: responseURL)
 
 			try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt"))
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> https://example.com/cloud/remote.php/webdav/Documents/Foobar.txt"])
@@ -1211,13 +971,7 @@ extension UnitTests {
 		func moveFileWithNotFoundError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (moveResponse, nil)
-			})
+			try enqueueResponse(statusCode: 404, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
@@ -1229,13 +983,7 @@ extension UnitTests {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
 			let moveData = try getTestData(forResource: "item-move-412-error", withExtension: "xml")
-			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 412, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (moveResponse, moveData)
-			})
+			try enqueueResponse(statusCode: 412, data: moveData, for: responseURL)
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
@@ -1246,13 +994,7 @@ extension UnitTests {
 		func moveFileWithParentFolderDoesNotExistError() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 409, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (moveResponse, nil)
-			})
+			try enqueueResponse(statusCode: 409, for: responseURL)
 
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt"])
@@ -1264,13 +1006,7 @@ extension UnitTests {
 		func moveFileIntoFileThrowsParentFolderDoesNotExist() async throws {
 			let responseURL = try #require(URL(string: "Documents/About.txt", relativeTo: baseURL))
 
-			let moveResponse = try #require(HTTPURLResponse(url: responseURL, statusCode: 415, httpVersion: "HTTP/1.1", headerFields: nil))
-			URLProtocolMock.requestHandler.append({ request in
-				guard let url = request.url, url.path == responseURL.path else {
-					throw URLProtocolMockError.unexpectedRequest
-				}
-				return (moveResponse, nil)
-			})
+			try enqueueResponse(statusCode: 415, for: responseURL)
 
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await provider.moveFile(from: CloudPath("/Documents/About.txt"), to: CloudPath("/Documents/Foobar.txt/About.txt")) }
 			#expect(RecordingURLProtocolMock.log.wireSummaries == ["MOVE Overwrite F /cloud/remote.php/webdav/Documents/About.txt -> /cloud/remote.php/webdav/Documents/Foobar.txt/About.txt"])
@@ -1393,12 +1129,6 @@ extension UnitTests {
 			return Data(document.utf8)
 		}
 
-		private func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data("content".utf8).write(to: localURL)
-			return localURL
-		}
-
 		private func getTestData(forResource name: String, withExtension ext: String) throws -> Data {
 			let testBundle = Bundle.module
 			guard let fileURL = testBundle.url(forResource: name, withExtension: ext) else {
@@ -1421,10 +1151,7 @@ extension UnitTests {
 		private func makeGatedProvider() throws -> (WebDAVCloudProvider, TransferGate) {
 			let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
 			let gate = TransferGate()
-			let configuration = URLSessionConfiguration.default
-			configuration.httpCookieStorage = HTTPCookieStorage()
-			configuration.urlCredentialStorage = nil
-			configuration.protocolClasses = [URLProtocolSequenceMock.self]
+			let configuration = HTTPClientSupport.hardened(URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self))
 			let client = WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: gate.hooks))
 			let provider = try WebDAVCloudProvider(client: client)
 			return (provider, gate)

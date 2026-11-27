@@ -23,8 +23,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = []
 			self.sleeps = SleepRecorder()
 			self.client = try S3Client.mocked(sleeps: sleeps)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -310,7 +309,7 @@ extension UnitTests {
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(headerFields: ["ETag": "\"etag-2\""], onRequest: requests.record)]
 
-			let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 2, fromFile: makeLocalFile(), progress: nil)
+			let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 2, fromFile: makeLocalFile(in: tmpDirURL, named: "part.bin"), progress: nil)
 
 			#expect(eTag == "\"etag-2\"")
 			let request = try #require(requests.requests.first)
@@ -335,7 +334,7 @@ extension UnitTests {
 				})
 			]
 
-			let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: progress)
+			let eTag = try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(in: tmpDirURL, named: "part.bin"), progress: progress)
 
 			#expect(eTag == "\"etag-1\"")
 			#expect(sleeps.durations.count == 1)
@@ -347,7 +346,7 @@ extension UnitTests {
 		func uploadPartStopsAfterThreeRetries() async throws {
 			URLProtocolMock.requestHandler = Array(repeating: URLProtocolMock.handler(statusCode: 503), count: 4) + [URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""])]
 
-			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil) }
+			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(in: tmpDirURL, named: "part.bin"), progress: nil) }
 			#expect((error as? S3Error)?.statusCode == 503)
 			#expect(sleeps.durations.count == 3)
 			#expect(URLProtocolMock.requestHandler.count == 1)
@@ -360,7 +359,7 @@ extension UnitTests {
 				URLProtocolMock.handler(headerFields: ["ETag": "\"etag-1\""])
 			]
 
-			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil) }
+			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(in: tmpDirURL, named: "part.bin"), progress: nil) }
 			#expect((error as? S3Error)?.code == "AccessDenied")
 			#expect(URLProtocolMock.requestHandler.count == 1)
 		}
@@ -369,7 +368,7 @@ extension UnitTests {
 		func uploadPartWithoutETagThrows() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler()]
 
-			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(), progress: nil) }
+			let error = try await #require(throws: (any Error).self) { try await client.uploadPart(key: "file.bin", uploadID: "upload-id", partNumber: 1, fromFile: makeLocalFile(in: tmpDirURL, named: "part.bin"), progress: nil) }
 			#expect((error as? URLError)?.code == .badServerResponse)
 		}
 
@@ -390,7 +389,7 @@ extension UnitTests {
 			]
 
 			_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
-			try await client.download(key: "file.txt", to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			try await client.download(key: "file.txt", to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			let sentDates = try dates.withLock { $0 }.map { try #require(S3ClientTests.dateFormatter.date(from: $0)) }
 			#expect(sentDates.count == 3)
@@ -493,21 +492,17 @@ extension UnitTests {
 
 		@Test
 		func transfersUsePresignedURLs() async throws {
-			let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-			let recordRequest: @Sendable (URLRequest) -> Void = { request in
-				requests.withLock { $0.append(request) }
-			}
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: "content", onRequest: recordRequest),
-				URLProtocolMock.handler(onRequest: recordRequest)
+				URLProtocolMock.handler(body: "content", onRequest: requests.record),
+				URLProtocolMock.handler(onRequest: requests.record)
 			]
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 
-			try await client.download(key: "file.txt", to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			try await client.download(key: "file.txt", to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			try await client.upload(key: "file.txt", fromFile: fileURL, contentType: "text/plain", progress: nil, onTaskCreation: nil)
 
-			let sentRequests = requests.withLock { $0 }
+			let sentRequests = requests.requests
 			#expect(sentRequests.map(\.httpMethod) == ["GET", "PUT"])
 			for request in sentRequests {
 				let query = try #require(request.url?.query)
@@ -516,7 +511,7 @@ extension UnitTests {
 				#expect(request.value(forHTTPHeaderField: "Authorization") == nil)
 			}
 			#expect(try #require(sentRequests.last?.url?.query).contains("X-Amz-SignedHeaders=content-type%3Bhost"))
-			#expect(try Data("content".utf8) == Data(contentsOf: tmpDirURL.appendingPathComponent("download.txt")))
+			#expect(try Data("content".utf8) == Data(contentsOf: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)))
 		}
 
 		@Test
@@ -532,11 +527,10 @@ extension UnitTests {
 				URLProtocolMock.handler(body: "content", onRequest: recordMarker),
 				URLProtocolMock.handler(onRequest: recordMarker)
 			]
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 
 			_ = try await backgroundClient.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
-			try await backgroundClient.download(key: "file.txt", to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			try await backgroundClient.download(key: "file.txt", to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			try await backgroundClient.upload(key: "file.txt", fromFile: fileURL, contentType: "text/plain", progress: nil, onTaskCreation: nil)
 
 			#expect(markers.withLock { $0 } == ["metadata", "transfer", "transfer"])
@@ -564,9 +558,8 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 403, body: signingDetails),
 				URLProtocolMock.handler(statusCode: 403, body: signingDetails)
 			]
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
-			let downloadURL = tmpDirURL.appendingPathComponent("download.txt")
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
+			let downloadURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let operations: [@Sendable () async throws -> Void] = [
 				{ _ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1) },
 				{ try await client.download(key: "file.txt", to: downloadURL, progress: nil, onTaskCreation: nil) },
@@ -599,12 +592,6 @@ extension UnitTests {
 
 		// MARK: - Helpers
 
-		private func makeLocalFile() throws -> URL {
-			let fileURL = tmpDirURL.appendingPathComponent("part.bin")
-			try Data("content".utf8).write(to: fileURL)
-			return fileURL
-		}
-
 		private static let dateFormatter = {
 			let formatter = DateFormatter()
 			formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -618,9 +605,7 @@ extension UnitTests {
 extension S3Client {
 	/// Returns a client whose requests `URLProtocolMock` answers.
 	static func mocked(credential: S3Credential = .stub, sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) throws -> S3Client {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return try S3Client(credential: credential, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
+		return try S3Client(credential: credential, configuration: URLProtocolMock.configuration(), metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

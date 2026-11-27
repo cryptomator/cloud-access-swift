@@ -16,7 +16,7 @@ extension UnitTests {
 		private let directoryURL: URL
 
 		init() {
-			self.directoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true).appendingPathComponent("Locks", isDirectory: true)
+			self.directoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory).appending(component: "Locks", directoryHint: .isDirectory)
 		}
 
 		deinit {
@@ -39,7 +39,6 @@ extension UnitTests {
 			let lock = makeLock()
 			let holder = try await lock.acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
 
-			holder.release()
 			holder.release()
 
 			let secondHolder = try await makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))

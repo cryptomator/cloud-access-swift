@@ -18,7 +18,7 @@ enum DropboxCredentialMock {
 	static func generateAuthorizedCredential(userID: String = "IntegrationTest") throws -> DropboxCredential {
 		let storage = MemoryOAuthTokenStorage()
 		try storage.save(OAuthTokenEncoding.encode(OAuthToken(accessToken: "", refreshToken: IntegrationTestSecrets.dropboxRefreshToken, expiresAt: .distantPast)), for: OAuthAccountKey(provider: .dropbox, account: userID))
-		let lockDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("DropboxTokenLocks", isDirectory: true)
+		let lockDirectory = FileManager.default.temporaryDirectory.appending(component: "DropboxTokenLocks", directoryHint: .isDirectory)
 		let oauth = try OAuthPersistence.custom(storage: storage, tokenLockDirectory: lockDirectory)
 		let endpoint = try DropboxOAuthEndpoint(appKey: IntegrationTestSecrets.dropboxAppKey)
 		let tokenSource = StoredOAuthTokenSource(provider: .dropbox, account: userID, persistence: oauth, legacyDecoder: DropboxLegacyToken.decode, refresher: { token in

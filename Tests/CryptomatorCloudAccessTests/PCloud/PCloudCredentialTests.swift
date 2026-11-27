@@ -20,7 +20,7 @@ extension UnitTests {
 
 		init() {
 			URLProtocolMock.requestHandler = []
-			self.lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			self.lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		}
 
 		deinit {

@@ -18,7 +18,7 @@ extension UnitTests {
 		private static let tokenB = OAuthToken(accessToken: "B", refreshToken: "RB", expiresAt: nil)
 		private static let tokenC = OAuthToken(accessToken: "C", refreshToken: "RC", expiresAt: nil)
 
-		private let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		private let lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		private let buffer = TokenBuffer()
 
 		deinit {
@@ -443,45 +443,44 @@ extension UnitTests {
 			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
 		}
 
-		@Test
-		func expiryDuringStorageWriteReleasesLockAfterWrite() async throws {
-			for write in ["save", "delete"] {
-				buffer.store(OAuthTokenStoreTests.tokenA)
-				let script = ActivityScript()
-				let writeStarted = TestSignal("write started")
-				let writeGate = DispatchSemaphore(value: 0)
-				let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
-					writeStarted.fulfill()
-					_ = writeGate.wait(timeout: testWaitDeadline())
-				})
-				let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
-				let operation = Task {
-					if write == "save" {
-						try await store.replace(with: OAuthTokenStoreTests.tokenC)
-					} else {
-						try await store.delete(revoking: { _ in })
-					}
+		@Test(arguments: StorageWrite.allCases)
+		func expiryDuringStorageWriteReleasesLockAfterWrite(write: StorageWrite) async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let script = ActivityScript()
+			let writeStarted = TestSignal("write started")
+			let writeGate = DispatchSemaphore(value: 0)
+			let storage = MemoryTokenStorage(buffer: buffer, onWrite: {
+				writeStarted.fulfill()
+				_ = writeGate.wait(timeout: testWaitDeadline())
+			})
+			let store = try makeStore(storage: storage, refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenB }, script: script)
+			let operation = Task {
+				switch write {
+				case .save:
+					try await store.replace(with: OAuthTokenStoreTests.tokenC)
+				case .delete:
+					try await store.delete(revoking: { _ in })
 				}
-				await writeStarted.wait()
-				let expiryStarted = TestSignal("expiry started")
-				let expiryReturned = TestSignal("expiry returned")
-				// The expiry waits for the write, so it runs on another thread.
-				DispatchQueue.global().async {
-					expiryStarted.fulfill()
-					script.expireRunningAssertion()
-					expiryReturned.fulfill()
-				}
-				await expiryStarted.wait()
-
-				await #expect(throws: OAuthTokenStoreError.lockTimeout, "\(write)") { try await store.makeLock().acquire(timeout: .milliseconds(500), pollInterval: .milliseconds(10)) }
-				writeGate.signal()
-				try await cancellingValue(of: operation)
-				await expiryReturned.wait()
-				let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
-				otherHolder.release()
-
-				#expect((write == "save" ? OAuthTokenStoreTests.tokenC : nil) == buffer.token, "\(write)")
 			}
+			await writeStarted.wait()
+			let expiryStarted = TestSignal("expiry started")
+			let expiryReturned = TestSignal("expiry returned")
+			// The expiry waits for the write, so it runs on another thread.
+			DispatchQueue.global().async {
+				expiryStarted.fulfill()
+				script.expireRunningAssertion()
+				expiryReturned.fulfill()
+			}
+			await expiryStarted.wait()
+
+			await #expect(throws: OAuthTokenStoreError.lockTimeout) { try await store.makeLock().acquire(timeout: .milliseconds(500), pollInterval: .milliseconds(10)) }
+			writeGate.signal()
+			try await cancellingValue(of: operation)
+			await expiryReturned.wait()
+			let otherHolder = try await store.makeLock().acquire(timeout: testWaitTimeout, pollInterval: .milliseconds(10))
+			otherHolder.release()
+
+			#expect((write == .save ? OAuthTokenStoreTests.tokenC : nil) == buffer.token)
 		}
 
 		@Test
@@ -510,78 +509,77 @@ extension UnitTests {
 			#expect(OAuthTokenStoreTests.tokenC == buffer.token)
 		}
 
-		@Test
-		func expiryDuringRefreshReleasesLockAndLateResponseIsSavedOnlyOverItsSource() async throws {
-			for meanwhile in ["nothing", "delete", "replace"] {
-				buffer.store(OAuthTokenStoreTests.tokenA)
-				let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
-				lateRefresh.otherHolder.release()
-				try await releasingOnError(lateRefresh.refresh, by: lateRefresh.refreshReleased) {
-					let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
-					if meanwhile == "delete" {
-						try await otherProcessStore.delete(revoking: { _ in })
-					} else if meanwhile == "replace" {
-						try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
-					}
+		@Test(arguments: MeanwhileChange.allCases)
+		func expiryDuringRefreshReleasesLockAndLateResponseIsSavedOnlyOverItsSource(meanwhile: MeanwhileChange) async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let lateRefresh = try await startLateRefresh(storage: MemoryTokenStorage(buffer: buffer), script: ActivityScript())
+			lateRefresh.otherHolder.release()
+			try await releasingOnError(lateRefresh.refresh, by: lateRefresh.refreshReleased) {
+				let otherProcessStore = try makeStore(refresher: RefresherMock { _ in OAuthTokenStoreTests.tokenC }, coordinator: OAuthTokenCoordinator())
+				switch meanwhile {
+				case .nothing:
+					break
+				case .delete:
+					try await otherProcessStore.delete(revoking: { _ in })
+				case .replace:
+					try await otherProcessStore.replace(with: OAuthTokenStoreTests.tokenC)
 				}
-				lateRefresh.refreshReleased.fulfill()
+			}
+			lateRefresh.refreshReleased.fulfill()
 
-				if meanwhile == "delete" {
-					await #expect(throws: CloudProviderError.unauthorized) { try await cancellingValue(of: lateRefresh.refresh) }
-					#expect(buffer.data == nil)
-				} else {
-					let expectedToken = meanwhile == "replace" ? OAuthTokenStoreTests.tokenC : OAuthTokenStoreTests.tokenB
-					let accessToken = try await cancellingValue(of: lateRefresh.refresh)
-					let currentAccessToken = try await lateRefresh.store.accessToken()
-					#expect(expectedToken.accessToken == accessToken, "\(meanwhile)")
-					#expect(expectedToken.accessToken == currentAccessToken, "\(meanwhile)")
-					#expect(expectedToken == buffer.token, "\(meanwhile)")
-				}
+			if meanwhile == .delete {
+				await #expect(throws: CloudProviderError.unauthorized) { try await cancellingValue(of: lateRefresh.refresh) }
+				#expect(buffer.data == nil)
+			} else {
+				let expectedToken = meanwhile == .replace ? OAuthTokenStoreTests.tokenC : OAuthTokenStoreTests.tokenB
+				let accessToken = try await cancellingValue(of: lateRefresh.refresh)
+				let currentAccessToken = try await lateRefresh.store.accessToken()
+				#expect(expectedToken.accessToken == accessToken)
+				#expect(expectedToken.accessToken == currentAccessToken)
+				#expect(expectedToken == buffer.token)
 			}
 		}
 
-		@Test
-		func lateResponseThatCannotBeSavedNowIsSavedBeforeNextRefresh() async throws {
-			for failure in ["assertion refused", "lock timeout", "load failure", "expiry while loading"] {
-				buffer.store(OAuthTokenStoreTests.tokenA)
-				let script = ActivityScript()
-				let expiresOnLoad = OSAllocatedUnfairLock(initialState: false)
-				let storage = MemoryTokenStorage(buffer: buffer, onLoad: {
-					if expiresOnLoad.withLock({ $0 }) {
-						script.expireRunningAssertion()
-					}
-				})
-				let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == "lock timeout" ? .milliseconds(100) : testWaitTimeout)
-				switch failure {
-				case "assertion refused":
-					script.refusesAssertions = true
-				case "load failure":
-					storage.failsLoads = true
-				case "expiry while loading":
-					expiresOnLoad.withLock { $0 = true }
-				default:
-					break
+		@Test(arguments: LateSaveFailure.allCases)
+		func lateResponseThatCannotBeSavedNowIsSavedBeforeNextRefresh(failure: LateSaveFailure) async throws {
+			buffer.store(OAuthTokenStoreTests.tokenA)
+			let script = ActivityScript()
+			let expiresOnLoad = OSAllocatedUnfairLock(initialState: false)
+			let storage = MemoryTokenStorage(buffer: buffer, onLoad: {
+				if expiresOnLoad.withLock({ $0 }) {
+					script.expireRunningAssertion()
 				}
-				if failure != "lock timeout" {
-					lateRefresh.otherHolder.release()
-				}
-				lateRefresh.refreshReleased.fulfill()
-
-				let accessToken = try await cancellingValue(of: lateRefresh.refresh)
-
-				#expect(accessToken == "B", "\(failure)")
-				#expect(OAuthTokenStoreTests.tokenA == buffer.token, "\(failure)")
-
-				lateRefresh.otherHolder.release()
-				script.refusesAssertions = false
-				storage.failsLoads = false
-				expiresOnLoad.withLock { $0 = false }
-				let savedAccessToken = try await lateRefresh.store.refresh(rejecting: "A")
-
-				#expect(savedAccessToken == "B", "\(failure)")
-				#expect(OAuthTokenStoreTests.tokenB == buffer.token, "\(failure)")
-				#expect(lateRefresh.refresher.callCount == 1, "\(failure)")
+			})
+			let lateRefresh = try await startLateRefresh(storage: storage, script: script, lockTimeout: failure == .lockTimeout ? .milliseconds(100) : testWaitTimeout)
+			switch failure {
+			case .assertionRefused:
+				script.refusesAssertions = true
+			case .lockTimeout:
+				break
+			case .loadFailure:
+				storage.failsLoads = true
+			case .expiryWhileLoading:
+				expiresOnLoad.withLock { $0 = true }
 			}
+			if failure != .lockTimeout {
+				lateRefresh.otherHolder.release()
+			}
+			lateRefresh.refreshReleased.fulfill()
+
+			let accessToken = try await cancellingValue(of: lateRefresh.refresh)
+
+			#expect(accessToken == "B")
+			#expect(OAuthTokenStoreTests.tokenA == buffer.token)
+
+			lateRefresh.otherHolder.release()
+			script.refusesAssertions = false
+			storage.failsLoads = false
+			expiresOnLoad.withLock { $0 = false }
+			let savedAccessToken = try await lateRefresh.store.refresh(rejecting: "A")
+
+			#expect(savedAccessToken == "B")
+			#expect(OAuthTokenStoreTests.tokenB == buffer.token)
+			#expect(lateRefresh.refresher.callCount == 1)
 		}
 
 		// MARK: - Lock Timeout
@@ -773,6 +771,48 @@ extension UnitTests {
 
 		private func makeStore(storage: MemoryTokenStorage? = nil, refresher: RefresherMock, script: ActivityScript = ActivityScript(), now: @escaping @Sendable () -> Date = Date.init, lockTimeout: Duration = testWaitTimeout, lockEvents: CrossProcessFileLock.Events = .init(), coordinator: OAuthTokenCoordinator = OAuthTokenCoordinator()) throws -> OAuthTokenStore {
 			return try OAuthTokenStore(provider: OAuthProvider(rawValue: "test"), account: "user", persistence: .custom(storage: storage ?? MemoryTokenStorage(buffer: buffer), tokenLockDirectory: lockDirectoryURL), legacyDecoder: BoxLegacyToken.decode, refresher: { try await refresher.refresh($0) }, assertion: script.assertion, now: now, lockTimeout: lockTimeout, lockPollInterval: .milliseconds(10), lockEvents: lockEvents, coordinator: coordinator)
+		}
+	}
+}
+
+/// The storage writes during which an assertion can expire.
+enum StorageWrite: CaseIterable, CustomTestStringConvertible {
+	case save
+	case delete
+
+	var testDescription: String {
+		return "\(self)"
+	}
+}
+
+/// The changes that another process makes to the stored token while a refresh's response is late.
+enum MeanwhileChange: CaseIterable, CustomTestStringConvertible {
+	case nothing
+	case delete
+	case replace
+
+	var testDescription: String {
+		return "\(self)"
+	}
+}
+
+/// The failures that keep a late refresh response from being saved at once.
+enum LateSaveFailure: CaseIterable, CustomTestStringConvertible {
+	case assertionRefused
+	case lockTimeout
+	case loadFailure
+	case expiryWhileLoading
+
+	var testDescription: String {
+		switch self {
+		case .assertionRefused:
+			return "assertion refused"
+		case .lockTimeout:
+			return "lock timeout"
+		case .loadFailure:
+			return "load failure"
+		case .expiryWhileLoading:
+			return "expiry while loading"
 		}
 	}
 }

@@ -88,10 +88,16 @@ class URLProtocolMock: URLProtocol {
 		}
 	}
 
+	/// Returns an unhardened configuration whose requests `protocolClass` answers.
+	static func configuration(protocolClass: AnyClass = URLProtocolMock.self) -> URLSessionConfiguration {
+		let configuration = URLSessionConfiguration.default
+		configuration.protocolClasses = [protocolClass]
+		return configuration
+	}
+
 	/// Returns a configuration whose requests this mock answers and that sends the marker in the `X-Session` header, so that a test can tell which session sent a request.
 	static func configuration(marker: String) -> URLSessionConfiguration {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
+		let configuration = URLProtocolMock.configuration()
 		configuration.httpAdditionalHeaders = ["X-Session": marker]
 		return configuration
 	}

@@ -72,9 +72,7 @@ extension UnitTests {
 		/// A session without a delegate follows the redirect from `https` to `http` as a background session does, so only the task's original request still shows that it started on `https`.
 		@Test
 		func passwordChallengeIsRefusedForATaskThatStartedOnHTTPS() async throws {
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolMock.self]
-			let session = URLSession(configuration: configuration)
+			let session = URLSession(configuration: URLProtocolMock.configuration())
 			defer {
 				session.invalidateAndCancel()
 			}

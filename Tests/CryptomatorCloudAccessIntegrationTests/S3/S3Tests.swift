@@ -51,13 +51,13 @@ extension IntegrationTests.ProviderSpecific {
 				let sandbox = try await context.makeSandbox()
 				let cloudPath = sandbox.appendingPathComponent("file.txt")
 				let data = Data("path style".utf8)
-				let localURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+				let localURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				try data.write(to: localURL)
 
 				_ = try await provider.uploadFile(from: localURL, to: cloudPath, replaceExisting: false)
 				try await waitUntilVisible(cloudPath, through: provider, on: .s3)
 				let items = try await provider.fetchItemListExhaustively(forFolderAt: sandbox).items
-				let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+				let downloadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				_ = try await provider.downloadFile(from: cloudPath, to: downloadURL)
 				try await provider.deleteFile(at: cloudPath)
 				let isDeleted = try await eventually(on: .s3) {
@@ -86,7 +86,7 @@ extension IntegrationTests.ProviderSpecific {
 			let (copyTaskUtility, _) = try createCopyTaskUtility()
 			let upload = try await uploadFileForMultiPartCopy(in: context)
 			try await copyTaskUtility.copy(upload.request)
-			let downloadURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+			let downloadURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			_ = try await context.provider.downloadFile(from: upload.targetCloudPath, to: downloadURL)
 			let copiedData = try Data(contentsOf: downloadURL)
 			#expect(copiedData.count == upload.data.count)
@@ -127,7 +127,7 @@ extension IntegrationTests.ProviderSpecific {
 		private static func uploadFileForMultiPartCopy(in context: IntegrationTestContext) async throws -> MultiPartCopyUpload {
 			let length = multiPartCopyMaxPartSize + (7 * 1024 * 1024)
 			let data = patternedData(length: length, seed: 0)
-			let tmpFileURL = context.tmpDirURL.appendingPathComponent(UUID().uuidString)
+			let tmpFileURL = context.tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try data.write(to: tmpFileURL)
 			let sandbox = try await context.makeSandbox()
 			let sourceCloudPath = sandbox.appendingPathComponent(tmpFileURL.lastPathComponent)

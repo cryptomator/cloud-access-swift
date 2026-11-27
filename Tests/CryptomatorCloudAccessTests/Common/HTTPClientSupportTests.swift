@@ -67,7 +67,7 @@ extension UnitTests {
 		func temporaryFileLiesInProcessFolder() throws {
 			let url = try HTTPClientSupport.writeTemporaryFile { try $0.write(contentsOf: Data("hello".utf8)) }
 			defer {
-				try? FileManager.default.removeItem(at: url)
+				removeItemRecordingFailure(at: url)
 			}
 
 			#expect(try ProcessTemporaryDirectory.shared.directoryURL().path == url.deletingLastPathComponent().path)

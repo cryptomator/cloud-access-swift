@@ -247,7 +247,7 @@ extension UnitTests {
 		// MARK: - Helpers
 
 		private func setUpDropbox() throws {
-			let lockDirectoryURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			let lockDirectoryURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 			setup = try DropboxSetup(appKey: DropboxAuthenticatorTests.appKey, oauth: .custom(storage: MemoryTokenStorage(buffer: TokenBuffer()), tokenLockDirectory: lockDirectoryURL))
 		}
 

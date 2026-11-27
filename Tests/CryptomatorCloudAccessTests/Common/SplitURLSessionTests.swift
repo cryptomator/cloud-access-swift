@@ -22,9 +22,8 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			URLProtocolSequenceMock.steps = []
-			self.session = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.session = SplitURLSession(configuration: URLProtocolMock.configuration())
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -41,8 +40,7 @@ extension UnitTests {
 				markers.withLock { $0.append(request.value(forHTTPHeaderField: "X-Session")) }
 				return (HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 			}, count: 4)
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 
 			_ = try await markedSession.data(URLRequest(url: url), bodyLimit: nil, bodyLogging: .logged)
 			_ = try await markedSession.download(URLRequest(url: url), route: .metadata, handler: { _, _ in .none }, bodyLogging: .logged, urlLogging: .redacted, progress: nil, cancelsBeforeResume: false, onTaskCreation: nil)
@@ -56,8 +54,7 @@ extension UnitTests {
 		func backgroundConfigurationRunsDataRequestsOffBackgroundSession() async throws {
 			let backgroundSession = makeBackgroundSession()
 			let mockURL = try #require(URL(string: "mock://example.com/file"))
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 			URLProtocolMock.requestHandler = Array(repeating: { request in
 				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 			}, count: 2)
@@ -80,8 +77,7 @@ extension UnitTests {
 			}
 			let backgroundSession = makeBackgroundSession()
 			let mockURL = try #require(URL(string: "mock://example.com/file"))
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 			URLProtocolMock.requestHandler = [{ request in
 				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 			}]
@@ -157,13 +153,13 @@ extension UnitTests {
 
 		@Test
 		func overlappingRequestsGetTheirOwnOutcomes() async throws {
-			let firstSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
-			let secondSession = SplitURLSession(configuration: SplitURLSessionTests.mockConfiguration())
+			let firstSession = SplitURLSession(configuration: URLProtocolMock.configuration())
+			let secondSession = SplitURLSession(configuration: URLProtocolMock.configuration())
 			URLProtocolMock.requestHandler = Array(repeating: { request in
 				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(request.url!.lastPathComponent.utf8))
 			}, count: 2)
-			let firstRequest = URLRequest(url: url.appendingPathComponent("first"))
-			let secondRequest = URLRequest(url: url.appendingPathComponent("second"))
+			let firstRequest = URLRequest(url: url.appending(component: "first", directoryHint: .notDirectory))
+			let secondRequest = URLRequest(url: url.appending(component: "second", directoryHint: .notDirectory))
 			let firstHeld = TestSignal("first task held")
 			let secondFinished = DispatchSemaphore(value: 0)
 			let firstWaitResult = OSAllocatedUnfairLock<DispatchTimeoutResult?>(initialState: nil)
@@ -191,7 +187,7 @@ extension UnitTests {
 
 		@Test
 		func bodyAtLimitIsReturned() async throws {
-			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration())
+			let sequenceSession = SplitURLSession(configuration: URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self))
 			URLProtocolSequenceMock.steps = try [.chunkedResponse(#require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), [Data(count: 32 * 1024), Data(count: 32 * 1024)])]
 
 			let outcome = try await sequenceSession.data(URLRequest(url: url), bodyLimit: 64 * 1024, bodyLogging: .logged)
@@ -208,7 +204,7 @@ extension UnitTests {
 				completionReached.fulfill()
 				_ = completionGate.wait(timeout: testWaitDeadline())
 			})
-			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), hooks: hooks)
+			let sequenceSession = SplitURLSession(configuration: URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self), hooks: hooks)
 			URLProtocolSequenceMock.steps = try [.chunkedResponse(#require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)), [Data(count: 64 * 1024), Data(count: 1)])]
 
 			let returned = TestSignal("call returned before the task terminated")
@@ -233,7 +229,7 @@ extension UnitTests {
 
 		@Test
 		func rejectedChallengeRecordsItsFailure() async throws {
-			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), challengeHandler: FailingChallengeHandler(failure: ChallengeFailure()))
+			let sequenceSession = SplitURLSession(configuration: URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self), challengeHandler: FailingChallengeHandler(failure: ChallengeFailure()))
 			let failureResponse = try #require(HTTPURLResponse(url: url, statusCode: 401, httpVersion: nil, headerFields: nil))
 			URLProtocolSequenceMock.steps = [.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 0, failureResponse: failureResponse))]
 
@@ -263,7 +259,7 @@ extension UnitTests {
 			let failingURL = try #require(URL(string: "https://api.example.com/SENTINEL"))
 			let underlyingError = URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: failingURL])
 			let failure = NSError(domain: "SplitURLSessionTests", code: 42, userInfo: ["Detail": "kept", NSURLErrorFailingURLErrorKey: failingURL, NSUnderlyingErrorKey: underlyingError])
-			let sequenceSession = SplitURLSession(configuration: sequenceConfiguration(), challengeHandler: FailingChallengeHandler(failure: failure))
+			let sequenceSession = SplitURLSession(configuration: URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self), challengeHandler: FailingChallengeHandler(failure: failure))
 			let failureResponse = try #require(HTTPURLResponse(url: url, statusCode: 401, httpVersion: nil, headerFields: nil))
 			URLProtocolSequenceMock.steps = [.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 0, failureResponse: failureResponse))]
 
@@ -283,7 +279,7 @@ extension UnitTests {
 
 		@Test
 		func downloadMovesBodyOfSuccessfulResponse() async throws {
-			let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
+			let stagingURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [{ [url] _ in
 				(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("new".utf8))
 			}]
@@ -297,7 +293,7 @@ extension UnitTests {
 
 		@Test
 		func unsuccessfulDownloadReturnsBodyAsData() async throws {
-			let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
+			let stagingURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [{ [url] _ in
 				(HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data("not found".utf8))
 			}]
@@ -311,7 +307,7 @@ extension UnitTests {
 
 		@Test
 		func downloadRecordsMoveError() async throws {
-			let stagingURL = tmpDirURL.appendingPathComponent("missing", isDirectory: true).appendingPathComponent("file.txt")
+			let stagingURL = tmpDirURL.appending(component: "missing", directoryHint: .isDirectory).appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [{ [url] _ in
 				(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("content".utf8))
 			}]
@@ -347,7 +343,7 @@ extension UnitTests {
 
 		@Test
 		func downgradeRedirectOfADownloadIsRefused() async throws {
-			let stagingURL = tmpDirURL.appendingPathComponent("file.txt")
+			let stagingURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "http://download.example.com/files/1"]),
 				URLProtocolMock.handler(body: "content")
@@ -447,20 +443,8 @@ extension UnitTests {
 
 		/// Returns a session whose transfer session the test registry backs with `URLProtocolMock`, because the hostless test bundle can't create background sessions.
 		private func makeBackgroundSession() -> SplitURLSession {
-			let registry = BackgroundURLSessionRegistry { _ in SplitURLSessionTests.mockConfiguration() }
+			let registry = BackgroundURLSessionRegistry { _ in URLProtocolMock.configuration() }
 			return SplitURLSession(configuration: .background(withIdentifier: "test"), registry: registry)
-		}
-
-		private static func mockConfiguration() -> URLSessionConfiguration {
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolMock.self]
-			return configuration
-		}
-
-		private func sequenceConfiguration() -> URLSessionConfiguration {
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolSequenceMock.self]
-			return configuration
 		}
 
 		private func authorizationHeaders(redirectingTo redirectURL: URL) async throws -> [String?] {

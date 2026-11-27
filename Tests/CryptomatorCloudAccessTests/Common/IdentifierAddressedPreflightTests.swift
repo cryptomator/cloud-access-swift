@@ -24,8 +24,7 @@ extension UnitTests {
 			for (path, identifier, itemType) in [("/folder", "D", CloudItemType.folder), ("/file", "F", .file), ("/link", "L", .symlink), ("/unknown", "U", .unknown)] {
 				try cache.addOrUpdate(BoxItem(cloudPath: CloudPath(path), identifier: identifier, itemType: itemType))
 			}
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -37,7 +36,7 @@ extension UnitTests {
 		@Test
 		func rootTargetThrowsItemAlreadyExistsAndRootSourceItemTypeMismatchWithoutLookup() async throws {
 			let preflight = makePreflight()
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await preflight.prepareCreateFolder(at: .root) }
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await preflight.prepareUpload(from: localURL, to: .root, replaceExisting: true) }
@@ -51,7 +50,7 @@ extension UnitTests {
 
 		@Test
 		func missingLocalFileThrowsItemNotFoundBeforeRootTarget() async throws {
-			await #expect(throws: CloudProviderError.itemNotFound) { try await makePreflight().prepareUpload(from: tmpDirURL.appendingPathComponent("missing"), to: .root, replaceExisting: true) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await makePreflight().prepareUpload(from: tmpDirURL.appending(component: "missing", directoryHint: .notDirectory), to: .root, replaceExisting: true) }
 		}
 
 		@Test
@@ -85,7 +84,7 @@ extension UnitTests {
 		@Test
 		func itemOnPathThatIsNoFolderIsNeverLookedIn() async throws {
 			let preflight = makePreflight()
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await preflight.prepareCreateFolder(at: CloudPath("/file/new")) }
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await preflight.prepareCreateFolder(at: CloudPath("/file/x/new")) }
@@ -464,7 +463,7 @@ extension UnitTests {
 		@Test
 		func folderMissingAtTargetLookupThrowsParentFolderDoesNotExist() async throws {
 			let preflight = makePreflight { _, _ in throw CloudProviderError.itemNotFound }
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await preflight.prepareCreateFolder(at: CloudPath("/folder/new")) }
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await preflight.prepareUpload(from: localURL, to: CloudPath("/folder/new"), replaceExisting: true) }
@@ -474,7 +473,7 @@ extension UnitTests {
 
 		@Test
 		func uploadReplacesOnlyFileWithReplaceExisting() async throws {
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let preflight = makePreflight { name, folderItem in
 				let itemType: CloudItemType = switch name {
 				case "folder": .folder
@@ -496,7 +495,7 @@ extension UnitTests {
 
 		@Test
 		func fastPathIsTriedOnlyForReplacingCachedFile() async throws {
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/folder/cached"), identifier: "C", itemType: .file))
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/folder/sub"), identifier: "S", itemType: .folder))
 			let fastPathCalls = LookupRecorder()
@@ -523,7 +522,7 @@ extension UnitTests {
 				BoxItem(cloudPath: folderItem.cloudPath.appendingPathComponent(name), identifier: "N", itemType: .file)
 			}
 
-			let existingItem = try await preflight.prepareUpload(from: makeLocalFile(), to: CloudPath("/folder/cached"), replaceExisting: true, fastPath: { _, _ in nil }).existing
+			let existingItem = try await preflight.prepareUpload(from: makeLocalFile(in: tmpDirURL, named: "local.txt"), to: CloudPath("/folder/cached"), replaceExisting: true, fastPath: { _, _ in nil }).existing
 
 			#expect(existingItem?.identifier == "N")
 			#expect(lookups.calls == ["D/cached"])
@@ -533,7 +532,7 @@ extension UnitTests {
 		func fastPathErrorIsThrownWithoutLookup() async throws {
 			try cache.addOrUpdate(BoxItem(cloudPath: CloudPath("/folder/cached"), identifier: "C", itemType: .file))
 
-			await #expect(throws: CloudProviderError.unauthorized) { try await makePreflight().prepareUpload(from: makeLocalFile(), to: CloudPath("/folder/cached"), replaceExisting: true, fastPath: { _, _ in throw CloudProviderError.unauthorized }) }
+			await #expect(throws: CloudProviderError.unauthorized) { try await makePreflight().prepareUpload(from: makeLocalFile(in: tmpDirURL, named: "local.txt"), to: CloudPath("/folder/cached"), replaceExisting: true, fastPath: { _, _ in throw CloudProviderError.unauthorized }) }
 			#expect(lookups.calls.isEmpty)
 		}
 
@@ -544,7 +543,7 @@ extension UnitTests {
 		func markPrecedesResolutionOfColdParent(operation: String) async throws {
 			let cache = cache
 			let target = BoxItem(cloudPath: CloudPath("/cold/new"), identifier: "N", itemType: .file)
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let preflight = makePreflight { name, _ in
 				guard name == "cold" else {
 					return nil
@@ -575,7 +574,7 @@ extension UnitTests {
 		/// A cancellation during the last lookup stops the mutation, which would otherwise send its request next.
 		@Test
 		func cancellationDuringLastLookupThrowsCancellationError() async throws {
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let operations: [(name: String, run: @Sendable (IdentifierAddressedPreflight<BoxItem>) async throws -> Void)] = [
 				("createFolder", { _ = try await $0.prepareCreateFolder(at: CloudPath("/folder/new")) }),
 				("upload", { _ = try await $0.prepareUpload(from: localURL, to: CloudPath("/folder/new"), replaceExisting: true) }),
@@ -631,12 +630,6 @@ extension UnitTests {
 				lookups.record("\(folderItem.identifier)/\(name)")
 				return try await lookUp(name, folderItem)
 			}
-		}
-
-		private func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data("content".utf8).write(to: localURL)
-			return localURL
 		}
 
 		/// Makes every write that records a change fail, as a full disk would.

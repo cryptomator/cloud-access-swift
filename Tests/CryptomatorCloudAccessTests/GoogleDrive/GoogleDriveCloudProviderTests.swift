@@ -23,8 +23,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = try GoogleDriveCloudProvider(client: .mocked())
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -92,7 +91,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 403, body: GoogleDriveMockResponse.error(status: 403, reason: "insufficientFilePermissions"))
 			]
 
-			await #expect(throws: GoogleDriveError.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: "Error")) { try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: GoogleDriveError.apiError(statusCode: 403, reason: "insufficientFilePermissions", message: "Error")) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -155,8 +154,8 @@ extension UnitTests {
 			]
 
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-			let shortcutMetadata = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appendingPathComponent("link.txt"), progress: nil, onTaskCreation: nil)
-			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			let shortcutMetadata = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appending(component: "link.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
+			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(shortcutMetadata.isAlias)
 			#expect(!fileMetadata.isAlias)
@@ -180,8 +179,8 @@ extension UnitTests {
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/link"), withPageToken: nil)
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/link/sub"), withPageToken: nil)
-			let childMetadata = try await provider.downloadFile(from: CloudPath("/link/file.txt"), to: tmpDirURL.appendingPathComponent("child.txt"), progress: nil, onTaskCreation: nil)
-			let grandchildMetadata = try await provider.downloadFile(from: CloudPath("/link/sub/file.txt"), to: tmpDirURL.appendingPathComponent("grandchild.txt"), progress: nil, onTaskCreation: nil)
+			let childMetadata = try await provider.downloadFile(from: CloudPath("/link/file.txt"), to: tmpDirURL.appending(component: "child.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
+			let grandchildMetadata = try await provider.downloadFile(from: CloudPath("/link/sub/file.txt"), to: tmpDirURL.appending(component: "grandchild.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(childMetadata.isAlias)
 			#expect(!grandchildMetadata.isAlias)
@@ -190,7 +189,7 @@ extension UnitTests {
 
 		@Test
 		func rootDownloadThrowsItemTypeMismatchWithoutRequest() async throws {
-			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appendingPathComponent("root"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appending(component: "root", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 		}
 
 		/// The listing fails if a shortcut's target request fails on the connection, through every retry, or as a login or quota failure, because the listing would otherwise look complete without the shortcut.
@@ -302,8 +301,8 @@ extension UnitTests {
 
 			let shortcutMetadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
-			_ = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/folder/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/link.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			try await provider.moveFile(from: CloudPath("/link.txt"), to: CloudPath("/folder/link.txt"))
 			try await provider.createFolder(at: CloudPath("/folder/new"))
 			try await provider.moveFile(from: CloudPath("/folder/file.txt"), to: CloudPath("/moved.txt"))
@@ -336,7 +335,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 204, onRequest: record)
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/link.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/link.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 			try await provider.deleteFile(at: CloudPath("/link.txt"))
 
 			let sent = requests.requests
@@ -352,7 +351,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.shortcut(id: "S", name: "folder", targetID: "T", targetMimeType: GoogleDriveJSON.folderMimeType)]))
 			]
 
-			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/folder"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/folder"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -375,7 +374,7 @@ extension UnitTests {
 			]
 
 			try await provider.moveFile(from: CloudPath("/file.txt"), to: CloudPath("/renamed.txt"))
-			let metadata = try await provider.downloadFile(from: CloudPath("/renamed.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.downloadFile(from: CloudPath("/renamed.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.size == 7)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -474,14 +473,14 @@ extension UnitTests {
 
 		@Test
 		func mutationGuardsSendNoRequestBeyondResolution() async throws {
-			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder))
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(in: tmpDirURL), file: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile), folder: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFolder), missing: URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder))
 
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try GoogleDriveCloudProvider(client: .mocked()) }
 		}
 
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try GoogleDriveCloudProvider(client: .mocked()) }
 		}
 
@@ -497,7 +496,7 @@ extension UnitTests {
 			]
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.deleteFolder(at: CloudPath("/link")) }
-			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(content: "content"), to: CloudPath("/link"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL), to: CloudPath("/link"), replaceExisting: true, progress: nil, onTaskCreation: nil) }
 			try await provider.deleteFile(at: CloudPath("/link"))
 
 			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["DELETE", "/drive/v3/files/S"]])
@@ -514,7 +513,7 @@ extension UnitTests {
 				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(name)") { try await provider.deleteFolder(at: CloudPath("/\(name)")) }
 				await #expect(throws: CloudProviderError.itemTypeMismatch, "\(name)") { try await provider.fetchItemList(forFolderAt: CloudPath("/\(name)"), withPageToken: nil) }
 			}
-			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/z"), to: tmpDirURL.appendingPathComponent("z"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: CloudPath("/z"), to: tmpDirURL.appending(component: "z", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -545,7 +544,7 @@ extension UnitTests {
 			]
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/file.txt"), replaceExisting: true, progress: nil, onTaskCreation: nil)
 
 			#expect(requests.requests.map { [$0.httpMethod, $0.url?.path] } == [["POST", "/upload/drive/v3/files"]])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -556,7 +555,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([GoogleDriveMockResponse.file(id: "G", name: "file.txt")]))]
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/file.txt"))
 
-			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil) }
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -565,22 +564,15 @@ extension UnitTests {
 		@Test
 		func downloadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: GoogleDriveCloudProvider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(metadata.size == 7)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -589,70 +581,54 @@ extension UnitTests {
 		@Test
 		func uploadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: GoogleDriveCloudProvider = provider
-			let localURL = try makeLocalFile(content: "file content")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "file content")
+			let probe = OnTaskCreationProbe()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 				GoogleDriveMockResponse.session(),
-				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: { _ in
-					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-				})
+				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12), onRequest: { _ in probe.expectOnTaskCreationReturned() })
 			]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(CloudItemMetadata(name: "file.txt", cloudPath: CloudPath("/file.txt"), itemType: .file, lastModifiedDate: GoogleDriveDate.date(fromRFC3339: GoogleDriveMockResponse.modifiedTime), size: 12) == metadata)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
-		func downloadWithCancellationDuringOnTaskCreation() async throws {
+		func downloadWithCancellationDuringOnTaskCreation() async {
 			let provider: GoogleDriveCloudProvider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content")]
 
-			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
 
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
 		@Test
 		func uploadWithCancellationDuringOnTaskCreation() async throws {
 			let provider: GoogleDriveCloudProvider = provider
-			let localURL = try makeLocalFile(content: "file content")
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "file content")
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.emptyFolder),
 				GoogleDriveMockResponse.session(),
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))
 			]
 
-			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
-
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
 		}
 
 		@Test
 		func failedDownloadThrowsItsErrorAndLeavesNoFile() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(statusCode: 404, body: GoogleDriveMockResponse.error(status: 404, reason: "notFound"))]
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
@@ -666,7 +642,7 @@ extension UnitTests {
 			let provider = try GoogleDriveCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 		}
@@ -682,7 +658,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt", size: 12))
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 		}
@@ -701,7 +677,7 @@ extension UnitTests {
 				})
 			]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
@@ -722,7 +698,7 @@ extension UnitTests {
 				})
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, content: "file content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			try assertRetryHalvesProgress(fractions.withLock { $0 }, fractionAtRetry: fractionAtRetry.withLock { $0 })
 		}
@@ -893,7 +869,7 @@ extension UnitTests {
 		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
 			let tokenSource = HookedTokenSource()
 			let provider = try GoogleDriveCloudProvider(client: .mocked(tokenSource: tokenSource))
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile),
@@ -983,24 +959,12 @@ extension UnitTests {
 			case .upload: [GoogleDriveMockResponse.session(), URLProtocolMock.handler(body: entry("new"))]
 			case .createFolder, .move: [URLProtocolMock.handler(body: entry("new"))]
 			}
-			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [source, emptyFolder] : [emptyFolder], renameResponses: [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([entry("new")])), emptyFolder, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(in: tmpDirURL), preparation: kind == .move ? [source, emptyFolder] : [emptyFolder], renameResponses: [URLProtocolMock.handler(body: GoogleDriveMockResponse.files([entry("new")])), emptyFolder, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
 		}
 
 		/// The responses of the name lookup and the metadata request of `/file.txt`, before its download.
 		private func downloadPreparation() -> [@Sendable (URLRequest) throws -> (HTTPURLResponse, Data?)] {
 			return [URLProtocolMock.handler(body: GoogleDriveCloudProviderTests.rootWithFile), URLProtocolMock.handler(body: GoogleDriveMockResponse.file(id: "F", name: "file.txt"))]
-		}
-
-		private func makeLocalFile(content: String) throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
-			try Data(content.utf8).write(to: localURL)
-			return localURL
-		}
-
-		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {
-			#expect(fractions.count == 1, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
 		}
 	}
 }

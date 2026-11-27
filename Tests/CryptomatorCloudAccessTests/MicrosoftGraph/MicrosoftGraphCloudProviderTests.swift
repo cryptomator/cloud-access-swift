@@ -28,8 +28,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = try MicrosoftGraphCloudProvider(client: .mocked(), maxPageSize: maxPageSize)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -55,7 +54,7 @@ extension UnitTests {
 			defer {
 				logCapture.stop()
 			}
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			let folderBody = "{\"id\":\"FolderIdentifier\",\"name\":\"folder\",\"folder\":{}}"
 			URLProtocolMock.requestHandler = [
 				{ request in (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(folderBody.utf8)) },
@@ -181,8 +180,8 @@ extension UnitTests {
 			]
 
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
-			let remoteItemMetadata = try await provider.downloadFile(from: CloudPath("/shared.txt"), to: tmpDirURL.appendingPathComponent("shared.txt"), progress: nil, onTaskCreation: nil)
-			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			let remoteItemMetadata = try await provider.downloadFile(from: CloudPath("/shared.txt"), to: tmpDirURL.appending(component: "shared.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
+			let fileMetadata = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(remoteItemMetadata.isAlias)
 			#expect(!fileMetadata.isAlias)
@@ -200,7 +199,7 @@ extension UnitTests {
 
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/shared"), withPageToken: nil)
-			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.isAlias)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -217,7 +216,7 @@ extension UnitTests {
 			]
 
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/shared"), withPageToken: "https://graph.microsoft.com/v1.0/drives/remoteDrive/items/remote/children?$skiptoken=NEXT")
-			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			let metadata = try await provider.downloadFile(from: CloudPath("/shared/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(metadata.isAlias)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -225,7 +224,7 @@ extension UnitTests {
 
 		@Test
 		func rootDownloadThrowsItemTypeMismatchWithoutRequest() async throws {
-			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appendingPathComponent("root"), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.downloadFile(from: .root, to: tmpDirURL.appending(component: "root", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 		}
 
 		/// An item whose name is no single path component is neither listed nor cached, so that it shadows no path and doesn't replace the cached root.
@@ -319,22 +318,15 @@ extension UnitTests {
 		@Test
 		func downloadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(metadata.size == 7)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
@@ -343,40 +335,31 @@ extension UnitTests {
 		@Test
 		func uploadAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider = provider
-			let localURL = try makeLocalFile(content: "content")
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
-			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: { _ in
-				#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-			})]
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			let probe = OnTaskCreationProbe()
+			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: { _ in probe.expectOnTaskCreationReturned() })]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(metadata.size == 7)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
 		func uploadThroughSymbolicLinkSendsTarget() async throws {
-			let linkURL = tmpDirURL.appendingPathComponent("link.txt")
-			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "content"))
-			let chunk = OSAllocatedUnfairLock<(range: String?, body: Data)?>(initialState: nil)
-			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: { request in
-				chunk.withLock { $0 = (request.value(forHTTPHeaderField: "Content-Range"), URLProtocolMock.body(of: request)) }
-			})]
+			let linkURL = tmpDirURL.appending(component: "link.txt", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(in: tmpDirURL))
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)]
 
 			_ = try await provider.uploadFile(from: linkURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
-			let sentChunk = try #require(chunk.withLock { $0 })
-			#expect(sentChunk.range == "bytes 0-6/7")
-			#expect(sentChunk.body == Data("content".utf8))
+			let chunk = try #require(requests.requests.first)
+			#expect(chunk.value(forHTTPHeaderField: "Content-Range") == "bytes 0-6/7")
+			#expect(chunk.httpBody == Data("content".utf8))
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -391,7 +374,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record)
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "content"), to: CloudPath("/a=b.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL), to: CloudPath("/a=b.txt"), replaceExisting: false, progress: nil, onTaskCreation: nil)
 
 			let sentRequests = requests.requests
 			try #require(sentRequests.count == 2)
@@ -406,43 +389,34 @@ extension UnitTests {
 		}
 
 		@Test
-		func downloadWithCancellationDuringOnTaskCreation() async throws {
+		func downloadWithCancellationDuringOnTaskCreation() async {
 			let provider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content")]
 
-			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
 
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
 		@Test
 		func uploadWithCancellationDuringOnTaskCreation() async throws {
 			let provider = provider
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem)]
 
-			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
-
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
 		}
 
 		@Test
 		func uploadOfSeveralChunksSendsEachChunkOnceAndHandsOverNoTask() async throws {
 			let chunkLength = 5 * 1024 * 1024
 			let content = Data((0 ..< chunkLength * 3 / 2).map { UInt8($0 % 251) })
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try content.write(to: localURL)
 			let progress = Progress(totalUnitCount: 1)
 			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
@@ -486,7 +460,7 @@ extension UnitTests {
 				(404, MicrosoftGraphError.unexpectedHTTPStatusCode(code: 404)),
 				(507, CloudProviderError.quotaInsufficient)
 			]
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			for testCase in cases {
 				URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: testCase.statusCode)]
 
@@ -499,7 +473,7 @@ extension UnitTests {
 		@Test
 		func uploadSessionErrorsStopBeforeAnyChunk() async throws {
 			let cases: [(sessionBody: String, expectsDecodingError: Bool)] = [("{}", false), (#"{"uploadUrl":""}"#, false), (#"{"uploadUrl":"http://upload.example.com/up/TOKEN"}"#, false), (#"{"uploadUrl":"https:/up/TOKEN"}"#, false), (#"{"uploadUrl":42}"#, true)]
-			let localURL = try makeLocalFile(content: "content")
+			let localURL = try makeLocalFile(in: tmpDirURL)
 			for testCase in cases {
 				URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(body: testCase.sessionBody), URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem)]
 
@@ -521,7 +495,7 @@ extension UnitTests {
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 			URLProtocolMock.requestHandler = downloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 		}
@@ -533,7 +507,7 @@ extension UnitTests {
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 			URLProtocolMock.requestHandler = uploadPreparation() + [URLProtocolMock.handler(statusCode: 201, body: MicrosoftGraphCloudProviderTests.fileItem)]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "content"), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL), to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 		}
@@ -544,7 +518,7 @@ extension UnitTests {
 		@Test
 		func downloadFromDownloadURL() async throws {
 			let requests = RequestRecorder()
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem, onRequest: requests.record),
 				URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL, onRequest: requests.record),
@@ -568,7 +542,7 @@ extension UnitTests {
 			for metadataBody in [MicrosoftGraphCloudProviderTests.fileItem, MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "http://"), MicrosoftGraphCloudProviderTests.fileItemWithDownloadURL.replacingOccurrences(of: "https://", with: "https:/")] {
 				let provider = try MicrosoftGraphCloudProvider(client: .mocked())
 				let requests = RequestRecorder()
-				let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
+				let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 				URLProtocolMock.requestHandler = [
 					URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem),
 					URLProtocolMock.handler(body: metadataBody),
@@ -588,7 +562,7 @@ extension UnitTests {
 		@Test
 		func refusedDownloadURLFallsBackToGraph() async throws {
 			let requests = RequestRecorder()
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [
 				URLProtocolMock.handler(statusCode: 401),
 				URLProtocolMock.handler(body: "content", onRequest: requests.record)
@@ -603,7 +577,7 @@ extension UnitTests {
 
 		@Test
 		func deletedFileThrowsItemNotFoundAfterFallback() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 404), URLProtocolMock.handler(statusCode: 404)]
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
@@ -613,7 +587,7 @@ extension UnitTests {
 
 		@Test
 		func otherSuccessOfDownloadURLFailsWithoutFallback() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 206, body: "con"), URLProtocolMock.handler(body: "content")]
 
 			let error = try await #require(throws: (any Error).self) { try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: nil) }
@@ -633,7 +607,7 @@ extension UnitTests {
 			}
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: "content")]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(logCapture.messages.contains { $0.hasPrefix("--> GET https://content.example.com") }, "\(logCapture.joinedMessages)")
 			#expect(!logCapture.joinedMessages.contains("SECRET"), "\(logCapture.joinedMessages)")
@@ -646,7 +620,7 @@ extension UnitTests {
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions)))
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(body: "content", headerFields: ["Content-Length": "7"])]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("download.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			assertTransferProgress(fractions.withLock { $0 })
 		}
@@ -656,7 +630,7 @@ extension UnitTests {
 			let taskHosts = OSAllocatedUnfairLock(initialState: [String?]())
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [URLProtocolMock.handler(statusCode: 401), URLProtocolMock.handler(body: "content")]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: nil, onTaskCreation: { task in
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: { task in
 				taskHosts.withLock { $0.append(task.originalRequest?.url?.host()) }
 			})
 
@@ -681,7 +655,7 @@ extension UnitTests {
 				})
 			]
 
-			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appendingPathComponent("file.txt"), progress: progress, onTaskCreation: nil)
+			_ = try await provider.downloadFile(from: CloudPath("/file.txt"), to: tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory), progress: progress, onTaskCreation: nil)
 
 			let before = try #require(fractionBeforeFallback.withLock { $0 })
 			let fallbackFractions = fractionsOfFallback.withLock { $0 }
@@ -694,7 +668,7 @@ extension UnitTests {
 		@Test
 		func cancellationBeforeFallbackStopsDownload() async throws {
 			let provider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = directDownloadPreparation() + [
 				URLProtocolMock.handler(statusCode: 401, onRequest: { _ in
@@ -856,14 +830,14 @@ extension UnitTests {
 
 		@Test
 		func mutationGuardsSendNoRequestBeyondResolution() async throws {
-			let cases = try MutationGuardCases.make(localURL: makeLocalFile(content: "content"), file: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem), folder: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem), missing: URLProtocolMock.handler(statusCode: 404))
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(in: tmpDirURL), file: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.fileItem), folder: URLProtocolMock.handler(body: MicrosoftGraphCloudProviderTests.folderItem), missing: URLProtocolMock.handler(statusCode: 404))
 
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try MicrosoftGraphCloudProvider(client: .mocked()) }
 		}
 
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(content: "content"), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try MicrosoftGraphCloudProvider(client: .mocked()) }
 		}
 
@@ -1050,7 +1024,7 @@ extension UnitTests {
 		func lateMetadataLeavesInvalidatedRowAlone(isDownload: Bool) async throws {
 			let tokenSource = HookedTokenSource()
 			let provider = try MicrosoftGraphCloudProvider(client: .mocked(tokenSource: tokenSource))
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
+			let localURL = tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory)
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: #"{"value":[\#(MicrosoftGraphCloudProviderTests.fileItem)]}"#),
@@ -1123,7 +1097,7 @@ extension UnitTests {
 			case .createFolder: [URLProtocolMock.handler(statusCode: 201, body: entry("new"))]
 			case .move: [URLProtocolMock.handler(body: entry("new"))]
 			}
-			return try LateMutationCase(kind: kind, localURL: makeLocalFile(content: "content"), preparation: kind == .move ? [URLProtocolMock.handler(body: entry("src")), notFound] : [notFound], renameResponses: [URLProtocolMock.handler(body: entry("new")), notFound, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
+			return try LateMutationCase(kind: kind, localURL: makeLocalFile(in: tmpDirURL), preparation: kind == .move ? [URLProtocolMock.handler(body: entry("src")), notFound] : [notFound], renameResponses: [URLProtocolMock.handler(body: entry("new")), notFound, URLProtocolMock.handler(body: entry("moved"))], mutationResponses: mutationResponses)
 		}
 
 		/// The responses of the path lookup and the metadata request of `/file.txt`, before its download.
@@ -1150,20 +1124,8 @@ extension UnitTests {
 			]
 		}
 
-		private func makeLocalFile(content: String) throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString)
-			try Data(content.utf8).write(to: localURL)
-			return localURL
-		}
-
 		private static func jsonBody(of request: URLRequest) throws -> NSDictionary? {
 			return try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? NSDictionary
-		}
-
-		private func assertTransferProgress(_ fractions: [Double], sourceLocation: SourceLocation = #_sourceLocation) {
-			#expect(fractions.count == 1, "Unexpected number of transfer tasks", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 0) > 0.5, "The progress of the transfer task isn't part of the transfer's progress", sourceLocation: sourceLocation)
-			#expect((fractions.first ?? 1) < 1, "The progress completed before the transfer returned", sourceLocation: sourceLocation)
 		}
 	}
 }

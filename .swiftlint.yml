@@ -27,3 +27,10 @@ custom_rules:
     excluded: "Sources/CryptomatorCloudAccessCore/API/CloudProvider\\.swift"
     regex: '^(?<!@concurrent\n)\t(?:(?:public|package|internal|override|final|nonisolated) )*func (?:fetchItemMetadata|fetchItemList|downloadFile|uploadFile|createFolder|deleteFile|deleteFolder|moveFile|moveFolder)\('
     severity: error
+  # Covers Tests/ only until WebDAVClient.swift's appendingPathComponent("/") is settled. A heuristic: it tells URL calls from CloudPath.appendingPathComponent(_:) by the isDirectory: label or a receiver named …URL or temporaryDirectory.
+  url_appending_path_component:
+    name: "URL appendingPathComponent"
+    message: "Use appending(component:directoryHint:) or appending(path:directoryHint:) instead of the soft-deprecated appendingPathComponent."
+    included: "Tests/.*\\.swift"
+    regex: '(URL|temporaryDirectory)\s*\.appendingPathComponent\(|appendingPathComponent\((?:[^()]|\([^()]*\))*isDirectory:'
+    severity: error

@@ -275,14 +275,14 @@ actor IntegrationFixtures {
 	private static func createTree(of fixture: IntegrationFixture) async throws {
 		let kind = fixture.backend.kind
 		let provider = try fixture.makeProvider()
-		let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+		let tmpDirURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 		defer {
 			try? FileManager.default.removeItem(at: tmpDirURL)
 		}
-		let fileInRootURL = tmpDirURL.appendingPathComponent("fileInRoot", isDirectory: false)
+		let fileInRootURL = tmpDirURL.appending(component: "fileInRoot", directoryHint: .notDirectory)
 		try IntegrationFixture.testContentForFilesInRoot.write(to: fileInRootURL, atomically: true, encoding: .utf8)
-		let fileInTestFolderURL = tmpDirURL.appendingPathComponent("fileInTestFolder", isDirectory: false)
+		let fileInTestFolderURL = tmpDirURL.appending(component: "fileInTestFolder", directoryHint: .notDirectory)
 		try IntegrationFixture.testContentForFilesInTestFolder.write(to: fileInTestFolderURL, atomically: true, encoding: .utf8)
 		let testFolder = fixture.treeRoot.appendingPathComponent("testFolder")
 		let levels: [[TreeItem]] = [

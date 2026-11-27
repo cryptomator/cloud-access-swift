@@ -91,7 +91,7 @@ enum DecoratorFactory {
 	}
 
 	private static func upload(_ data: Data, to cloudPath: CloudPath, with delegate: CloudProvider) async throws {
-		let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: localURL)
 		}
@@ -100,7 +100,7 @@ enum DecoratorFactory {
 	}
 
 	private static func download(from cloudPath: CloudPath, with delegate: CloudProvider) async throws -> Data {
-		let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
 			try? FileManager.default.removeItem(at: localURL)
 		}

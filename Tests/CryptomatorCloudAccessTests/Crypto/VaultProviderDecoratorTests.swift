@@ -92,10 +92,10 @@ enum VaultTestFormat: CaseIterable, CustomTestStringConvertible {
 		}
 	}
 
-	/// Returns a provider that holds the given folder references and, unless one replaces it, that of `Directory 1`. A key is the directory below `pathToVault/d` and the encrypted folder name (e.g. `11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2`), a value the dir ID. The directories of the root and of `dir1-id` to `dir4-id` exist. A download of a file at a path of `aliasedDownloads` reports an alias.
+	/// Returns a provider that holds the given folder references and, unless one replaces it, that of `Directory 1`. A key is the path of the directory and the encrypted folder name (e.g. `pathToVault/d/11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2`), a value the dir ID. The directories of the root and of `dir1-id` to `dir4-id` exist. A download of a file at a path of `aliasedDownloads` reports an alias.
 	func makeNestedProvider(references: [String: String], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
-		let references = ["\(VaultTestFormat.nestedDirectories[0])/dir1": "dir1-id"].merging(references) { $1 }
-		let referenceLocations = references.keys.map { CloudPath("pathToVault/d/\($0)") }.map { (name: $0.lastPathComponent, directory: $0.deletingLastPathComponent().path) }
+		let references = ["\(VaultTestFormat.rootDirectory)/dir1": "dir1-id"].merging(references) { $1 }
+		let referenceLocations = references.keys.map { CloudPath($0) }.map { (name: $0.lastPathComponent, directory: $0.deletingLastPathComponent().path) }
 		let referenceFolders = self == .vf7 ? referenceLocations.map { referencePath($0.name, in: $0.directory) } : []
 		let folders = Set(["pathToVault", "pathToVault/d"] + Self.nestedDirectories.map { "pathToVault/d/\($0)" } + referenceFolders)
 		let dirFiles = Dictionary(uniqueKeysWithValues: zip(referenceLocations, references.values).map { location, dirId in
@@ -188,7 +188,7 @@ enum PathDerivingOperation: CaseIterable, CustomTestStringConvertible {
 	}
 
 	func run(on provider: CloudProvider, at cloudPath: CloudPath, localDirectoryURL: URL) async throws {
-		let localURL = localDirectoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localURL = localDirectoryURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		switch self {
 		case .fetchItemMetadata:
 			_ = try await provider.fetchItemMetadata(at: cloudPath)
@@ -234,7 +234,7 @@ enum PathCheckingOperation: CaseIterable, CustomTestStringConvertible {
 	}
 
 	func run(on provider: CloudProvider, at cloudPath: CloudPath, localDirectoryURL: URL) async throws {
-		let localURL = localDirectoryURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+		let localURL = localDirectoryURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		switch self {
 		case .downloadFile:
 			_ = try await provider.downloadFile(from: cloudPath, to: localURL)
@@ -262,8 +262,7 @@ extension UnitTests {
 		let tmpDirURL: URL
 
 		init() throws {
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -341,7 +340,7 @@ extension UnitTests {
 		func fetchItemListSkipsNamesThatAreNoSinglePathComponent(format: VaultTestFormat) async throws {
 			let dirPath = VaultTestFormat.rootDirectory
 			let files = Dictionary(uniqueKeysWithValues: ["nested", "parent", "file1"].map { (format.filePath($0, in: dirPath), Data()) })
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: files)
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath]), files: files)
 			let cryptor = CryptorMock(dirIds: ["": VaultTestFormat.encryptedRootDirId], fileNames: ["nested": "a/b", "parent": "..", "file1": "File 1"], contents: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: cryptor)
 			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
@@ -350,7 +349,7 @@ extension UnitTests {
 
 		@Test(arguments: VaultTestFormat.allCases)
 		func fetchItemListWithTooLargeDirFileThrowsInvalidDirectoryReference(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.nestedDirectories[0])/dir1": String(repeating: "a", count: vaultDirFileMaxLength + 1)])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.rootDirectory)/dir1": String(repeating: "a", count: vaultDirFileMaxLength + 1)])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.fetchItemList(forFolderAt: CloudPath("/Directory 1"), withPageToken: nil) }
 		}
@@ -372,7 +371,7 @@ extension UnitTests {
 		func testDownloadFile(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
@@ -398,7 +397,7 @@ extension UnitTests {
 		func downloadFileWithFailingTransfer(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
@@ -415,7 +414,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
 		func downloadFileWithFailingCleartextMetadata(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let temporaryURLs = OSAllocatedUnfairLock(initialState: [URL]())
 			fixture.cryptor.decryptContentHook = { ciphertextURL, cleartextURL in
 				temporaryURLs.withLock { $0 = [ciphertextURL, cleartextURL] }
@@ -430,7 +429,7 @@ extension UnitTests {
 		func downloadFileWithCancellationBeforePublication(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let temporaryURLs = OSAllocatedUnfairLock(initialState: [URL]())
 			fixture.cryptor.decryptContentHook = { ciphertextURL, cleartextURL in
 				temporaryURLs.withLock { $0 = [ciphertextURL, cleartextURL] }
@@ -447,7 +446,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases, Stacking.allCases)
 		func downloadFileWithDestinationCreatedDuringDownload(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 			let temporaryURLs = OSAllocatedUnfairLock(initialState: [URL]())
 			fixture.cryptor.decryptContentHook = { ciphertextURL, cleartextURL in
@@ -464,13 +463,13 @@ extension UnitTests {
 		func downloadFileWithCancellationDuringDecryption(format: VaultTestFormat) async throws {
 			let cryptor = try Cryptor(masterkey: Masterkey.createNew(), scheme: .sivCtrMac)
 			let cloudPath = CloudPath("/File")
-			let cleartextURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let cleartextURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try Data(count: 1024 * 1024).write(to: cleartextURL)
 			let rootDirId = try cryptor.encryptDirId(Data())
 			let provider = CloudProviderMock(folders: ["pathToVault/d/\(rootDirId.prefix(2))/\(rootDirId.dropFirst(2))"], files: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: cryptor)
 			_ = try await decorator.uploadFile(from: cleartextURL, to: cloudPath, replaceExisting: false)
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
 			// The transfer makes up the first 79.9 % of the progress, the decryption the following 20 %.
 			let progressObserver = progress.observe(\.fractionCompleted) { progress, _ in
@@ -494,8 +493,7 @@ extension UnitTests {
 		func testUploadFile(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext1")
 			let progress = Progress(totalUnitCount: 1)
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
@@ -519,8 +517,7 @@ extension UnitTests {
 		func uploadFileWithFailingTransfer(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext1")
 			let progress = Progress(totalUnitCount: 1)
 			let transfer = SuspendedTransfer()
 			fixture.provider.transferHook = transfer.run
@@ -537,8 +534,7 @@ extension UnitTests {
 		func uploadFileWithCancellationAfterEncryption(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let decorator = fixture.decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext1".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext1")
 			let temporaryURLs = OSAllocatedUnfairLock(initialState: [URL]())
 			fixture.cryptor.encryptContentHook = { _, ciphertextURL in
 				temporaryURLs.withLock { $0 = [ciphertextURL] }
@@ -556,7 +552,7 @@ extension UnitTests {
 		func uploadFileWithCancellationDuringEncryption(format: VaultTestFormat) async throws {
 			let provider = CloudProviderMock(folders: [], files: [:])
 			let decorator = try format.makeDecorator(provider: provider, cryptor: Cryptor(masterkey: Masterkey.createNew(), scheme: .sivCtrMac))
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			try Data(count: 1024 * 1024).write(to: localURL)
 			let progress = Progress(totalUnitCount: 1)
 			let progressObserver = progress.observe(\.fractionCompleted) { progress, _ in
@@ -579,9 +575,8 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases)
 		func uploadFileThroughSymbolicLinkEncryptsTarget(format: VaultTestFormat) async throws {
 			let fixture = try format.makeFixture(stacking: .plain)
-			let targetURL = tmpDirURL.appendingPathComponent("target", isDirectory: false)
-			try "cleartext1".write(to: targetURL, atomically: true, encoding: .utf8)
-			let linkURL = tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			let targetURL = try makeLocalFile(in: tmpDirURL, named: "target", content: "cleartext1")
+			let linkURL = tmpDirURL.appending(component: "link", directoryHint: .notDirectory)
 			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: targetURL)
 			let encryptedURLs = OSAllocatedUnfairLock(initialState: [URL]())
 			fixture.cryptor.encryptContentHook = { cleartextURL, _ in
@@ -594,9 +589,9 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases, [false, true])
 		func uploadFileFromUnusableSourceThrowsBeforeAnyRequest(format: VaultTestFormat, sourceIsFolder: Bool) async throws {
 			let fixture = try format.makeFixture(stacking: .plain)
-			let sourceURL = sourceIsFolder ? tmpDirURL : tmpDirURL.appendingPathComponent("link", isDirectory: false)
+			let sourceURL = sourceIsFolder ? tmpDirURL : tmpDirURL.appending(component: "link", directoryHint: .notDirectory)
 			if !sourceIsFolder {
-				try FileManager.default.createSymbolicLink(at: sourceURL, withDestinationURL: tmpDirURL.appendingPathComponent("missing", isDirectory: false))
+				try FileManager.default.createSymbolicLink(at: sourceURL, withDestinationURL: tmpDirURL.appending(component: "missing", directoryHint: .notDirectory))
 			}
 			await #expect(throws: sourceIsFolder ? CloudProviderError.itemTypeMismatch : .itemNotFound) {
 				try await fixture.decorator.uploadFile(from: sourceURL, to: CloudPath("/Directory 1/File"), replaceExisting: false)
@@ -631,7 +626,7 @@ extension UnitTests {
 				try await decorator.createFolder(at: CloudPath("/Directory 2"))
 			}
 			let referenceFolders = format == .vf7 ? [format.referencePath("dir2", in: VaultTestFormat.rootDirectory)] : []
-			#expect(fixture.provider.createdFolders.sorted() == (referenceFolders + ["pathToVault/d/99", VaultTestFormat.newDirectory]).sorted())
+			#expect(fixture.provider.createdFolders.sorted() == (referenceFolders + [VaultTestFormat.newDirectoryParent, VaultTestFormat.newDirectory]).sorted())
 			#expect(Array(fixture.provider.createdFiles.keys) == [format.dirFilePath("dir2", in: VaultTestFormat.rootDirectory)])
 			#expect(try fixture.dirIdCache.get(CloudPath("/Directory 2")) != nil)
 		}
@@ -687,7 +682,7 @@ extension UnitTests {
 		/// On Google Drive, a shortcut can share a genuine dir file's name, and a read of that path can reach the shortcut's target. The walk refuses it, so the directory of `Directory 2` is neither listed nor deleted.
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderKeepsFolderWhoseDirFileDownloadsThroughAlias(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2": "dir2-id"], aliasedDownloads: [format.dirFilePath("dir2", in: VaultTestFormat.directory1)])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.directory1)/dir2": "dir2-id"], aliasedDownloads: [format.dirFilePath("dir2", in: VaultTestFormat.directory1)])
 			let (listedFolders, _) = provider.recordingListingsAndTransfers()
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1")) }
@@ -700,7 +695,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderWhoseAncestorDirFileDownloadsThroughAliasThrowsInvalidDirectoryReference(format: VaultTestFormat) async throws {
 			let ancestorDirFilePath = format.dirFilePath("dir1", in: VaultTestFormat.rootDirectory)
-			let provider = format.makeNestedProvider(references: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2": "dir2-id"], aliasedDownloads: [ancestorDirFilePath])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.directory1)/dir2": "dir2-id"], aliasedDownloads: [ancestorDirFilePath])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
@@ -713,7 +708,7 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderWhoseOwnDirFileDownloadsThroughAliasThrowsInvalidDirectoryReference(format: VaultTestFormat) async throws {
 			let dirFilePath = format.dirFilePath("dir2", in: VaultTestFormat.directory1)
-			let provider = format.makeNestedProvider(references: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2": "dir2-id"], aliasedDownloads: [dirFilePath])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.directory1)/dir2": "dir2-id"], aliasedDownloads: [dirFilePath])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
@@ -725,7 +720,7 @@ extension UnitTests {
 		/// `Directory 5` inside `Directory 2` refers to the directory of `Directory 1`, which contains it, so the walk never lists that directory.
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderWithDirFileNamingAncestorThrowsInvalidDirectoryReference(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["11/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB/dir2": "dir2-id", "22/CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC/dir5": "dir1-id"])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.directory1)/dir2": "dir2-id", "\(VaultTestFormat.directory2)/dir5": "dir1-id"])
 			let listedFolders = OSAllocatedUnfairLock(initialState: [String]())
 			provider.listingHook = CloudProviderMock.listingEachFolderOnce(recordingInto: listedFolders)
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
@@ -738,7 +733,7 @@ extension UnitTests {
 		/// The dir file of `Directory 1` is empty, which is the dir ID of the root, so `Directory 2` would resolve to the root's `Directory 2`.
 		@Test(arguments: VaultTestFormat.allCases)
 		func deleteFolderBelowFolderWhoseDirFileNamesRootReadsNoFurtherDirFile(format: VaultTestFormat) async throws {
-			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.nestedDirectories[0])/dir1": "", "\(VaultTestFormat.nestedDirectories[0])/dir2": "dir2-id"])
+			let provider = format.makeNestedProvider(references: ["\(VaultTestFormat.rootDirectory)/dir1": "", "\(VaultTestFormat.rootDirectory)/dir2": "dir2-id"])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try format.makeDecorator(provider: provider, cryptor: format.makeCryptor())
 			await #expect(throws: VaultFormatError.invalidDirectoryReference) { try await decorator.deleteFolder(at: CloudPath("/Directory 1/Directory 2")) }
@@ -792,9 +787,8 @@ extension UnitTests {
 		@Test(arguments: VaultTestFormat.allCases)
 		func unresolvablePathsThrowWithoutRequest(format: VaultTestFormat) async throws {
 			let fixture = try format.makeFixture(stacking: .shortening)
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try Data("content".utf8).write(to: localURL)
-			for testCase in try MutationGuardCases.makeInvalidPathCases(localURL: localURL, downloadURL: tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false), paths: MutationGuardCases.unresolvablePaths()) {
+			let localURL = try makeLocalFile(in: tmpDirURL)
+			for testCase in try MutationGuardCases.makeInvalidPathCases(localURL: localURL, downloadURL: tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths()) {
 				await #expect(throws: testCase.expected, "\(testCase.name)") { try await testCase.operation(fixture.decorator) }
 			}
 			#expect(fixture.provider.calls == [])
@@ -933,8 +927,7 @@ extension UnitTests {
 			case .vf7:
 				try await fixture.provider.deleteFolder(at: referencePath)
 			}
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try Data("ciphertext1".utf8).write(to: localURL)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "ciphertext1")
 			_ = try await fixture.provider.uploadFile(from: localURL, to: CloudPath(format.filePath("dir1", in: VaultTestFormat.rootDirectory)), replaceExisting: false)
 			let callCount = fixture.provider.calls.count
 			await #expect(throws: CloudProviderError.itemNotFound) { try await fixture.decorator.deleteFolder(at: folderPath) }
@@ -971,7 +964,7 @@ extension UnitTests {
 			case .vf6:
 				#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata"], metadataReads: ["\(VaultTestFormat.rootDirectory)/2QODSHBUSLEFQ6UELQ45EKJ27HTAMZPH.lng"]))
 			case .vf7:
-				let c9sPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
+				let c9sPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.file4C9SName)"
 				#expect(requests() == RecordedRequests(calls: ["downloadFile", "fetchItemMetadata", "fetchItemList"], metadataReads: [c9sPath], listings: [c9sPath]))
 			}
 		}
@@ -988,7 +981,7 @@ extension UnitTests {
 		func downloadFileRequests(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let requests = fixture.provider.recordingRequests()
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			_ = try await fixture.decorator.downloadFile(from: CloudPath("/Directory 1/File 3"), to: localURL)
 			#expect(try String(contentsOf: localURL, encoding: .utf8) == "cleartext3")
 			#expect(requests() == RecordedRequests(calls: ["downloadFile", "downloadFile"], transfers: [format.dirFilePath("dir1", in: VaultTestFormat.rootDirectory), format.filePath("file3", in: VaultTestFormat.directory1)]))
@@ -999,8 +992,7 @@ extension UnitTests {
 		func uploadFileRequests(format: VaultTestFormat, stacking: Stacking) async throws {
 			let fixture = try format.makeFixture(stacking: stacking)
 			let requests = fixture.provider.recordingRequests()
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext3".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			_ = try await fixture.decorator.uploadFile(from: localURL, to: CloudPath("/Directory 1/File 2"), replaceExisting: false)
 			let dirFilePath = format.dirFilePath("dir1", in: VaultTestFormat.rootDirectory)
 			let filePath = format.filePath("file2", in: VaultTestFormat.directory1)
@@ -1020,7 +1012,7 @@ extension UnitTests {
 			let requests = fixture.provider.recordingRequests()
 			try await fixture.decorator.createFolder(at: CloudPath("/Directory 2"))
 			let dirFilePath = format.dirFilePath("dir2", in: VaultTestFormat.rootDirectory)
-			let directoryFolders = ["pathToVault/d/99", VaultTestFormat.newDirectory]
+			let directoryFolders = [VaultTestFormat.newDirectoryParent, VaultTestFormat.newDirectory]
 			switch format {
 			case .vf6:
 				#expect(requests() == RecordedRequests(calls: ["fetchItemMetadata", "uploadFile", "createFolder", "createFolder"], metadataReads: [format.filePath("dir2", in: VaultTestFormat.rootDirectory)], transfers: [dirFilePath], createdFolders: directoryFolders, createdFiles: [dirFilePath]))

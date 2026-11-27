@@ -23,8 +23,7 @@ extension UnitTests {
 			self.tokenSource = OAuthTokenSourceStub()
 			self.sleeps = SleepRecorder()
 			self.client = DropboxClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -83,9 +82,8 @@ extension UnitTests {
 		@Test
 		func contentRoutesSendArgumentHeaders() async throws {
 			let client: DropboxClient = client
-			let fileURL = tmpDirURL.appendingPathComponent("file")
-			try Data("content".utf8).write(to: fileURL)
-			let stagingURL = tmpDirURL.appendingPathComponent("download")
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "file")
+			let stagingURL = tmpDirURL.appending(component: "download", directoryHint: .notDirectory)
 			let cases = [
 				RouteCase(name: "download", response: "content", headerFields: ["Dropbox-API-Result": DropboxMockResponse.file(name: "a.txt", tagged: false)], expectedRoute: "files/download", expectedArgument: ["path": "/a.txt"], expectedContentType: nil, expectedBody: nil) {
 					_ = try await client.download(path: "/a.txt", to: stagingURL, progress: nil, onTaskCreation: nil)
@@ -124,7 +122,7 @@ extension UnitTests {
 		@Test
 		func downloadReturnsMetadataOfResultHeader() async throws {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: "content", headerFields: ["Dropbox-API-Result": #"{"name":"fö.txt","size":7,"server_modified":"2026-10-21T08:15:38Z"}"#])]
-			let stagingURL = tmpDirURL.appendingPathComponent("download")
+			let stagingURL = tmpDirURL.appending(component: "download", directoryHint: .notDirectory)
 
 			let metadata = try await client.download(path: "/fö.txt", to: stagingURL, progress: nil, onTaskCreation: nil)
 
@@ -147,8 +145,7 @@ extension UnitTests {
 
 		@Test
 		func incorrectOffsetReturnsCorrectOffset() async throws {
-			let chunkURL = tmpDirURL.appendingPathComponent("chunk")
-			try Data("0123".utf8).write(to: chunkURL)
+			let chunkURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "0123")
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 409, body: #"{"error_summary":"incorrect_offset/..","error":{".tag":"incorrect_offset","correct_offset":8}}"#)]
 
 			let correctOffset = try await client.appendToUploadSession(sessionID: "SESSION", offset: 4, from: chunkURL, progress: nil)
@@ -222,8 +219,7 @@ extension UnitTests {
 
 		@Test
 		func transportErrorsAreRetriedOnlyForRepeatableRequests() async throws {
-			let fileURL = tmpDirURL.appendingPathComponent("file")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "file")
 			URLProtocolMock.requestHandler = [{ _ in throw URLError(.networkConnectionLost) }, URLProtocolMock.handler(body: DropboxMockResponse.file(name: "a.txt"))]
 
 			_ = try await client.metadata(path: "/a.txt")
@@ -264,8 +260,7 @@ extension UnitTests {
 
 		@Test
 		func uploadResponseOverErrorBodyLimitFails() async throws {
-			let fileURL = tmpDirURL.appendingPathComponent("file")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "file")
 			URLProtocolMock.requestHandler = [{ request in
 				(HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(count: HTTPClientSupport.maxErrorBodyLength + 1))
 			}]
@@ -286,7 +281,7 @@ extension UnitTests {
 				URLProtocolMock.handler(body: "content", headerFields: ["Dropbox-API-Result": DropboxMockResponse.file(name: "a.txt", tagged: false)])
 			]
 
-			_ = try await client.download(path: "/a.txt", to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: { _ in
+			_ = try await client.download(path: "/a.txt", to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: { _ in
 				taskCount.withLock { $0 += 1 }
 			})
 
@@ -316,9 +311,7 @@ extension UnitTests {
 
 extension DropboxClient {
 	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> DropboxClient {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return DropboxClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
+		return DropboxClient(tokenSource: tokenSource, configuration: URLProtocolMock.configuration(), metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }
 

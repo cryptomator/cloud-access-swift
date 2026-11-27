@@ -19,8 +19,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			URLProtocolSequenceMock.steps = []
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -52,17 +51,16 @@ extension UnitTests {
 				sessions.withLock { $0["\(request.httpMethod ?? "") \(request.value(forHTTPHeaderField: "Depth") ?? "")"] = request.value(forHTTPHeaderField: "X-Session") }
 				return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data())
 			}, count: 8)
-			let fileURL = baseURL.appendingPathComponent("file.txt")
-			let uploadURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: uploadURL)
+			let fileURL = baseURL.appending(component: "file.txt", directoryHint: .notDirectory)
+			let uploadURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 
 			_ = try await client.OPTIONS(url: baseURL)
 			_ = try await client.PROPFIND(url: fileURL, depth: .zero)
-			_ = try await client.PROPFIND(url: baseURL, depth: .one, to: tmpDirURL.appendingPathComponent("listing.xml"))
-			_ = try await client.MKCOL(url: baseURL.appendingPathComponent("folder"))
+			_ = try await client.PROPFIND(url: baseURL, depth: .one, to: tmpDirURL.appending(component: "listing.xml", directoryHint: .notDirectory))
+			_ = try await client.MKCOL(url: baseURL.appending(component: "folder", directoryHint: .notDirectory))
 			_ = try await client.DELETE(url: fileURL)
-			_ = try await client.MOVE(sourceURL: fileURL, destinationURL: baseURL.appendingPathComponent("moved.txt"))
-			_ = try await client.GET(from: fileURL, to: tmpDirURL.appendingPathComponent("download.txt"), progress: nil, onTaskCreation: nil)
+			_ = try await client.MOVE(sourceURL: fileURL, destinationURL: baseURL.appending(component: "moved.txt", directoryHint: .notDirectory))
+			_ = try await client.GET(from: fileURL, to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 			_ = try await client.PUT(url: fileURL, fileURL: uploadURL, progress: nil, onTaskCreation: nil)
 
 			#expect(sessions.withLock { $0 } == [
@@ -100,12 +98,11 @@ extension UnitTests {
 		@Test
 		func uploadResponseBodyOverLimitThrowsUnexpectedResponse() async throws {
 			let client = WebDAVClient.mocked(baseURL: baseURL, protocolClass: URLProtocolSequenceMock.self)
-			let fileURL = tmpDirURL.appendingPathComponent("upload.txt")
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "upload.txt")
 			let response = try #require(HTTPURLResponse(url: baseURL, statusCode: 201, httpVersion: nil, headerFields: nil))
 			URLProtocolSequenceMock.steps = [.chunkedResponse(response, [Data(count: 1024 * 1024), Data(count: 1)])]
 
-			await #expect(throws: WebDAVError.unexpectedResponse) { try await client.PUT(url: baseURL.appendingPathComponent("file.txt"), fileURL: fileURL, progress: nil, onTaskCreation: nil) }
+			await #expect(throws: WebDAVError.unexpectedResponse) { try await client.PUT(url: baseURL.appending(component: "file.txt", directoryHint: .notDirectory), fileURL: fileURL, progress: nil, onTaskCreation: nil) }
 		}
 
 		@Test
@@ -144,10 +141,9 @@ extension UnitTests {
 		@Test
 		func unsuccessfulDownloadThrowsHTTPErrorAndLeavesFile() throws {
 			let response = try #require(HTTPURLResponse(url: baseURL, statusCode: 404, httpVersion: nil, headerFields: nil))
-			let location = tmpDirURL.appendingPathComponent("location")
-			try Data("not found".utf8).write(to: location)
+			let location = try makeLocalFile(in: tmpDirURL, named: "location", content: "not found")
 
-			let body = try WebDAVSession.downloadHandler(movingTo: tmpDirURL.appendingPathComponent("download.txt"))(location, response)
+			let body = try WebDAVSession.downloadHandler(movingTo: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory))(location, response)
 
 			#expect(SplitURLSession.Outcome.Body.none == body)
 			#expect(FileManager.default.fileExists(atPath: location.path))
@@ -157,10 +153,8 @@ extension UnitTests {
 		@Test
 		func failedMoveTakesPrecedenceOverStatus() throws {
 			let response = try #require(HTTPURLResponse(url: baseURL, statusCode: 200, httpVersion: nil, headerFields: nil))
-			let location = tmpDirURL.appendingPathComponent("location")
-			let localURL = tmpDirURL.appendingPathComponent("download.txt")
-			try Data("content".utf8).write(to: location)
-			try Data("existing".utf8).write(to: localURL)
+			let location = try makeLocalFile(in: tmpDirURL, named: "location")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "download.txt", content: "existing")
 
 			let moveError = try #require(throws: (any Error).self) { try WebDAVSession.downloadHandler(movingTo: localURL)(location, response) }
 			let failedResponse = try #require(HTTPURLResponse(url: baseURL, statusCode: 500, httpVersion: nil, headerFields: nil))
@@ -177,8 +171,6 @@ extension WebDAVClient {
 	/// A client whose requests, transfers included, reach `protocolClass`.
 	static func mocked(baseURL: URL, protocolClass: AnyClass = RecordingURLProtocolMock.self) -> WebDAVClient {
 		let credential = WebDAVCredential(baseURL: baseURL, username: "", password: "", allowedCertificate: nil)
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [protocolClass]
-		return WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: configuration, metadataConfiguration: nil))
+		return WebDAVClient(credential: credential, session: WebDAVSession(credential: credential, configuration: URLProtocolMock.configuration(protocolClass: protocolClass), metadataConfiguration: nil))
 	}
 }

@@ -19,18 +19,17 @@ extension UnitTests {
 		var provider: CloudProviderMock
 		var shorteningDecorator: VaultFormat7ShorteningProviderDecorator
 		var decorator: VaultFormat7ProviderDecorator
-		let file4C9SDirPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
-		let dir3C9SDirPath = "\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"
+		let file4C9SDirPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.file4C9SName)"
+		let dir3C9SDirPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.dir3C9SName)"
 		/// The fixture holds `File 6 (Long)` only in `Directory 3 (Long)`, so its `.c9s` in the root doesn't exist.
-		let rootFile6C9SDirPath = "\(VaultTestFormat.rootDirectory)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"
+		let rootFile6C9SDirPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.file6C9SName)"
 		/// The fixture holds `Directory 4 (Long)` only in `Directory 3 (Long)`, so its `.c9s` in the root doesn't exist.
-		let rootDir4C9SDirPath = "\(VaultTestFormat.rootDirectory)/ImoW6Jb8d-kdR00uEadGd1_TJDM=.c9s"
+		let rootDir4C9SDirPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.dir4C9SName)"
 
 		init() throws {
 			let vaultPath = CloudPath("pathToVault")
 			let cryptor = CryptorMock.vaultFormat7()
-			let tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			let tmpDirURL = try makeTemporaryDirectory()
 			let fixture = try VaultFormat7Fixture(stacking: .shortening, vaultPath: vaultPath, cryptor: cryptor)
 			self.vaultPath = vaultPath
 			self.cryptor = cryptor
@@ -74,7 +73,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListWithOnlyInvalidNamesIsEmpty() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, "\(dirPath)/invalid.c9s"], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, "\(dirPath)/invalid.c9s"]), files: [
 				"\(dirPath)/invalid.c9s/name.c9s": Data("..".utf8),
 				"\(dirPath)/invalid.c9s/contents.c9r": Data()
 			])
@@ -89,8 +88,8 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let longName = "\(String(repeating: "a", count: 217)).c9r"
 			let ownDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
-			let file5DirPath = "\(dirPath)/aw1qoKFUVs_FnB_n3lGtqKpyIeA=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, ownDirPath, file4C9SDirPath, file5DirPath], files: [
+			let file5DirPath = "\(dirPath)/\(VaultTestFormat.file5C9SName)"
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, ownDirPath, file4C9SDirPath, file5DirPath]), files: [
 				"\(ownDirPath)/contents.c9r": Data(),
 				"\(ownDirPath)/name.c9s": Data(longName.utf8),
 				"\(file4C9SDirPath)/contents.c9r": Data(),
@@ -110,7 +109,7 @@ extension UnitTests {
 			let longestName = "\(String(repeating: "a", count: vaultNameFileMaxLength - ".c9r".count)).c9r"
 			let longestDirPath = "\(dirPath)/-cQZZfpxsSDQPcuYRwOXtKmQoTU=.c9s"
 			let tooLargeDirPath = "\(dirPath)/KOqmxbxIdVOtsmKM_zOEpV5IhKw=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, longestDirPath, tooLargeDirPath], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, longestDirPath, tooLargeDirPath]), files: [
 				"\(longestDirPath)/contents.c9r": Data(),
 				"\(longestDirPath)/name.c9s": Data(longestName.utf8),
 				"\(tooLargeDirPath)/contents.c9r": Data(),
@@ -127,7 +126,7 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let longName = "\(String(repeating: "a", count: 217)).c9r"
 			let c9sDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, c9sDirPath]), files: [
 				"\(c9sDirPath)/name.c9s": Data(longName.utf8),
 				"\(c9sDirPath)/symlink.c9r": Data()
 			], maxPageSize: 1)
@@ -141,7 +140,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListWithInvalidNamesAndFailedNameLookupThrows() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, "\(dirPath)/a-missing.c9s", "\(dirPath)/invalid.c9s"], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, "\(dirPath)/a-missing.c9s", "\(dirPath)/invalid.c9s"]), files: [
 				"\(dirPath)/a-missing.c9s/contents.c9r": Data(),
 				"\(dirPath)/invalid.c9s/contents.c9r": Data(),
 				"\(dirPath)/invalid.c9s/name.c9s": Data("..".utf8)
@@ -155,7 +154,7 @@ extension UnitTests {
 		func fetchItemListWithOnlyC9SHoldingNameFileIsEmpty() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
 			let c9sDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, c9sDirPath]), files: [
 				"\(c9sDirPath)/name.c9s": Data("\(String(repeating: "a", count: 217)).c9r".utf8)
 			])
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
@@ -169,7 +168,7 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let c9sDirPath = "\(dirPath)/x\u{600}.c9s"
 			let nameFile: [String: Data] = holdsNameFile ? ["\(c9sDirPath)/name.c9s": Data("\(String(repeating: "a", count: 217)).c9r".utf8)] : [:]
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: nameFile.merging(["\(c9sDirPath)/contents.c9r": Data()]) { $1 })
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, c9sDirPath]), files: nameFile.merging(["\(c9sDirPath)/contents.c9r": Data()]) { $1 })
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			if holdsNameFile {
 				let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
@@ -182,7 +181,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListWithOnlyEmptyC9SIsEmpty() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, "\(dirPath)/empty.c9s"], files: [:])
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, "\(dirPath)/empty.c9s"]), files: [:])
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
 			#expect(itemList.items.isEmpty)
@@ -191,7 +190,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListWithOnlyFileAtC9SNameIsEmpty() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath]), files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			let itemList = try await shorteningDecorator.fetchItemList(forFolderAt: CloudPath(dirPath), withPageToken: nil)
 			#expect(itemList.items.isEmpty)
@@ -200,7 +199,7 @@ extension UnitTests {
 		@Test
 		func fetchItemMetadataOfFileAtC9SNameThrowsItemNotFound() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath]), files: ["\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s": Data()])
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
 			await #expect(throws: CloudProviderError.itemNotFound) { try await shorteningDecorator.fetchItemMetadata(at: CloudPath("\(dirPath)/\(String(repeating: "a", count: 217)).c9r")) }
 		}
@@ -210,7 +209,7 @@ extension UnitTests {
 			let dirPath = VaultTestFormat.rootDirectory
 			let longName = "\(String(repeating: "a", count: 217)).c9r"
 			let c9sDirPath = "\(dirPath)/-r4lcvemRsbH0dWuk2yfMOp9tco=.c9s"
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath, c9sDirPath], files: [
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath, c9sDirPath]), files: [
 				"\(c9sDirPath)/name.c9s": Data(longName.utf8)
 			])
 			let shorteningDecorator = try VaultFormat7ShorteningProviderDecorator(delegate: provider, vaultPath: vaultPath)
@@ -219,7 +218,7 @@ extension UnitTests {
 
 		@Test
 		func downloadFileWithLongName() async throws {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
+			let localURL = tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 			let metadata = try await decorator.downloadFile(from: CloudPath("/File 4 (Long)"), to: localURL)
 			let cleartext = try String(contentsOf: localURL, encoding: .utf8)
 			#expect(cleartext == "cleartext4")
@@ -232,8 +231,7 @@ extension UnitTests {
 
 		@Test
 		func uploadFileWithLongName() async throws {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext6".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext6")
 			let metadata = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 6 (Long)"), replaceExisting: false)
 			#expect([rootFile6C9SDirPath] == provider.createdFolders)
 			#expect(provider.createdFiles.count == 2)
@@ -248,8 +246,7 @@ extension UnitTests {
 
 		@Test
 		func uploadFileWithLongNameOverExistingFileWithReplaceExisting() async throws {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext5".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext5")
 			let metadata = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true)
 			#expect(["\(file4C9SDirPath)/contents.c9r": Data("ciphertext5".utf8)] == provider.createdFiles)
 			#expect(provider.createdFolders == [])
@@ -258,8 +255,7 @@ extension UnitTests {
 
 		@Test
 		func uploadFileWithLongNameOverExistingFileWithoutReplaceExistingThrowsItemAlreadyExists() async throws {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext5".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext5")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -268,8 +264,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameToC9SHoldingOnlyNameFile() async throws {
 			try rebuildProvider(changingFiles: ["\(file4C9SDirPath)/contents.c9r": nil])
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext4")
 			_ = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false)
 			#expect(["\(file4C9SDirPath)/contents.c9r": Data("ciphertext4".utf8)] == provider.createdFiles)
 		}
@@ -277,8 +272,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameToEmptyC9SUploadsNameFile() async throws {
 			try rebuildProvider(changingFiles: ["\(file4C9SDirPath)/contents.c9r": nil, "\(file4C9SDirPath)/name.c9s": nil])
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext4")
 			_ = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: false)
 			#expect(Data("ciphertext4".utf8) == provider.createdFiles["\(file4C9SDirPath)/contents.c9r"])
 			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(file4C9SDirPath)/name.c9s"])
@@ -287,16 +281,14 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameOverExistingFileWithoutNameFileUploadsNameFile() async throws {
 			try rebuildProvider(changingFiles: ["\(file4C9SDirPath)/name.c9s": nil])
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext4")
 			_ = try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true)
 			#expect(Data("\(String(repeating: "file4", count: 44)).c9r".utf8) == provider.createdFiles["\(file4C9SDirPath)/name.c9s"])
 		}
 
 		@Test
 		func uploadFileWithLongNameOverFolderThrowsItemAlreadyExists() async throws {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext4")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await decorator.uploadFile(from: localURL, to: CloudPath("/Directory 3 (Long)"), replaceExisting: true) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -305,8 +297,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameOverSymlinkThrowsItemAlreadyExists() async throws {
 			try rebuildProvider(changingFiles: ["\(file4C9SDirPath)/contents.c9r": nil, "\(file4C9SDirPath)/symlink.c9r": Data()], maxPageSize: 1)
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext4".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext4")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -315,8 +306,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameOverFileAtC9SNameThrowsItemAlreadyExists() async throws {
 			try rebuildProvider(changingFiles: [rootFile6C9SDirPath: Data()])
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext6".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext6")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await decorator.uploadFile(from: localURL, to: CloudPath("/File 6 (Long)"), replaceExisting: true) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -330,8 +320,7 @@ extension UnitTests {
 					withUnsafeCurrentTask { $0?.cancel() }
 				}
 			}
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext5".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext5")
 			let upload = Task {
 				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true)
 			}
@@ -346,8 +335,7 @@ extension UnitTests {
 			provider.mutationHook = {
 				withUnsafeCurrentTask { $0?.cancel() }
 			}
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext5".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext5")
 			let upload = Task {
 				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 4 (Long)"), replaceExisting: true)
 			}
@@ -360,7 +348,7 @@ extension UnitTests {
 			try await decorator.createFolder(at: CloudPath("/Directory 4 (Long)"))
 			#expect(provider.createdFolders.count == 3)
 			#expect(provider.createdFolders.contains(rootDir4C9SDirPath))
-			#expect(provider.createdFolders.contains("pathToVault/d/99"))
+			#expect(provider.createdFolders.contains(VaultTestFormat.newDirectoryParent))
 			#expect(provider.createdFolders.contains(VaultTestFormat.newDirectory))
 			#expect(provider.createdFiles.count == 2)
 			#expect(provider.createdFiles["\(rootDir4C9SDirPath)/dir.c9r"] != nil)
@@ -371,7 +359,7 @@ extension UnitTests {
 		func deleteFileWithLongName() async throws {
 			try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)"))
 			#expect(provider.deleted.count == 1)
-			#expect(provider.deleted.contains("\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s"))
+			#expect(provider.deleted.contains("\(VaultTestFormat.directory3)/\(VaultTestFormat.file6C9SName)"))
 		}
 
 		@Test
@@ -387,7 +375,7 @@ extension UnitTests {
 		func deleteFileWithLongNameWithDeletionIncompleteRestoresNameFile() async throws {
 			provider.mutationFailure = CloudProviderMock.failing("deleteFolder", with: CloudProviderError.deletionIncomplete)
 			await #expect(throws: CloudProviderError.deletionIncomplete) { try await decorator.deleteFile(at: CloudPath("/Directory 3 (Long)/File 6 (Long)")) }
-			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.directory3)/nSuAAJhIy1kp2_GdVZ0KgqaLJ-U=.c9s/name.c9s"])
+			#expect(Data("\(String(repeating: "file6", count: 44)).c9r".utf8) == provider.createdFiles["\(VaultTestFormat.directory3)/\(VaultTestFormat.file6C9SName)/name.c9s"])
 		}
 
 		@Test
@@ -587,8 +575,7 @@ extension UnitTests {
 		@Test
 		func uploadFileWithLongNameWithCancellationAfterFirstRemoteChange() async throws {
 			let decorator: VaultFormat7ProviderDecorator = decorator
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext6".write(to: localURL, atomically: true, encoding: .utf8)
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext6")
 			let metadata = try await valueCancelledAfterFirstRemoteChange(of: provider) {
 				try await decorator.uploadFile(from: localURL, to: CloudPath("/File 6 (Long)"), replaceExisting: false)
 			}

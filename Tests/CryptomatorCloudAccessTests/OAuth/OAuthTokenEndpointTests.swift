@@ -17,9 +17,7 @@ extension UnitTests {
 		init() {
 			URLProtocolMock.requestHandler = []
 			URLProtocolSequenceMock.steps = []
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolMock.self]
-			self.session = SplitURLSession(configuration: configuration)
+			self.session = SplitURLSession(configuration: URLProtocolMock.configuration())
 		}
 
 		@Test
@@ -68,9 +66,7 @@ extension UnitTests {
 			let failingURL = try #require(URL(string: "https://auth.example.com/SENTINEL"))
 			let underlyingError = URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: failingURL])
 			let failure = NSError(domain: "OAuthTokenEndpointTests", code: 42, userInfo: ["Detail": "kept", NSURLErrorFailingURLErrorKey: failingURL, NSUnderlyingErrorKey: underlyingError])
-			let configuration = URLSessionConfiguration.default
-			configuration.protocolClasses = [URLProtocolSequenceMock.self]
-			let session = SplitURLSession(configuration: configuration, challengeHandler: FailingChallengeHandler(failure: failure))
+			let session = SplitURLSession(configuration: URLProtocolMock.configuration(protocolClass: URLProtocolSequenceMock.self), challengeHandler: FailingChallengeHandler(failure: failure))
 			let failureResponse = try #require(HTTPURLResponse(url: failingURL, statusCode: 401, httpVersion: nil, headerFields: nil))
 			URLProtocolSequenceMock.steps = [.authChallenge(URLAuthenticationChallengeMock(previousFailureCount: 0, failureResponse: failureResponse))]
 

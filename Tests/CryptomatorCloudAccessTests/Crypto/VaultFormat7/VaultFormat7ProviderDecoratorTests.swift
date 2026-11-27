@@ -36,11 +36,10 @@ extension UnitTests {
 		let cryptor = CryptorMock.vaultFormat7()
 		let tmpDirURL: URL
 		/// The `.c9s` of `File 4 (Long)` in the vault mock.
-		static let shortenedFileC9SPath = "\(VaultTestFormat.rootDirectory)/9j5eVKQZdTojV6zlbxhcCLD_8bs=.c9s"
+		static let shortenedFileC9SPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.file4C9SName)"
 
 		init() throws {
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -51,7 +50,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListStripsSuffixInCombinedCharacter() async throws {
 			let dirPath = VaultTestFormat.rootDirectory
-			let provider = CloudProviderMock(folders: ["pathToVault", "pathToVault/d", "pathToVault/d/00", dirPath], files: ["\(dirPath)/x\u{600}.c9r": Data()])
+			let provider = CloudProviderMock(folders: VaultTestFormat.rootDirectoryAncestors.union([dirPath]), files: ["\(dirPath)/x\u{600}.c9r": Data()])
 			let cryptor = CryptorMock(dirIds: ["": VaultTestFormat.encryptedRootDirId], fileNames: ["x\u{600}": "File X"], contents: [:])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			let itemList = try await decorator.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
@@ -71,7 +70,7 @@ extension UnitTests {
 		func uploadFileWithoutRootDirectoryThrowsParentFolderDoesNotExist(rootDirectoryIsFile: Bool) async throws {
 			let provider = rootDirectoryIsFile ? CloudProviderMock(folders: [], files: [VaultTestFormat.rootDirectory: Data()]) : CloudProviderMock(folders: [vaultPath.path], files: [:])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			await #expect(throws: CloudProviderError.parentFolderDoesNotExist) { try await decorator.uploadFile(from: localURL, to: CloudPath("/File 3"), replaceExisting: false) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -80,7 +79,7 @@ extension UnitTests {
 		@Test
 		func uploadFileOverFolderWithReplaceExistingThrowsItemAlreadyExists() async throws {
 			let fixture = try VaultFormat7Fixture(stacking: .plain, vaultPath: vaultPath, cryptor: cryptor)
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await fixture.decorator.uploadFile(from: localURL, to: CloudPath("/Directory 1"), replaceExisting: true) }
 			#expect(fixture.provider.createdFiles == [:])
 		}
@@ -93,7 +92,7 @@ extension UnitTests {
 			provider.transferHook = { _, _ in
 				try await provider.createFolder(at: CloudPath("\(VaultTestFormat.rootDirectory)/file3.c9r"))
 			}
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, content: "cleartext3")
 			await #expect(throws: CloudProviderError.itemAlreadyExists) { try await fixture.decorator.uploadFile(from: localURL, to: CloudPath("/File 3"), replaceExisting: true) }
 			#expect(provider.createdFiles == [:])
 		}
@@ -126,16 +125,13 @@ extension UnitTests {
 			// └─Directory 1
 			//   ├─ Directory 2
 			//   └─ File 3
-			let folders: Set = [
-				"pathToVault",
-				"pathToVault/d",
-				"pathToVault/d/00",
+			let folders = VaultTestFormat.rootDirectoryAncestors.union([
 				VaultTestFormat.rootDirectory,
 				"\(VaultTestFormat.rootDirectory)/dir1.c9r",
 				VaultTestFormat.directory1,
 				"\(VaultTestFormat.directory1)/dir2.c9r",
 				VaultTestFormat.directory2
-			]
+			])
 			let files = [
 				"\(VaultTestFormat.directory1)/dir2.c9r/dir.c9r": Data("dir2-id".utf8),
 				"\(VaultTestFormat.directory1)/file3.c9r": Data("ciphertext3".utf8)
@@ -152,7 +148,7 @@ extension UnitTests {
 		func deleteFolderFollowsDirFilesOfC9SWithoutReadingNames() async throws {
 			let folderC9SPath = "\(VaultTestFormat.directory1)/folder.c9s"
 			let fileC9SPath = "\(VaultTestFormat.directory1)/file.c9s"
-			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/folder.c9s": "dir2-id"], folders: [fileC9SPath], files: ["\(folderC9SPath)/name.c9s": Data(), "\(fileC9SPath)/contents.c9r": Data(), "\(fileC9SPath)/name.c9s": Data()])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.directory1)/folder.c9s": "dir2-id"], folders: [fileC9SPath], files: ["\(folderC9SPath)/name.c9s": Data(), "\(fileC9SPath)/contents.c9r": Data(), "\(fileC9SPath)/name.c9s": Data()])
 			let downloadedNameFiles = OSAllocatedUnfairLock(initialState: [String]())
 			provider.transferHook = { cloudPath, _ in
 				if cloudPath.lastPathComponent == "name.c9s" {
@@ -170,7 +166,7 @@ extension UnitTests {
 		/// The `.c9r` and `.c9s` suffixes form one `Character` with a prepended mark before them, but they still mark a Cryptomator item.
 		@Test
 		func deleteFolderFollowsDirFilesOfItemsWhoseSuffixIsInCombinedCharacter() async throws {
-			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/dir2\u{600}.c9r": "dir2-id", "\(VaultTestFormat.nestedDirectories[1])/dir3\u{600}.c9s": "dir3-id"])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.directory1)/dir2\u{600}.c9r": "dir2-id", "\(VaultTestFormat.directory1)/dir3\u{600}.c9s": "dir3-id"])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted.sorted() == ["\(VaultTestFormat.rootDirectory)/dir1.c9r", VaultTestFormat.directory1, VaultTestFormat.directory2, VaultTestFormat.directory3])
@@ -179,7 +175,7 @@ extension UnitTests {
 		/// Only a `.c9r` or `.c9s` folder is a Cryptomator item, so the directory of the `dir.c9r` in another folder isn't deleted.
 		@Test
 		func deleteFolderIgnoresDirFileOfOtherFolder() async throws {
-			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/backup": "dir2-id"])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.directory1)/backup": "dir2-id"])
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
 			#expect(provider.deleted == [VaultTestFormat.directory1, "\(VaultTestFormat.rootDirectory)/dir1.c9r"])
@@ -188,7 +184,7 @@ extension UnitTests {
 		@Test
 		func deleteFolderDoesNotReadAliasDirFile() async throws {
 			let subfolderPath = "\(VaultTestFormat.directory1)/sub.c9r"
-			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.nestedDirectories[1])/sub.c9r": "dir2-id"], aliases: ["\(subfolderPath)/dir.c9r"])
+			let provider = makeNestedProvider(subdirectories: ["\(VaultTestFormat.directory1)/sub.c9r": "dir2-id"], aliases: ["\(subfolderPath)/dir.c9r"])
 			let (listedFolders, transferredFiles) = provider.recordingListingsAndTransfers()
 			let decorator = try VaultFormat7ProviderDecorator(provider: provider, vaultPath: vaultPath, cryptor: cryptor)
 			try await decorator.deleteFolder(at: CloudPath("/Directory 1"))
@@ -234,7 +230,7 @@ extension UnitTests {
 		/// The `.c9s` of a long name is listed physically, so its unreadable `dir.c9r` keeps the reference, and a `.c9s` that a partial delete left with only `name.c9s` is deleted.
 		@Test(arguments: [true, false])
 		func deleteFolderWithLongNameWithoutReadableDirFile(holdsDirFile: Bool) async throws {
-			let c9sPath = "\(VaultTestFormat.rootDirectory)/kUDsIDxDMxx1lK0CD1ZftCF376Y=.c9s"
+			let c9sPath = "\(VaultTestFormat.rootDirectory)/\(VaultTestFormat.dir3C9SName)"
 			let fixture = CloudProviderMock.vaultFormat7()
 			let provider = CloudProviderMock(folders: fixture.folders, files: fixture.files.filter { holdsDirFile || $0.key != "\(c9sPath)/dir.c9r" })
 			provider.transferHook = { cloudPath, _ in
@@ -512,24 +508,18 @@ extension UnitTests {
 			return try VaultFormat7ProviderDecorator(shortening: shorteningDecorator, vaultPath: vaultPath, cryptor: cryptor)
 		}
 
-		func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try "cleartext3".write(to: localURL, atomically: true, encoding: .utf8)
-			return localURL
-		}
-
-		/// Returns a provider that holds `Directory 1`, the given subdirectory references (by path below `pathToVault/d` and dir ID, replacing a default one) and the given folders and files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
+		/// Returns a provider that holds `Directory 1`, the given subdirectory references (by full path and dir ID, replacing a default one) and the given folders and files. The directories of `dir1-id` to `dir4-id` exist. A listing marks the items at the full paths of `aliases` as aliases, and a download those of `aliasedDownloads`.
 		func makeNestedProvider(subdirectories: [String: String], folders: Set<String> = [], files: [String: Data] = [:], maxPageSize: Int = .max, aliases: Set<String> = [], aliasedDownloads: Set<String> = []) -> CloudProviderMock {
-			let references = ["\(VaultTestFormat.nestedDirectories[0])/dir1.c9r": "dir1-id"].merging(subdirectories) { $1 }
-			let folders = folders.union(["pathToVault", "pathToVault/d"] + (VaultTestFormat.nestedDirectories + references.keys).map { "pathToVault/d/\($0)" })
-			let dirFiles = Dictionary(uniqueKeysWithValues: references.map { ("pathToVault/d/\($0.key)/dir.c9r", Data($0.value.utf8)) })
+			let references = ["\(VaultTestFormat.rootDirectory)/dir1.c9r": "dir1-id"].merging(subdirectories) { $1 }
+			let folders = folders.union(["pathToVault", "pathToVault/d"] + VaultTestFormat.nestedDirectories.map { "pathToVault/d/\($0)" } + references.keys)
+			let dirFiles = Dictionary(uniqueKeysWithValues: references.map { ("\($0.key)/dir.c9r", Data($0.value.utf8)) })
 			return CloudProviderMock(folders: folders, files: dirFiles.merging(files) { $1 }, maxPageSize: maxPageSize, aliases: aliases, aliasedDownloads: aliasedDownloads)
 		}
 
 		/// Returns a provider whose `Directory 1` is a `.c9r` holding the given files and folders by name.
 		func makeBrokenFolderProvider(files: [String] = [], folders: [String] = [], maxPageSize: Int = .max) -> CloudProviderMock {
 			let c9rPath = "\(VaultTestFormat.rootDirectory)/dir1.c9r"
-			let baseFolders: Set = ["pathToVault", "pathToVault/d", "pathToVault/d/00", VaultTestFormat.rootDirectory, c9rPath]
+			let baseFolders = VaultTestFormat.rootDirectoryAncestors.union([VaultTestFormat.rootDirectory, c9rPath])
 			return CloudProviderMock(folders: baseFolders.union(folders.map { "\(c9rPath)/\($0)" }), files: Dictionary(uniqueKeysWithValues: files.map { ("\(c9rPath)/\($0)", Data()) }), maxPageSize: maxPageSize)
 		}
 	}

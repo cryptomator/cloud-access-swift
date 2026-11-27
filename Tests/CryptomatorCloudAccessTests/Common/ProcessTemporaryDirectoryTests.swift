@@ -47,13 +47,13 @@ extension UnitTests {
 		private let legacyStagingURL: URL
 
 		init() throws {
-			let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			let parentURL = rootURL.appendingPathComponent("CryptomatorCloudAccess", isDirectory: true)
-			let processFoldersURL = parentURL.appendingPathComponent("pid-v1", isDirectory: true)
+			let rootURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
+			let parentURL = rootURL.appending(component: "CryptomatorCloudAccess", directoryHint: .isDirectory)
+			let processFoldersURL = parentURL.appending(component: "pid-v1", directoryHint: .isDirectory)
 			self.rootURL = rootURL
 			self.parentURL = parentURL
 			self.processFoldersURL = processFoldersURL
-			self.legacyStagingURL = rootURL.appendingPathComponent("CryptomatorCloudAccessStaging", isDirectory: true)
+			self.legacyStagingURL = rootURL.appending(component: "CryptomatorCloudAccessStaging", directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: processFoldersURL, withIntermediateDirectories: true)
 		}
 
@@ -107,8 +107,8 @@ extension UnitTests {
 			for folderURL in [otherInstanceFolderURL, launchdFolderURL, ownPIDFolderURL] {
 				#expect(isDirectory(folderURL), "\(folderURL.lastPathComponent)")
 			}
-			#expect(FileManager.default.fileExists(atPath: launchdFolderURL.appendingPathComponent("content").path))
-			#expect(FileManager.default.fileExists(atPath: ownPIDFolderURL.appendingPathComponent("content").path))
+			#expect(FileManager.default.fileExists(atPath: launchdFolderURL.appending(component: "content", directoryHint: .notDirectory).path))
+			#expect(FileManager.default.fileExists(atPath: ownPIDFolderURL.appending(component: "content", directoryHint: .notDirectory).path))
 		}
 
 		/// Probing its own pid gives 0, so only the probe count shows that a folder with the process's pid is never a candidate.
@@ -142,24 +142,23 @@ extension UnitTests {
 			let uuid = UUID().uuidString
 			let names = ["0-\(uuid)", "-5-\(uuid)", "+100000-\(uuid)", "abc-\(uuid)", "100000-notauuid", " 100000-\(uuid)", "100000-\(uuid)x", "100000-\u{301}\(uuid)", "100000-\u{200D}\(uuid)"]
 			for name in names {
-				try FileManager.default.createDirectory(at: processFoldersURL.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: false)
+				try FileManager.default.createDirectory(at: processFoldersURL.appending(component: name, directoryHint: .isDirectory), withIntermediateDirectories: false)
 			}
-			let fileURL = processFoldersURL.appendingPathComponent("100000-\(UUID().uuidString)", isDirectory: false)
-			try Data("content".utf8).write(to: fileURL)
-			let targetURL = rootURL.appendingPathComponent("target", isDirectory: true)
+			let fileURL = try makeLocalFile(in: processFoldersURL, named: "100000-\(UUID().uuidString)")
+			let targetURL = rootURL.appending(component: "target", directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: false)
-			try Data("content".utf8).write(to: targetURL.appendingPathComponent("content"))
-			let symlinkURL = processFoldersURL.appendingPathComponent("100000-\(UUID().uuidString)", isDirectory: false)
+			let contentURL = try makeLocalFile(in: targetURL, named: "content")
+			let symlinkURL = processFoldersURL.appending(component: "100000-\(UUID().uuidString)", directoryHint: .notDirectory)
 			try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: targetURL)
 
 			_ = try makeDirectory().directoryURL()
 
 			for name in names {
-				#expect(isDirectory(processFoldersURL.appendingPathComponent(name, isDirectory: true)), "\(name)")
+				#expect(isDirectory(processFoldersURL.appending(component: name, directoryHint: .isDirectory)), "\(name)")
 			}
 			#expect(FileManager.default.fileExists(atPath: fileURL.path))
 			#expect((try? FileManager.default.destinationOfSymbolicLink(atPath: symlinkURL.path)) != nil)
-			#expect(FileManager.default.fileExists(atPath: targetURL.appendingPathComponent("content").path))
+			#expect(FileManager.default.fileExists(atPath: contentURL.path))
 		}
 
 		@Test
@@ -219,7 +218,7 @@ extension UnitTests {
 		@Test
 		func keepsLegacySubfolders() throws {
 			let oldFileURL = try makeLegacyStagedFile(age: 25 * 60 * 60)
-			let subfolderURL = legacyStagingURL.appendingPathComponent(UUID().uuidString, isDirectory: true)
+			let subfolderURL = legacyStagingURL.appending(component: UUID().uuidString, directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: subfolderURL, withIntermediateDirectories: false)
 			try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -25 * 60 * 60)], ofItemAtPath: subfolderURL.path)
 
@@ -243,9 +242,9 @@ extension UnitTests {
 		@Test
 		func failedDeletionIsRetriedLater() throws {
 			let deadFolderURL = try makeOwnerFolder(pid: ProcessTemporaryDirectoryTests.deadPID)
-			let lockedFolderURL = deadFolderURL.appendingPathComponent("locked", isDirectory: true)
+			let lockedFolderURL = deadFolderURL.appending(component: "locked", directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: lockedFolderURL, withIntermediateDirectories: false)
-			try Data("content".utf8).write(to: lockedFolderURL.appendingPathComponent("content"))
+			_ = try makeLocalFile(in: lockedFolderURL, named: "content")
 			try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: lockedFolderURL.path)
 
 			#expect(throws: Never.self) { try makeDirectory().directoryURL() }
@@ -263,16 +262,15 @@ extension UnitTests {
 		}
 
 		private func makeOwnerFolder(pid: pid_t) throws -> URL {
-			let folderURL = processFoldersURL.appendingPathComponent("\(pid)-\(UUID().uuidString)", isDirectory: true)
+			let folderURL = processFoldersURL.appending(component: "\(pid)-\(UUID().uuidString)", directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: false)
-			try Data("content".utf8).write(to: folderURL.appendingPathComponent("content"))
+			_ = try makeLocalFile(in: folderURL, named: "content")
 			return folderURL
 		}
 
 		private func makeLegacyStagedFile(age: TimeInterval) throws -> URL {
 			try FileManager.default.createDirectory(at: legacyStagingURL, withIntermediateDirectories: true)
-			let fileURL = legacyStagingURL.appendingPathComponent(UUID().uuidString, isDirectory: false)
-			try Data("content".utf8).write(to: fileURL)
+			let fileURL = try makeLocalFile(in: legacyStagingURL)
 			try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -age)], ofItemAtPath: fileURL.path)
 			return fileURL
 		}

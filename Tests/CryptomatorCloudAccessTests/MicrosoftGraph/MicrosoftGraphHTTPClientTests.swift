@@ -26,8 +26,7 @@ extension UnitTests {
 			self.tokenSource = OAuthTokenSourceStub()
 			self.sleeps = SleepRecorder()
 			self.client = MicrosoftGraphHTTPClient.mocked(tokenSource: tokenSource, sleeps: sleeps)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -137,7 +136,7 @@ extension UnitTests {
 
 		@Test
 		func uploadIsSentWithoutAuthorization() async throws {
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			let authorizations = OSAllocatedUnfairLock(initialState: [String?]())
 			let recordAuthorization: @Sendable (URLRequest) -> Void = { request in
 				authorizations.withLock { $0.append(request.value(forHTTPHeaderField: "Authorization")) }
@@ -154,7 +153,7 @@ extension UnitTests {
 
 		@Test
 		func serverErrorOfUploadIsRetried() async throws {
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 500), URLProtocolMock.handler(statusCode: 502), URLProtocolMock.handler(statusCode: 201, body: driveItem)]
 
 			let item = try await uploadChunk(from: fileURL)
@@ -166,7 +165,7 @@ extension UnitTests {
 		/// Each attempt adds the progress of its task, so a retried chunk takes half of the transfer's share instead of pushing it past complete.
 		@Test
 		func retriedUploadSharesProgressWithFirstAttempt() async throws {
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			let progress = Progress(totalUnitCount: 1)
 			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 			let fractionAtRetry = OSAllocatedUnfairLock<Double?>(initialState: nil)
@@ -185,12 +184,12 @@ extension UnitTests {
 
 		@Test
 		func retriedTransfersHandOverOneTask() async throws {
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			let downloadTaskCount = OSAllocatedUnfairLock(initialState: 0)
 			let uploadTaskCount = OSAllocatedUnfairLock(initialState: 0)
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(body: "content"), URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(statusCode: 202)]
 
-			try await client.downloadContent(of: address, to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: { _ in
+			try await client.downloadContent(of: address, to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: { _ in
 				downloadTaskCount.withLock { $0 += 1 }
 			})
 			_ = try await client.uploadChunk(to: uploadURL, fromFile: fileURL, offset: 0, length: 5, totalLength: 10, progress: nil, onTaskCreation: { _ in
@@ -208,7 +207,7 @@ extension UnitTests {
 			defer {
 				logCapture.stop()
 			}
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503), { _ in throw URLError(.timedOut) }]
 
 			let error = try await #require(throws: (any Error).self) { try await uploadChunk(from: fileURL) }
@@ -228,7 +227,7 @@ extension UnitTests {
 			defer {
 				logCapture.stop()
 			}
-			let fileURL = try chunkFile()
+			let fileURL = try makeLocalFile(in: tmpDirURL, named: "chunk", content: "chunk")
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: #"{"value":[{"id":"1","@microsoft.graph.downloadUrl":"https://content.example.com/a?tempauth=SECRET-LISTED","createdBy":{"user":{"email":"lister@example.com"}}}]}"#),
 				URLProtocolMock.handler(statusCode: 201, body: #"{"id":"2","@content.downloadUrl":"https://content.example.com/b?tempauth=SECRET-UPLOADED","createdBy":{"user":{"email":"uploader@example.com"}}}"#)
@@ -255,7 +254,7 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 302, headerFields: ["Location": "https://content.example.com/personal/SECRET-ACCOUNT/download.aspx?tempauth=TEMPAUTH"]),
 				URLProtocolMock.handler(body: "content")
 			]
-			let stagingURL = tmpDirURL.appendingPathComponent("download")
+			let stagingURL = tmpDirURL.appending(component: "download", directoryHint: .notDirectory)
 
 			try await client.downloadContent(of: address, to: stagingURL, progress: nil, onTaskCreation: nil)
 
@@ -277,7 +276,7 @@ extension UnitTests {
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 503), URLProtocolMock.handler(body: "content")]
 			let downloadURL = try #require(URL(string: "https://content.example.com/personal/SECRET-ACCOUNT/download.aspx"))
 
-			_ = try await client.download(fromDownloadURL: downloadURL, to: tmpDirURL.appendingPathComponent("download"), progress: nil, onTaskCreation: nil)
+			_ = try await client.download(fromDownloadURL: downloadURL, to: tmpDirURL.appending(component: "download", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			let log = logCapture.joinedMessages
 			#expect(logCapture.messages.contains { $0.hasPrefix("MicrosoftGraphHTTPClient: GET https://content.example.com/<redacted>") }, "\(log)")
@@ -294,12 +293,12 @@ extension UnitTests {
 			let errorBody = #"{"error":"https://content.example.com/dl/SECRET-PATH"}"#
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404, body: errorBody)]
 
-			await #expect(throws: CloudProviderError.itemNotFound) { try await client.downloadContent(of: address, to: tmpDirURL.appendingPathComponent(UUID().uuidString), progress: nil, onTaskCreation: nil) }
+			await #expect(throws: CloudProviderError.itemNotFound) { try await client.downloadContent(of: address, to: tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory), progress: nil, onTaskCreation: nil) }
 
 			URLProtocolMock.requestHandler = [URLProtocolMock.handler(statusCode: 404, body: errorBody)]
 			let downloadURL = try #require(URL(string: "https://content.example.com/dl/PATH"))
 
-			let response = try await client.download(fromDownloadURL: downloadURL, to: tmpDirURL.appendingPathComponent(UUID().uuidString), progress: nil, onTaskCreation: nil)
+			let response = try await client.download(fromDownloadURL: downloadURL, to: tmpDirURL.appending(component: UUID().uuidString, directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
 			#expect(response.statusCode == 404)
 			#expect(logCapture.messages.count { $0.hasPrefix("--> GET https://content.example.com") } == 1, "\(logCapture.joinedMessages)")
@@ -307,12 +306,6 @@ extension UnitTests {
 		}
 
 		// MARK: - Helpers
-
-		private func chunkFile() throws -> URL {
-			let fileURL = tmpDirURL.appendingPathComponent("chunk")
-			try Data("chunk".utf8).write(to: fileURL)
-			return fileURL
-		}
 
 		private func uploadChunk(from fileURL: URL) async throws -> MicrosoftGraphAPI.DriveItem? {
 			return try await client.uploadChunk(to: uploadURL, fromFile: fileURL, offset: 0, length: 5, totalLength: 5, progress: nil, onTaskCreation: nil)
@@ -329,8 +322,6 @@ extension UnitTests {
 
 extension MicrosoftGraphHTTPClient {
 	static func mocked(tokenSource: any BearerTokenSource = OAuthTokenSourceStub(), sleeps: SleepRecorder = SleepRecorder(), hooks: SplitURLSession.Hooks = SplitURLSession.Hooks()) -> MicrosoftGraphHTTPClient {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return MicrosoftGraphHTTPClient(tokenSource: tokenSource, configuration: configuration, metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
+		return MicrosoftGraphHTTPClient(tokenSource: tokenSource, configuration: URLProtocolMock.configuration(), metadataConfiguration: nil, hooks: hooks, sleep: { sleeps.sleep(for: $0) })
 	}
 }

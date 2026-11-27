@@ -19,8 +19,7 @@ extension UnitTests {
 		init() throws {
 			URLProtocolMock.requestHandler = []
 			self.provider = try S3CloudProvider(client: .mocked(), maxPageSize: .max)
-			self.tmpDirURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-			try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+			self.tmpDirURL = try makeTemporaryDirectory()
 		}
 
 		deinit {
@@ -133,26 +132,19 @@ extension UnitTests {
 		@Test
 		func downloadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: S3CloudProvider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			let progress = Progress(totalUnitCount: 1)
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let probe = OnTaskCreationProbe()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
-				URLProtocolMock.handler(body: "content", onRequest: { _ in
-					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-				})
+				URLProtocolMock.handler(body: "content", onRequest: { _ in probe.expectOnTaskCreationReturned() })
 			]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: progress, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: progress, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))
 			#expect(metadata.size == 7)
 			#expect(progress.fractionCompleted == 1)
@@ -162,15 +154,12 @@ extension UnitTests {
 		@Test
 		func uploadFileAwaitsOnTaskCreationBeforeResumingTask() async throws {
 			let provider: S3CloudProvider = provider
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let progress = Progress(totalUnitCount: 1)
-			let taskStates = OSAllocatedUnfairLock(initialState: [URLSessionTask.State]())
-			let onTaskCreationReturned = OSAllocatedUnfairLock(initialState: false)
+			let probe = OnTaskCreationProbe()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt"),
-				URLProtocolMock.handler(onRequest: { _ in
-					#expect(onTaskCreationReturned.withLock { $0 }, "The task was resumed before onTaskCreation returned")
-				}),
+				URLProtocolMock.handler(onRequest: { _ in probe.expectOnTaskCreationReturned() }),
 				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"], onRequest: { _ in
 					#expect(progress.fractionCompleted > 0.5, "The progress of the upload task isn't part of the upload's progress")
 					#expect(progress.fractionCompleted < 1, "The progress completed before the upload returned")
@@ -178,62 +167,49 @@ extension UnitTests {
 			]
 
 			let metadata = try await cancellingValue(of: Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: { task in
-					taskStates.withLock { $0.append(task.state) }
-					try? await Task.sleep(for: .milliseconds(100))
-					onTaskCreationReturned.withLock { $0 = true }
-				})
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: progress, onTaskCreation: probe.onTaskCreation())
 			})
 
-			#expect(taskStates.withLock { $0 } == [.suspended])
+			probe.expectAwaited()
 			#expect(CloudPath("/file.txt") == metadata.cloudPath)
 			#expect(progress.fractionCompleted == 1)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
 		@Test
-		func downloadFileWithCancellationDuringOnTaskCreation() async throws {
+		func downloadFileWithCancellationDuringOnTaskCreation() async {
 			let provider: S3CloudProvider = provider
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
 				URLProtocolMock.handler(body: "content")
 			]
 
-			let download = Task {
-				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.downloadFile(from: CloudPath("/file.txt"), to: localURL, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: download) }
 
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled download must not be resumed")
 			#expect(!FileManager.default.fileExists(atPath: localURL.path))
 		}
 
 		@Test
 		func uploadFileWithCancellationDuringOnTaskCreation() async throws {
 			let provider: S3CloudProvider = provider
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt"),
 				URLProtocolMock.handler()
 			]
 
-			let upload = Task {
-				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
-					withUnsafeCurrentTask { $0?.cancel() }
-				})
+			await expectCancelledBeforeResume {
+				try await provider.uploadFile(from: localURL, to: CloudPath("/file.txt"), replaceExisting: false, progress: nil, onTaskCreation: cancellingOnTaskCreation())
 			}
-			await #expect(throws: CancellationError.self) { try await cancellingValue(of: upload) }
-
-			#expect(URLProtocolMock.requestHandler.count == 1, "The task of a cancelled upload must not be resumed")
 		}
 
 		/// The error body of a download may be missing, so any 404 means that the file is gone.
 		@Test
 		func downloadFileOfMissingFileThrowsItemNotFound() async throws {
-			let localURL = tmpDirURL.appendingPathComponent("file.txt")
+			let localURL = tmpDirURL.appending(component: "file.txt", directoryHint: .notDirectory)
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt", keys: ["file.txt"]),
 				URLProtocolMock.handler(statusCode: 404)
@@ -247,7 +223,7 @@ extension UnitTests {
 		@Test
 		func uploadFileCancelledAfterPutReturnsMetadata() async throws {
 			let provider: S3CloudProvider = provider
-			let localURL = try makeLocalFile()
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.txt")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.txt"),
@@ -274,7 +250,7 @@ extension UnitTests {
 			let progress = Progress(totalUnitCount: 1)
 			let fractions = OSAllocatedUnfairLock(initialState: [Double]())
 			let provider = try makeMultipartProvider(hooks: SplitURLSession.Hooks.recordingTransferProgress(of: progress, into: fractions))
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			let onTaskCreationCalled = OSAllocatedUnfairLock(initialState: false)
@@ -329,7 +305,7 @@ extension UnitTests {
 				S3CloudProviderTests.listing(of: "file.bin", body: S3MockResponse.listBucketResult(keys: ["file.bin"], size: 10), onRequest: requests.record)
 			]
 
-			_ = try await provider.uploadFile(from: makeLocalFile(content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
+			_ = try await provider.uploadFile(from: makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789"), to: CloudPath("/file.bin"), replaceExisting: false, progress: nil, onTaskCreation: { _ in
 				onTaskCreationCalled.withLock { $0 = true }
 			})
 
@@ -344,8 +320,8 @@ extension UnitTests {
 		@Test
 		func uploadFileThroughSymbolicLinkUsesSizeOfTarget() async throws {
 			let provider = try makeMultipartProvider()
-			let linkURL = tmpDirURL.appendingPathComponent("link.bin")
-			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(content: "0123456789"))
+			let linkURL = tmpDirURL.appending(component: "link.bin", directoryHint: .notDirectory)
+			try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789"))
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.bin"),
@@ -366,7 +342,7 @@ extension UnitTests {
 		@Test
 		func failedPartAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
@@ -384,7 +360,7 @@ extension UnitTests {
 		@Test
 		func failedCompletionAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
@@ -406,7 +382,7 @@ extension UnitTests {
 		@Test
 		func fileThatGetsShorterDuringMultipartUploadAborts() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
@@ -427,13 +403,13 @@ extension UnitTests {
 		@Test
 		func unreadableFileAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "file.bin"),
 				URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult(), onRequest: { _ in
-					try? FileManager.default.removeItem(at: localURL)
+					removeItemRecordingFailure(at: localURL)
 				}),
 				S3CloudProviderTests.abortMultipartUpload(requests)
 			]
@@ -447,7 +423,7 @@ extension UnitTests {
 		@Test
 		func cancellationDuringPartAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
@@ -473,7 +449,7 @@ extension UnitTests {
 		@Test
 		func cancellationDuringLastPartAbortsMultipartUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let temporaryFiles = try uuidNamedTemporaryFiles()
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
@@ -500,7 +476,7 @@ extension UnitTests {
 		@Test
 		func cancellationDuringCompletionCompletesUpload() async throws {
 			let provider = try makeMultipartProvider()
-			let localURL = try makeLocalFile(content: "0123456789")
+			let localURL = try makeLocalFile(in: tmpDirURL, named: "local.bin", content: "0123456789")
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
@@ -543,7 +519,7 @@ extension UnitTests {
 			let provider = try makeMultipartProvider(maxPartCount: 1)
 			let oversizedURL = try makeFileOverMaximumSize()
 			let cases: [(localURL: URL, isExpected: (Error) -> Bool)] = [
-				(tmpDirURL.appendingPathComponent("missing.bin"), { ($0 as? CloudProviderError) == .itemNotFound }),
+				(tmpDirURL.appending(component: "missing.bin", directoryHint: .notDirectory), { ($0 as? CloudProviderError) == .itemNotFound }),
 				(oversizedURL, { ($0 as? URLError)?.code == .dataLengthExceedsMaximum })
 			]
 			let logCapture = LogCapture.start()
@@ -575,16 +551,14 @@ extension UnitTests {
 
 		@Test
 		func fetchItemListRequestsOnePageOfFolder() async throws {
-			let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: { request in
-					requests.withLock { $0.append(request) }
-				})
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], commonPrefixes: ["folder/sub/"], nextContinuationToken: "next"), onRequest: requests.record)
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: "token")
 
-			let request = try #require(requests.withLock { $0 }.first)
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "GET")
 			#expect(request.url?.path == "/exampleBucket")
 			#expect(S3CloudProviderTests.queryParameters(of: request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "delimiter": "/", "continuation-token": "token"])
@@ -723,20 +697,17 @@ extension UnitTests {
 
 		@Test
 		func fetchItemMetadataOfFolderListedAfterSibling() async throws {
-			let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
-			let recordRequest: @Sendable (URLRequest) -> Void = { request in
-				requests.withLock { $0.append(request) }
-			}
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: recordRequest),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: recordRequest)
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]), onRequest: requests.record)
 			]
 
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/folder"))
 
 			#expect(CloudPath("/folder") == metadata.cloudPath)
 			#expect(metadata.itemType == .folder)
-			#expect(requests.withLock { $0 }.map(S3CloudProviderTests.queryParameters(of:)) == [
+			#expect(requests.requests.map(S3CloudProviderTests.queryParameters(of:)) == [
 				["list-type": "2", "prefix": "folder", "max-keys": "1", "delimiter": "/"],
 				["list-type": "2", "prefix": "folder/", "max-keys": "1", "delimiter": "/"]
 			])
@@ -774,17 +745,15 @@ extension UnitTests {
 
 		@Test
 		func createFolderPutsFolderMarker() async throws {
-			let markerRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				S3CloudProviderTests.listing(of: "folder"),
-				URLProtocolMock.handler(onRequest: { request in
-					markerRequest.withLock { $0 = request }
-				})
+				URLProtocolMock.handler(onRequest: requests.record)
 			]
 
 			try await provider.createFolder(at: CloudPath("/folder"))
 
-			let request = try #require(markerRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "PUT")
 			#expect(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } == "/exampleBucket/folder/")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-directory")
@@ -793,27 +762,24 @@ extension UnitTests {
 
 		@Test
 		func deleteFolderDeletesEveryPage() async throws {
-			let requests = OSAllocatedUnfairLock(initialState: [(request: URLRequest, body: String)]())
-			let recordRequest: @Sendable (URLRequest) -> Void = { request in
-				let body = String(bytes: URLProtocolMock.body(of: request), encoding: .utf8) ?? ""
-				requests.withLock { $0.append((request, body)) }
-			}
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next", onRequest: recordRequest),
-				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest),
-				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: recordRequest),
-				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: recordRequest)
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/", "folder/a.txt"], nextContinuationToken: "next", onRequest: requests.record),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record),
+				S3CloudProviderTests.listing(of: "folder/", recursive: true, keys: ["folder/b.txt"], onRequest: requests.record),
+				URLProtocolMock.handler(body: "<DeleteResult/>", onRequest: requests.record)
 			]
 
 			try await provider.deleteFolder(at: CloudPath("/folder"))
 
-			let sent = requests.withLock { $0 }
-			#expect(sent.map(\.request.httpMethod) == ["GET", "POST", "GET", "POST"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[0].request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[2].request) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
-			#expect(S3CloudProviderTests.queryParameters(of: sent[1].request) == ["delete": ""])
-			#expect(sent[1].body.contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), "\(sent[1].body)")
-			#expect(sent[3].body.contains("<Object><Key>folder/b.txt</Key></Object>"), "\(sent[3].body)")
+			let sent = requests.requests
+			let bodies = sent.map { String(bytes: $0.httpBody ?? Data(), encoding: .utf8) ?? "" }
+			#expect(sent.map(\.httpMethod) == ["GET", "POST", "GET", "POST"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[0]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[2]) == ["list-type": "2", "prefix": "folder/", "max-keys": "1000", "continuation-token": "next"])
+			#expect(S3CloudProviderTests.queryParameters(of: sent[1]) == ["delete": ""])
+			#expect(bodies[1].contains("<Object><Key>folder/</Key></Object><Object><Key>folder/a.txt</Key></Object>"), "\(bodies[1])")
+			#expect(bodies[3].contains("<Object><Key>folder/b.txt</Key></Object>"), "\(bodies[3])")
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -893,7 +859,7 @@ extension UnitTests {
 		/// A folder is judged by a listing of its prefix, and a file by a listing of its key. A source folder whose prefix holds nothing is then looked up by its key.
 		@Test
 		func mutationChecksFollowTheSharedContract() async throws {
-			let cases = try MutationGuardCases.make(localURL: makeLocalFile()) { kind in
+			let cases = try MutationGuardCases.make(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt")) { kind in
 				switch kind {
 				case .deleteFileOfFolder, .moveFileOfFolder:
 					return [S3CloudProviderTests.listing(of: "folder", commonPrefixes: ["folder/"])]
@@ -929,7 +895,7 @@ extension UnitTests {
 		/// Each path maps to a key: one that no listing shows (`..`, `a/../b`) or, for a relative path, the key of its absolute spelling.
 		@Test
 		func unresolvablePathsThrowWithoutRequest() async throws {
-			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(), downloadURL: tmpDirURL.appendingPathComponent("download.txt"), paths: MutationGuardCases.unresolvablePaths())
+			let cases = try MutationGuardCases.makeInvalidPathCases(localURL: makeLocalFile(in: tmpDirURL, named: "local.txt"), downloadURL: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), paths: MutationGuardCases.unresolvablePaths())
 			try await MutationGuardCases.expectErrorsConsumingAllResponses(cases) { try S3CloudProvider(client: .mocked(), maxPageSize: .max) }
 		}
 
@@ -1493,21 +1459,9 @@ extension UnitTests {
 
 		/// A sparse file one byte larger than the largest part, which a provider with `maxPartCount` 1 can't upload.
 		private func makeFileOverMaximumSize() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("sparse.bin")
+			let localURL = tmpDirURL.appending(component: "sparse.bin", directoryHint: .notDirectory)
 			#expect(FileManager.default.createFile(atPath: localURL.path, contents: nil))
 			try FileHandle(forWritingTo: localURL).truncate(atOffset: UInt64(S3Client.maxPartSize + 1))
-			return localURL
-		}
-
-		private func makeLocalFile(content: String) throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.bin")
-			try Data(content.utf8).write(to: localURL)
-			return localURL
-		}
-
-		private func makeLocalFile() throws -> URL {
-			let localURL = tmpDirURL.appendingPathComponent("local.txt")
-			try Data("content".utf8).write(to: localURL)
 			return localURL
 		}
 	}

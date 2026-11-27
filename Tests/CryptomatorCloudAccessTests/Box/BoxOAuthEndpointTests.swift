@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
@@ -22,15 +21,13 @@ extension UnitTests {
 
 		@Test
 		func refreshPostsRefreshGrantAndMapsToken() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxOAuthEndpointTests.tokenResponse, onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: BoxOAuthEndpointTests.tokenResponse, onRequest: requests.record)]
 
 			let token = try await BoxOAuthEndpoint.mocked().refresh(OAuthToken(accessToken: "OLD", refreshToken: "SECRET-REFRESH", expiresAt: nil))
 
 			#expect(OAuthToken(accessToken: "SECRET-ACCESS", refreshToken: "SECRET-NEW-REFRESH", expiresAt: BoxOAuthEndpointTests.now.addingTimeInterval(3600)) == token)
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://api.box.com/oauth2/token")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
@@ -39,14 +36,12 @@ extension UnitTests {
 
 		@Test
 		func revokePostsAccessToken() async throws {
-			let sentRequest = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(onRequest: { request in
-				sentRequest.withLock { $0 = request }
-			})]
+			let requests = RequestRecorder()
+			URLProtocolMock.requestHandler = [URLProtocolMock.handler(onRequest: requests.record)]
 
 			try await BoxOAuthEndpoint.mocked().revoke(OAuthToken(accessToken: "SECRET-ACCESS", refreshToken: "SECRET-REFRESH", expiresAt: nil))
 
-			let request = try #require(sentRequest.withLock { $0 })
+			let request = try #require(requests.requests.first)
 			#expect(request.url?.absoluteString == "https://api.box.com/oauth2/revoke")
 			#expect(URLProtocolMock.formParameters(of: request) == ["client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT", "token": "SECRET-ACCESS"])
 		}
@@ -55,8 +50,6 @@ extension UnitTests {
 
 extension BoxOAuthEndpoint {
 	static func mocked() -> BoxOAuthEndpoint {
-		let configuration = URLSessionConfiguration.default
-		configuration.protocolClasses = [URLProtocolMock.self]
-		return BoxOAuthEndpoint(clientID: "CLIENT-ID", clientSecret: "SECRET-CLIENT", configuration: configuration, now: { Date(timeIntervalSince1970: 1_792_000_000) })
+		return BoxOAuthEndpoint(clientID: "CLIENT-ID", clientSecret: "SECRET-CLIENT", configuration: URLProtocolMock.configuration(), now: { Date(timeIntervalSince1970: 1_792_000_000) })
 	}
 }

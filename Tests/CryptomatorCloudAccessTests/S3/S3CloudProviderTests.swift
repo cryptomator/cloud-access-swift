@@ -596,7 +596,7 @@ extension UnitTests {
 		@Test
 		func fetchItemListParsesLastModified() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
+				S3CloudProviderTests.listing(of: "folder/", body: S3MockResponse.listBucketResult(keys: ["folder/", "folder/a.txt"], lastModified: "2026-10-18T12:34:56.500Z"))
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/folder"), withPageToken: nil)
@@ -611,8 +611,8 @@ extension UnitTests {
 				logCapture.stop()
 			}
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt", "f/.."], commonPrefixes: ["f/../", "f//", "f/./", "f/sub/"])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["ok.txt", ""], commonPrefixes: ["/"]))
+				S3CloudProviderTests.listing(of: "f/", keys: ["f/ok.txt", "f/.."], commonPrefixes: ["f/../", "f//", "f/./", "f/sub/"]),
+				S3CloudProviderTests.listing(of: "", keys: ["ok.txt", ""], commonPrefixes: ["/"])
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
@@ -629,8 +629,8 @@ extension UnitTests {
 		func listingReturnsEmptyPageWithTokenIfPageHoldsOnlyMarkerOrSkippedKeys() async throws {
 			for keys in [["f/"], ["f/.", "f/.."]] {
 				URLProtocolMock.requestHandler = [
-					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys, nextContinuationToken: "next")),
-					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/ok.txt"]))
+					S3CloudProviderTests.listing(of: "f/", keys: keys, nextContinuationToken: "next"),
+					S3CloudProviderTests.listing(of: "f/", keys: ["f/ok.txt"])
 				]
 
 				let firstPage = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
@@ -647,7 +647,7 @@ extension UnitTests {
 		@Test
 		func listingSkipsKeysThatAreNotDirectlyBelowFolder() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/", "f/ok.txt", "f/sub/deep.txt", "g/other.txt", "f"], commonPrefixes: ["f/sub/deeper/", "f/a/\u{301}b/"]))
+				S3CloudProviderTests.listing(of: "f/", keys: ["f/", "f/ok.txt", "f/sub/deep.txt", "g/other.txt", "f"], commonPrefixes: ["f/sub/deeper/", "f/a/\u{301}b/"])
 			]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
@@ -657,7 +657,7 @@ extension UnitTests {
 
 		@Test
 		func listingKeepsNameStartingWithCombiningMark() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f/\u{301}report.txt"]))]
+			URLProtocolMock.requestHandler = [S3CloudProviderTests.listing(of: "f/", keys: ["f/\u{301}report.txt"])]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil)
 
@@ -670,8 +670,8 @@ extension UnitTests {
 		func listingOfMissingFolderThrowsItemNotFound() async throws {
 			for keys in [[], ["g/other.txt"]] {
 				URLProtocolMock.requestHandler = [
-					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: keys)),
-					URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+					S3CloudProviderTests.listing(of: "f/", keys: keys),
+					S3CloudProviderTests.listing(of: "f")
 				]
 
 				await #expect(throws: CloudProviderError.itemNotFound, "\(keys)") { try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil) }
@@ -682,8 +682,8 @@ extension UnitTests {
 		@Test
 		func listingOfFileThrowsItemTypeMismatch() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f"]))
+				S3CloudProviderTests.listing(of: "f/"),
+				S3CloudProviderTests.listing(of: "f", keys: ["f"])
 			]
 
 			await #expect(throws: CloudProviderError.itemTypeMismatch) { try await provider.fetchItemList(forFolderAt: CloudPath("/f"), withPageToken: nil) }
@@ -693,7 +693,7 @@ extension UnitTests {
 		/// A prepended mark such as U+0600 forms one `Character` with the slash that follows it, so the key's segments and the marker's trailing slash are found by scalar.
 		@Test
 		func listingOfFolderWhoseNameEndsWithPrependedMark() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["f\u{600}/", "f\u{600}/x.txt"]))]
+			URLProtocolMock.requestHandler = [S3CloudProviderTests.listing(of: "f\u{600}/", keys: ["f\u{600}/", "f\u{600}/x.txt"])]
 
 			let itemList = try await provider.fetchItemList(forFolderAt: CloudPath("/f\u{600}"), withPageToken: nil)
 
@@ -703,8 +703,8 @@ extension UnitTests {
 		@Test
 		func fetchItemMetadataOfNestedFileAndFolder() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["a/b.txt"])),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["a/c/"]))
+				S3CloudProviderTests.listing(of: "a/b.txt", keys: ["a/b.txt"]),
+				S3CloudProviderTests.listing(of: "a/c", commonPrefixes: ["a/c/"])
 			]
 
 			let file = try await provider.fetchItemMetadata(at: CloudPath("/a/b.txt"))
@@ -716,7 +716,7 @@ extension UnitTests {
 
 		@Test
 		func fetchItemMetadataOfRootIgnoresKeyThatStandardizesToRoot() async throws {
-			URLProtocolMock.requestHandler = [URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [".", ""]))]
+			URLProtocolMock.requestHandler = [S3CloudProviderTests.listing(of: "", keys: [".", ""])]
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/")) }
 		}
@@ -747,10 +747,10 @@ extension UnitTests {
 			let provider: S3CloudProvider = provider
 			let canceller = TaskCanceller<CloudItemMetadata>()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: [], commonPrefixes: ["folder 2/"], nextContinuationToken: "next"), onRequest: { _ in
+				S3CloudProviderTests.listing(of: "folder", commonPrefixes: ["folder 2/"], nextContinuationToken: "next", onRequest: { _ in
 					canceller.cancel()
 				}),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder/"]))
+				S3CloudProviderTests.listing(of: "folder/", keys: ["folder/"])
 			]
 
 			let fetchTask = canceller.start {
@@ -764,8 +764,8 @@ extension UnitTests {
 		@Test
 		func fetchItemMetadataThrowsItemNotFoundIfOnlySiblingExists() async throws {
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: ["folder.txt"], nextContinuationToken: "next")),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []))
+				S3CloudProviderTests.listing(of: "folder", keys: ["folder.txt"], nextContinuationToken: "next"),
+				S3CloudProviderTests.listing(of: "folder/")
 			]
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/folder")) }

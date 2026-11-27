@@ -27,7 +27,7 @@ extension UnitTests {
 			let partCopy: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
 				requests.record(request)
 				let url = try #require(request.url)
-				let partNumber = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "partNumber" }?.value)
+				let partNumber = try #require(try URLProtocolMock.queryParameter("partNumber", of: request))
 				ranges.withLock { $0[partNumber] = request.value(forHTTPHeaderField: "x-amz-copy-source-range") }
 				return try (#require(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)), Data("<CopyPartResult><ETag>\"etag-\(partNumber)\"</ETag></CopyPartResult>".utf8))
 			}
@@ -44,7 +44,7 @@ extension UnitTests {
 			#expect(ranges.withLock { $0 } == ["1": "bytes=0-9", "2": "bytes=10-19", "3": "bytes=20-24"])
 			let sent = requests.requests
 			#expect(Array(repeating: "/exampleBucket/b.txt", count: 5) == sent.map { $0.url?.path })
-			#expect(Array(repeating: "copy-upload-id", count: 4) == sent.dropFirst().map(S3CopyTaskUtilityTests.uploadID(of:)))
+			#expect(try Array(repeating: "copy-upload-id", count: 4) == sent.dropFirst().map { try URLProtocolMock.queryParameter("uploadId", of: $0) })
 			#expect(Array(repeating: "exampleBucket/a.txt", count: 3) == sent[1 ... 3].map { $0.value(forHTTPHeaderField: "x-amz-copy-source") })
 			let body = try #require(sent.last?.httpBody.flatMap { String(bytes: $0, encoding: .utf8) })
 			#expect(body.contains("<Part><PartNumber>1</PartNumber><ETag>&quot;etag-1&quot;</ETag></Part><Part><PartNumber>2</PartNumber><ETag>&quot;etag-2&quot;</ETag></Part><Part><PartNumber>3</PartNumber><ETag>&quot;etag-3&quot;</ETag></Part></CompleteMultipartUpload>"), "\(body)")
@@ -58,12 +58,12 @@ extension UnitTests {
 			let requests = RequestRecorder()
 			let answer: @Sendable (URLRequest) throws -> (HTTPURLResponse, Data?) = { request in
 				let url = try #require(request.url)
-				let queryNames = Set(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? [])
-				let body = if queryNames.contains("uploads") {
+				let parameters = try URLProtocolMock.queryParameters(of: request)
+				let body = if parameters.keys.contains("uploads") {
 					S3MockResponse.initiateMultipartUploadResult(uploadID: url.lastPathComponent)
-				} else if queryNames.contains("partNumber") {
+				} else if parameters.keys.contains("partNumber") {
 					"<CopyPartResult><ETag>\"etag\"</ETag></CopyPartResult>"
-				} else if queryNames.contains("uploadId") {
+				} else if parameters.keys.contains("uploadId") {
 					S3MockResponse.completeMultipartUploadResult
 				} else {
 					S3MockResponse.copyObjectResult
@@ -90,16 +90,11 @@ extension UnitTests {
 		@Test
 		func cancelledMultipartCopyRetriesAbort() async throws {
 			let copyTaskUtility = try S3CopyTaskUtility(client: .mocked(), maxPartSize: 10)
-			let abortRequestCount = OSAllocatedUnfairLock(initialState: 0)
-			let countAbortRequest: @Sendable (URLRequest) -> Void = { request in
-				if request.httpMethod == "DELETE", request.url?.query?.contains("uploadId=upload-id") ?? false {
-					abortRequestCount.withLock { $0 += 1 }
-				}
-			}
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
 				URLProtocolMock.handler(body: S3MockResponse.initiateMultipartUploadResult()),
-				URLProtocolMock.handler(statusCode: 503, onRequest: countAbortRequest),
-				URLProtocolMock.handler(statusCode: 204, onRequest: countAbortRequest)
+				URLProtocolMock.handler(statusCode: 503, onRequest: requests.record),
+				URLProtocolMock.handler(statusCode: 204, onRequest: requests.record)
 			]
 
 			await #expect(throws: CancellationError.self) {
@@ -108,14 +103,8 @@ extension UnitTests {
 				})
 			}
 
-			#expect(abortRequestCount.withLock { $0 } == 2)
+			#expect(try requests.requests.map { try [$0.httpMethod, URLProtocolMock.queryParameter("uploadId", of: $0)] } == [["DELETE", "upload-id"], ["DELETE", "upload-id"]])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
-		}
-
-		// MARK: - Helpers
-
-		private static func uploadID(of request: URLRequest) -> String? {
-			return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "uploadId" }?.value }
 		}
 	}
 }

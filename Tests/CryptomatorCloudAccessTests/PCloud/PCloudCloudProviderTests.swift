@@ -199,7 +199,7 @@ extension UnitTests {
 
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/b"))
 
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "2")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "2")
 		}
 
 		@Test(arguments: [false, true])
@@ -213,7 +213,7 @@ extension UnitTests {
 			let metadata = try await provider.fetchItemMetadata(at: CloudPath("/x"))
 
 			PCloudProviderTestResponse.assertMetadata(metadata, name: "x", cloudPath: CloudPath("/x"), itemType: .folder, size: nil)
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
 		}
 
 		@Test(arguments: [false, true])
@@ -228,7 +228,7 @@ extension UnitTests {
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
 
 			#expect(itemList.items.map(\.itemType) == (fileFirst ? [.file, .folder] : [.folder, .file]))
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
 		}
 
 		@Test
@@ -244,7 +244,7 @@ extension UnitTests {
 			_ = try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil)
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
 
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["fileid"] == "5")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["fileid"] == "5")
 		}
 
 		@Test
@@ -259,7 +259,7 @@ extension UnitTests {
 			await #expect(throws: (any Error).self) { try await provider.fetchItemList(forFolderAt: CloudPath("/"), withPageToken: nil) }
 			_ = try await provider.fetchItemMetadata(at: CloudPath("/x"))
 
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "3")
 		}
 
 		@Test
@@ -377,7 +377,7 @@ extension UnitTests {
 			#expect(firstPage.items.map(\.name) == ["a", "b"])
 			#expect(secondPage.items.map(\.name) == ["c"])
 			#expect(secondPage.nextPageToken == nil)
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["0"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["0"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -647,7 +647,7 @@ extension UnitTests {
 			try await provider.deleteFolder(at: CloudPath("/file.txt"))
 
 			#expect(itemList.items.map(\.name) == ["file.txt"])
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
 		}
 
 		/// The listed folder moved and a new folder took its path. No record names the child's path, so only the parent check keeps the moved folder's child out of the new folder.
@@ -674,7 +674,7 @@ extension UnitTests {
 			}
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFile(at: CloudPath("/folder/x")) }
 
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -700,7 +700,7 @@ extension UnitTests {
 			}
 			try await provider.deleteFolder(at: CloudPath("/folder/new"))
 
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
 		}
 
 		/// A file and a folder of one name make the listing write its folders a second time, even if a later child fails the fill. That second write must not bring back a folder that was renamed meanwhile.
@@ -736,7 +736,7 @@ extension UnitTests {
 			}
 			try await provider.deleteFolder(at: CloudPath("/y"))
 
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
 		}
 
 		/// The listed folder moves away and a new folder takes its path while the listing fills, after a file overwrote the folder of its name. No record names the children's paths, so only the parent check keeps the second write of the folders out of the new folder.
@@ -781,7 +781,7 @@ extension UnitTests {
 
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.deleteFolder(at: CloudPath("/folder/y")) }
 
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["8"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -853,7 +853,7 @@ extension UnitTests {
 			}
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: CloudPath("/folder")) }
 
-			#expect(requests.requests.map { URLProtocolMock.formParameters(of: $0)["folderid"] } == ["0"])
+			#expect(try requests.requests.map { try URLProtocolMock.formParameters(of: $0)["folderid"] } == ["0"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -918,7 +918,7 @@ extension UnitTests {
 			}
 
 			#expect(requests.requests.map(\.url?.path) == ["/listfolder", isFolder ? "/deletefolderrecursive" : "/deletefile"])
-			#expect(requests.requests.last.map { URLProtocolMock.formParameters(of: $0)[isFolder ? "folderid" : "fileid"] } == "5")
+			#expect(try requests.requests.last.map { try URLProtocolMock.formParameters(of: $0)[isFolder ? "folderid" : "fileid"] } == "5")
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 
@@ -943,7 +943,7 @@ extension UnitTests {
 			await #expect(throws: CloudProviderError.itemNotFound) { try await provider.fetchItemMetadata(at: cloudPath) }
 
 			#expect(requests.requests.map(\.url?.path) == ["/listfolder"])
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "0")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["folderid"] == "0")
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
 

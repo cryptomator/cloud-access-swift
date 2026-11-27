@@ -35,7 +35,7 @@ struct LocalUploadFile: Sendable {
 			guard stat(resolvedPath, &status) == 0 else {
 				throw LocalUploadFile.error(forErrno: errno)
 			}
-			self.url = URL(fileURLWithPath: String(cString: resolvedPath), isDirectory: false)
+			self.url = URL(filePath: String(cString: resolvedPath), directoryHint: .notDirectory)
 		} else {
 			self.url = localURL
 		}

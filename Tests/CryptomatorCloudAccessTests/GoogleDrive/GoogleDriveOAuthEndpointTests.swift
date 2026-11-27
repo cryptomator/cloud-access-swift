@@ -30,7 +30,7 @@ extension UnitTests {
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://oauth2.googleapis.com/token")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
-			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID"])
+			#expect(try URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID"])
 		}
 
 		@Test

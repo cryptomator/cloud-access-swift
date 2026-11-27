@@ -32,7 +32,7 @@ extension UnitTests {
 			let request = try #require(recorder.requests.first)
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://api.dropboxapi.com/oauth2/token")
-			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "authorization_code", "code": "SECRET-CODE", "code_verifier": "SECRET-VERIFIER", "client_id": "APP-KEY", "redirect_uri": "db-APP-KEY://2/token"])
+			#expect(try URLProtocolMock.formParameters(of: request) == ["grant_type": "authorization_code", "code": "SECRET-CODE", "code_verifier": "SECRET-VERIFIER", "client_id": "APP-KEY", "redirect_uri": "db-APP-KEY://2/token"])
 		}
 
 		@Test
@@ -60,7 +60,7 @@ extension UnitTests {
 			#expect(OAuthToken(accessToken: "SECRET-REFRESHED-ACCESS", refreshToken: "SECRET-REFRESH", expiresAt: DropboxOAuthEndpointTests.now.addingTimeInterval(14400)) == token)
 			let request = try #require(recorder.requests.first)
 			#expect(request.url?.absoluteString == "https://api.dropboxapi.com/oauth2/token")
-			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "APP-KEY"])
+			#expect(try URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "APP-KEY"])
 		}
 
 		/// Dropbox may answer an expired access token with `expired_access_token`, so the revocation sends a fresh one, whatever the stored expiry says.

@@ -55,7 +55,7 @@ extension UnitTests {
 			#expect(sent.map(\.httpMethod) == ["GET", "GET", "POST", "DELETE", "PATCH"])
 			#expect(sent.map { $0.url.map { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedPath } ?? nil } == ["/drive/v3/files/a%2Fb", "/drive/v3/files", "/drive/v3/files", "/drive/v3/files/F", "/drive/v3/files/F"])
 			#expect(sent.allSatisfy { $0.url?.host == "www.googleapis.com" && $0.value(forHTTPHeaderField: "Authorization") == "Bearer TOKEN" })
-			#expect(sent.map(GoogleDriveClientTests.queryParameters) == [
+			#expect(try sent.map(URLProtocolMock.queryParameters(of:)) == [
 				["supportsAllDrives": "true", "fields": "name,modifiedTime,size,mimeType"],
 				["q": "'P' in parents and trashed = false", "supportsAllDrives": "true", "includeItemsFromAllDrives": "true", "pageSize": "100", "pageToken": "T+1", "fields": "nextPageToken,files(id)"],
 				["supportsAllDrives": "true"],
@@ -84,7 +84,7 @@ extension UnitTests {
 			#expect(about.user?.emailAddress == "secret@example.com")
 			let request = try #require(requests.requests.first)
 			#expect(request.url?.path == "/drive/v3/about")
-			#expect(GoogleDriveClientTests.queryParameters(of: request) == ["fields": "user(emailAddress)"])
+			#expect(try URLProtocolMock.queryParameters(of: request) == ["fields": "user(emailAddress)"])
 			#expect(!logCapture.joinedMessages.contains("secret@example.com"), "\(logCapture.joinedMessages)")
 		}
 
@@ -209,7 +209,7 @@ extension UnitTests {
 			}
 			let request = try #require(requests.requests.first)
 			#expect(request.url?.path == "/download/drive/v3/files/F")
-			#expect(GoogleDriveClientTests.queryParameters(of: request) == ["alt": "media", "supportsAllDrives": "true"])
+			#expect(try URLProtocolMock.queryParameters(of: request) == ["alt": "media", "supportsAllDrives": "true"])
 		}
 
 		@Test
@@ -275,7 +275,7 @@ extension UnitTests {
 			let (sessionRequest, put) = try (#require(requests.requests.first), #require(requests.requests.last))
 			#expect(sessionRequest.httpMethod == "POST")
 			#expect(sessionRequest.url?.path == "/upload/drive/v3/files")
-			#expect(GoogleDriveClientTests.queryParameters(of: sessionRequest) == ["uploadType": "resumable", "supportsAllDrives": "true", "fields": "id,name,modifiedTime,size,mimeType"])
+			#expect(try URLProtocolMock.queryParameters(of: sessionRequest) == ["uploadType": "resumable", "supportsAllDrives": "true", "fields": "id,name,modifiedTime,size,mimeType"])
 			#expect(sessionRequest.value(forHTTPHeaderField: "X-Upload-Content-Type") == "application/octet-stream")
 			#expect(sessionRequest.value(forHTTPHeaderField: "X-Upload-Content-Length") == "12")
 			#expect(try (["name": "file.txt", "parents": ["P"]] as NSDictionary) == (JSONSerialization.jsonObject(with: URLProtocolMock.body(of: sessionRequest)) as? NSDictionary))
@@ -530,12 +530,6 @@ extension UnitTests {
 			for secret in ["SECRET-UPLOAD-ID", "SECRET-HEADER-ID"] {
 				#expect(!log.contains(secret), "\(secret) in \(log)")
 			}
-		}
-
-		// MARK: - Helpers
-
-		private static func queryParameters(of request: URLRequest) -> [String: String] {
-			return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery }.map(URLProtocolMock.parameters(inFormEncoded:)) ?? [:]
 		}
 	}
 }

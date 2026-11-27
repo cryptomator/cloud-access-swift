@@ -149,9 +149,10 @@ extension UnitTests {
 			#expect(url.scheme == "https")
 			#expect(url.host == "api.box.com")
 			#expect(url.path == "/2.0/folders/7/items")
-			let query = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
+			let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+			let query = try #require(components.percentEncodedQuery)
 			#expect(query.contains("marker=a%2Bb%20c"), "\(query)")
-			#expect(URLProtocolMock.parameters(inFormEncoded: query) == ["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"])
+			#expect(try URLProtocolMock.queryParameters(of: components) == ["fields": "name,size,modified_at", "usemarker": "true", "marker": "a+b c", "limit": "100"])
 		}
 
 		/// Box sends nothing before a recursive folder delete is done, so the request's timeout exceeds the 600 s after which Box gives up.

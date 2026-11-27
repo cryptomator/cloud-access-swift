@@ -53,7 +53,7 @@ extension UnitTests {
 			let sentRequests = recorder.requests
 			#expect(sentRequests.count == 2)
 			#expect(sentRequests.first?.url?.absoluteString == "https://api.box.com/oauth2/token")
-			#expect(sentRequests.first.map(URLProtocolMock.formParameters) == ["grant_type": "authorization_code", "code": "CODE", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
+			#expect(try sentRequests.first.map(URLProtocolMock.formParameters) == ["grant_type": "authorization_code", "code": "CODE", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
 			#expect(sentRequests.last?.url?.absoluteString == "https://api.box.com/2.0/users/me")
 			#expect(sentRequests.last?.value(forHTTPHeaderField: "Authorization") == "Bearer NEW-ACCESS")
 			#expect(buffer.token?.accessToken == "NEW-ACCESS")
@@ -119,7 +119,7 @@ extension UnitTests {
 			#expect(sentRequests.map { $0.value(forHTTPHeaderField: "Authorization") } == ["Bearer LEGACY", nil, "Bearer NEW-ACCESS"])
 			let tokenRequest = try #require(sentRequests.dropFirst().first)
 			#expect(tokenRequest.url?.absoluteString == "https://api.box.com/oauth2/token")
-			#expect(URLProtocolMock.formParameters(of: tokenRequest) == ["grant_type": "refresh_token", "refresh_token": "LEGACY-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
+			#expect(try URLProtocolMock.formParameters(of: tokenRequest) == ["grant_type": "refresh_token", "refresh_token": "LEGACY-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
 			let storedData = try #require(buffer.data)
 			let storedJSON = try #require(JSONSerialization.jsonObject(with: storedData) as? [String: Any])
 			#expect((storedJSON["version"] as? Int) == 1)
@@ -130,7 +130,7 @@ extension UnitTests {
 
 			let revocation = try #require(recorder.requests.last)
 			#expect(revocation.url?.absoluteString == "https://api.box.com/oauth2/revoke")
-			#expect(URLProtocolMock.formParameters(of: revocation)["token"] == "NEW-ACCESS")
+			#expect(try URLProtocolMock.formParameters(of: revocation)["token"] == "NEW-ACCESS")
 			#expect(buffer.data == nil)
 		}
 

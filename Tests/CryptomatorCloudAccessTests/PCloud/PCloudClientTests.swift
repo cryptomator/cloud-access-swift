@@ -42,7 +42,7 @@ extension UnitTests {
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://eapi.pcloud.com/listfolder")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
-			#expect(URLProtocolMock.formParameters(of: request)["access_token"] == PCloudCredential.stubAccessToken)
+			#expect(try URLProtocolMock.formParameters(of: request)["access_token"] == PCloudCredential.stubAccessToken)
 		}
 
 		@Test
@@ -62,7 +62,7 @@ extension UnitTests {
 			_ = try await client.listFolder(3, to: listingURL())
 
 			#expect(requests.requests.first?.url?.absoluteString == "https://api.pcloud.com/listfolder")
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "STORED")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "STORED")
 		}
 
 		@Test
@@ -86,7 +86,7 @@ extension UnitTests {
 
 				let request = try #require(requests.requests.first, "\(command.name)")
 				#expect(request.url?.path == "/\(command.name)", "\(command.name)")
-				#expect(command.parameters.merging(["access_token": PCloudCredential.stubAccessToken]) { first, _ in first } == URLProtocolMock.formParameters(of: request), "\(command.name)")
+				#expect(try command.parameters.merging(["access_token": PCloudCredential.stubAccessToken]) { first, _ in first } == URLProtocolMock.formParameters(of: request), "\(command.name)")
 			}
 		}
 
@@ -105,7 +105,7 @@ extension UnitTests {
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/octet-stream")
 			let query = try #require(request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery })
 			#expect(query.contains("filename=a%2Bb.txt"), "\(query)")
-			#expect(["access_token": PCloudCredential.stubAccessToken, "folderid": "3", "filename": "a+b.txt", "nopartial": "1", "iconformat": "id", "timeformat": "timestamp"] == URLProtocolMock.parameters(inFormEncoded: query))
+			#expect(try ["access_token": PCloudCredential.stubAccessToken, "folderid": "3", "filename": "a+b.txt", "nopartial": "1", "iconformat": "id", "timeformat": "timestamp"] == URLProtocolMock.queryParameters(of: request))
 			#expect(Data("content".utf8) == request.httpBody)
 		}
 

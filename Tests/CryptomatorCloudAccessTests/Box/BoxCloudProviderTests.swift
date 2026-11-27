@@ -257,7 +257,7 @@ extension UnitTests {
 			let sent = requests.requests
 			try #require(sent.count == 2)
 			#expect([sent[0].httpMethod, sent[0].url?.path] == ["GET", "/2.0/files/5"])
-			#expect(URLProtocolMock.queryParameter("fields", of: sent[0]) == "type,id,name,parent,item_status")
+			#expect(try URLProtocolMock.queryParameter("fields", of: sent[0]) == "type,id,name,parent,item_status")
 			#expect([sent[1].httpMethod, sent[1].url?.absoluteString] == ["POST", "https://upload.box.com/api/2.0/files/5/content"])
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}

@@ -12,21 +12,39 @@ import Testing
 @testable import CryptomatorCloudAccessCore
 
 extension URLProtocolMock {
-	static func formParameters(of request: URLRequest) -> [String: String] {
-		return parameters(inFormEncoded: String(bytes: body(of: request), encoding: .utf8) ?? "")
-	}
-
-	static func parameters(inFormEncoded string: String) -> [String: String] {
-		let pairs = string.split(separator: "&").map { pair in
-			let nameAndValue = pair.split(separator: "=", maxSplits: 1).map { String($0).removingPercentEncoding ?? "" }
+	/// The percent-decoded parameters of the request's form-encoded body, in which a `+` stays a `+`, with `""` as the value of a parameter that has none. It throws for a body that isn't UTF-8, a malformed percent-encoding or a name that occurs more than once.
+	static func formParameters(of request: URLRequest) throws -> [String: String] {
+		let form = try #require(String(bytes: body(of: request), encoding: .utf8))
+		return try uniqueParameters(form.split(separator: "&").map { pair in
+			let nameAndValue = try pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map { try #require(String($0).removingPercentEncoding) }
 			return (nameAndValue[0], nameAndValue.count > 1 ? nameAndValue[1] : "")
-		}
-		return Dictionary(pairs, uniquingKeysWith: { first, _ in first })
+		})
 	}
 
-	/// The decoded value of the first query parameter of the name.
-	static func queryParameter(_ name: String, of request: URLRequest) -> String? {
-		return request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value }
+	/// The query parameters of the request's URL, as `queryParameters(of:)` reads them from its components.
+	static func queryParameters(of request: URLRequest) throws -> [String: String?] {
+		let url = try #require(request.url)
+		return try queryParameters(of: #require(URLComponents(url: url, resolvingAgainstBaseURL: false)))
+	}
+
+	/// The percent-decoded query parameters, in which a `+` stays a `+`, with `nil` as the value of a parameter that has none. It throws for a name that occurs more than once.
+	static func queryParameters(of components: URLComponents) throws -> [String: String?] {
+		return try uniqueParameters((components.queryItems ?? []).map { ($0.name, $0.value) })
+	}
+
+	/// The value of the query parameter `name`, `nil` if the request has no such parameter or it has no value. It throws if any parameter of the request occurs more than once.
+	static func queryParameter(_ name: String, of request: URLRequest) throws -> String? {
+		return try queryParameters(of: request)[name, default: nil]
+	}
+
+	private static func uniqueParameters<Value>(_ parameters: [(String, Value)]) throws -> [String: Value] {
+		var uniqueParameters = [String: Value]()
+		for (name, value) in parameters {
+			guard uniqueParameters.updateValue(value, forKey: name) == nil else {
+				throw URLProtocolMockError.duplicateParameter(name)
+			}
+		}
+		return uniqueParameters
 	}
 }
 

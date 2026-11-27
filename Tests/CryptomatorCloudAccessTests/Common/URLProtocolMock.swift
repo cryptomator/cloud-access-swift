@@ -12,7 +12,7 @@ import Testing
 
 enum URLProtocolMockError: Error {
 	case unexpectedRequest
-	case duplicateQueryParameter(String)
+	case duplicateParameter(String)
 	case simulatedTransportFailure
 }
 

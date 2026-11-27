@@ -82,8 +82,8 @@ extension UnitTests {
 			let request = try #require(requests.requests.first)
 			#expect(request.httpMethod == "GET")
 			#expect(request.url?.path == "/v1.0/me/drive/items/root/children")
-			#expect(URLProtocolMock.queryParameter("$top", of: request) == "100")
-			#expect(URLProtocolMock.queryParameter("$select", of: request) == "id,name,size,folder,fileSystemInfo,parentReference,remoteItem")
+			#expect(try URLProtocolMock.queryParameter("$top", of: request) == "100")
+			#expect(try URLProtocolMock.queryParameter("$select", of: request) == "id,name,size,folder,fileSystemInfo,parentReference,remoteItem")
 			#expect(request.url?.query(percentEncoded: true) == "%24top=100&%24select=id%2Cname%2Csize%2Cfolder%2CfileSystemInfo%2CparentReference%2CremoteItem")
 		}
 
@@ -246,7 +246,7 @@ extension UnitTests {
 			#expect([CloudPath("/file.txt")] == itemList.items.map(\.cloudPath))
 			#expect(itemList.nextPageToken == "https://graph.microsoft.com/v1.0/me/drive/items/root/children?$skiptoken=NEXT")
 			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/a:"])
-			#expect(requests.requests.map { URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields])
+			#expect(try requests.requests.map { try URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields])
 			#expect(logCapture.messages.count(where: { $0.hasSuffix("because its name is no single path component") }) == 2)
 			#expect(URLProtocolMock.requestHandler.isEmpty)
 		}
@@ -276,7 +276,7 @@ extension UnitTests {
 
 			#expect(metadata.size == 7)
 			#expect(requests.requests.map(\.url?.path) == ["/v1.0/me/drive/items/root:/file.txt:", "/v1.0/me/drive/items/F"])
-			#expect(requests.requests.map { URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields, MicrosoftGraphAPI.DriveItem.selectedFields])
+			#expect(try requests.requests.map { try URLProtocolMock.queryParameter("$select", of: $0) } == [MicrosoftGraphAPI.DriveItem.selectedFields, MicrosoftGraphAPI.DriveItem.selectedFields])
 		}
 
 		@Test
@@ -526,7 +526,7 @@ extension UnitTests {
 			let sentRequests = requests.requests
 			try #require(sentRequests.count == 3)
 			#expect(sentRequests[0].url?.path == "/v1.0/me/drive/items/root:/file.txt:")
-			#expect(URLProtocolMock.queryParameter("$select", of: sentRequests[0]) == MicrosoftGraphAPI.DriveItem.selectedFields)
+			#expect(try URLProtocolMock.queryParameter("$select", of: sentRequests[0]) == MicrosoftGraphAPI.DriveItem.selectedFields)
 			#expect(["https://graph.microsoft.com/v1.0/me/drive/items/F", MicrosoftGraphCloudProviderTests.downloadURL] == sentRequests.dropFirst().map(\.url?.absoluteString))
 			#expect(requests.requests.last?.value(forHTTPHeaderField: "Authorization") == nil)
 			#expect(try Data("content".utf8) == Data(contentsOf: localURL))

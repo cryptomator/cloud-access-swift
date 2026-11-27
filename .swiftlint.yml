@@ -34,3 +34,8 @@ custom_rules:
     included: "Tests/.*\\.swift"
     regex: '(URL|temporaryDirectory)\s*\.appendingPathComponent\(|appendingPathComponent\((?:[^()]|\([^()]*\))*isDirectory:'
     severity: error
+  url_file_url_with_path:
+    name: "URL(fileURLWithPath:)"
+    message: "Use URL(filePath:directoryHint:) instead of the soft-deprecated URL(fileURLWithPath:)."
+    regex: '\bURL(?:\.init)?\(fileURLWithPath:'
+    severity: error

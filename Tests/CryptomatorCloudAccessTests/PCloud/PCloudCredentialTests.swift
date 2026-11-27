@@ -51,7 +51,7 @@ extension UnitTests {
 			#expect(credential.userID == "7")
 			#expect([OAuthAccountKey(provider: .pCloud, account: "7")] == storage.keys)
 			#expect(requests.requests.first?.url?.absoluteString == "https://eapi.pcloud.com/userinfo")
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "NEW-ACCESS")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "NEW-ACCESS")
 			#expect(OAuthToken(accessToken: "NEW-ACCESS", refreshToken: nil, expiresAt: nil, username: "user@example.com", apiHost: "eapi.pcloud.com") == buffer.token)
 			#expect(try credential.cachedUsername() == "user@example.com")
 		}
@@ -109,7 +109,7 @@ extension UnitTests {
 
 			#expect(username == "user@example.com")
 			#expect(requests.requests.first?.url?.absoluteString == "https://eapi.pcloud.com/userinfo")
-			#expect(requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "LEGACY")
+			#expect(try requests.requests.first.map(URLProtocolMock.formParameters)?["access_token"] == "LEGACY")
 			#expect(OAuthToken(accessToken: "LEGACY", refreshToken: nil, expiresAt: nil, username: "user@example.com", apiHost: "eapi.pcloud.com") == buffer.token)
 			#expect(try PCloudLogin(accessToken: "LEGACY", apiHost: "eapi.pcloud.com") == tokenSource.login())
 		}

@@ -237,7 +237,7 @@ extension UnitTests {
 				_ = try await DropboxClient.mocked(tokenSource: makeTokenSource(storage: storage)).currentAccount()
 
 				#expect(log.requests.map { $0.url?.absoluteString } == ["https://api.dropboxapi.com/oauth2/token", "https://api.dropboxapi.com/2/users/get_current_account"])
-				#expect(log.requests.first.map(URLProtocolMock.formParameters) == ["grant_type": "refresh_token", "refresh_token": "refresh-token", "client_id": "APP-KEY"])
+				#expect(try log.requests.first.map(URLProtocolMock.formParameters) == ["grant_type": "refresh_token", "refresh_token": "refresh-token", "client_id": "APP-KEY"])
 				#expect(log.requests.last?.value(forHTTPHeaderField: "Authorization") == "Bearer NEW-ACCESS")
 				#expect([OAuthAccountKey(provider: .dropbox, account: "12345")] == storage.keys)
 				let storedData = try #require(buffer.data)

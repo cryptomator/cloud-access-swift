@@ -217,12 +217,12 @@ extension UnitTests {
 			#expect(components.scheme == "dbapi-2")
 			#expect(components.host == "1")
 			#expect(components.path == "/connect")
-			#expect([
+			#expect(try [
 				"k": "appkey",
 				"s": "",
 				"state": DropboxAuthenticatorTests.pkce.dAuthState,
 				"extra_query_params": "code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&token_access_type=offline&response_type=code&scope=files.metadata.read files.metadata.write files.content.read files.content.write account_info.read"
-			] == DropboxAuthenticatorTests.queryParameters(of: components))
+			] == URLProtocolMock.queryParameters(of: components))
 		}
 
 		@Test
@@ -231,7 +231,7 @@ extension UnitTests {
 
 			let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
 			#expect("https://www.dropbox.com/oauth2/authorize" == "\(components.scheme ?? "")://\(components.host ?? "")\(components.path)")
-			#expect(DropboxAuthenticatorTests.queryParameters(of: components) == [
+			#expect(try URLProtocolMock.queryParameters(of: components) == [
 				"client_id": "appkey",
 				"redirect_uri": "db-appkey://2/token",
 				"response_type": "code",
@@ -253,10 +253,6 @@ extension UnitTests {
 
 		private func authorizationCode(fromCallbackURL callbackURL: String) throws -> String {
 			return try DropboxAuthenticator.authorizationCode(fromCallbackURL: #require(URL(string: callbackURL)), appKey: DropboxAuthenticatorTests.appKey, expectedState: "STATE")
-		}
-
-		private static func queryParameters(of components: URLComponents) -> [String: String] {
-			return Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { first, _ in first })
 		}
 	}
 }

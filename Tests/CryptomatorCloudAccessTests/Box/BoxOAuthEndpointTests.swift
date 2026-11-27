@@ -31,7 +31,7 @@ extension UnitTests {
 			#expect(request.httpMethod == "POST")
 			#expect(request.url?.absoluteString == "https://api.box.com/oauth2/token")
 			#expect(request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
-			#expect(URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
+			#expect(try URLProtocolMock.formParameters(of: request) == ["grant_type": "refresh_token", "refresh_token": "SECRET-REFRESH", "client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT"])
 		}
 
 		@Test
@@ -43,7 +43,7 @@ extension UnitTests {
 
 			let request = try #require(requests.requests.first)
 			#expect(request.url?.absoluteString == "https://api.box.com/oauth2/revoke")
-			#expect(URLProtocolMock.formParameters(of: request) == ["client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT", "token": "SECRET-ACCESS"])
+			#expect(try URLProtocolMock.formParameters(of: request) == ["client_id": "CLIENT-ID", "client_secret": "SECRET-CLIENT", "token": "SECRET-ACCESS"])
 		}
 	}
 }

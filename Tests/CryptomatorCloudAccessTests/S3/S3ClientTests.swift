@@ -316,10 +316,11 @@ extension UnitTests {
 			#expect(request.httpMethod == "PUT")
 			#expect(Data("content".utf8) == request.httpBody)
 			#expect(request.value(forHTTPHeaderField: "Authorization") == nil)
-			let query = try #require(request.url?.query)
-			for parameter in ["partNumber=2", "uploadId=upload-id", "X-Amz-Expires=3000", "X-Amz-Signature="] {
-				#expect(query.contains(parameter), "\(query)")
-			}
+			let parameters = try URLProtocolMock.queryParameters(of: request)
+			#expect(parameters["partNumber"] == "2")
+			#expect(parameters["uploadId"] == "upload-id")
+			#expect(parameters["X-Amz-Expires"] == "3000")
+			#expect(parameters["X-Amz-Signature", default: nil] != nil)
 		}
 
 		/// The retry is a further task, which gets its own unit of the progress before it starts, so that the finished first task counts only half.
@@ -377,21 +378,20 @@ extension UnitTests {
 		/// The corrected offset also signs later requests, including presigned transfers, which don't correct it themselves.
 		@Test
 		func correctsClockSkew() async throws {
-			let dates = OSAllocatedUnfairLock(initialState: [String]())
-			let recordDate: @Sendable (URLRequest) -> Void = { request in
-				let presignedDate = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems?.first { $0.name == "X-Amz-Date" }?.value
-				dates.withLock { $0.append(request.value(forHTTPHeaderField: "x-amz-date") ?? presignedDate ?? "") }
-			}
+			let requests = RequestRecorder()
 			URLProtocolMock.requestHandler = [
-				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))], onRequest: recordDate),
-				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: recordDate),
-				URLProtocolMock.handler(body: "content", onRequest: recordDate)
+				URLProtocolMock.handler(statusCode: 403, body: "<Error><Code>RequestTimeTooSkewed</Code></Error>", headerFields: ["Date": Date.rfc822String(from: Date().addingTimeInterval(3600))], onRequest: requests.record),
+				URLProtocolMock.handler(body: S3MockResponse.listBucketResult(keys: []), onRequest: requests.record),
+				URLProtocolMock.handler(body: "content", onRequest: requests.record)
 			]
 
 			_ = try await client.listObjectsV2(prefix: "", delimiter: "/", continuationToken: nil, maxKeys: 1)
 			try await client.download(key: "file.txt", to: tmpDirURL.appending(component: "download.txt", directoryHint: .notDirectory), progress: nil, onTaskCreation: nil)
 
-			let sentDates = try dates.withLock { $0 }.map { try #require(S3ClientTests.dateFormatter.date(from: $0)) }
+			let sentDates = try requests.requests.map { request in
+				let date = try request.value(forHTTPHeaderField: "x-amz-date") ?? URLProtocolMock.queryParameter("X-Amz-Date", of: request)
+				return try #require(date.flatMap(S3ClientTests.dateFormatter.date(from:)))
+			}
 			#expect(sentDates.count == 3)
 			#expect(abs(3600 - sentDates[1].timeIntervalSince(sentDates[0])) <= 60)
 			#expect(abs(3600 - sentDates[2].timeIntervalSince(sentDates[0])) <= 60)
@@ -505,9 +505,9 @@ extension UnitTests {
 			let sentRequests = requests.requests
 			#expect(sentRequests.map(\.httpMethod) == ["GET", "PUT"])
 			for request in sentRequests {
-				let query = try #require(request.url?.query)
-				#expect(query.contains("X-Amz-Expires=3000"), "\(query)")
-				#expect(query.contains("X-Amz-Signature="), "\(query)")
+				let parameters = try URLProtocolMock.queryParameters(of: request)
+				#expect(parameters["X-Amz-Expires"] == "3000")
+				#expect(parameters["X-Amz-Signature", default: nil] != nil)
 				#expect(request.value(forHTTPHeaderField: "Authorization") == nil)
 			}
 			#expect(try #require(sentRequests.last?.url?.query).contains("X-Amz-SignedHeaders=content-type%3Bhost"))
@@ -552,7 +552,8 @@ extension UnitTests {
 				URLProtocolMock.handler(statusCode: 403, body: signingDetails),
 				{ request in
 					let url = try #require(request.url)
-					presignedSignature.withLock { $0 = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "X-Amz-Signature" }?.value }
+					let signature = try URLProtocolMock.queryParameter("X-Amz-Signature", of: request)
+					presignedSignature.withLock { $0 = signature }
 					throw URLError(.timedOut, userInfo: [NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString])
 				},
 				URLProtocolMock.handler(statusCode: 403, body: signingDetails),

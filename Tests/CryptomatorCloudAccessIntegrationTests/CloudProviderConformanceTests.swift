@@ -542,7 +542,7 @@ extension IntegrationTests {
 			}
 		}
 
-		/// Only the vault backends, because whether plain Dropbox answers a metadata read or delete below a file with `not_found` isn't known. On Dropbox, VF8 downloads a `dir.c9r` below the file and relies on that download answering `not_found`. The long name is shortened in every vault format.
+		/// Only the vault backends, because whether plain Dropbox answers a metadata read or delete below a file with `not_found` isn't known. On Dropbox, VF8 downloads a `dir.c9r` below the file, which Dropbox answers with `not_found` (live, 2026-11-27). The long name is shortened in every vault format.
 		@Test(arguments: IntegrationBackend.selectedVaults)
 		func readsAndDeletesBelowFileReportAbsence(backend: IntegrationBackend) async throws {
 			try await withIntegrationFixture(backend) { context in

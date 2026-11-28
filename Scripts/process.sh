@@ -29,7 +29,8 @@ function process_output() {
 function lint_staged_swift() {
   local scratch
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/process-staged.XXXXXX") || return 1
-  git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift' | while IFS= read -r -d '' path; do
+  # Only the paths of .swiftlint.yml's `included`, because SwiftLint fails with "No lintable files found" when every copied file lies outside them (e.g. Package.swift alone).
+  git diff --cached --name-only --diff-filter=ACMR -z -- 'Sources/*.swift' 'Tests/*.swift' | while IFS= read -r -d '' path; do
     mkdir -p "$scratch/$(dirname "$path")" && git show ":$path" > "$scratch/$path"
   done
   if [ -n "$(find "$scratch" -name '*.swift' -print -quit)" ]; then

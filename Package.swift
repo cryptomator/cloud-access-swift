@@ -10,9 +10,15 @@
 
 import PackageDescription
 
-let swiftSettings: [SwiftSetting] = [
+var swiftSettings: [SwiftSetting] = [
 	.enableUpcomingFeature("NonisolatedNonsendingByDefault")
 ]
+
+// CI sets CLOUD_ACCESS_WARNINGS_AS_ERRORS=1 to fail on any compiler warning in the package's own targets. The setting is gated because Xcode app projects that consume a package carrying it unconditionally are reported to fail with conflicting `-warnings-as-errors` and `-suppress-warnings` options (Xcode 26.x).
+// Toggling the variable needs a clean build.
+if Context.environment["CLOUD_ACCESS_WARNINGS_AS_ERRORS"] == "1" {
+	swiftSettings.append(.treatAllWarnings(as: .error))
+}
 
 let package = Package(
 	name: "CryptomatorCloudAccess",

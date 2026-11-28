@@ -550,6 +550,14 @@ And make your pre-commit hook executable:
 chmod +x .git/hooks/pre-commit
 ```
 
+CI fails on any compiler warning in the package's own targets, deprecations included, so use a `// TODO:` comment instead of `#warning`. To check a change the same way locally, run:
+
+```sh
+CLOUD_ACCESS_WARNINGS_AS_ERRORS=1 xcodebuild clean build-for-testing -scheme CryptomatorCloudAccess-Package -destination 'name=iPhone 17'
+```
+
+Keep `clean`, because an incremental build doesn't recompile when the variable changes. Set the variable on that command only, not exported for the shell, because an app you build from the same shell would otherwise compile this package with warnings as errors too.
+
 ## Code of Conduct
 
 Help us keep Cryptomator open and inclusive. Please read and follow our [Code of Conduct](https://github.com/cryptomator/.github/blob/main/CODE_OF_CONDUCT.md).

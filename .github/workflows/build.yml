@@ -49,7 +49,20 @@ jobs:
       - name: Test integration test script
         run: python3 -I -m unittest discover -s Scripts/integration-tests/tests
       - name: Build
-        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess-Package' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | xcbeautify
+        run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild clean build-for-testing -scheme 'CryptomatorCloudAccess-Package' -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -enableCodeCoverage YES | tee "$RUNNER_TEMP/xcodebuild-build.log" | xcbeautify
+        env:
+          CLOUD_ACCESS_WARNINGS_AS_ERRORS: '1'
+      - name: Check that the package's modules compile with -warnings-as-errors
+        # xcbeautify drops the compiler command lines, so only the raw log shows whether the package's own modules were compiled with -warnings-as-errors.
+        run: |
+          status=0
+          for module in CryptomatorCloudAccessCore CryptomatorCloudAccess CryptomatorCloudAccessTestSupport CryptomatorCloudAccessTests CryptomatorCloudAccessIntegrationTests; do
+            if ! grep -F -- "-module-name $module " "$RUNNER_TEMP/xcodebuild-build.log" | grep -E -- '(^| )-warnings-as-errors( |$)' > /dev/null; then
+              echo "::error::No build-log line for $module contains -warnings-as-errors. Check that CLOUD_ACCESS_WARNINGS_AS_ERRORS reaches Package.swift and that the target passes swiftSettings."
+              status=1
+            fi
+          done
+          exit $status
       - name: Test
         run: set -o pipefail && env NSUnbufferedIO=YES xcodebuild test-without-building -xctestrun $(find . -type f -name "*.xctestrun") -destination "name=$DEVICE" -derivedDataPath $DERIVED_DATA_PATH -only-testing:CryptomatorCloudAccessTests -test-timeouts-enabled YES -collect-test-diagnostics never | xcbeautify
       - name: Print unit-test failures

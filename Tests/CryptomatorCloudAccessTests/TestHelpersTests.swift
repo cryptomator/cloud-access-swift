@@ -7,6 +7,7 @@
 //
 
 import CryptomatorCloudAccessTestSupport
+import Foundation
 import os
 import Testing
 
@@ -233,6 +234,23 @@ extension UnitTests {
 			signal.fulfill()
 			signal.fulfill()
 			#expect(signal.fulfillmentCount == 2)
+		}
+
+		@Test
+		func removeItemRecordingFailureRecordsIssueAtCallerForMissingItem() {
+			let url = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
+			withKnownIssue {
+				removeItemRecordingFailure(at: url)
+			} matching: { issue in
+				(issue.error as? CocoaError)?.code == .fileNoSuchFile && issue.sourceLocation?.fileID == #fileID
+			}
+		}
+
+		@Test
+		func removeItemRecordingFailureRemovesExistingItem() throws {
+			let url = try makeTemporaryDirectory()
+			removeItemRecordingFailure(at: url)
+			#expect(!FileManager.default.fileExists(atPath: url.path(percentEncoded: false)))
 		}
 	}
 }

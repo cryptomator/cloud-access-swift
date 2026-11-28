@@ -12,7 +12,7 @@ import os
 import Testing
 @testable import CryptomatorCloudAccessCore
 
-/// Checks the test runner's retry policy, permits and error classification, the run-root naming, the parsing of the secrets file, and the wiring of the fixtures on the local file system, which needs no network.
+/// Checks the test runner's retry policy, permits and error classification, and that a failed removal of an attempt's temporary folder is recorded. It also checks the run-root naming, the parsing of the secrets file, and the wiring of the fixtures on the local file system, which needs no network.
 extension IntegrationTests {
 	struct Runner {
 		private static let backend = IntegrationBackend(.localFileSystem, .plain)
@@ -44,6 +44,17 @@ extension IntegrationTests {
 			let urls = tmpDirURLs.withLock { $0 }
 			#expect(urls.count == 3)
 			#expect(Set(urls).count == 3)
+		}
+
+		@Test
+		func failedRemovalOfTemporaryFolderIsRecorded() async throws {
+			try await withKnownIssue {
+				try await withIntegrationFixture(Runner.backend) { context in
+					try FileManager.default.removeItem(at: context.tmpDirURL)
+				}
+			} matching: { issue in
+				(issue.error as? CocoaError)?.code == .fileNoSuchFile && issue.sourceLocation?.fileName == "IntegrationTestRunner.swift"
+			}
 		}
 
 		@Test

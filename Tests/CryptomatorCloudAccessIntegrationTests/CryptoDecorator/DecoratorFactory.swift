@@ -6,8 +6,10 @@
 //  Copyright © 2020 Skymatic GmbH. All rights reserved.
 //
 
+import CryptomatorCloudAccessTestSupport
 import CryptomatorCryptoLib
 import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 /**
@@ -93,7 +95,9 @@ enum DecoratorFactory {
 	private static func upload(_ data: Data, to cloudPath: CloudPath, with delegate: CloudProvider) async throws {
 		let localURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
-			try? FileManager.default.removeItem(at: localURL)
+			if FileManager.default.fileExists(atPath: localURL.path(percentEncoded: false)) {
+				removeItemRecordingFailure(at: localURL)
+			}
 		}
 		try data.write(to: localURL)
 		_ = try await delegate.uploadFile(from: localURL, to: cloudPath, replaceExisting: false)
@@ -102,7 +106,9 @@ enum DecoratorFactory {
 	private static func download(from cloudPath: CloudPath, with delegate: CloudProvider) async throws -> Data {
 		let localURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .notDirectory)
 		defer {
-			try? FileManager.default.removeItem(at: localURL)
+			if FileManager.default.fileExists(atPath: localURL.path(percentEncoded: false)) {
+				removeItemRecordingFailure(at: localURL)
+			}
 		}
 		_ = try await delegate.downloadFile(from: cloudPath, to: localURL)
 		return try Data(contentsOf: localURL)

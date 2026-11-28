@@ -209,12 +209,6 @@ final class Gate: Sendable {
 
 // MARK: - Temporary Files
 
-func makeTemporaryDirectory() throws -> URL {
-	let url = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
-	try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-	return url
-}
-
 func makeLocalFile(in directory: URL, named name: String = UUID().uuidString, content: String = "content") throws -> URL {
 	return try makeLocalFile(in: directory, named: name, data: Data(content.utf8))
 }
@@ -223,15 +217,6 @@ func makeLocalFile(in directory: URL, named name: String = UUID().uuidString, da
 	let url = directory.appending(component: name, directoryHint: .notDirectory)
 	try data.write(to: url)
 	return url
-}
-
-/// Records a failed removal as an issue of the running test instead of throwing, because a suite's `deinit` can't throw.
-func removeItemRecordingFailure(at url: URL, sourceLocation: SourceLocation = #_sourceLocation) {
-	do {
-		try FileManager.default.removeItem(at: url)
-	} catch {
-		Issue.record(error, sourceLocation: sourceLocation)
-	}
 }
 
 // MARK: - Library

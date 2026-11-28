@@ -7,6 +7,7 @@
 //
 
 import CryptomatorCloudAccessCore
+import CryptomatorCloudAccessTestSupport
 import Foundation
 import Testing
 
@@ -22,9 +23,8 @@ struct IntegrationTestContext: Sendable {
 		self.backend = fixture.backend
 		self.provider = try fixture.makeProvider()
 		self.treeRoot = fixture.treeRoot
-		self.tmpDirURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
+		self.tmpDirURL = try makeTemporaryDirectory()
 		self.fixture = fixture
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
 	}
 
 	/// Creates an empty folder that only this attempt uses.
@@ -102,7 +102,7 @@ func withIntegrationFixture(_ backend: IntegrationBackend, budget: Duration, bac
 		try await semaphore.withPermit(budget: budget) {
 			let context = try IntegrationTestContext(fixture: fixture)
 			defer {
-				try? FileManager.default.removeItem(at: context.tmpDirURL)
+				removeItemRecordingFailure(at: context.tmpDirURL)
 			}
 			try await body(context)
 		}

@@ -9,6 +9,7 @@
 import CryptomatorCloudAccessTestSupport
 import CryptomatorCryptoLib
 import Foundation
+import Testing
 @testable import CryptomatorCloudAccessCore
 
 /// The providers of an account and the folder of this run in it, shared by all vault formats.
@@ -175,7 +176,7 @@ actor IntegrationFixtures {
 		return try? Date(String(match.1), strategy: runRootDateStyle)
 	}
 
-	/// Deletes the run roots that this process created, and the folder of the local file system provider.
+	/// Deletes the run roots that this process created, and the folder of the local file system provider. It prints its failures instead of recording issues, because it runs after the tests, where an issue would belong to the root suite rather than to a test case.
 	func cleanUp() async {
 		let runRoots = runRoots
 		await withTaskGroup(of: Void.self) { group in
@@ -189,7 +190,15 @@ actor IntegrationFixtures {
 				}
 			}
 		}
-		try? FileManager.default.removeItem(at: IntegrationProvider.localFileSystemRootURL)
+		let localFileSystemRootURL = IntegrationProvider.localFileSystemRootURL
+		guard FileManager.default.fileExists(atPath: localFileSystemRootURL.path(percentEncoded: false)) else {
+			return
+		}
+		do {
+			try FileManager.default.removeItem(at: localFileSystemRootURL)
+		} catch {
+			print("[integration-cleanup] \(IntegrationProvider.localFileSystem.rawValue): removing \(localFileSystemRootURL.path(percentEncoded: false)) failed: \(error)")
+		}
 	}
 
 	// MARK: - Caching
@@ -275,10 +284,9 @@ actor IntegrationFixtures {
 	private static func createTree(of fixture: IntegrationFixture) async throws {
 		let kind = fixture.backend.kind
 		let provider = try fixture.makeProvider()
-		let tmpDirURL = FileManager.default.temporaryDirectory.appending(component: UUID().uuidString, directoryHint: .isDirectory)
-		try FileManager.default.createDirectory(at: tmpDirURL, withIntermediateDirectories: true)
+		let tmpDirURL = try makeTemporaryDirectory()
 		defer {
-			try? FileManager.default.removeItem(at: tmpDirURL)
+			removeItemRecordingFailure(at: tmpDirURL)
 		}
 		let fileInRootURL = tmpDirURL.appending(component: "fileInRoot", directoryHint: .notDirectory)
 		try IntegrationFixture.testContentForFilesInRoot.write(to: fileInRootURL, atomically: true, encoding: .utf8)
